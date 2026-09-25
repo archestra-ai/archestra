@@ -97,7 +97,6 @@ describe("ProviderAuthRequiredCard", () => {
       expect.objectContaining({
         provider: "openai",
         apiKey: "chatgpt-oauth:fresh",
-        scope: "personal",
       }),
     );
     expect(reconnectMutateAsync).not.toHaveBeenCalled();

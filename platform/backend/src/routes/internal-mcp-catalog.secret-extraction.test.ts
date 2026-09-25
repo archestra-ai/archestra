@@ -57,7 +57,6 @@ describe("Internal MCP Catalog - secret extraction", () => {
         payload: {
           name: "regcred-extraction",
           serverType: "local",
-          scope: "org",
           localConfig: {
             dockerImage: "registry.example.com/private/mcp:1",
             imagePullSecrets: [
@@ -97,7 +96,6 @@ describe("Internal MCP Catalog - secret extraction", () => {
         payload: {
           name: "regcred-preserve",
           serverType: "local",
-          scope: "org",
           localConfig: {
             dockerImage: "registry.example.com/private/mcp:1",
             imagePullSecrets: [
@@ -162,7 +160,6 @@ describe("Internal MCP Catalog - secret extraction", () => {
         payload: {
           name: "approval-preserve",
           serverType: "local",
-          scope: "org",
           localConfig: {
             dockerImage: "registry.example.com/private/mcp:1",
             environment: [
@@ -220,7 +217,6 @@ describe("Internal MCP Catalog - secret extraction", () => {
           name: "enterprise-override-extraction",
           serverType: "remote",
           serverUrl: "https://api.example.com/mcp/",
-          scope: "org",
           enterpriseManagedConfig: {
             clientIdOverride: "client-abc",
             clientSecretOverride: "override-plaintext",

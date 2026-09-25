@@ -345,7 +345,7 @@ describe("chat-mcp-client health check", () => {
       const org = await makeOrganization();
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({ teams: [team.id] });
+      const agent = await makeAgent({});
       await makeTeamMember(team.id, user.id);
       await TeamTokenModel.createTeamToken(team.id, team.name);
 
@@ -404,7 +404,7 @@ describe("chat-mcp-client health check", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
     await TeamTokenModel.createTeamToken(team.id, team.name);
 
@@ -458,7 +458,7 @@ describe("chat-mcp-client health check", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
     await TeamTokenModel.createTeamToken(team.id, team.name);
 
@@ -519,7 +519,7 @@ describe("chat-mcp-client health check", () => {
       const org = await makeOrganization();
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({ teams: [team.id] });
+      const agent = await makeAgent({});
       await makeTeamMember(team.id, user.id);
       await TeamTokenModel.createTeamToken(team.id, team.name);
 
@@ -579,7 +579,7 @@ describe("getChatMcpTools failure-vs-empty contract", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
     await TeamTokenModel.createTeamToken(team.id, team.name);
 
@@ -1078,9 +1078,7 @@ describe("chat-mcp-client tool caching", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({
-      teams: [team.id],
-    });
+    const agent = await makeAgent({});
 
     // Add user to team as a member
     await makeTeamMember(team.id, user.id);
@@ -1152,7 +1150,7 @@ describe("chat-mcp-client tool caching", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
     await TeamTokenModel.createTeamToken(team.id, team.name);
 
@@ -1385,7 +1383,7 @@ describe("clearChatMcpClient", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
@@ -1416,8 +1414,8 @@ describe("clearChatMcpClient", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent1 = await makeAgent({ teams: [team.id] });
-    const agent2 = await makeAgent({ teams: [team.id] });
+    const agent1 = await makeAgent({});
+    const agent2 = await makeAgent({});
     await makeTeamMember(team.id, user.id);
 
     const cacheKey1 = chatClient.__test.getCacheKey(agent1.id, user.id);
@@ -1528,7 +1526,7 @@ describe("closeChatMcpClient", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
     const conversationId = crypto.randomUUID();
 
@@ -1558,7 +1556,7 @@ describe("closeChatMcpClient", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
     const conv1 = crypto.randomUUID();
     const conv2 = crypto.randomUUID();

@@ -12,23 +12,27 @@ import {
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
 import AgentModel from "./agent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentToolModel from "./agent-tool";
-import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import ModelModel from "./model";
 import OrganizationModel from "./organization";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamModel from "./team";
 import ToolModel from "./tool";
 
 describe("AgentModel", () => {
-  test("can create an agent", async () => {
-    await AgentModel.create({ name: "Test Agent", teams: [], scope: "org" });
-    await AgentModel.create({ name: "Test Agent 2", teams: [], scope: "org" });
+  test("can create an agent", async ({ makeAgent }) => {
+    await makeAgent({
+      name: "Test Agent",
+    });
+    await makeAgent({
+      name: "Test Agent 2",
+    });
 
     expect(await AgentModel.findAll()).toHaveLength(2);
   });
@@ -36,17 +40,19 @@ describe("AgentModel", () => {
   describe("resolved LLM metadata", () => {
     test("resolves provider + per-user flag from the agent's configured key", async ({
       makeOrganization,
+      makeMember,
       makeUser,
+      makeAgent,
+      makeLlmProviderApiKey,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
 
-      const copilotKey = await LlmProviderApiKeyModel.create({
-        organizationId: org.id,
+      const copilotKey = await makeLlmProviderApiKey(org.id, null, {
         userId: user.id,
         name: "GitHub Copilot",
         provider: "github-copilot",
-        scope: "personal",
       });
       const copilotModel = await ModelModel.create({
         externalId: "github-copilot/gpt-4",
@@ -55,11 +61,9 @@ describe("AgentModel", () => {
         inputModalities: null,
         outputModalities: null,
       });
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Copilot Agent",
         organizationId: org.id,
-        scope: "org",
-        teams: [],
         llmApiKeyId: copilotKey.id,
         modelId: copilotModel.id,
       });
@@ -83,6 +87,7 @@ describe("AgentModel", () => {
 
     test("falls back to the pinned model's provider with the flag false", async ({
       makeOrganization,
+      makeAgent,
     }) => {
       const org = await makeOrganization();
       const anthropicModel = await ModelModel.create({
@@ -92,11 +97,9 @@ describe("AgentModel", () => {
         inputModalities: null,
         outputModalities: null,
       });
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Anthropic Agent",
         organizationId: org.id,
-        scope: "org",
-        teams: [],
         modelId: anthropicModel.id,
       });
 
@@ -107,13 +110,12 @@ describe("AgentModel", () => {
 
     test("leaves provider null when no LLM is configured", async ({
       makeOrganization,
+      makeAgent,
     }) => {
       const org = await makeOrganization();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "No LLM Agent",
         organizationId: org.id,
-        scope: "org",
-        teams: [],
       });
 
       const fetched = await AgentModel.findById(agent.id);
@@ -127,35 +129,35 @@ describe("AgentModel", () => {
   test("filters paginated agents by configured provider key", async ({
     makeOrganization,
     makeUser,
+    makeMember,
+    makeAgent,
+    makeLlmProviderApiKey,
   }) => {
     const organization = await makeOrganization();
     const user = await makeUser();
-    const selectedKey = await LlmProviderApiKeyModel.create({
-      organizationId: organization.id,
+    // Organization-wide reach is a grant to the reader's role, so the caller
+    // needs a membership to carry one.
+    await makeMember(user.id, organization.id);
+    const selectedKey = await makeLlmProviderApiKey(organization.id, null, {
       userId: user.id,
       name: "Selected key",
       provider: "openai",
-      scope: "org",
+      access: "org",
     });
-    const otherKey = await LlmProviderApiKeyModel.create({
-      organizationId: organization.id,
+    const otherKey = await makeLlmProviderApiKey(organization.id, null, {
       userId: user.id,
       name: "Other key",
       provider: "anthropic",
-      scope: "org",
+      access: "org",
     });
-    await AgentModel.create({
+    await makeAgent({
       name: "Selected agent",
       organizationId: organization.id,
-      teams: [],
-      scope: "org",
       llmApiKeyId: selectedKey.id,
     });
-    await AgentModel.create({
+    await makeAgent({
       name: "Other agent",
       organizationId: organization.id,
-      teams: [],
-      scope: "org",
       llmApiKeyId: otherKey.id,
     });
 
@@ -174,17 +176,18 @@ describe("AgentModel", () => {
   describe("sandboxAvailable", () => {
     test("is false on findById when the sandbox feature is disabled", async ({
       makeOrganization,
+      makeMember,
       makeUser,
+      makeAgent,
     }) => {
       // The sandbox feature is off in the test environment, so the per-agent
       // availability check short-circuits to false for any user.
       const org = await makeOrganization();
       const user = await makeUser();
-      const agent = await AgentModel.create({
+      await makeMember(user.id, org.id);
+      const agent = await makeAgent({
         name: "Sandbox Agent",
         organizationId: org.id,
-        scope: "org",
-        teams: [],
       });
 
       const fetched = await AgentModel.findById(agent.id, user.id, true);
@@ -193,13 +196,12 @@ describe("AgentModel", () => {
 
     test("is left absent when no requesting user is given (fail-closed)", async ({
       makeOrganization,
+      makeAgent,
     }) => {
       const org = await makeOrganization();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Userless Lookup Agent",
         organizationId: org.id,
-        scope: "org",
-        teams: [],
       });
 
       const fetched = await AgentModel.findById(agent.id);
@@ -210,21 +212,18 @@ describe("AgentModel", () => {
   describe("findBasicByOrganizationIdAndIds", () => {
     test("returns only agents from the requested organization", async ({
       makeOrganization,
+      makeAgent,
     }) => {
       const organization = await makeOrganization();
       const otherOrganization = await makeOrganization();
 
-      const includedAgent = await AgentModel.create({
+      const includedAgent = await makeAgent({
         name: "Included Agent",
         organizationId: organization.id,
-        teams: [],
-        scope: "org",
       });
-      const excludedAgent = await AgentModel.create({
+      const excludedAgent = await makeAgent({
         name: "Excluded Agent",
         organizationId: otherOrganization.id,
-        teams: [],
-        scope: "org",
       });
 
       const result = await AgentModel.findBasicByOrganizationIdAndIds({
@@ -243,20 +242,17 @@ describe("AgentModel", () => {
 
     test("returns basic agent fields ordered by newest first", async ({
       makeOrganization,
+      makeAgent,
     }) => {
       const organization = await makeOrganization();
 
-      const olderAgent = await AgentModel.create({
+      const olderAgent = await makeAgent({
         name: "Older Agent",
         organizationId: organization.id,
-        teams: [],
-        scope: "org",
       });
-      const newerAgent = await AgentModel.create({
+      const newerAgent = await makeAgent({
         name: "Newer Agent",
         organizationId: organization.id,
-        teams: [],
-        scope: "org",
       });
       // Back-to-back creates can land on the same createdAt millisecond,
       // making "newest first" a coin flip. Backdate the older agent so the
@@ -287,11 +283,9 @@ describe("AgentModel", () => {
   });
 
   describe("exists", () => {
-    test("returns true for an existing agent", async () => {
-      const agent = await AgentModel.create({
+    test("returns true for an existing agent", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       const exists = await AgentModel.exists(agent.id);
@@ -306,16 +300,12 @@ describe("AgentModel", () => {
   });
 
   describe("existsBatch", () => {
-    test("returns Set of existing agent IDs", async () => {
-      const agent1 = await AgentModel.create({
+    test("returns Set of existing agent IDs", async ({ makeAgent }) => {
+      const agent1 = await makeAgent({
         name: "Test Agent 1",
-        teams: [],
-        scope: "org",
       });
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
         name: "Test Agent 2",
-        teams: [],
-        scope: "org",
       });
       const nonExistentId = "00000000-0000-0000-0000-000000000000";
 
@@ -352,11 +342,9 @@ describe("AgentModel", () => {
       expect(existingIds.size).toBe(0);
     });
 
-    test("handles duplicate IDs in input", async () => {
-      const agent = await AgentModel.create({
+    test("handles duplicate IDs in input", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       const existingIds = await AgentModel.existsBatch([
@@ -374,57 +362,77 @@ describe("AgentModel", () => {
     test("can create agent with team assignments", async ({
       makeUser,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
+      await makeMember(user.id, org.id);
       const team = await makeTeam(org.id, user.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
+        legacy: { scope: "team", teams: [team.id] },
       });
 
       expect(agent.teams).toHaveLength(1);
       expect(agent.teams[0]).toMatchObject({ id: team.id, name: team.name });
     });
 
-    test("admin can see all agents", async ({ makeAdmin }) => {
+    test("admin can see all agents", async ({
+      makeAdmin,
+      makeAgent,
+      makeOrganization,
+      makeMember,
+    }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
-      await AgentModel.create({ name: "Agent 1", teams: [], scope: "org" });
-      await AgentModel.create({ name: "Agent 2", teams: [], scope: "org" });
-      await AgentModel.create({ name: "Agent 3", teams: [], scope: "org" });
+      await makeAgent({ organizationId: org.id, name: "Agent 1" });
+      await makeAgent({ organizationId: org.id, name: "Agent 2" });
+      await makeAgent({ organizationId: org.id, name: "Agent 3" });
 
       const agents = await AgentModel.findAll(admin.id, true);
       expect(agents).toHaveLength(3);
     });
 
-    test("admin 'All' view (no scope) hides team-oversight agents", async ({
+    test("filtering by a team cannot bypass scoped read grants", async ({
       makeUser,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const admin = await makeUser();
       const other = await makeUser();
       const org = await makeOrganization();
+      await makeMember(other.id, org.id);
+      await makeMember(admin.id, org.id);
 
       // A team the admin belongs to, and one they don't.
       const myTeam = await makeTeam(org.id, admin.id, { name: "Mine" });
       await TeamModel.addMember(myTeam.id, admin.id);
       const foreignTeam = await makeTeam(org.id, other.id, { name: "Foreign" });
 
-      await AgentModel.create({ name: "Org Agent", teams: [], scope: "org" });
-      await AgentModel.create({
-        name: "Mine Team Agent",
-        teams: [myTeam.id],
-        scope: "team",
+      await makeAgent({
+        organizationId: org.id,
+        name: "Org Agent",
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
+        name: "Mine Team Agent",
+        access: { teams: [myTeam.id] },
+        legacy: { scope: "team", teams: [myTeam.id] },
+      });
+      await makeAgent({
+        organizationId: org.id,
         name: "Foreign Team Agent",
-        teams: [foreignTeam.id],
-        scope: "team",
+        access: { teams: [foreignTeam.id] },
+        legacy: { scope: "team", teams: [foreignTeam.id] },
       });
 
       // The unscoped "All" view shows an admin only the agents they can access:
@@ -441,7 +449,7 @@ describe("AgentModel", () => {
         "Org Agent",
       ]);
 
-      // Oversight stays reachable by explicitly picking that team under Team scope.
+      // A legacy filter never expands access beyond the actor’s grants.
       const teamView = await AgentModel.findAllPaginated(
         { limit: 50, offset: 0 },
         undefined,
@@ -449,19 +457,24 @@ describe("AgentModel", () => {
         admin.id,
         true,
       );
-      expect(teamView.data.map((a) => a.name)).toEqual(["Foreign Team Agent"]);
+      expect(teamView.data).toEqual([]);
     });
 
     test("member only sees agents in their teams", async ({
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user1 = await makeUser();
       const user2 = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user2.id, org.id);
+      await makeMember(user1.id, org.id);
 
       // Create two teams
       const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
@@ -472,20 +485,19 @@ describe("AgentModel", () => {
       await TeamModel.addMember(team2.id, user2.id);
 
       // Create agents assigned to different teams
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 1",
-        teams: [team1.id],
-        scope: "team",
+        access: { teams: [team1.id] },
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Agent 2",
-        teams: [team2.id],
-        scope: "team",
+        access: { teams: [team2.id] },
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Agent 3",
-        teams: [],
-        scope: "org",
       });
 
       // user1 has access to agent1 (via team1) and agent3 (org-wide)
@@ -498,20 +510,25 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user1 = await makeUser();
       const user2 = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user2.id, org.id);
+      await makeMember(user1.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user1.id);
 
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Agent 1",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
 
       // user2 is not in any team
@@ -519,13 +536,14 @@ describe("AgentModel", () => {
       expect(agents).toHaveLength(0);
     });
 
-    test("findById returns agent for admin", async ({ makeAdmin }) => {
+    test("findById returns agent for admin", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
       const admin = await makeAdmin();
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       const foundAgent = await AgentModel.findById(agent.id, admin.id, true);
@@ -537,19 +555,23 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
 
       const foundAgent = await AgentModel.findById(agent.id, user.id, false);
@@ -561,20 +583,25 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user1 = await makeUser();
       const user2 = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user2.id, org.id);
+      await makeMember(user1.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user1.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
 
       const foundAgent = await AgentModel.findById(agent.id, user2.id, false);
@@ -583,12 +610,11 @@ describe("AgentModel", () => {
 
     test("findLlmSelectionFieldsById returns selection fields for an admin", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       const fields = await AgentModel.findLlmSelectionFieldsById(
@@ -604,19 +630,23 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
 
       const fields = await AgentModel.findLlmSelectionFieldsById(
@@ -633,20 +663,25 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user1 = await makeUser();
       const user2 = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user2.id, org.id);
+      await makeMember(user1.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user1.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
 
       // The access gate must hold for the narrow fetch exactly as for findById.
@@ -658,53 +693,62 @@ describe("AgentModel", () => {
       expect(fields).toBeNull();
     });
 
-    test("update syncs team assignments correctly", async ({
+    // An agent's `teams` are the teams its grants reach. Writing the retired
+    // team rows on update no longer changes who the agent is shared with, so
+    // the response keeps showing the granted team.
+    test("an agent's teams follow its grants, not the retired team rows", async ({
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [team1.id],
-        scope: "team",
+        access: { teams: [team1.id] },
       });
 
       expect(agent.teams).toHaveLength(1);
       expect(agent.teams[0]).toMatchObject({ id: team1.id, name: team1.name });
+      // `scope` is read from the grants too, not the stored "personal".
+      expect(agent.scope).toBe("team");
+      expect((await AgentModel.findById(agent.id))?.scope).toBe("team");
 
-      // Update to only include team2
       const updatedAgent = await AgentModel.update(agent.id, {
         teams: [team2.id],
       });
 
-      expect(updatedAgent?.teams).toHaveLength(1);
-      expect(updatedAgent?.teams[0]).toMatchObject({
-        id: team2.id,
-        name: team2.name,
-      });
-      expect(updatedAgent?.teams.some((t) => t.id === team1.id)).toBe(false);
+      expect(updatedAgent?.teams).toEqual([
+        expect.objectContaining({ id: team1.id, name: team1.name }),
+      ]);
     });
 
     test("update without teams keeps existing assignments", async ({
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       const team = await makeTeam(org.id, admin.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
+        legacy: { scope: "team", teams: [team.id] },
       });
 
       const initialTeams = agent.teams;
@@ -721,17 +765,21 @@ describe("AgentModel", () => {
     test("teams is always populated in responses", async ({
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       const team = await makeTeam(org.id, admin.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
+        legacy: { scope: "team", teams: [team.id] },
       });
 
       expect(agent.teams).toBeDefined();
@@ -745,11 +793,9 @@ describe("AgentModel", () => {
   });
 
   describe("Team Assignment Validation", () => {
-    test("admin can create agent without any team", async () => {
-      const agent = await AgentModel.create({
+    test("admin can create agent without any team", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "No Team Agent",
-        teams: [],
-        scope: "org",
       });
 
       expect(agent.teams).toHaveLength(0);
@@ -762,10 +808,13 @@ describe("AgentModel", () => {
     test("admin can create agent with any team regardless of membership", async ({
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create a team where admin is NOT a member
       const team = await makeTeam(org.id, admin.id, {
@@ -773,10 +822,11 @@ describe("AgentModel", () => {
       });
       // Note: makeTeam creates team but doesn't automatically add the creator as member
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Admin Created Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
+        legacy: { scope: "team", teams: [team.id] },
       });
 
       expect(agent.teams).toHaveLength(1);
@@ -787,11 +837,15 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       const userTeam = await makeTeam(org.id, admin.id, { name: "User Team" });
       const otherTeam = await makeTeam(org.id, admin.id, {
@@ -802,20 +856,19 @@ describe("AgentModel", () => {
       await TeamModel.addMember(userTeam.id, user.id);
 
       // Create agents in different teams
-      const userTeamAgent = await AgentModel.create({
+      const userTeamAgent = await makeAgent({
+        organizationId: org.id,
         name: "User Team Agent",
-        teams: [userTeam.id],
-        scope: "team",
+        access: { teams: [userTeam.id] },
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Other Team Agent",
-        teams: [otherTeam.id],
-        scope: "team",
+        access: { teams: [otherTeam.id] },
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "No Team Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Non-admin user sees agent in their team + org-wide agents
@@ -828,20 +881,23 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       const userTeam = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(userTeam.id, user.id);
 
       // Create agent with no teams (org-wide)
-      const orgWideAgent = await AgentModel.create({
+      const orgWideAgent = await makeAgent({
+        organizationId: org.id,
         name: "No Team Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Non-admin user should see org-wide agents
@@ -853,24 +909,27 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const userWithNoTeam = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(userWithNoTeam.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
 
       // Create agents with and without teams
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Agent in Team",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Agent without Team",
-        teams: [],
-        scope: "org",
       });
 
       // User with no team membership should still see org-wide agents
@@ -883,11 +942,15 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
@@ -906,10 +969,11 @@ describe("AgentModel", () => {
       expect(userTeamIds).not.toContain(team3.id);
 
       // Creating an agent with team1 should work (user is member)
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Valid Agent",
-        teams: [team1.id],
-        scope: "team",
+        access: { teams: [team1.id] },
+        legacy: { scope: "team", teams: [team1.id] },
       });
       expect(agent.teams).toHaveLength(1);
       expect(agent.teams[0].id).toBe(team1.id);
@@ -917,12 +981,12 @@ describe("AgentModel", () => {
   });
 
   describe("Label Ordering", () => {
-    test("labels are returned in alphabetical order by key", async () => {
+    test("labels are returned in alphabetical order by key", async ({
+      makeAgent,
+    }) => {
       // Create an agent with labels in non-alphabetical order
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Test Agent",
-        teams: [],
-        scope: "org",
         labels: [
           { key: "region", value: "us-west-2" },
           { key: "environment", value: "production" },
@@ -940,12 +1004,12 @@ describe("AgentModel", () => {
       expect(agent.labels[2].value).toBe("engineering");
     });
 
-    test("findById returns labels in alphabetical order", async () => {
+    test("findById returns labels in alphabetical order", async ({
+      makeAgent,
+    }) => {
       // Create an agent with labels
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Test Agent",
-        teams: [],
-        scope: "org",
         labels: [
           { key: "zebra", value: "last" },
           { key: "alpha", value: "first" },
@@ -966,22 +1030,20 @@ describe("AgentModel", () => {
       expect(foundAgent.labels[2].key).toBe("zebra");
     });
 
-    test("findAll returns labels in alphabetical order for all agents", async () => {
+    test("findAll returns labels in alphabetical order for all agents", async ({
+      makeAgent,
+    }) => {
       // Create multiple agents with labels
-      await AgentModel.create({
+      await makeAgent({
         name: "Agent 1",
-        teams: [],
-        scope: "org",
         labels: [
           { key: "environment", value: "prod" },
           { key: "application", value: "web" },
         ],
       });
 
-      await AgentModel.create({
+      await makeAgent({
         name: "Agent 2",
-        teams: [],
-        scope: "org",
         labels: [
           { key: "zone", value: "us-east" },
           { key: "deployment", value: "blue" },
@@ -1017,36 +1079,37 @@ describe("AgentModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       // Create team and add user to it
       const team = await makeTeam(org.id, admin.id, { name: "Team 1" });
       await TeamModel.addMember(team.id, user.id);
 
       // Create 4 agents: 1 with team assignment, 3 org-scoped
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Agent 1",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Agent 2",
-        teams: [],
-        scope: "org",
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Agent 3",
-        teams: [],
-        scope: "org",
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Agent 4",
-        teams: [],
-        scope: "org",
       });
 
       // Query as non-admin user (should only see Agent 1)
@@ -1066,25 +1129,18 @@ describe("AgentModel", () => {
 
     test("pagination count includes all agents for admin", async ({
       makeAdmin,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create 3 agents
-      await AgentModel.create({
-        name: "Agent 1",
-        teams: [],
-        scope: "org",
-      });
-      await AgentModel.create({
-        name: "Agent 2",
-        teams: [],
-        scope: "org",
-      });
-      await AgentModel.create({
-        name: "Agent 3",
-        teams: [],
-        scope: "org",
-      });
+      await makeAgent({ organizationId: org.id, name: "Agent 1" });
+      await makeAgent({ organizationId: org.id, name: "Agent 2" });
+      await makeAgent({ organizationId: org.id, name: "Agent 3" });
 
       // Query as admin (should see all agents)
       const result = await AgentModel.findAllPaginated(
@@ -1103,35 +1159,29 @@ describe("AgentModel", () => {
       makeAdmin,
       makeTool,
       makeAgentTool,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create 5 agents with varying numbers of tools
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 1",
-        teams: [],
-        scope: "org",
       });
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 2",
-        teams: [],
-        scope: "org",
       });
-      const agent3 = await AgentModel.create({
+      const agent3 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 3",
-        teams: [],
-        scope: "org",
       });
-      await AgentModel.create({
-        name: "Agent 4",
-        teams: [],
-        scope: "org",
-      });
-      await AgentModel.create({
-        name: "Agent 5",
-        teams: [],
-        scope: "org",
-      });
+      await makeAgent({ organizationId: org.id, name: "Agent 4" });
+      await makeAgent({ organizationId: org.id, name: "Agent 5" });
 
       // Give agent1 and agent2 many tools (50+ each) via junction table
       for (let i = 0; i < 50; i++) {
@@ -1190,25 +1240,21 @@ describe("AgentModel", () => {
       makeAdmin,
       makeTool,
       makeAgentTool,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create 3 agents
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent A",
-        teams: [],
-        scope: "org",
       });
-      await AgentModel.create({
-        name: "Agent B",
-        teams: [],
-        scope: "org",
-      });
-      await AgentModel.create({
-        name: "Agent C",
-        teams: [],
-        scope: "org",
-      });
+      await makeAgent({ organizationId: org.id, name: "Agent B" });
+      await makeAgent({ organizationId: org.id, name: "Agent C" });
 
       // Give agent1 many tools via junction table
       for (let i = 0; i < 30; i++) {
@@ -1240,12 +1286,15 @@ describe("AgentModel", () => {
     test("pagination with different sort options returns correct agent count", async ({
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
       makeTool,
       makeAgentTool,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       const team1 = await makeTeam(org.id, admin.id, { name: "Team A" });
       const team2 = await makeTeam(org.id, admin.id, { name: "Team B" });
@@ -1256,25 +1305,24 @@ describe("AgentModel", () => {
       await TeamModel.addMember(team2.id, admin.id);
 
       // Create 4 agents with varying tools and teams
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Zebra",
-        teams: [team1.id],
-        scope: "team",
+        access: { teams: [team1.id] },
       });
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
+        organizationId: org.id,
         name: "Alpha",
-        teams: [team2.id],
-        scope: "team",
+        access: { teams: [team2.id] },
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Beta",
-        teams: [team1.id],
-        scope: "team",
+        access: { teams: [team1.id] },
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Gamma",
-        teams: [],
-        scope: "org",
       });
 
       // Give different numbers of tools via junction table
@@ -1342,24 +1390,23 @@ describe("AgentModel", () => {
 
     test("populates lastUsedAt from the MCP tool-call log and sorts by it", async ({
       makeAdmin,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
-      const gatewayA = await AgentModel.create({
+      const gatewayA = await makeAgent({
+        organizationId: org.id,
         name: "Gateway A",
-        teams: [],
-        scope: "org",
       });
-      const gatewayB = await AgentModel.create({
+      const gatewayB = await makeAgent({
+        organizationId: org.id,
         name: "Gateway B",
-        teams: [],
-        scope: "org",
       });
-      await AgentModel.create({
-        name: "Gateway Never Used",
-        teams: [],
-        scope: "org",
-      });
+      await makeAgent({ organizationId: org.id, name: "Gateway Never Used" });
 
       const older = new Date("2026-07-01T10:00:00Z");
       const newer = new Date("2026-07-05T10:00:00Z");
@@ -1434,27 +1481,27 @@ describe("AgentModel", () => {
     test("sortBy knowledgeSourcesCount orders by combined knowledge base and connector count", async ({
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create 3 agents with varying knowledge sources
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "No Sources",
-        teams: [],
-        scope: "org",
       });
-      const agentSome = await AgentModel.create({
+      const agentSome = await makeAgent({
+        organizationId: org.id,
         name: "Some Sources",
-        teams: [],
-        scope: "org",
       });
-      const agentMany = await AgentModel.create({
+      const agentMany = await makeAgent({
+        organizationId: org.id,
         name: "Many Sources",
-        teams: [],
-        scope: "org",
       });
 
       // agentSome: 1 knowledge base + 1 connector = 2 sources
@@ -1514,16 +1561,20 @@ describe("AgentModel", () => {
       makeAdmin,
       makeTool,
       makeAgentTool,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create 5 agents, each with many tools
       const agentIds: string[] = [];
       for (let i = 1; i <= 5; i++) {
-        const agent = await AgentModel.create({
+        const agent = await makeAgent({
+          organizationId: org.id,
           name: `Agent ${i}`,
-          teams: [],
-          scope: "org",
         });
         agentIds.push(agent.id);
 
@@ -1571,25 +1622,25 @@ describe("AgentModel", () => {
 
     test("prioritizes the current user's personal agent ahead of other sort results", async ({
       makeAdmin,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
-      await AgentModel.create(
-        {
-          name: "Alpha Shared Agent",
-          teams: [],
-          scope: "org",
-        },
-        admin.id,
-      );
-      await AgentModel.create(
-        {
-          name: "Zulu Personal Agent",
-          teams: [],
-          scope: "personal",
-        },
-        admin.id,
-      );
+      await makeAgent({
+        organizationId: org.id,
+        name: "Alpha Shared Agent",
+        authorId: admin.id,
+      });
+      await makeAgent({
+        organizationId: org.id,
+        name: "Zulu Personal Agent",
+        authorId: admin.id,
+        access: "personal",
+      });
 
       const result = await AgentModel.findAllPaginated(
         { limit: 10, offset: 0 },
@@ -1610,14 +1661,18 @@ describe("AgentModel", () => {
       makeAdmin,
       makeTool,
       makeAgentTool,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create an agent
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Add some regular tools
@@ -1668,20 +1723,23 @@ describe("AgentModel", () => {
       makeAdmin,
       makeTool,
       makeAgentTool,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create two agents
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent with 5 regular tools",
-        teams: [],
-        scope: "org",
       });
 
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
+        organizationId: org.id,
         name: "Agent with 2 regular tools",
-        teams: [],
-        scope: "org",
       });
 
       // Give agent1 5 regular tools + 10 Archestra tools
@@ -1762,14 +1820,18 @@ describe("AgentModel", () => {
       makeAdmin,
       makeTool,
       makeAgentTool,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create an agent with only Archestra tools
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Archestra Only Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Add only Archestra MCP tools
@@ -1805,14 +1867,18 @@ describe("AgentModel", () => {
       makeAdmin,
       makeTool,
       makeAgentTool,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create an agent
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Pattern Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Create tools with double underscore
@@ -1873,20 +1939,23 @@ describe("AgentModel", () => {
       makeAdmin,
       makeTool,
       makeAgentTool,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
       // Create two agents
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent with mixed tools",
-        teams: [],
-        scope: "org",
       });
 
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
+        organizationId: org.id,
         name: "Agent with single underscore",
-        teams: [],
-        scope: "org",
       });
 
       // Give agent1: 1 regular + 5 archestra__ tools = 6 total
@@ -1957,12 +2026,11 @@ describe("AgentModel", () => {
     test("findById returns tools from junction table", async ({
       makeTool,
       makeAgentTool,
+      makeAgent,
     }) => {
       // Create an agent
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Add tools via the junction table (agent_tools)
@@ -2003,12 +2071,11 @@ describe("AgentModel", () => {
     test("findById includes Archestra MCP tools", async ({
       makeTool,
       makeAgentTool,
+      makeAgent,
     }) => {
       // Create an agent
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Add regular tools
@@ -2056,12 +2123,12 @@ describe("AgentModel", () => {
       ]);
     });
 
-    test("findById returns empty tools array when agent has no tools", async () => {
+    test("findById returns empty tools array when agent has no tools", async ({
+      makeAgent,
+    }) => {
       // Create an agent with no tools
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "No Tools Agent",
-        teams: [],
-        scope: "org",
       });
 
       const foundAgent = await AgentModel.findById(agent.id);
@@ -2073,12 +2140,11 @@ describe("AgentModel", () => {
     test("findById returns Archestra tools when agent has only Archestra tools", async ({
       makeTool,
       makeAgentTool,
+      makeAgent,
     }) => {
       // Create an agent
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Archestra Only Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Add only Archestra tools
@@ -2108,10 +2174,8 @@ describe("AgentModel", () => {
 
       // Create a new agent — the creation-default set (shared composer) is
       // assigned server-side, matching the frontend form's pre-selection.
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent with Default Tools",
-        teams: [],
-        scope: "org",
       });
 
       const toolNames = agent.tools.map((t) => t.name);
@@ -2128,11 +2192,11 @@ describe("AgentModel", () => {
       expect(assignedIds).toContain(kbTool?.id);
     });
 
-    test("new agent gets no default tools when they are not seeded yet", async () => {
-      const agent = await AgentModel.create({
+    test("new agent gets no default tools when they are not seeded yet", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Agent before seeding",
-        teams: [],
-        scope: "org",
       });
 
       expect(await AgentToolModel.findToolIdsByAgent(agent.id)).toEqual([]);
@@ -2140,36 +2204,30 @@ describe("AgentModel", () => {
   });
 
   describe("Description", () => {
-    test("can create an agent with description", async () => {
-      const agent = await AgentModel.create({
+    test("can create an agent with description", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Described Agent",
         agentType: "agent",
         description: "An agent that helps with code review",
-        teams: [],
-        scope: "org",
       });
 
       expect(agent.description).toBe("An agent that helps with code review");
     });
 
-    test("description defaults to null", async () => {
-      const agent = await AgentModel.create({
+    test("description defaults to null", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Basic Agent",
         agentType: "agent",
-        teams: [],
-        scope: "org",
       });
 
       expect(agent.description).toBeNull();
     });
 
-    test("findById returns description", async () => {
-      const agent = await AgentModel.create({
+    test("findById returns description", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Find Me Agent",
         agentType: "agent",
         description: "Test description",
-        teams: [],
-        scope: "org",
       });
 
       const found = await AgentModel.findById(agent.id);
@@ -2177,13 +2235,11 @@ describe("AgentModel", () => {
       expect(found?.description).toBe("Test description");
     });
 
-    test("update can modify description", async () => {
-      const agent = await AgentModel.create({
+    test("update can modify description", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Updatable Agent",
         agentType: "agent",
         description: "Original description",
-        teams: [],
-        scope: "org",
       });
 
       const updated = await AgentModel.update(agent.id, {
@@ -2193,19 +2249,17 @@ describe("AgentModel", () => {
       expect(updated?.description).toBe("Updated description");
     });
 
-    test("findAll returns description for all agents", async () => {
-      await AgentModel.create({
+    test("findAll returns description for all agents", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: "Agent A",
         agentType: "agent",
         description: "Desc A",
-        teams: [],
-        scope: "org",
       });
-      await AgentModel.create({
+      await makeAgent({
         name: "Agent B",
         agentType: "agent",
-        teams: [],
-        scope: "org",
       });
 
       const agents = await AgentModel.findAll();
@@ -2218,11 +2272,11 @@ describe("AgentModel", () => {
   });
 
   describe("hasPlaywrightToolsAssigned", () => {
-    test("returns false when no playwright tools are assigned", async () => {
-      const agent = await AgentModel.create({
+    test("returns false when no playwright tools are assigned", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "No Playwright Agent",
-        teams: [],
-        scope: "org",
       });
 
       const result = await AgentModel.hasPlaywrightToolsAssigned(agent.id);
@@ -2233,11 +2287,10 @@ describe("AgentModel", () => {
       makeTool,
       makeAgentTool,
       makeInternalMcpCatalog,
+      makeAgent,
     }) => {
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Playwright Agent",
-        teams: [],
-        scope: "org",
       });
 
       const catalog = await makeInternalMcpCatalog({
@@ -2268,11 +2321,9 @@ describe("AgentModel", () => {
       expect(result).toBeNull();
     });
 
-    test("returns the built-in agent by config name", async () => {
-      await AgentModel.create({
+    test("returns the built-in agent by config name", async ({ makeAgent }) => {
+      await makeAgent({
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-        teams: [],
-        scope: "org",
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
@@ -2293,11 +2344,11 @@ describe("AgentModel", () => {
       );
     });
 
-    test("supports dual LLM built-in config variants", async () => {
-      await AgentModel.create({
+    test("supports dual LLM built-in config variants", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
-        teams: [],
-        scope: "org",
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
@@ -2318,11 +2369,11 @@ describe("AgentModel", () => {
       );
     });
 
-    test("does not return agents without built-in config", async () => {
-      await AgentModel.create({
+    test("does not return agents without built-in config", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: "Regular Agent",
-        teams: [],
-        scope: "org",
         agentType: "agent",
       });
 
@@ -2334,17 +2385,15 @@ describe("AgentModel", () => {
   });
 
   describe("findAll with excludeBuiltIn", () => {
-    test("excludes built-in agents when excludeBuiltIn is true", async () => {
-      await AgentModel.create({
+    test("excludes built-in agents when excludeBuiltIn is true", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: "Regular Agent",
-        teams: [],
-        scope: "org",
         agentType: "agent",
       });
-      await AgentModel.create({
+      await makeAgent({
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-        teams: [],
-        scope: "org",
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
@@ -2365,11 +2414,11 @@ describe("AgentModel", () => {
       expect(filtered[0].name).toBe("Regular Agent");
     });
 
-    test("includes built-in agents when excludeBuiltIn is false", async () => {
-      await AgentModel.create({
+    test("includes built-in agents when excludeBuiltIn is false", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-        teams: [],
-        scope: "org",
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
@@ -2384,17 +2433,15 @@ describe("AgentModel", () => {
       expect(all[0].builtInAgentConfig).toBeTruthy();
     });
 
-    test("hides built-in agents from non-admin users", async () => {
-      await AgentModel.create({
+    test("hides built-in agents from non-admin users", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: "Regular Agent",
-        teams: [],
-        scope: "org",
         agentType: "agent",
       });
-      await AgentModel.create({
+      await makeAgent({
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-        teams: [],
-        scope: "org",
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
@@ -2418,19 +2465,22 @@ describe("AgentModel", () => {
 
     test("findAllPaginated hides built-in agents from non-admin users", async ({
       makeAdmin,
+      makeAgent,
+      makeOrganization,
+      makeMember,
     }) => {
       const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
 
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: "Regular Agent",
-        teams: [],
-        scope: "org",
         agentType: "agent",
       });
-      await AgentModel.create({
+      await makeAgent({
+        organizationId: org.id,
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-        teams: [],
-        scope: "org",
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
@@ -2476,24 +2526,22 @@ describe("AgentModel", () => {
   });
 
   describe("findAll with scope filter", () => {
-    test("returns only org-scoped agents when scope is org", async () => {
-      await AgentModel.create({
+    test("returns only org-scoped agents when scope is org", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: "Org Agent",
-        teams: [],
-        scope: "org",
         agentType: "agent",
       });
-      await AgentModel.create({
+      await makeAgent({
         name: "Personal Agent",
-        teams: [],
-        scope: "personal",
         agentType: "agent",
+        access: "personal",
       });
-      await AgentModel.create({
+      await makeAgent({
         name: "Team Agent",
-        teams: [],
-        scope: "team",
         agentType: "agent",
+        access: { teams: [] },
       });
 
       const results = await AgentModel.findAll(undefined, true, {
@@ -2505,18 +2553,18 @@ describe("AgentModel", () => {
       expect(results[0].name).toBe("Org Agent");
     });
 
-    test("excludes personal and team agents when scope is org", async () => {
-      await AgentModel.create({
+    test("excludes personal and team agents when scope is org", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: "Personal Agent",
-        teams: [],
-        scope: "personal",
         agentType: "agent",
+        access: "personal",
       });
-      await AgentModel.create({
+      await makeAgent({
         name: "Team Agent",
-        teams: [],
-        scope: "team",
         agentType: "agent",
+        access: { teams: [] },
       });
 
       const results = await AgentModel.findAll(undefined, true, {
@@ -2527,17 +2575,15 @@ describe("AgentModel", () => {
       expect(results).toHaveLength(0);
     });
 
-    test("excludes built-in agents when both scope and excludeBuiltIn are set", async () => {
-      await AgentModel.create({
+    test("excludes built-in agents when both scope and excludeBuiltIn are set", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: "Org Agent",
-        teams: [],
-        scope: "org",
         agentType: "agent",
       });
-      await AgentModel.create({
+      await makeAgent({
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-        teams: [],
-        scope: "org",
         agentType: "agent",
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
@@ -2555,18 +2601,17 @@ describe("AgentModel", () => {
       expect(results[0].name).toBe("Org Agent");
     });
 
-    test("returns only personal agents when scope is personal", async () => {
-      await AgentModel.create({
+    test("returns only personal agents when scope is personal", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
         name: "Org Agent",
-        teams: [],
-        scope: "org",
         agentType: "agent",
       });
-      await AgentModel.create({
+      await makeAgent({
         name: "Personal Agent",
-        teams: [],
-        scope: "personal",
         agentType: "agent",
+        access: "personal",
       });
 
       const results = await AgentModel.findAll(undefined, true, {
@@ -2646,6 +2691,7 @@ describe("AgentModel", () => {
       makeUser,
       makeOrganization,
       makeMember,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
@@ -2658,15 +2704,13 @@ describe("AgentModel", () => {
 
       // The member creates a second personal agent and picks it as their
       // default. Creating it must not claim the role by itself.
-      const otherAgent = await AgentModel.create(
-        {
-          name: "Other Agent",
-          agentType: "agent",
-          scope: "personal",
-          organizationId: org.id,
-        },
-        user.id,
-      );
+      const otherAgent = await makeAgent({
+        name: "Other Agent",
+        agentType: "agent",
+        organizationId: org.id,
+        authorId: user.id,
+        access: "personal",
+      });
       expect(await MemberModel.getDefaultAgentId(user.id, org.id)).toBeNull();
       await MemberModel.setDefaultAgent(user.id, org.id, otherAgent.id);
 
@@ -2887,34 +2931,54 @@ describe("AgentModel", () => {
   });
 
   describe("findByIdsForPermissionCheck", () => {
-    test("returns agentType, scope, authorId, and teamIds for each agent", async ({
+    test("reads the audience and teams from the agent's own grants", async ({
       makeAgent,
       makeOrganization,
+      makeMember,
       makeUser,
       makeTeam,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const team = await makeTeam(org.id, user.id, { name: "Eng" });
 
       const agent = await makeAgent({
         name: "Perm Check Agent",
         agentType: "profile",
-        scope: "org",
+        access: { teams: [team.id] },
         organizationId: org.id,
         authorId: user.id,
-        teams: [team.id],
       });
 
-      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
-
-      expect(result.size).toBe(1);
-      const entry = result.get(agent.id);
-      expect(entry).toBeDefined();
+      const entry = (
+        await AgentModel.findByIdsForPermissionCheck([agent.id])
+      ).get(agent.id);
       expect(entry?.agentType).toBe("profile");
-      expect(entry?.scope).toBe("org");
+      expect(entry?.scope).toBe("team");
       expect(entry?.authorId).toBe(user.id);
       expect(entry?.teamIds).toEqual([team.id]);
+
+      // A grant to a role puts the agent in front of the organization, and
+      // the retired scope column has no say.
+      const key = {
+        organizationId: org.id,
+        resource: "agent" as const,
+        scope: agent.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [
+          ...(policy?.grants ?? []),
+          { subject: { type: "role", id: "member" }, actions: ["read", "use"] },
+        ],
+      });
+      expect(
+        (await AgentModel.findByIdsForPermissionCheck([agent.id])).get(agent.id)
+          ?.scope,
+      ).toBe("org");
     });
 
     test("returns multiple agents in a single batch", async ({ makeAgent }) => {
@@ -2961,18 +3025,20 @@ describe("AgentModel", () => {
     test("returns multiple team IDs when agent has multiple teams", async ({
       makeAgent,
       makeOrganization,
+      makeMember,
       makeUser,
       makeTeam,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
+      await makeMember(user.id, org.id);
       const team1 = await makeTeam(org.id, user.id, { name: "Frontend" });
       const team2 = await makeTeam(org.id, user.id, { name: "Backend" });
 
       const agent = await makeAgent({
         name: "Multi-Team Agent",
         organizationId: org.id,
-        teams: [team1.id, team2.id],
+        access: { teams: [team1.id, team2.id] },
       });
 
       const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
@@ -2997,7 +3063,7 @@ describe("AgentModel", () => {
     test("returns null authorId for agent without an author", async ({
       makeAgent,
     }) => {
-      const agent = await makeAgent({ name: "No Author", scope: "org" });
+      const agent = await makeAgent({ name: "No Author" });
 
       const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
 
@@ -3006,40 +3072,34 @@ describe("AgentModel", () => {
   });
 
   describe("slug generation", () => {
-    test("generates slug from name for mcp_gateway", async () => {
-      const agent = await AgentModel.create({
+    test("generates slug from name for mcp_gateway", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "My Test Gateway",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
 
       expect(agent.slug).toBe("my-test-gateway");
     });
 
-    test("does not generate slug for non-mcp_gateway agents", async () => {
-      const agent = await AgentModel.create({
+    test("does not generate slug for non-mcp_gateway agents", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "My Agent",
         agentType: "agent",
-        teams: [],
-        scope: "org",
       });
 
       expect(agent.slug).toBeNull();
     });
 
-    test("generates unique slug when name collides", async () => {
-      const agent1 = await AgentModel.create({
+    test("generates unique slug when name collides", async ({ makeAgent }) => {
+      const agent1 = await makeAgent({
         name: "Duplicate Name",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
         name: "Duplicate Name",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
 
       expect(agent1.slug).toBe("duplicate-name");
@@ -3047,33 +3107,29 @@ describe("AgentModel", () => {
       expect(agent2.slug).toMatch(/^duplicate-name-[a-f0-9]{6}$/);
     });
 
-    test("handles special characters in name", async () => {
-      const agent = await AgentModel.create({
+    test("handles special characters in name", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Test @#$ Gateway!",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
 
       expect(agent.slug).toBe("test-gateway");
     });
 
-    test("frees slug for reuse after soft-delete (Bucket B)", async () => {
-      const original = await AgentModel.create({
+    test("frees slug for reuse after soft-delete (Bucket B)", async ({
+      makeAgent,
+    }) => {
+      const original = await makeAgent({
         name: "Reusable Gateway",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
       expect(original.slug).toBe("reusable-gateway");
 
       await AgentModel.delete(original.id);
 
-      const reused = await AgentModel.create({
+      const reused = await makeAgent({
         name: "Reusable Gateway",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
       expect(reused.slug).toBe("reusable-gateway");
       expect(reused.id).not.toBe(original.id);
@@ -3081,12 +3137,14 @@ describe("AgentModel", () => {
   });
 
   describe("soft-delete", () => {
-    test("delete sets deletedAt and removes the agent from findAll", async () => {
-      await AgentModel.create({ name: "Keeper", teams: [], scope: "org" });
-      const target = await AgentModel.create({
+    test("delete sets deletedAt and removes the agent from findAll", async ({
+      makeAgent,
+    }) => {
+      await makeAgent({
+        name: "Keeper",
+      });
+      const target = await makeAgent({
         name: "To Delete",
-        teams: [],
-        scope: "org",
       });
 
       await AgentModel.delete(target.id);
@@ -3101,11 +3159,9 @@ describe("AgentModel", () => {
       expect(row.deletedAt).toBeInstanceOf(Date);
     });
 
-    test("hardDelete physically removes the row", async () => {
-      const agent = await AgentModel.create({
+    test("hardDelete physically removes the row", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Purge Me",
-        teams: [],
-        scope: "org",
       });
 
       await AgentModel.hardDelete(agent.id);
@@ -3119,19 +3175,16 @@ describe("AgentModel", () => {
 
     test("active lookup helpers exclude soft-deleted agents", async ({
       makeOrganization,
+      makeAgent,
     }) => {
       const organization = await makeOrganization();
-      const active = await AgentModel.create({
+      const active = await makeAgent({
         name: "Active Agent",
         organizationId: organization.id,
-        teams: [],
-        scope: "org",
       });
-      const deleted = await AgentModel.create({
+      const deleted = await makeAgent({
         name: "Deleted Agent",
         organizationId: organization.id,
-        teams: [],
-        scope: "org",
       });
 
       await AgentModel.delete(deleted.id);
@@ -3159,29 +3212,27 @@ describe("AgentModel", () => {
     test("findAccessibleIdsForUser excludes soft-deleted agents", async ({
       makeUser,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const organization = await makeOrganization();
+      await makeMember(user.id, organization.id);
       const team = await makeTeam(organization.id, user.id);
 
-      const visibleOrgAgent = await AgentModel.create({
+      const visibleOrgAgent = await makeAgent({
         name: "Visible Org Agent",
         organizationId: organization.id,
-        teams: [],
-        scope: "org",
       });
-      const deletedOrgAgent = await AgentModel.create({
+      const deletedOrgAgent = await makeAgent({
         name: "Deleted Org Agent",
         organizationId: organization.id,
-        teams: [],
-        scope: "org",
       });
-      const deletedTeamAgent = await AgentModel.create({
+      const deletedTeamAgent = await makeAgent({
         name: "Deleted Team Agent",
         organizationId: organization.id,
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
 
       await AgentModel.delete(deletedOrgAgent.id);
@@ -3202,23 +3253,19 @@ describe("AgentModel", () => {
       expect(result).toBeNull();
     });
 
-    test("returns ID for existing UUID", async () => {
-      const agent = await AgentModel.create({
+    test("returns ID for existing UUID", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "UUID Resolve Test",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
       const result = await AgentModel.resolveIdFromIdOrSlug(agent.id);
       expect(result).toBe(agent.id);
     });
 
-    test("resolves slug to agent ID", async () => {
-      const agent = await AgentModel.create({
+    test("resolves slug to agent ID", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Slug Resolve Test",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
 
       expect(agent.slug).not.toBeNull();
@@ -3234,15 +3281,15 @@ describe("AgentModel", () => {
       expect(result).toBeNull();
     });
 
-    test("does not cache misses: a slug resolves as soon as its agent exists", async () => {
+    test("does not cache misses: a slug resolves as soon as its agent exists", async ({
+      makeAgent,
+    }) => {
       expect(await AgentModel.resolveIdFromIdOrSlug("late-agent")).toBeNull();
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Late Agent",
         slug: "late-agent",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
 
       expect(await AgentModel.resolveIdFromIdOrSlug("late-agent")).toBe(
@@ -3250,12 +3297,12 @@ describe("AgentModel", () => {
       );
     });
 
-    test("tolerates bounded staleness: a cached slug survives deletion until the TTL", async () => {
-      const agent = await AgentModel.create({
+    test("tolerates bounded staleness: a cached slug survives deletion until the TTL", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Cached Then Deleted",
         agentType: "mcp_gateway",
-        teams: [],
-        scope: "org",
       });
       const slug = agent.slug as string;
 
@@ -3274,12 +3321,10 @@ describe("AgentModel", () => {
   });
 
   describe("passthroughHeaders", () => {
-    test("persists passthrough headers on create", async () => {
-      const agent = await AgentModel.create({
+    test("persists passthrough headers on create", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Gateway With Headers",
         agentType: "mcp_gateway",
-        scope: "org",
-        teams: [],
         passthroughHeaders: ["x-correlation-id", "x-tenant-id"],
       });
 
@@ -3295,12 +3340,10 @@ describe("AgentModel", () => {
       ]);
     });
 
-    test("persists passthrough headers on update", async () => {
-      const agent = await AgentModel.create({
+    test("persists passthrough headers on update", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Gateway Update Headers",
         agentType: "mcp_gateway",
-        scope: "org",
-        teams: [],
       });
 
       expect(agent.passthroughHeaders).toBeNull();
@@ -3317,12 +3360,12 @@ describe("AgentModel", () => {
   });
 
   describe("findGatewayAgentById", () => {
-    test("returns the scalar gateway config and labels without full hydration", async () => {
-      const agent = await AgentModel.create({
+    test("returns the scalar gateway config and labels without full hydration", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Gateway Hot Path",
         agentType: "mcp_gateway",
-        scope: "org",
-        teams: [],
         passthroughHeaders: ["x-correlation-id"],
         labels: [{ key: "environment", value: "production" }],
       });
@@ -3338,12 +3381,10 @@ describe("AgentModel", () => {
       ]);
     });
 
-    test("returns null for a soft-deleted agent", async () => {
-      const agent = await AgentModel.create({
+    test("returns null for a soft-deleted agent", async ({ makeAgent }) => {
+      const agent = await makeAgent({
         name: "Soon Deleted Gateway",
         agentType: "mcp_gateway",
-        scope: "org",
-        teams: [],
       });
 
       await AgentModel.delete(agent.id);
@@ -3355,11 +3396,11 @@ describe("AgentModel", () => {
   });
 
   describe("accessAllTools / toolExposureMode normalization", () => {
-    test("create coerces toolExposureMode to search_and_run_only when accessAllTools is true", async () => {
-      const agent = await AgentModel.create({
+    test("create coerces toolExposureMode to search_and_run_only when accessAllTools is true", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "All Tools Agent",
-        teams: [],
-        scope: "org",
         accessAllTools: true,
         toolExposureMode: "full",
       });
@@ -3368,11 +3409,11 @@ describe("AgentModel", () => {
       expect(agent.toolExposureMode).toBe("search_and_run_only");
     });
 
-    test("create leaves toolExposureMode untouched when accessAllTools is false", async () => {
-      const agent = await AgentModel.create({
+    test("create leaves toolExposureMode untouched when accessAllTools is false", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Custom Tools Agent",
-        teams: [],
-        scope: "org",
         accessAllTools: false,
         toolExposureMode: "full",
       });
@@ -3380,11 +3421,11 @@ describe("AgentModel", () => {
       expect(agent.toolExposureMode).toBe("full");
     });
 
-    test("update coerces toolExposureMode to search_and_run_only when accessAllTools is enabled", async () => {
-      const agent = await AgentModel.create({
+    test("update coerces toolExposureMode to search_and_run_only when accessAllTools is enabled", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
         accessAllTools: false,
         toolExposureMode: "full",
       });
@@ -3396,11 +3437,11 @@ describe("AgentModel", () => {
       expect(updated?.toolExposureMode).toBe("search_and_run_only");
     });
 
-    test("update keeps an all-tools agent on search_and_run_only even when full is requested", async () => {
-      const agent = await AgentModel.create({
+    test("update keeps an all-tools agent on search_and_run_only even when full is requested", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
         accessAllTools: true,
       });
 
@@ -3422,6 +3463,7 @@ describe("AgentModel", () => {
 
     test("create with accessAllTools pre-fills exclusions for unassigned built-ins only", async ({
       makeOrganization,
+      makeAgent,
     }) => {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       const org = await makeOrganization();
@@ -3429,11 +3471,9 @@ describe("AgentModel", () => {
       // creation, they must NOT be pre-excluded.
       await OrganizationModel.patch(org.id, { skillToolsEnabled: true });
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "All Tools Prefill Agent",
         organizationId: org.id,
-        teams: [],
-        scope: "org",
         accessAllTools: true,
       });
 
@@ -3463,15 +3503,14 @@ describe("AgentModel", () => {
 
     test("create in All mode does not pre-exclude the creation-default tools", async ({
       makeOrganization,
+      makeAgent,
     }) => {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       const org = await makeOrganization();
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "All Tools Defaults Agent",
         organizationId: org.id,
-        teams: [],
-        scope: "org",
         accessAllTools: true,
       });
 
@@ -3501,14 +3540,9 @@ describe("AgentModel", () => {
     test("create with skipExclusionPrefill leaves the exclusion list empty but still enables All mode", async () => {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       const agent = await AgentModel.create(
-        {
-          name: "Skip Prefill Agent",
-          teams: [],
-          scope: "org",
-          accessAllTools: true,
-        },
+        { name: "Skip Prefill Agent", teams: [], accessAllTools: true },
         undefined,
-        { skipExclusionPrefill: true },
+        { skipExclusionPrefill: true, ...accessGrants("org") },
       );
 
       expect(agent.accessAllTools).toBe(true);
@@ -3678,17 +3712,19 @@ describe("AgentModel", () => {
       return result.data.find((agent) => agent.name === name)?.lastUsedAt;
     };
 
-    test("is null for an agent that was never used", async () => {
-      await AgentModel.create({ name: "Unused", teams: [], scope: "org" });
+    test("is null for an agent that was never used", async ({ makeAgent }) => {
+      await makeAgent({
+        name: "Unused",
+      });
 
       expect(await lastUsedOf("Unused")).toBeNull();
     });
 
-    test("reports an MCP request routed through the agent", async () => {
-      const agent = await AgentModel.create({
+    test("reports an MCP request routed through the agent", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Gateway-ish",
-        teams: [],
-        scope: "org",
       });
       await seedMcpCall(agent.id, at("10"));
 
@@ -3700,30 +3736,28 @@ describe("AgentModel", () => {
      * chat can answer for months without ever routing a tool call, and used to
      * report itself as never used.
      */
-    test("reports an LLM call made on the agent's behalf", async () => {
-      const agent = await AgentModel.create({
+    test("reports an LLM call made on the agent's behalf", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Chat only",
-        teams: [],
-        scope: "org",
       });
       await seedInteraction(agent.id, at("11"));
 
       expect(await lastUsedOf("Chat only")).toEqual(at("11"));
     });
 
-    test("reports the later of the two signals, whichever it is", async () => {
-      const mcpLater = await AgentModel.create({
+    test("reports the later of the two signals, whichever it is", async ({
+      makeAgent,
+    }) => {
+      const mcpLater = await makeAgent({
         name: "MCP later",
-        teams: [],
-        scope: "org",
       });
       await seedInteraction(mcpLater.id, at("10"));
       await seedMcpCall(mcpLater.id, at("20"));
 
-      const interactionLater = await AgentModel.create({
+      const interactionLater = await makeAgent({
         name: "Interaction later",
-        teams: [],
-        scope: "org",
       });
       await seedMcpCall(interactionLater.id, at("10"));
       await seedInteraction(interactionLater.id, at("20"));
@@ -3732,23 +3766,17 @@ describe("AgentModel", () => {
       expect(await lastUsedOf("Interaction later")).toEqual(at("20"));
     });
 
-    test("sorts by the same value the rows report", async () => {
-      const oldest = await AgentModel.create({
+    test("sorts by the same value the rows report", async ({ makeAgent }) => {
+      const oldest = await makeAgent({
         name: "Oldest",
-        teams: [],
-        scope: "org",
       });
-      const middle = await AgentModel.create({
+      const middle = await makeAgent({
         name: "Middle",
-        teams: [],
-        scope: "org",
       });
-      const newest = await AgentModel.create({
+      const newest = await makeAgent({
         name: "Newest",
-        teams: [],
-        scope: "org",
       });
-      await AgentModel.create({ name: "Never", teams: [], scope: "org" });
+      await makeAgent({ name: "Never" });
 
       // Each agent's later signal is the one that must order it, so the two
       // kinds are deliberately crossed over here.

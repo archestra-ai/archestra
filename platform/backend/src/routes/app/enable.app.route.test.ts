@@ -48,7 +48,7 @@ describe("POST /api/apps/:appId/(enable|disable)", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Fresh", scope: "org" },
+      payload: { name: "Fresh" },
     });
     expect(created.statusCode).toBe(200);
     expect(created.json().enabled).toBe(true);
@@ -59,7 +59,6 @@ describe("POST /api/apps/:appId/(enable|disable)", () => {
   }) => {
     const disabled = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
       enabled: false,
     });
@@ -78,7 +77,6 @@ describe("POST /api/apps/:appId/(enable|disable)", () => {
   }) => {
     const disabled = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
       enabled: false,
     });
@@ -99,7 +97,6 @@ describe("POST /api/apps/:appId/(enable|disable)", () => {
   test("disabling returns a live app to author-only", async ({ makeApp }) => {
     const live = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
       enabled: true,
     });
@@ -126,7 +123,6 @@ describe("POST /api/apps/:appId/(enable|disable)", () => {
   }) => {
     const disabled = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
       enabled: false,
     });
@@ -146,7 +142,6 @@ describe("POST /api/apps/:appId/(enable|disable)", () => {
   }) => {
     const live = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
       enabled: true,
     });
@@ -180,7 +175,6 @@ describe("POST /api/apps/:appId/(enable|disable)", () => {
   }) => {
     const disabled = await makeApp({
       organizationId,
-      scope: "org",
       authorId: author.id,
       enabled: false,
     });

@@ -11,7 +11,7 @@ import {
 } from "@archestra/shared";
 import { eq, inArray, type SQL } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { beforeEach, describe, expect, test } from "@/test";
+import { accessGrants, beforeEach, describe, expect, test } from "@/test";
 import type { InsertInteraction, InteractionResponse } from "@/types";
 import { SelectInteractionSchema } from "@/types";
 import AgentModel from "./agent";
@@ -170,10 +170,12 @@ describe("InteractionModel", () => {
     test("returns chat errors for chat conversation sessions", async ({
       makeUser,
       makeOrganization,
+      makeMember,
       makeAgent,
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
+      await makeMember(user.id, org.id);
       const agent = await makeAgent({ organizationId: org.id });
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -511,12 +513,12 @@ describe("InteractionModel", () => {
   });
 
   describe("getAllInteractionsForProfile", () => {
-    test("returns all interactions for a specific agent", async () => {
+    test("returns all interactions for a specific agent", async ({
+      makeAgent,
+    }) => {
       // Create another agent
-      const otherAgent = await AgentModel.create({
+      const otherAgent = await makeAgent({
         name: "Other Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Create interactions for both agents
@@ -582,18 +584,14 @@ describe("InteractionModel", () => {
   });
 
   describe("Access Control", () => {
-    test("admin can see all interactions", async ({ makeAdmin }) => {
+    test("admin can see all interactions", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
 
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
         name: "Agent 1",
-        teams: [],
-        scope: "org",
       });
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
         name: "Agent 2",
-        teams: [],
-        scope: "org",
       });
 
       await InteractionModel.create({
@@ -635,12 +633,17 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user1 = await makeUser();
       const user2 = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user2.id, org.id);
+      await makeMember(user1.id, org.id);
 
       // Create teams and add users
       const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
@@ -650,15 +653,15 @@ describe("InteractionModel", () => {
       await TeamModel.addMember(team2.id, user2.id);
 
       // Create agents with team assignments
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 1",
-        teams: [team1.id],
-        scope: "team",
+        access: { teams: [team1.id] },
       });
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 2",
-        teams: [team2.id],
-        scope: "team",
+        access: { teams: [team2.id] },
       });
 
       await InteractionModel.create({
@@ -699,14 +702,18 @@ describe("InteractionModel", () => {
 
     test("member with no access sees only org-wide agent interactions", async ({
       makeUser,
+      makeOrganization,
+      makeMember,
+      makeAgent,
     }) => {
       const user = await makeUser();
+      const organization = await makeOrganization();
+      await makeMember(user.id, organization.id);
 
       // Teamless agent is org-wide, visible to all members
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
+        organizationId: organization.id,
         name: "Agent 1",
-        teams: [],
-        scope: "org",
       });
 
       await InteractionModel.create({
@@ -733,13 +740,14 @@ describe("InteractionModel", () => {
       expect(interactions.data[0].profileId).toBe(agent1.id);
     });
 
-    test("findById returns interaction for admin", async ({ makeAdmin }) => {
+    test("findById returns interaction for admin", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
       const admin = await makeAdmin();
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       const interaction = await InteractionModel.create({
@@ -768,20 +776,24 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       // Create team and add user
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Test Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
 
       const interaction = await InteractionModel.create({
@@ -808,14 +820,18 @@ describe("InteractionModel", () => {
 
     test("findById returns interaction for org-wide agent", async ({
       makeUser,
+      makeOrganization,
+      makeMember,
+      makeAgent,
     }) => {
       const user = await makeUser();
+      const organization = await makeOrganization();
+      await makeMember(user.id, organization.id);
 
       // Teamless agent is org-wide
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: organization.id,
         name: "Test Agent",
-        teams: [],
-        scope: "org",
       });
 
       const interaction = await InteractionModel.create({
@@ -843,18 +859,14 @@ describe("InteractionModel", () => {
   });
 
   describe("findAllPaginated filters", () => {
-    test("filters by profileId", async ({ makeAdmin }) => {
+    test("filters by profileId", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
 
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
         name: "Agent 1",
-        teams: [],
-        scope: "org",
       });
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
         name: "Agent 2",
-        teams: [],
-        scope: "org",
       });
 
       await InteractionModel.create({
@@ -895,13 +907,11 @@ describe("InteractionModel", () => {
       expect(interactions.data[0].profileId).toBe(agent1.id);
     });
 
-    test("filters by externalAgentId", async ({ makeAdmin }) => {
+    test("filters by externalAgentId", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       await InteractionModel.create({
@@ -960,18 +970,15 @@ describe("InteractionModel", () => {
 
     test("filters by both profileId and externalAgentId", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
 
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
         name: "Agent 1",
-        teams: [],
-        scope: "org",
       });
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
         name: "Agent 2",
-        teams: [],
-        scope: "org",
       });
 
       // Agent 1 with external ID
@@ -1035,25 +1042,28 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
-      const accessibleAgent = await AgentModel.create({
+      const accessibleAgent = await makeAgent({
+        organizationId: org.id,
         name: "Accessible Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
       // Org-wide agent (no teams) is also accessible
-      const orgWideAgent = await AgentModel.create({
+      const orgWideAgent = await makeAgent({
+        organizationId: org.id,
         name: "Org-Wide Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Interaction for team-scoped agent
@@ -1098,15 +1108,13 @@ describe("InteractionModel", () => {
       expect(interactions.data).toHaveLength(2);
     });
 
-    test("filters by userId", async ({ makeAdmin, makeUser }) => {
+    test("filters by userId", async ({ makeAdmin, makeUser, makeAgent }) => {
       const admin = await makeAdmin();
       const user1 = await makeUser();
       const user2 = await makeUser();
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Interaction with user1
@@ -1167,12 +1175,10 @@ describe("InteractionModel", () => {
   });
 
   describe("date range filtering", () => {
-    test("filters by startDate", async ({ makeAdmin }) => {
+    test("filters by startDate", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Create interactions with different timestamps
@@ -1221,12 +1227,10 @@ describe("InteractionModel", () => {
       expect(interactions.data.length).toBeGreaterThanOrEqual(1);
     });
 
-    test("filters by endDate", async ({ makeAdmin }) => {
+    test("filters by endDate", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Create interactions
@@ -1263,12 +1267,11 @@ describe("InteractionModel", () => {
 
     test("filters by date range (startDate and endDate)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Create an interaction
@@ -1308,17 +1311,16 @@ describe("InteractionModel", () => {
       ).toBe(true);
     });
 
-    test("date filter works with other filters", async ({ makeAdmin }) => {
+    test("date filter works with other filters", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
       const admin = await makeAdmin();
-      const agent1 = await AgentModel.create({
+      const agent1 = await makeAgent({
         name: "Agent 1",
-        teams: [],
-        scope: "org",
       });
-      const agent2 = await AgentModel.create({
+      const agent2 = await makeAgent({
         name: "Agent 2",
-        teams: [],
-        scope: "org",
       });
 
       // Create interactions for both agents
@@ -1366,12 +1368,10 @@ describe("InteractionModel", () => {
   });
 
   describe("getSessions date filtering", () => {
-    test("filters sessions by date range", async ({ makeAdmin }) => {
+    test("filters sessions by date range", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Create interaction
@@ -1407,12 +1407,11 @@ describe("InteractionModel", () => {
   describe("getSessions last-user-message preview (T-1015)", () => {
     test("returns a truncated preview and never the raw request", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       const longMessage = "m".repeat(500);
@@ -1457,12 +1456,11 @@ describe("InteractionModel", () => {
     // that mixed rows up would show one session's message under another.
     test("reconstructs each session's own last message", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Delta Agent",
-        teams: [],
-        scope: "org",
       });
 
       const sessionCount = 5;
@@ -1536,12 +1534,11 @@ describe("InteractionModel", () => {
   describe("getSessions total", () => {
     test("paginates mixed session and sessionless summaries before returning aggregates", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Pagination Agent",
-        teams: [],
-        scope: "org",
       });
       const baseTime = new Date("2020-01-01T00:00:00.000Z").getTime();
       const rows = [
@@ -1605,12 +1602,11 @@ describe("InteractionModel", () => {
     // the filter set — otherwise a filtered page reports the unfiltered count.
     test("reports a total per filter set, not the first one computed", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Total Agent",
-        teams: [],
-        scope: "org",
       });
 
       for (const sessionId of ["total-a", "total-b", "total-c"]) {
@@ -1667,11 +1663,11 @@ describe("InteractionModel", () => {
   // paths must return the same page, so pin them against each other rather than
   // trusting the rarely-taken one.
   describe("getSessions key-walk and whole-table fallback agree", () => {
-    test("both strategies return the same page in the same order", async () => {
-      const agent = await AgentModel.create({
+    test("both strategies return the same page in the same order", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
         name: "Scan Fallback Agent",
-        teams: [],
-        scope: "org",
       });
       const baseTime = new Date("2021-06-01T00:00:00.000Z").getTime();
       // Two multi-row sessions plus a sessionless row, so the page mixes both
@@ -1743,12 +1739,11 @@ describe("InteractionModel", () => {
   describe("getSessions billing-mode split", () => {
     test("splits session cost into billed and subscription", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
       const base = {
         profileId: agent.id,
@@ -1804,17 +1799,22 @@ describe("InteractionModel", () => {
     // (source "chat:title_generation"). The sessions listing must treat this as
     // ONE session, not two, and attribute it to the user's agent.
     async function seedChatPlusTitleGen(sessionId: string) {
-      const chatAgent = await AgentModel.create({
-        name: "My Assistant",
-        teams: [],
-        scope: "org",
-      });
-      const titleAgent = await AgentModel.create({
-        name: "Chat Title Generation Subagent",
-        teams: [],
-        scope: "org",
-        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION },
-      });
+      const chatAgent = await AgentModel.create(
+        { name: "My Assistant", teams: [] },
+        undefined,
+        accessGrants("org"),
+      );
+      const titleAgent = await AgentModel.create(
+        {
+          name: "Chat Title Generation Subagent",
+          teams: [],
+          builtInAgentConfig: {
+            name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+          },
+        },
+        undefined,
+        accessGrants("org"),
+      );
       const base = {
         sessionId,
         sessionSource: "header",
@@ -1899,12 +1899,11 @@ describe("InteractionModel", () => {
 
     test("classifies OpenCode title and tool-spawning requests across native provider formats", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
       const sessionId = "opencode-request-types";
       const geminiResponse = {
@@ -2104,12 +2103,11 @@ describe("InteractionModel", () => {
   describe("getSessions auth attribution", () => {
     test("aggregates auth methods and authenticated app names", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       await InteractionModel.create({
@@ -2172,16 +2170,15 @@ describe("InteractionModel", () => {
     test("keeps a user name containing a comma as a single entry", async ({
       makeAdmin,
       makeUser,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
       // "Last, First" display names (common for enterprise IdP / MS Teams
       // accounts) must not be split into multiple names by the aggregation
       const commaNameUser = await makeUser({ name: "Doe, Jane Q." });
       const plainNameUser = await makeUser({ name: "John Smith" });
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       for (const [index, user] of [commaNameUser, plainNameUser].entries()) {
@@ -2220,12 +2217,10 @@ describe("InteractionModel", () => {
   });
 
   describe("getSessions source filtering", () => {
-    test("filters sessions by source", async ({ makeAdmin }) => {
+    test("filters sessions by source", async ({ makeAdmin, makeAgent }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Create interactions with different sources
@@ -2340,12 +2335,11 @@ describe("InteractionModel", () => {
 
     test("filters sessions by client (external_agent_id)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       const make = (sessionId: string, externalAgentId: string | null) =>
@@ -2425,12 +2419,11 @@ describe("InteractionModel", () => {
 
     test("marks mixed-source chat sessions without promoting compaction to the session source", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       await InteractionModel.create({
@@ -2478,12 +2471,11 @@ describe("InteractionModel", () => {
 
     test("returns empty when filtering by source with no matches", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       await InteractionModel.create({
@@ -2542,12 +2534,11 @@ describe("InteractionModel", () => {
   describe("getSessions last-interaction preview and claudeCodeTitle", () => {
     test("returns the last-user-message preview for a session with a single interaction", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       await InteractionModel.create({
@@ -2599,12 +2590,11 @@ describe("InteractionModel", () => {
 
     test("recognizes a Responses-format request (Codex `input`) as the last interaction", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Codex sends the OpenAI Responses shape: turns live in `input`, not
@@ -2646,12 +2636,11 @@ describe("InteractionModel", () => {
 
     test("skips prompt suggestion generator requests when deriving the preview", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // First: a real user request (should drive the preview)
@@ -2717,12 +2706,11 @@ describe("InteractionModel", () => {
 
     test("skips title generation requests when deriving the preview", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // First: a real user request
@@ -2798,12 +2786,11 @@ describe("InteractionModel", () => {
 
     test("extracts claudeCodeTitle from title generation response", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Real request
@@ -2871,12 +2858,11 @@ describe("InteractionModel", () => {
 
     test("handles title generation request with malformed response (no text)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Real request (should drive the preview)
@@ -2942,12 +2928,13 @@ describe("InteractionModel", () => {
       expect(sessions.data[0].claudeCodeTitle).toBeNull();
     });
 
-    test("returns a preview even for short messages", async ({ makeAdmin }) => {
+    test("returns a preview even for short messages", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Short message - should still be returned
@@ -2981,12 +2968,11 @@ describe("InteractionModel", () => {
 
     test("returns a preview for Gemini format (contents[].parts[].text)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Gemini format uses contents[] with parts[] instead of messages[]
@@ -3031,12 +3017,11 @@ describe("InteractionModel", () => {
 
     test("returns a descriptive preview for Gemini with image-only content (no text)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Gemini request with only image data (no text parts)
@@ -3087,12 +3072,11 @@ describe("InteractionModel", () => {
 
     test("returns a descriptive preview for Gemini with function response (tool result)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Gemini request with function response (common in agentic workflows)
@@ -3160,12 +3144,11 @@ describe("InteractionModel", () => {
 
     test("handles single interactions without sessionId (null session)", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       const interaction = await InteractionModel.create({
@@ -3227,12 +3210,11 @@ describe("InteractionModel", () => {
 
     test("previews the newest turn of a session far longer than the sampling window", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       for (let turn = 1; turn <= 12; turn++) {
@@ -3258,12 +3240,11 @@ describe("InteractionModel", () => {
 
     test("finds the title of a long session, which Claude Code generates at its start", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Claude Code asks for a title once, on the session's first turn.
@@ -3306,12 +3287,11 @@ describe("InteractionModel", () => {
 
     test("previews a session whose only real turn sits between scaffolding at both ends", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Both sampling windows land on scaffolding, so the real turn is only
@@ -3435,15 +3415,14 @@ describe("InteractionModel", () => {
     test("returns unique users ordered by activity", async ({
       makeAdmin,
       makeUser,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
       const user1 = await makeUser({ name: "Zulu Most Active" });
       const user2 = await makeUser({ name: "Alpha Less Active" });
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Create interactions for both users
@@ -3506,14 +3485,13 @@ describe("InteractionModel", () => {
     test("excludes interactions without userId", async ({
       makeAdmin,
       makeUser,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
       const user = await makeUser({ name: "Test User" });
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Interaction with userId
@@ -3558,25 +3536,29 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser({ name: "Regular User" });
       const otherUser = await makeUser({ name: "Other User" });
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(otherUser.id, org.id);
+      await makeMember(user.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
-      const accessibleAgent = await AgentModel.create({
+      const accessibleAgent = await makeAgent({
+        organizationId: org.id,
         name: "Accessible Agent",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
-      const orgWideAgent = await AgentModel.create({
+      const orgWideAgent = await makeAgent({
+        organizationId: org.id,
         name: "Org-Wide Agent",
-        teams: [],
-        scope: "org",
       });
 
       // Interaction for team-scoped agent with otherUser
@@ -3622,12 +3604,11 @@ describe("InteractionModel", () => {
   describe("preserves interactions when profile is deleted", () => {
     test("interaction is preserved with null profileId when profile is deleted", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent To Delete",
-        teams: [],
-        scope: "org",
       });
 
       // Create an interaction for the agent
@@ -3677,20 +3658,24 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
+      makeAgent,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       // Give user access to the team
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
+        organizationId: org.id,
         name: "Agent To Delete",
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
 
       // Create an interaction for the agent
@@ -3741,12 +3726,11 @@ describe("InteractionModel", () => {
 
     test("getSessions includes sessions with deleted profiles for admin", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent To Delete",
-        teams: [],
-        scope: "org",
       });
 
       // Create an interaction with session
@@ -3785,17 +3769,14 @@ describe("InteractionModel", () => {
 
     test("findAllPaginated includes interactions with deleted profiles for admin", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agentToDelete = await AgentModel.create({
+      const agentToDelete = await makeAgent({
         name: "Agent To Delete",
-        teams: [],
-        scope: "org",
       });
-      const agentToKeep = await AgentModel.create({
+      const agentToKeep = await makeAgent({
         name: "Agent To Keep",
-        teams: [],
-        scope: "org",
       });
 
       // Create interactions for both agents
@@ -3851,12 +3832,11 @@ describe("InteractionModel", () => {
 
     test("findAllPaginated resolves external agent labels after profile deletion", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Deleted External Agent",
-        teams: [],
-        scope: "org",
       });
 
       await InteractionModel.create({
@@ -4056,11 +4036,13 @@ describe("InteractionModel", () => {
       makeAgent,
       makeUser,
       makeOrganization,
+      makeMember,
       makeVirtualApiKey,
     }) => {
       const agent = await makeAgent();
       const user = await makeUser();
       const org = await makeOrganization();
+      await makeMember(user.id, org.id);
       const virtualKey = await makeVirtualApiKey(org.id);
 
       const userLimit = await LimitModel.create({
@@ -4115,13 +4097,17 @@ describe("InteractionModel", () => {
     test("still updates agent/team/org limits as before (regression)", async ({
       makeAgent,
       makeOrganization,
+      makeMember,
       makeAdmin,
       makeTeam,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
+      await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({ access: { teams: [team.id] } });
+      // Team limits follow the agent's team assignment, not its grants.
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
       const agentLimit = await LimitModel.create({
         entityType: "agent",
@@ -4184,13 +4170,15 @@ describe("InteractionModel", () => {
     test("updates team all-models limit via interaction flow", async ({
       makeAgent,
       makeOrganization,
+      makeMember,
       makeAdmin,
       makeTeam,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
+      await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({ access: { teams: [team.id] } });
 
       // Also assign via agent_team table (like production)
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
@@ -4231,16 +4219,17 @@ describe("InteractionModel", () => {
     test("updates team all-models limit with multiple teams", async ({
       makeAgent,
       makeOrganization,
+      makeMember,
       makeAdmin,
       makeTeam,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
+      await makeMember(admin.id, org.id, { role: "admin" });
       const team1 = await makeTeam(org.id, admin.id);
       const team2 = await makeTeam(org.id, admin.id);
       const agent = await makeAgent({
-        teams: [team1.id, team2.id],
-        scope: "team",
+        access: { teams: [team1.id, team2.id] },
       });
 
       // Assign to both teams
@@ -4462,8 +4451,7 @@ describe("InteractionModel", () => {
       await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
       const agent = await makeAgent({
-        teams: [team.id],
-        scope: "team",
+        access: { teams: [team.id] },
       });
 
       // Assign agent to team via junction table (like production)
@@ -4548,12 +4536,11 @@ describe("InteractionModel", () => {
 
     test("findAllPaginated returns full requests and classifies requestType on the reconstructed request", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
       const tools = [
         { name: "Task", description: "spawn subagent", input_schema: {} },
@@ -4597,12 +4584,11 @@ describe("InteractionModel", () => {
 
     test("findAllPaginated classifies a Claude Desktop web-search request as a subagent", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
       const sessionId = "desktop-subagent";
 
@@ -4700,12 +4686,11 @@ describe("InteractionModel", () => {
 
     test("getSessions derives the preview from the fully reconstructed chain, even when ancestors are outside the 20-row window", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
-      const agent = await AgentModel.create({
+      const agent = await makeAgent({
         name: "Agent",
-        teams: [],
-        scope: "org",
       });
 
       // 22 consecutive requests so the head/earliest rows fall outside the

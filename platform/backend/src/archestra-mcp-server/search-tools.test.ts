@@ -518,8 +518,7 @@ describe("search_tools", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       name: "GitHub MCP",
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
     });
     await makeTool({
       name: "github__search_repositories",

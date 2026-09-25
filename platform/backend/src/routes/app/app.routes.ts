@@ -41,8 +41,6 @@ import {
   assertCallerMayAuthorApp,
   assertCallerMayModifyApp,
   callerIsAppAdmin,
-  resolveOrgTeams,
-  resolveOrgUsers,
 } from "@/services/apps/app-authorization";
 import {
   createSeededAppConversation,
@@ -62,6 +60,7 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import { transferResourceOwnership } from "@/services/resource-ownership";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   type App,
@@ -87,7 +86,6 @@ import { isUniqueConstraintError } from "@/utils/db";
 import { externalAppLabel } from "@/utils/external-app-label";
 import {
   BulkDeleteBodySchema,
-  BulkIdsSchema,
   BulkOutcomeSchema,
   runBulk,
 } from "../bulk-route";
@@ -100,23 +98,18 @@ const CommaSeparatedIds = z.preprocess(
   z.array(z.string()),
 );
 
-// REST bodies extend the shared create/update schemas with team assignments,
-// which only the REST surface needs for team-scoped apps.
+// The REST create body. Who can reach the new app is its `initialGrants`
+// alone; the schema is strict so the retired `scope`/`teamIds` fields are
+// refused rather than silently dropped.
 const CreateAppBodySchema = CreateAppSchema.extend({
-  teamIds: z.array(UuidIdSchema).optional(),
   // When set, also create a chat conversation with this app already rendered, so
   // the client opens it directly at `/chat/<conversationId>` with no model turn.
   openInChat: z.boolean().optional(),
-});
-const UpdateAppBodySchema = UpdateAppSchema.extend({
-  teamIds: z.array(UuidIdSchema).optional(),
-  // People the app is shared with individually. Additive to `personal` scope
-  // rather than a scope of its own, so a personal app can follow a chat shared
-  // with named colleagues without widening to a team or the organization.
-  // Omitted leaves grants untouched; `[]` revokes them all. Not UUIDs — better-auth
-  // user ids are opaque strings.
-  userIds: z.array(z.string().min(1)).optional(),
-});
+}).strict();
+// Who can reach an app is decided by its resource permission policy, which the
+// permissions API writes on its own, so the update body carries no sharing
+// fields: the stored visibility columns are carried through untouched.
+const UpdateAppBodySchema = UpdateAppSchema;
 const RestoreAppVersionBodySchema = z.strictObject({
   baseVersion: z.number().int().positive(),
 });
@@ -227,23 +220,19 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // by their own model; we merge, sort, and paginate over the combined set.
       // Cardinality is small (tens), so fetching all-then-slicing is fine.
       const isAppAdmin = await callerIsAppAdmin(user.id, organizationId);
+      const hasBaseRead = await userHasPermission(
+        user.id,
+        organizationId,
+        "app",
+        "read",
+      );
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId,
         userId: user.id,
-        isAppAdmin,
       });
-      // Apps the caller reaches WITHOUT the admin bypass. Distinguishes a
-      // genuinely-accessible app ("shared") from one seen only through oversight
-      // ("admin"), so the card can label the latter and the "All" view can hide
-      // it. For a non-admin this is just the accessible set (no extra query).
-      const nonAdminAccessibleIds = new Set(
-        isAppAdmin
-          ? await AppAccessModel.getUserAccessibleAppIds({
-              organizationId,
-              userId: user.id,
-            })
-          : accessibleAppIds,
-      );
+      // Grants are the only way to reach an app, so there is no longer a set
+      // an administrator sees only through oversight.
+      const nonAdminAccessibleIds = new Set(accessibleAppIds);
       const ownedFilters = {
         organizationId,
         accessibleAppIds,
@@ -251,11 +240,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       };
       const [ownedCount, external] = await Promise.all([
         AppModel.countByOrganization(ownedFilters),
-        McpServerModel.findUiCapableForCaller({
-          userId: user.id,
-          organizationId,
-          ...(query.search ? { search: query.search } : {}),
-        }),
+        hasBaseRead
+          ? McpServerModel.findUiCapableForCaller({
+              userId: user.id,
+              organizationId,
+              ...(query.search ? { search: query.search } : {}),
+            })
+          : Promise.resolve([]),
       ]);
       const owned = await AppModel.findByOrganization({
         ...ownedFilters,
@@ -532,21 +523,21 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, user, organizationId }, reply) => {
-      const scope = body.scope ?? "personal";
-      const teamIds = await resolveOrgTeams(body.teamIds, organizationId);
-      if (scope === "team" && teamIds.length === 0) {
-        throw new ApiError(
-          400,
-          "A team-scoped app requires at least one teamId.",
-        );
-      }
-      await assertCallerMayModifyApp({
-        userId: user.id,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
         organizationId,
-        scope,
-        authorId: user.id,
-        resourceTeamIds: teamIds,
+        userId: user.id,
+        resource: "app",
+        grants: body.initialGrants ?? [],
+        target: {
+          id: crypto.randomUUID(),
+          name: body.name,
+          authorId: user.id,
+        },
       });
+      // SPDX-SnippetEnd
       // `openInChat` hands the new app straight to a chat agent to build (the
       // Apps page create flow), so that agent is resolved up front: the app
       // binds to its environment below, and the seeded conversation reuses the
@@ -598,6 +589,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Names are unique per author and slugs per org; a duplicate of either
       // fails this insert before any backing is created.
       const created = await AppModel.create({
+        initialPermissionGrants: body.initialGrants ?? [],
         app: {
           organizationId,
           authorId: user.id,
@@ -617,12 +609,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         await createAppBacking({
           app: created,
-          scope,
           environmentId,
           icon: body.icon ?? null,
           userId: user.id,
           organizationId,
-          teamIds,
         });
       } catch (error) {
         await AppModel.purge(created.id);
@@ -923,26 +913,15 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const app = await loadViewableApp({
+        action: "update",
         appId,
         userId: user.id,
         organizationId,
       });
-      const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
-      const nextTeamIds =
-        body.teamIds !== undefined
-          ? await resolveOrgTeams(body.teamIds, organizationId)
-          : undefined;
-      const nextUserIds =
-        body.userIds !== undefined
-          ? await resolveOrgUsers(body.userIds, organizationId)
-          : undefined;
-
       await assertCallerMayModifyApp({
+        appId: app.id,
         userId: user.id,
         organizationId,
-        scope: app.scope,
-        authorId: app.authorId,
-        resourceTeamIds,
       });
       // Changing the html is editing the app itself, not its settings — hold it
       // to the stricter chat-authoring gate so an admin who only sees the app
@@ -963,34 +942,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorId: app.authorId,
             enabled: app.enabled,
           },
-          resourceTeamIds,
         });
       }
-      // Authorize the destination whenever the team set or scope changes — a
-      // team admin must not redirect an app to teams they don't administer, even
-      // with the scope unchanged.
-      const destScope = body.scope ?? app.scope;
-      const effectiveTeamIds = nextTeamIds ?? resourceTeamIds;
-      if (destScope === "team" && effectiveTeamIds.length === 0) {
-        throw new ApiError(
-          400,
-          "A team-scoped app requires at least one teamId.",
-        );
-      }
-      const reScoping = body.scope !== undefined && body.scope !== app.scope;
-      // Handing an app to named individuals widens who can reach it just as a
-      // team change does, so it goes through the same destination check rather
-      // than riding along on plain view access.
-      if (reScoping || nextTeamIds !== undefined || nextUserIds !== undefined) {
-        await assertCallerMayModifyApp({
-          userId: user.id,
-          organizationId,
-          scope: destScope,
-          authorId: app.authorId,
-          resourceTeamIds: nextTeamIds ?? resourceTeamIds,
-        });
-      }
-
       // Re-binding the environment is authorized like the initial bind: org
       // membership + the restricted-env permission. Only an actual change is
       // re-authorized — editing other fields of an app bound to a restricted
@@ -1014,7 +967,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           | "name"
           | "slug"
           | "description"
-          | "scope"
           | "environmentId"
           | "icon"
           | "openInFullscreen"
@@ -1023,7 +975,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.name !== undefined) patch.name = body.name;
       if (body.slug !== undefined) patch.slug = body.slug;
       if (body.description !== undefined) patch.description = body.description;
-      if (body.scope !== undefined) patch.scope = body.scope;
       if (body.environmentId !== undefined)
         patch.environmentId = body.environmentId;
       if (body.icon !== undefined) patch.icon = body.icon;
@@ -1054,8 +1005,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: appId,
         ...(Object.keys(patch).length > 0 ? { patch } : {}),
         ...(version ? { version } : {}),
-        ...(nextTeamIds !== undefined ? { teamIds: nextTeamIds } : {}),
-        ...(nextUserIds !== undefined ? { userIds: nextUserIds } : {}),
       }).catch((error) => {
         throw appConflictError(error, { name: body.name, slug: body.slug });
       });
@@ -1072,128 +1021,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       await syncAppBacking(result);
       return reply.send(warnings.length > 0 ? { ...result, warnings } : result);
-    },
-  );
-
-  fastify.patch(
-    "/api/apps/bulk",
-    {
-      schema: {
-        operationId: RouteId.BulkUpdateApps,
-        description:
-          "Update several apps in one request. Today the only bulk-editable " +
-          "surface is visibility — `scope` with the `teamIds` or `userIds` it " +
-          "reaches — and every app in the batch is moved to the same one. " +
-          "Content is deliberately not editable here: replacing html forks a " +
-          "version and is authorized more strictly than re-scoping. Per-app " +
-          "problems are reported in `failed` and leave the rest applied.",
-        tags: ["Apps"],
-        body: z.object({
-          ids: BulkIdsSchema,
-          scope: AppScopeSchema.describe(
-            "The visibility every app in the batch moves to.",
-          ),
-          teamIds: z
-            .array(z.string())
-            .optional()
-            .describe("Only meaningful for `scope = team`; required there."),
-          userIds: z
-            .array(z.string())
-            .optional()
-            .describe(
-              "People to share with. Only meaningful for `scope = personal`; " +
-                "omitting it revokes existing grants rather than keeping " +
-                "them, since this sets one visibility across the selection.",
-            ),
-        }),
-        response: constructResponseSchema(BulkOutcomeSchema),
-      },
-    },
-    async (request, reply) => {
-      const { user, organizationId, body } = request;
-      const { scope } = body;
-
-      // Request-level: the destination is the same for every app, so an
-      // unusable one is a bad request rather than N identical failures.
-      if (scope === "team" && (body.teamIds ?? []).length === 0) {
-        throw new ApiError(
-          400,
-          "A team-scoped app requires at least one teamId.",
-        );
-      }
-      const teamIds =
-        scope === "team"
-          ? await resolveOrgTeams(body.teamIds ?? [], organizationId)
-          : [];
-      const userIds =
-        scope === "personal"
-          ? await resolveOrgUsers(body.userIds ?? [], organizationId)
-          : [];
-
-      const outcome = await runBulk({
-        ids: body.ids,
-        logLabel: "apps bulk update",
-        notFoundMessage: "App not found",
-        unexpectedMessage: "Could not update this app",
-        // Reuses the single-app loader per id rather than reimplementing app
-        // visibility. That costs a query per app; the point of the bulk route
-        // is one HTTP round trip and one authorization pass, not one query.
-        load: async (ids) => {
-          const found = new Map<string, App>();
-          for (const appId of ids) {
-            const app = await loadViewableApp({
-              appId,
-              userId: user.id,
-              organizationId,
-            }).catch(() => null);
-            if (app) found.set(appId, app);
-          }
-          return found;
-        },
-        describe: (app) => app.name,
-        authorize: async (app) => {
-          const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
-          // Twice, as the single-app update does: the caller must be allowed
-          // to modify the app where it is, and to place it where it is going.
-          await assertCallerMayModifyApp({
-            userId: user.id,
-            organizationId,
-            scope: app.scope,
-            authorId: app.authorId,
-            resourceTeamIds,
-          });
-          await assertCallerMayModifyApp({
-            userId: user.id,
-            organizationId,
-            scope,
-            authorId: app.authorId,
-            resourceTeamIds: teamIds,
-          });
-        },
-        applyEach: async (app, appId) => {
-          const updated = await AppModel.update({
-            id: appId,
-            patch: { scope },
-            teamIds,
-            userIds,
-          });
-          if (!updated) {
-            throw new ApiError(404, `No app found with id ${appId}.`);
-          }
-          await syncAppBacking(updated);
-        },
-        audit: {
-          target: request,
-          snapshot: async (ids) => ({
-            apps: await AppModel.findVisibilityForBulkAudit({
-              ids,
-              organizationId,
-            }),
-          }),
-        },
-      });
-
-      return reply.send(outcome);
     },
   );
 
@@ -1225,6 +1052,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const found = new Map<string, App>();
           for (const appId of ids) {
             const app = await loadViewableApp({
+              action: "delete",
               appId,
               userId: user.id,
               organizationId,
@@ -1236,11 +1064,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         describe: (app) => app.name,
         authorize: async (app) => {
           await assertCallerMayModifyApp({
+            action: "delete",
+            appId: app.id,
             userId: user.id,
             organizationId,
-            scope: app.scope,
-            authorId: app.authorId,
-            resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
           });
           if (app.locked) {
             throw new ApiError(
@@ -1284,16 +1111,16 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { appId }, user, organizationId }, reply) => {
       const app = await loadViewableApp({
+        action: "delete",
         appId,
         userId: user.id,
         organizationId,
       });
       await assertCallerMayModifyApp({
+        action: "delete",
+        appId: app.id,
         userId: user.id,
         organizationId,
-        scope: app.scope,
-        authorId: app.authorId,
-        resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
       if (app.locked) {
         throw new ApiError(
@@ -1338,11 +1165,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         });
         await assertCallerMayModifyApp({
+          appId: app.id,
           userId: user.id,
           organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
         const updated = await AppModel.setEnabled(appId, enable);
         if (!updated) {
@@ -1390,11 +1215,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         });
         await assertCallerMayModifyApp({
+          appId: app.id,
           userId: user.id,
           organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
         const updated = await AppModel.setLocked(appId, lock);
         if (!updated) {
@@ -1501,11 +1324,11 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       const app = await loadViewableApp({
+        action: "update",
         appId,
         userId: user.id,
         organizationId,
       });
-      const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
       if (app.locked) {
         throw new ApiError(
           409,
@@ -1521,7 +1344,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorId: app.authorId,
           enabled: app.enabled,
         },
-        resourceTeamIds,
       });
 
       const restored = await restoreAppVersion({
@@ -1777,6 +1599,7 @@ function appConflictError(
 /** Load an app the caller may view, or throw 404 (no existence leak). */
 async function loadViewableApp(params: {
   appId: string;
+  action?: "read" | "update" | "delete";
   userId: string;
   organizationId: string;
   /**
@@ -1792,7 +1615,23 @@ async function loadViewableApp(params: {
     userId: params.userId,
     isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
   });
-  if (!app) {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const effective = app
+    ? await ResourcePermissions.getEffective({
+        ...params,
+        resource: "app",
+        scope: params.appId,
+      })
+    : null;
+  // SPDX-SnippetEnd
+  if (
+    !app ||
+    !effective?.grants.some(
+      (grant) => grant.action === "read" || grant.action === params.action,
+    )
+  ) {
     throw new ApiError(
       404,
       `No app found with id ${params.addressedAs ?? params.appId}.`,
@@ -1847,11 +1686,9 @@ async function resolveViewerRole(params: {
     app: {
       id: params.app.id,
       organizationId: params.app.organizationId,
-      scope: params.app.scope,
       authorId: params.app.authorId,
       enabled: params.app.enabled,
     },
-    isAppAdmin: false,
   });
   return reachableWithoutAdmin ? "shared" : "admin";
 }
@@ -1862,13 +1699,11 @@ async function assertCallerMayModifyAppById(params: {
   userId: string;
   organizationId: string;
 }): Promise<void> {
-  const app = await loadViewableApp(params);
+  const app = await loadViewableApp({ ...params, action: "update" });
   await assertCallerMayModifyApp({
+    appId: app.id,
     userId: params.userId,
     organizationId: params.organizationId,
-    scope: app.scope,
-    authorId: app.authorId,
-    resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
   });
 }
 
@@ -1903,8 +1738,8 @@ function isCanonicalBase64(value: string): boolean {
 /**
  * Authorize binding an app to `environmentId` (null = org default). Mirrors the
  * agent/knowledge-base/MCP-catalog path: org membership of the environment plus
- * app:deploy-to-restricted are enforced by `assertCanAssignEnvironment`, which
- * also gates a restricted *default* environment.
+ * a `use` grant on it are enforced by `assertCanAssignEnvironment`, which also
+ * gates a restricted *default* environment.
  */
 async function assertEnvironmentAssignable(params: {
   userId: string;
@@ -1912,17 +1747,7 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  const hasAppDeploy = await userHasPermission(
-    userId,
-    organizationId,
-    "app",
-    "deploy-to-restricted",
-  );
-  await assertCanAssignEnvironment({
-    environmentId,
-    organizationId,
-    canDeployToRestricted: hasAppDeploy,
-  });
+  await assertCanAssignEnvironment({ environmentId, organizationId, userId });
 }
 
 /**
@@ -1946,13 +1771,6 @@ async function resolveNewAppEnvironmentId(params: {
   const { userId, organizationId, requested, builderAgentId } = params;
   if (requested !== undefined) return requested;
 
-  const canDeployToRestricted = await userHasPermission(
-    userId,
-    organizationId,
-    "app",
-    "deploy-to-restricted",
-  );
-
   if (builderAgentId) {
     const agentEnvironmentId =
       await AgentModel.findEnvironmentId(builderAgentId);
@@ -1965,7 +1783,7 @@ async function resolveNewAppEnvironmentId(params: {
       (await environmentIsAssignable({
         environmentId: agentEnvironmentId,
         organizationId,
-        canDeployToRestricted,
+        userId,
       }))
     ) {
       return agentEnvironmentId;
@@ -1975,7 +1793,7 @@ async function resolveNewAppEnvironmentId(params: {
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource: "app",
-    canDeployToRestricted,
+    userId,
   });
 }
 
@@ -1987,7 +1805,7 @@ async function resolveNewAppEnvironmentId(params: {
 async function environmentIsAssignable(params: {
   environmentId: string;
   organizationId: string;
-  canDeployToRestricted: boolean;
+  userId: string;
 }): Promise<boolean> {
   try {
     await assertCanAssignEnvironment(params);

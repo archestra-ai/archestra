@@ -16,7 +16,6 @@ import {
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -33,12 +32,9 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
-import {
-  ApiError,
-  type GatewayAgent,
-  type ResourceVisibilityScope,
-} from "@/types";
+import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackRequest } from "@/utils/network";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
@@ -108,8 +104,8 @@ export interface VirtualKeyValidationResult {
   /** Parent chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
   chatApiKeyId?: string;
   virtualKeyId?: string;
-  /** Scope of the resolved key; a personal key identifies its owner. */
-  virtualKeyScope?: ResourceVisibilityScope;
+  /** Whether the resolved key is its author's own; only such a key identifies its owner. */
+  virtualKeyIsPersonal?: boolean;
   /** Owner of the resolved key (for cross-credential user-consistency checks). */
   virtualKeyAuthorId?: string | null;
 }
@@ -240,9 +236,8 @@ export async function validateVirtualApiKey(params: {
       mappedProviderKey.providerApiKeyId,
     );
     if (
-      resolved.virtualKey.scope !== "personal" ||
+      !(await VirtualApiKeyModel.isPersonal(resolved.virtualKey)) ||
       !parentKey ||
-      parentKey.scope !== "personal" ||
       parentKey.userId == null ||
       parentKey.userId !== resolved.virtualKey.authorId
     ) {
@@ -258,7 +253,9 @@ export async function validateVirtualApiKey(params: {
     baseUrl: mappedProviderKey.baseUrl ?? undefined,
     chatApiKeyId: mappedProviderKey.providerApiKeyId,
     virtualKeyId: resolved.virtualKey.id,
-    virtualKeyScope: resolved.virtualKey.scope,
+    virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(
+      resolved.virtualKey,
+    ),
     virtualKeyAuthorId: resolved.virtualKey.authorId,
   };
 }
@@ -323,17 +320,19 @@ export async function validatePassthroughVirtualKey(params: {
   }
 
   // Proxy access follows the owner's own agent access.
-  const ownerIsAgentAdmin = await userHasPermission(
-    virtualKey.authorId,
-    agent.organizationId,
-    "agent",
-    "admin",
-  );
-  const hasProxyAccess = await AgentTeamModel.userHasAgentAccess(
-    virtualKey.authorId,
-    agent.id,
-    ownerIsAgentAdmin,
-  );
+  const ownerIsAgentAdmin = await ResourcePermissions.allows({
+    userId: virtualKey.authorId,
+    organizationId: agent.organizationId,
+    resource: "agent",
+    scope: "*",
+    action: "update",
+  });
+  const hasProxyAccess = await AgentTeamModel.userHasAgentAccess({
+    userId: virtualKey.authorId,
+    agentId: agent.id,
+    isAgentAdmin: ownerIsAgentAdmin,
+    action: "use",
+  });
   if (!hasProxyAccess) {
     throw noAccessError;
   }
@@ -1017,11 +1016,12 @@ async function validateUserLlmOAuthAccessToken(params: {
     throw new ApiError(401, "OAuth user is no longer available.");
   }
 
-  const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
-    params.userId,
-    params.agent.id,
-    false,
-  );
+  const hasAgentAccess = await AgentTeamModel.userHasAgentAccess({
+    userId: params.userId,
+    agentId: params.agent.id,
+    isAgentAdmin: false,
+    action: "use",
+  });
   if (!hasAgentAccess) {
     throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
   }

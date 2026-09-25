@@ -21,6 +21,7 @@ import {
   mustExist,
   test,
 } from "@/test";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 import { ApiError } from "@/types";
 
@@ -129,6 +130,18 @@ describe("mcp server inspect route", () => {
     await makeMember(user.id, organization.id);
     hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
+    grantEverywhere(
+      ["mcpRegistry"],
+      async () =>
+        (
+          await hasPermissionMock.getMockImplementation()?.(
+            // The retired action this grant replaced; per-test stubs that
+            // key on real actions leave it denied.
+            { mcpServerInstallation: ["admin"] } as never,
+            {},
+          )
+        )?.success ?? false,
+    );
     k8sStartServerMock.mockResolvedValue(undefined);
     k8sRestartServerMock.mockResolvedValue(undefined);
     k8sStopServerMock.mockResolvedValue(undefined);
@@ -1157,18 +1170,7 @@ describe("mcp server inspect route", () => {
       header_x_api_key: "header-value",
     });
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const [serverRow] = await db
-        .select()
-        .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.id, mcpServer.id));
-
-      if (serverRow?.localInstallationStatus !== "pending") {
-        break;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await drainPendingReinstall(mcpServer.id);
   });
 
   test("local reinstall ignores unknown keys and installer overrides for catalog static headers", async ({
@@ -1248,18 +1250,7 @@ describe("mcp server inspect route", () => {
     });
     expect(storedSecret?.secret).not.toHaveProperty("unknown_key");
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const [serverRow] = await db
-        .select()
-        .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.id, mcpServer.id));
-
-      if (serverRow?.localInstallationStatus !== "pending") {
-        break;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await drainPendingReinstall(mcpServer.id);
   });
 
   test("rejects reinstall of another user's personal connection by an editor", async ({
@@ -1355,11 +1346,8 @@ describe("mcp server inspect route", () => {
     });
 
     // Drain the route's setImmediate-deferred reinstall so background
-    // work doesn't leak into the next test in the file. The local-
-    // reinstall test above uses 200ms total, but the remote path runs
-    // autoReinstallServer with a tool-fetch that takes longer when
-    // mocks aren't pre-primed — give it 2s so we don't leak a
-    // "pending" install whose async error fires inside the next test.
+    // work cannot leak into the next test in the file, where its async
+    // write could fire after the test database is gone.
     await drainPendingReinstall(mcpServer.id);
   });
 
@@ -2779,7 +2767,7 @@ describe("mcp server inspect route", () => {
     const agent = await makeAgent({
       name: "Protected Resource Demo Agent",
       agentType: "mcp_gateway",
-      scope: "personal",
+      access: "personal",
       organizationId,
       authorId: user.id,
     });
@@ -3854,19 +3842,7 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
-
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const [serverRow] = await db
-        .select()
-        .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.id, mcpServer.id));
-
-      if (serverRow?.localInstallationStatus === "success") {
-        break;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await drainPendingReinstall(mcpServer.id);
 
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
@@ -3960,7 +3936,7 @@ describe("mcp server inspect route", () => {
       const otherAgent = await makeAgent({
         name: "Explicit Target",
         agentType: "mcp_gateway",
-        scope: "personal",
+        access: "personal",
         organizationId: organizationId,
         authorId: user.id,
       });
@@ -4181,7 +4157,7 @@ describe("mcp server inspect route", () => {
     );
   }
 
-  test("install scope=team: organization-level team manager can install for a non-member team", async ({
+  test("install scope=team: organization-level team manager cannot install without installation permissions", async ({
     makeInternalMcpCatalog,
     makeTeam,
     makeUser,
@@ -4214,7 +4190,7 @@ describe("mcp server inspect route", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(403);
   });
 
   test("install scope=team: editor + member of team succeeds", async ({
@@ -4317,7 +4293,7 @@ describe("mcp server inspect route", () => {
     );
   });
 
-  test("revoke team-scoped: organization-level team manager can revoke for a non-member team", async ({
+  test("revoke team-scoped: organization-level team manager cannot revoke without installation permissions", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTeam,
@@ -4342,7 +4318,7 @@ describe("mcp server inspect route", () => {
       url: `/api/mcp_server/${mcpServer.id}`,
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(403);
   });
 
   test("revoke team-scoped: editor not a member is rejected", async ({
@@ -4391,6 +4367,18 @@ describe("mcp server core route coverage", () => {
     await makeMember(user.id, organization.id);
     hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
+    grantEverywhere(
+      ["mcpRegistry"],
+      async () =>
+        (
+          await hasPermissionMock.getMockImplementation()?.(
+            // The retired action this grant replaced; per-test stubs that
+            // key on real actions leave it denied.
+            { mcpServerInstallation: ["admin"] } as never,
+            {},
+          )
+        )?.success ?? false,
+    );
     k8sStopServerMock.mockResolvedValue(undefined);
 
     app = createFastifyInstance();
@@ -4433,7 +4421,7 @@ describe("mcp server core route coverage", () => {
       const tool = await makeTool({ catalogId: catalog.id });
       const agent = await makeAgent({
         name: "Server Consumer",
-        scope: "personal",
+        access: "personal",
         authorId: user.id,
       });
       await makeAgentTool(agent.id, tool.id);
@@ -5014,6 +5002,7 @@ describe("mcp server core route coverage", () => {
       });
 
       expect(response.statusCode).toBe(200);
+      await drainPendingReinstall(mcpServer.id);
       const [row] = await db
         .select()
         .from(schema.mcpServersTable)
@@ -5050,9 +5039,7 @@ describe("mcp server core route coverage", () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toBe(
-        "App servers are managed via the Apps API and cannot be installed here.",
-      );
+      expect(response.json().error.message).toBe("Catalog item not found");
     });
 
     test("rejects manual Playwright browser installations", async ({
@@ -5081,9 +5068,7 @@ describe("mcp server core route coverage", () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toBe(
-        "The Playwright browser runtime is managed automatically.",
-      );
+      expect(response.json().error.message).toBe("Catalog item not found");
     });
 
     test("ignores client-supplied OAuth refresh-failure fields — they are server-owned state", async ({

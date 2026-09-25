@@ -1,5 +1,6 @@
 import {
   CreatedByNullableSchema,
+  ResourcePermissionGrantSchema,
   ResourceVisibilityScopeSchema,
 } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
@@ -78,12 +79,13 @@ export const CreatePluginSchema = z
     description: z.string().max(1_000).default(""),
     clientType: ClientTypeSchema,
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
-    scope: ResourceVisibilityScopeSchema.optional(),
-    teamIds: z.array(z.string().min(1)).max(100).optional(),
-    userIds: z.array(z.string().min(1)).max(100).optional(),
     files: z.array(PluginFileInputSchema).min(1).max(PLUGIN_MAX_FILES),
     labels: z.array(LabelWithDetailsSchema).optional(),
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   })
+  // Strict: the retired scope/teamIds/userIds fields are refused, not
+  // silently dropped. Access is set with initialGrants.
+  .strict()
   .superRefine(validateFileSet);
 
 export const UpdatePluginSchema = z
@@ -92,9 +94,6 @@ export const UpdatePluginSchema = z
     description: z.string().max(1_000).optional(),
     enabled: z.boolean().optional(),
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
-    scope: ResourceVisibilityScopeSchema.optional(),
-    teamIds: z.array(z.string().min(1)).max(100).optional(),
-    userIds: z.array(z.string().min(1)).max(100).optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
     githubSource: z
       .object({
@@ -121,6 +120,9 @@ export const UpdatePluginSchema = z
       .max(PLUGIN_MAX_FILES)
       .optional(),
   })
+  // Strict: the retired scope/teamIds/userIds fields are refused, not
+  // silently dropped. Access is edited through the resource permissions API.
+  .strict()
   .superRefine((value, ctx) => {
     if (Object.keys(value).length === 0) {
       ctx.addIssue({

@@ -7,7 +7,15 @@ import {
 import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
@@ -61,15 +69,14 @@ describe("member catalog update is limited to own personal items", () => {
     await app.close();
   });
 
-  function makeRemoteCatalog(scope: "personal" | "org", authorId: string) {
+  function makeRemoteCatalog(access: TestAccess, authorId: string) {
     return InternalMcpCatalogModel.create(
       {
         name: `cat-${crypto.randomUUID().slice(0, 8)}`,
         serverType: "remote",
         serverUrl: "https://example.com/mcp/",
-        scope,
       },
-      { organizationId, authorId },
+      { organizationId, authorId, ...accessGrants(access) },
     );
   }
 
@@ -83,8 +90,11 @@ describe("member catalog update is limited to own personal items", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("member CANNOT update an org-scoped catalog item", async () => {
-    const catalog = await makeRemoteCatalog("org", member.id);
+  test("member cannot update another creator’s organization-shared catalog item", async ({
+    makeUser,
+  }) => {
+    const author = await makeUser();
+    const catalog = await makeRemoteCatalog("org", author.id);
     const response = await app.inject({
       method: "PUT",
       url: `/api/internal_mcp_catalog/${catalog.id}`,
@@ -116,7 +126,6 @@ describe("member catalog update is limited to own personal items", () => {
       {
         name: `local-${crypto.randomUUID().slice(0, 8)}`,
         serverType: "local",
-        scope: "personal",
         localConfig: { dockerImage: "ghcr.io/acme/ok:1" },
       },
       { organizationId, authorId: member.id },

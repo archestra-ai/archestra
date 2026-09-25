@@ -19,6 +19,7 @@ import type {
   KbDocument,
   UpdateKbDocument,
 } from "@/types";
+import KbDocumentAccessModel from "./kb-document-access";
 
 type KbDocumentListItem = KbDocument & {
   connectorType: ConnectorType;
@@ -94,10 +95,13 @@ class KbDocumentModel {
     const d = schema.kbDocumentsTable;
     const aclFilter = params.bypassAcl
       ? undefined
-      : sql`${d.acl} ?| ARRAY[${sql.join(
-          params.userAcl.map((entry) => sql`${entry}`),
-          sql`, `,
-        )}]`;
+      : KbDocumentAccessModel.condition({
+          userAcl: params.userAcl,
+          documentId: d.id,
+          connectorId: d.connectorId,
+          organizationId: d.organizationId,
+          acl: d.acl,
+        });
 
     const [result] = await db
       .select()
@@ -1061,12 +1065,7 @@ class KbDocumentModel {
       keys.map((key) => sql`${key}`),
       sql`, `,
     );
-    const aclEntries = bypassAcl
-      ? null
-      : sql.join(
-          userAcl.map((entry) => sql`${entry}`),
-          sql`, `,
-        );
+
     const envFilter =
       environmentId !== undefined
         ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
@@ -1076,7 +1075,7 @@ class KbDocumentModel {
       : sql`EXISTS (
             SELECT 1 FROM kb_chunks c
             WHERE c.document_id = d.id
-              AND c.acl ?| ARRAY[${aclEntries}]
+              AND ${KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}
           )`;
 
     const rows = await db.execute(sql`

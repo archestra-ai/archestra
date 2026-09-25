@@ -1227,7 +1227,7 @@ describe("ConnectorSyncService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const secretId = await createSecret();
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
 
@@ -1257,7 +1257,7 @@ describe("ConnectorSyncService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const secretId = await createSecret();
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
 
@@ -1554,9 +1554,10 @@ describe("ConnectorSyncService", () => {
     });
     const kb = await makeKnowledgeBase(org.id);
     const secretId = await createSecret();
+    // The document ACL is still built from the connector's retired
+    // visibility columns, so the seed writes them.
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "team-scoped",
-      teamIds: [connectorTeam.id],
+      legacy: { visibility: "team-scoped", teamIds: [connectorTeam.id] },
     });
 
     await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
@@ -1663,7 +1664,7 @@ describe("ConnectorSyncService", () => {
     const secretId = await createSecret();
     // Starts org-wide, so content-sync authors ["org:*"].
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "org-wide",
+      legacy: { visibility: "org-wide", teamIds: [] },
     });
     await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
     setupSecret();
@@ -1722,7 +1723,7 @@ describe("ConnectorSyncService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const secretId = await createSecret();
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
     setupSecret();

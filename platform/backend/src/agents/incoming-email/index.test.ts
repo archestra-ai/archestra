@@ -1,5 +1,6 @@
 import type { IncomingEmailSecurityMode } from "@archestra/shared";
 import { vi } from "vitest";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 
 const { startDetachedAgentTask, watchTaskCompletion } = vi.hoisted(() => ({
   startDetachedAgentTask: vi.fn(),
@@ -28,6 +29,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import ProcessedEmailModel from "@/models/processed-email";
 import { beforeEach, describe, expect, test } from "@/test";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { AgentRuntime, IncomingEmail } from "@/types";
 import { MAX_EMAIL_BODY_SIZE } from "./constants";
 import {
@@ -1390,6 +1392,19 @@ describe("processIncomingEmail security modes", () => {
       scope: "team",
     });
     const agentId = agent.id;
+    const key = {
+      organizationId: org.id,
+      resource: "agent" as const,
+      scope: agentId,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ],
+    });
 
     // Assign agent to team
     await db
@@ -1539,12 +1554,14 @@ describe("processIncomingEmail security modes", () => {
     makeUser,
     makeOrganization,
     makeTeam,
+    makeMember,
   }) => {
     // Create an admin user (user exists but is not a team member)
     const adminUser = await makeUser({ email: "admin@company.com" });
     // Create another user who owns the team
     const teamOwner = await makeUser({ email: "owner@company.com" });
     const org = await makeOrganization();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
     // Create a team owned by teamOwner, admin is NOT a member
     const team = await makeTeam(org.id, teamOwner.id);
 
@@ -1560,8 +1577,9 @@ describe("processIncomingEmail security modes", () => {
       .insert(schema.agentTeamsTable)
       .values({ agentId, teamId: team.id });
 
-    // Mock: adminUser IS an agent admin
-    vi.mocked(userHasPermission).mockResolvedValue(true);
+    // adminUser IS an agent admin: `update` on every agent, the grant the
+    // retired agent:admin became.
+    const allows = grantEverywhere(["agent"]);
 
     const mockProvider = {
       providerId: "outlook",
@@ -1596,13 +1614,13 @@ describe("processIncomingEmail security modes", () => {
       }),
     );
 
-    // Verify userHasPermission was called with correct args
-    expect(vi.mocked(userHasPermission)).toHaveBeenCalledWith(
-      adminUser.id,
-      org.id,
-      "agent",
-      "admin",
-    );
+    expect(allows).toHaveBeenCalledWith({
+      userId: adminUser.id,
+      organizationId: org.id,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
   });
 
   test("internal mode: accepts email from allowed domain", async ({

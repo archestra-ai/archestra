@@ -10,66 +10,46 @@ describe("buildSkillUri", () => {
   it("puts the skill name last, as SEP-2640 requires", () => {
     // A client must be able to read the skill's name off the URI without
     // fetching the manifest, so the name is always the final directory segment.
+    expect(buildSkillManifestUri({ authorId: "user-1", name: "refunds" })).toBe(
+      "skill://archestra/user-1/refunds/SKILL.md",
+    );
+
+    // A skill with no author (a built-in) has no author segment.
+    expect(buildSkillManifestUri({ authorId: null, name: "refunds" })).toBe(
+      "skill://archestra/shared/refunds/SKILL.md",
+    );
+  });
+
+  it("gives two authors' skills of the same name different addresses", () => {
+    // A name is unique per author, so the author segment makes it unique.
+    const alice = buildSkillManifestUri({ authorId: "alice", name: "refunds" });
+    const bob = buildSkillManifestUri({ authorId: "bob", name: "refunds" });
+
+    expect(alice).not.toBe(bob);
+  });
+
+  it("never lets an author id take a reserved first segment", () => {
+    expect(buildSkillManifestUri({ authorId: "shared", name: "refunds" })).toBe(
+      "skill://archestra/shared/refunds/SKILL.md",
+    );
     expect(
-      buildSkillManifestUri({
-        scope: "shared",
-        authorId: null,
-        name: "refunds",
-      }),
+      buildSkillManifestUri({ authorId: "personal", name: "refunds" }),
     ).toBe("skill://archestra/shared/refunds/SKILL.md");
-
-    expect(
-      buildSkillManifestUri({
-        scope: "personal",
-        authorId: "user-1",
-        name: "refunds",
-      }),
-    ).toBe("skill://archestra/personal/user-1/refunds/SKILL.md");
-  });
-
-  it("distinguishes a personal skill from a shared one of the same name", () => {
-    // Names are unique only within a visibility scope, so a user can hold a
-    // personal `refunds` while an org `refunds` also exists.
-    const personal = buildSkillManifestUri({
-      scope: "personal",
-      authorId: "user-1",
-      name: "refunds",
-    });
-    const shared = buildSkillManifestUri({
-      scope: "shared",
-      authorId: null,
-      name: "refunds",
-    });
-
-    expect(personal).not.toBe(shared);
-  });
-
-  it("refuses to build a personal URI without an author", () => {
-    expect(() =>
-      buildSkillUri({
-        scope: "personal",
-        authorId: null,
-        name: "refunds",
-        filePath: "",
-      }),
-    ).toThrow(/authorId/);
   });
 
   it("addresses supporting files as siblings of SKILL.md", () => {
     expect(
       buildSkillUri({
-        scope: "shared",
-        authorId: null,
+        authorId: "user-1",
         name: "pdf-processing",
         filePath: "references/FORMS.md",
       }),
-    ).toBe("skill://archestra/shared/pdf-processing/references/FORMS.md");
+    ).toBe("skill://archestra/user-1/pdf-processing/references/FORMS.md");
   });
 
   it("returns the bare root when there is no file path", () => {
     expect(
       buildSkillUri({
-        scope: "shared",
         authorId: null,
         name: "pdf-processing",
         filePath: "",
@@ -160,53 +140,64 @@ describe("isPlatformSkillUri", () => {
   });
 
   it("keeps the path case-sensitive", () => {
-    // A mixed-case path is reserved but does not parse, so it is answered
-    // not-found rather than resolving to a differently-cased skill.
+    // A mixed-case first segment is not the bare form: it reads as an author
+    // id, so it can never resolve by name to a differently-cased skill.
     expect(
       isPlatformSkillUri("skill://archestra/SHARED/Refunds/SKILL.md"),
     ).toBe(true);
     expect(
-      parseSkillUri("skill://archestra/SHARED/Refunds/SKILL.md"),
-    ).toBeNull();
+      parseSkillUri("skill://archestra/SHARED/Refunds/SKILL.md")?.authorId,
+    ).toBe("SHARED");
   });
 });
 
 describe("parseSkillUri", () => {
   it.each([
     {
-      uri: "skill://archestra/shared/refunds/SKILL.md",
+      uri: "skill://archestra/user-1/refunds/SKILL.md",
       expected: {
-        scope: "shared",
-        authorId: null,
-        name: "refunds",
-        filePath: "SKILL.md",
-      },
-    },
-    {
-      uri: "skill://archestra/personal/user-1/refunds/SKILL.md",
-      expected: {
-        scope: "personal",
         authorId: "user-1",
         name: "refunds",
         filePath: "SKILL.md",
+        legacyPersonal: false,
+      },
+    },
+    {
+      // Bare: names no author, so the gateway resolves it by name.
+      uri: "skill://archestra/shared/refunds/SKILL.md",
+      expected: {
+        authorId: null,
+        name: "refunds",
+        filePath: "SKILL.md",
+        legacyPersonal: false,
+      },
+    },
+    {
+      // The earlier author form keeps working and names the same skill.
+      uri: "skill://archestra/personal/user-1/refunds/SKILL.md",
+      expected: {
+        authorId: "user-1",
+        name: "refunds",
+        filePath: "SKILL.md",
+        legacyPersonal: true,
       },
     },
     {
       uri: "skill://archestra/shared/pdf/templates/regional/eu.md",
       expected: {
-        scope: "shared",
         authorId: null,
         name: "pdf",
         filePath: "templates/regional/eu.md",
+        legacyPersonal: false,
       },
     },
     {
       uri: "skill://archestra/shared/pdf",
       expected: {
-        scope: "shared",
         authorId: null,
         name: "pdf",
         filePath: "",
+        legacyPersonal: false,
       },
     },
   ])("parses $uri", ({ uri, expected }) => {
@@ -217,7 +208,7 @@ describe("parseSkillUri", () => {
     "ui://some-app/index.html",
     "https://example.com/skill",
     "skill://other-registry/shared/refunds/SKILL.md",
-    "skill://archestra/unknown-scope/refunds/SKILL.md",
+    "skill://archestra/user-1",
     "skill://archestra/shared",
     "skill://archestra/personal/user-1",
   ])("returns null for %s", (uri) => {
@@ -228,17 +219,16 @@ describe("parseSkillUri", () => {
 
   it("round-trips names and authors needing percent-encoding", () => {
     const uri = buildSkillUri({
-      scope: "personal",
       authorId: "user id/with slash",
       name: "skill-name",
       filePath: "references/a b.md",
     });
 
     expect(parseSkillUri(uri)).toEqual({
-      scope: "personal",
       authorId: "user id/with slash",
       name: "skill-name",
       filePath: "references/a b.md",
+      legacyPersonal: false,
     });
   });
 
@@ -252,7 +242,6 @@ describe("parseSkillUri", () => {
     "faq?.md",
   ])("round-trips file path %s through an encoded URI", (filePath) => {
     const uri = buildSkillUri({
-      scope: "shared",
       authorId: null,
       name: "pdf",
       filePath,
@@ -299,18 +288,18 @@ describe("parseSkillUri", () => {
 
   it("still resolves the canonical spelling of those URIs", () => {
     expect(parseSkillUri("skill://archestra/shared/refunds/SKILL.md")).toEqual({
-      scope: "shared",
       authorId: null,
       name: "refunds",
       filePath: "SKILL.md",
+      legacyPersonal: false,
     });
     expect(
       parseSkillUri("skill://archestra/shared/refunds/scripts/run.py"),
     ).toEqual({
-      scope: "shared",
       authorId: null,
       name: "refunds",
       filePath: "scripts/run.py",
+      legacyPersonal: false,
     });
   });
 

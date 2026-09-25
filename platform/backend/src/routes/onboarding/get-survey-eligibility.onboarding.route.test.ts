@@ -15,6 +15,7 @@ describe("GET /api/onboarding/survey-eligibility", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
+    config.enterpriseFeatures.core = false;
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();

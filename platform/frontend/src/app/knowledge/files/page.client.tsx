@@ -16,7 +16,7 @@ import { AddToKnowledgeBaseDialog } from "@/app/knowledge/files/_parts/add-to-kn
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import { EditFileDialog } from "@/app/knowledge/files/_parts/edit-file-dialog";
 import { UploadFileDialog } from "@/app/knowledge/files/_parts/upload-file-dialog";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -31,7 +31,7 @@ import {
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -40,7 +40,6 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
   useKnowledgeFileLabelKeys,
@@ -55,13 +54,12 @@ import {
   ROOT_DIRECTORY,
   useAllMatchingKnowledgeFiles,
   useBulkDeleteKnowledgeItems,
-  useBulkUpdateKnowledgeVisibility,
   useDeleteKnowledgeDirectory,
   useDeleteKnowledgeFile,
   useKnowledgeDirectories,
   useKnowledgeFiles,
+  useKnowledgePermissionSelection,
 } from "@/lib/knowledge/knowledge-file.query";
-import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 /**
@@ -76,7 +74,7 @@ type Row =
   | { kind: "file"; id: string; file: KnowledgeFile };
 
 /** Who added this row, whichever half of the mixed listing it came from. */
-function rowCreatedBy(row: Row) {
+function _rowCreatedBy(row: Row) {
   return row.kind === "directory"
     ? row.directory.createdBy
     : row.file.createdBy;
@@ -87,49 +85,6 @@ function rowCreatedBy(row: Row) {
  * document's visibility reads exactly like an agent's or a project's instead of
  * inventing a second badge style for the same idea.
  */
-const SCOPE_BY_VISIBILITY = {
-  "org-wide": "org",
-  "team-scoped": "team",
-  private: "personal",
-} as const;
-
-/** The reverse of {@link SCOPE_BY_VISIBILITY}, for writing a scope back. */
-const VISIBILITY_BY_SCOPE = {
-  org: "org-wide",
-  team: "team-scoped",
-  personal: "private",
-} as const;
-
-function VisibilityBadge({
-  visibility,
-  teamIds,
-  authorId,
-}: {
-  visibility: string;
-  teamIds: string[];
-  authorId?: string | null;
-}) {
-  const { data: teams } = useTeams();
-  const { data: session } = useSession();
-  const scope =
-    SCOPE_BY_VISIBILITY[visibility as keyof typeof SCOPE_BY_VISIBILITY];
-  if (!scope) return null;
-
-  return (
-    <ResourceVisibilityBadge
-      scope={scope}
-      teams={(teams ?? []).filter((team) => teamIds.includes(team.id))}
-      authorId={authorId}
-      authorName={undefined}
-      currentUserId={session?.user?.id}
-      // A private document is only ever listed to the person who uploaded it
-      // (the repository filter sees to that), so "Me" is always the accurate
-      // label here — and without it the cell renders a bare dash next to
-      // labelled Organization and Team badges.
-      showSelfAsMe
-    />
-  );
-}
 
 export default function KnowledgeFilesPage() {
   const {
@@ -175,7 +130,6 @@ export default function KnowledgeFilesPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const bulkDelete = useBulkDeleteKnowledgeItems();
-  const bulkVisibility = useBulkUpdateKnowledgeVisibility();
   const deleteFile = useDeleteKnowledgeFile();
   const deleteDirectory = useDeleteKnowledgeDirectory();
 
@@ -311,6 +265,10 @@ export default function KnowledgeFilesPage() {
       ];
 
   const actionFileIds = escalatedFileIds ?? selectedFileIds;
+  const permissionSelection = useKnowledgePermissionSelection(
+    selectionItems,
+    bulkVisibilityOpen,
+  );
   const actionDirectoryIds = escalatedFileIds ? [] : selectedDirectoryIds;
   const actionDocumentCount = escalatedFileIds
     ? escalatedFileIds.length
@@ -393,27 +351,7 @@ export default function KnowledgeFilesPage() {
           );
         },
       },
-      {
-        id: "visibility",
-        header: "Visibility",
-        size: 14,
-        minSize: 130,
-        cell: ({ row }) => (
-          <VisibilityBadge
-            visibility={
-              row.original.kind === "directory"
-                ? row.original.directory.visibility
-                : row.original.file.visibility
-            }
-            teamIds={
-              row.original.kind === "directory"
-                ? row.original.directory.teamIds
-                : row.original.file.teamIds
-            }
-            authorId={rowCreatedBy(row.original)?.id ?? null}
-          />
-        ),
-      },
+
       {
         id: "knowledgeBases",
         header: "Knowledge bases",
@@ -519,6 +457,7 @@ export default function KnowledgeFilesPage() {
       title="Files"
       description="Documents uploaded directly — no connector needed. Add them to a knowledge base to make them retrievable by your agents."
       createLabel="Upload"
+      trailingActions={<ResourceListActions resource="knowledgeFile" />}
       onCreateClick={() => setUploadOpen(true)}
       // Only at the top level: directories are flat, so inside one there is no
       // sub-directory to create — the button would silently make a sibling you
@@ -618,10 +557,11 @@ export default function KnowledgeFilesPage() {
             permissions={{ knowledgeSource: ["update"] }}
             variant="outline"
             size="sm"
+            disabled={actionDocumentCount === 0}
             onClick={() => setBulkVisibilityOpen(true)}
           >
             <Pencil className="h-4 w-4" />
-            <span>Edit visibility</span>
+            <span>Add access</span>
           </PermissionButton>
           <PermissionButton
             permissions={{ knowledgeSource: ["delete"] }}
@@ -737,35 +677,17 @@ export default function KnowledgeFilesPage() {
       )}
 
       {bulkVisibilityOpen && (
-        <BulkVisibilityDialog
-          // Documents carry team scoping but no per-person grants, so the
-          // dialog's Users choice resolves to "private" — visible to you alone.
-          items={selectionItems.map((item) => ({
-            id: item.id,
-            scope: "org" as const,
-            teams: [],
-            users: [],
-          }))}
-          noun="item"
+        <BulkResourceAccessDialog
+          resource="knowledgeFile"
+          items={permissionSelection.data ?? []}
+          isLoading={permissionSelection.isLoading}
+          loadError={permissionSelection.error}
+          onRetry={() => {
+            void permissionSelection.refetch();
+          }}
           open={bulkVisibilityOpen}
           onOpenChange={setBulkVisibilityOpen}
-          isPending={bulkVisibility.isPending}
-          onApply={async (change) => {
-            const outcome = await bulkVisibility.mutateAsync({
-              items: selectionItems,
-              visibility: VISIBILITY_BY_SCOPE[change.scope],
-              teamIds: change.teamIds,
-            });
-            reportBulkOutcome({
-              outcome,
-              verb: "Updated",
-              failureVerb: "update",
-              noun: "item",
-            });
-            if (outcome.succeeded.length === 0) return false;
-            if (outcome.failed.length === 0) clearSelection();
-            return true;
-          }}
+          onApplied={clearSelection}
         />
       )}
 

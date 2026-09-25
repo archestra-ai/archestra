@@ -34,20 +34,16 @@ import {
 } from "@/components/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
-import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
+import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import {
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { providerSearchHaystack } from "@/lib/provider-search";
-import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { LlmProviderOptionLabel } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
@@ -70,24 +66,25 @@ const ExternalSecretSelector = lazy(
     // biome-ignore lint/style/noRestrictedImports: lazy loading
     import("@/components/external-secret-selector.ee"),
 );
-const InlineVaultSecretSelector = lazy(
-  () =>
-    // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("@/components/inline-vault-secret-selector.ee"),
-);
 
 type CreateLlmProviderApiKeyBody =
   archestraApiTypes.CreateLlmProviderApiKeyData["body"];
 
 export type LlmProviderApiKeyFormValues = {
   name: string;
+  initialGrants?: InitialPermissionGrant[];
   provider: CreateLlmProviderApiKeyBody["provider"];
   apiKey: string | null;
   baseUrl: string | null;
   inferenceBaseUrl: string | null;
   /** Edited as an array of rows; serialized to Record<string, string> on submit. */
   extraHeaders: Array<{ name: string; value: string }>;
-  scope: NonNullable<CreateLlmProviderApiKeyBody["scope"]>;
+  /**
+   * "Just for me" (false: the key is yours and only you use it) or "Shared"
+   * (true: no owner; the initial grants say who uses it).
+   */
+  shared: boolean;
+  /** The team whose vault folder the secret picker browses. Not submitted. */
   teamId: string | null;
   vaultSecretPath: string | null;
   vaultSecretKey: string | null;
@@ -137,6 +134,19 @@ export function deserializeExtraHeaders(
 
 export type LlmProviderApiKeyResponse =
   archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
+
+/**
+ * Keys compete for "primary" within one partition: the caller's own keys, or
+ * the organization's shared keys (no owner).
+ */
+function isInPrimaryPartition(params: {
+  key: LlmProviderApiKeyResponse;
+  shared: boolean;
+  currentUserId: string | undefined;
+}): boolean {
+  const { key, shared, currentUserId } = params;
+  return shared ? key.userId === null : key.userId === currentUserId;
+}
 
 function isOllamaProvider(provider: string): boolean {
   return provider === "ollama" || provider === "ollama-native";
@@ -460,7 +470,7 @@ interface LlmProviderApiKeyFormProps {
   allowedProviders?: CreateLlmProviderApiKeyBody["provider"][];
   /** Omit providers outside the allowlist instead of rendering them disabled. */
   hideUnavailableProviders?: boolean;
-  /** Hide scope and primary-key controls when the parent fixes those values. */
+  /** Hide the ownership and primary-key controls when the parent fixes them. */
   hideScopeAndPrimary?: boolean;
   /** When true, providers without embedding support are disabled in the picker. */
   forEmbedding?: boolean;
@@ -507,11 +517,6 @@ export function LlmProviderApiKeyForm({
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
-  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
-    llmProviderApiKey: ["admin"],
-  });
-  const { data: teams = [] } = useTeams();
   const isEditMode = Boolean(existingKey);
   const isSubscriptionFlow = credentialMode === "subscription";
   const hasLabelsEditor = labels !== undefined && onLabelsChange !== undefined;
@@ -519,8 +524,9 @@ export function LlmProviderApiKeyForm({
 
   const provider = form.watch("provider");
   const apiKey = form.watch("apiKey");
-  const scope = form.watch("scope");
+  const shared = form.watch("shared");
   const teamId = form.watch("teamId");
+  const currentUserId = useSession()?.data?.user?.id;
   const bedrockAuthMethod = form.watch("bedrockAuthMethod");
   const isBedrockSigV4 =
     provider === "bedrock" && bedrockAuthMethod === "sigv4";
@@ -532,7 +538,7 @@ export function LlmProviderApiKeyForm({
   // Credential-level subscription mode (e.g. ChatGPT on `openai`): the provider
   // also takes plain API keys, so the auth-method tabs decide which credential
   // this key holds. It then behaves like the per-user Copilot providers —
-  // personal scope only, "Sign in" instead of a key field.
+  // just for the signed-in user, "Sign in" instead of a key field.
   const isCredentialSubscriptionMode =
     isCredentialLevelSubscriptionProvider(provider) &&
     authMethod === "subscription";
@@ -780,12 +786,11 @@ export function LlmProviderApiKeyForm({
       otherKeys.find(
         (key) =>
           key.provider === provider &&
-          key.scope === scope &&
-          (scope !== "team" || key.teamId === teamId) &&
+          isInPrimaryPartition({ key, shared, currentUserId }) &&
           key.isPrimary,
       ) ?? null
     );
-  }, [existingKey, existingKeys, provider, scope, teamId]);
+  }, [existingKey, existingKeys, provider, shared, currentUserId]);
 
   const hasAnyKeyForProvider = useMemo(() => {
     if (!existingKeys) {
@@ -795,14 +800,13 @@ export function LlmProviderApiKeyForm({
     return existingKeys.some(
       (key) =>
         key.provider === provider &&
-        key.scope === scope &&
-        (scope !== "team" || key.teamId === teamId) &&
+        isInPrimaryPartition({ key, shared, currentUserId }) &&
         !key.isSystem,
     );
-  }, [existingKeys, provider, scope, teamId]);
+  }, [existingKeys, provider, shared, currentUserId]);
 
   // Per-user-credential providers (GitHub Copilot) hold an individual's token,
-  // so keys are personal-only — each user connects their own account. The
+  // so a key is never shared — each user connects their own account. The
   // OpenAI "ChatGPT subscription" auth mode is the same shape.
   const isPerUserProvider = providerRequiresPerUserCredential(provider);
   const isPerUserCredential = isPerUserProvider || isCredentialSubscriptionMode;
@@ -827,9 +831,6 @@ export function LlmProviderApiKeyForm({
   const subscriptionHasApiKeyAlternative = activeSubscriptionKind
     ? SUBSCRIPTION_CREDENTIALS[activeSubscriptionKind].marker !== null
     : false;
-  const perUserScopeReason =
-    connectCopy?.perUserScopeReason ??
-    `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
   // The connected card: for provider-level subscriptions (Copilot) editing
   // implies an existing credential. For a credential-level one, editing a key
   // whose stored credential is already that subscription (known from the key
@@ -840,52 +841,6 @@ export function LlmProviderApiKeyForm({
         existingKey?.subscriptionKind === activeSubscriptionKind) ||
       (!!apiKey && apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER)
     : hasCopilotCredential;
-
-  const visibilityOptions = useMemo(
-    (): Array<
-      VisibilityOption<NonNullable<CreateLlmProviderApiKeyBody["scope"]>>
-    > => [
-      {
-        value: "personal",
-        label: scopeLabel("personal"),
-        description: "Only you can use this key",
-        icon: SCOPE_META.personal.icon,
-      },
-      {
-        value: "team",
-        label: scopeLabel("team"),
-        description: "Available to members of one selected team",
-        icon: SCOPE_META.team.icon,
-        disabled: isPerUserCredential || !canReadTeams || teams.length === 0,
-        disabledReason: isPerUserCredential
-          ? perUserScopeReason
-          : !canReadTeams
-            ? "Team sharing is unavailable without team:read permission"
-            : teams.length === 0
-              ? "Create a team before using team scope"
-              : undefined,
-      },
-      {
-        value: "org",
-        label: scopeLabel("org"),
-        description: "Available to everyone in the organization",
-        icon: SCOPE_META.org.icon,
-        disabled: isPerUserCredential || !isLlmProviderApiKeyAdmin,
-        disabledReason: isPerUserCredential
-          ? perUserScopeReason
-          : !isLlmProviderApiKeyAdmin
-            ? "You need llmProviderApiKey:admin permission to share org-wide"
-            : undefined,
-      },
-    ],
-    [
-      canReadTeams,
-      isLlmProviderApiKeyAdmin,
-      teams.length,
-      isPerUserCredential,
-      perUserScopeReason,
-    ],
-  );
 
   useEffect(() => {
     if (isEditMode) {
@@ -923,21 +878,20 @@ export function LlmProviderApiKeyForm({
     }
   }, [form, isEditMode, defaultKeyName, existingKeys, provider]);
 
-  // Force personal scope when the credential is per-user (Copilot providers or
-  // the OpenAI ChatGPT-subscription auth mode). For a credential-level
+  // A per-user credential (Copilot providers or the OpenAI
+  // ChatGPT-subscription auth mode) is never shared. For a credential-level
   // subscription the coercion waits for a credential to actually exist —
   // merely opening the subscription tab while editing a shared key must not
   // silently privatize the row (submitting in that state is blocked too; see
   // subscriptionSignInRequired).
-  const perUserScopeEffective =
+  const perUserOnlyEffective =
     isPerUserProvider ||
     (isCredentialSubscriptionMode && perUserCredentialConnected);
   useEffect(() => {
-    if (perUserScopeEffective && scope !== "personal") {
-      form.setValue("scope", "personal");
-      form.setValue("teamId", null);
+    if (perUserOnlyEffective && shared) {
+      form.setValue("shared", false);
     }
-  }, [form, perUserScopeEffective, scope]);
+  }, [form, perUserOnlyEffective, shared]);
 
   useEffect(() => {
     if (allowedProviderSet.has(provider)) {
@@ -949,15 +903,6 @@ export function LlmProviderApiKeyForm({
       form.setValue("provider", firstAllowedProvider);
     }
   }, [allowedProviderSet, form, provider]);
-
-  useEffect(() => {
-    if (scope === "team") {
-      return;
-    }
-
-    form.setValue("vaultSecretPath", null);
-    form.setValue("vaultSecretKey", null);
-  }, [form, scope]);
 
   // Clear provider-specific credentials when the provider changes, so a key (or
   // base URL / AWS credential) typed for one provider can't be submitted against
@@ -994,35 +939,22 @@ export function LlmProviderApiKeyForm({
     form.setValue("authMethod", "api-key");
   }, [form, isEditMode, provider]);
 
-  const vaultSecretSelector =
-    scope === "team" ? (
-      <InlineVaultSecretSelector
-        teamId={teamId}
-        selectedSecretPath={form.getValues("vaultSecretPath")}
-        selectedSecretKey={form.getValues("vaultSecretKey")}
-        onSecretPathChange={(value) =>
-          form.setValue("vaultSecretPath", value, { shouldDirty: true })
-        }
-        onSecretKeyChange={(value) =>
-          form.setValue("vaultSecretKey", value, { shouldDirty: true })
-        }
-      />
-    ) : (
-      <ExternalSecretSelector
-        selectedTeamId={teamId}
-        selectedSecretPath={form.getValues("vaultSecretPath")}
-        selectedSecretKey={form.getValues("vaultSecretKey")}
-        onTeamChange={(value) =>
-          form.setValue("teamId", value, { shouldDirty: true })
-        }
-        onSecretChange={(value) =>
-          form.setValue("vaultSecretPath", value, { shouldDirty: true })
-        }
-        onSecretKeyChange={(value) =>
-          form.setValue("vaultSecretKey", value, { shouldDirty: true })
-        }
-      />
-    );
+  const vaultSecretSelector = (
+    <ExternalSecretSelector
+      selectedTeamId={teamId}
+      selectedSecretPath={form.getValues("vaultSecretPath")}
+      selectedSecretKey={form.getValues("vaultSecretKey")}
+      onTeamChange={(value) =>
+        form.setValue("teamId", value, { shouldDirty: true })
+      }
+      onSecretChange={(value) =>
+        form.setValue("vaultSecretPath", value, { shouldDirty: true })
+      }
+      onSecretKeyChange={(value) =>
+        form.setValue("vaultSecretKey", value, { shouldDirty: true })
+      }
+    />
+  );
 
   // Rendered either above "Advanced settings" or inside it, depending on
   // `showBaseUrlUpFront`, so the field itself is defined once.
@@ -1532,46 +1464,55 @@ export function LlmProviderApiKeyForm({
           </div>
         )}
 
-        {!hideScopeAndPrimary && !isSubscriptionFlow && (
-          <VisibilitySelector
-            label="Scope"
-            value={scope}
-            options={visibilityOptions}
-            onValueChange={(nextScope) => {
-              form.setValue("scope", nextScope, { shouldDirty: true });
-              if (nextScope !== "team") {
-                form.setValue("teamId", null, { shouldDirty: true });
-              }
-            }}
-          >
-            {scope === "team" && (
-              <div className="space-y-2">
-                <Label htmlFor="llm-provider-api-key-team">Team</Label>
-                <Select
-                  value={teamId ?? undefined}
-                  onValueChange={(value) =>
-                    form.setValue("teamId", value, { shouldDirty: true })
-                  }
-                  disabled={isPending || !canReadTeams || teams.length === 0}
-                >
-                  <SelectTrigger
-                    id="llm-provider-api-key-team"
-                    className="w-full"
-                  >
-                    <SelectValue placeholder="Select a team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </VisibilitySelector>
+        {/* A saved key answers "who can reach this" from its own grant
+            policy, so editing one shows the policy. */}
+        {!hideScopeAndPrimary && !isSubscriptionFlow && existingKey?.id && (
+          <ResourceAccessSection
+            resource="llmProviderApiKey"
+            id={existingKey.id}
+          />
         )}
+
+        {/* SPDX-SnippetBegin
+            SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+        {!hideScopeAndPrimary && !isPerUserCredential && !existingKey?.id && (
+          <div className="space-y-2">
+            <Label>Who uses this key</Label>
+            <Tabs
+              value={shared ? "shared" : "just-me"}
+              onValueChange={(value) =>
+                form.setValue("shared", value === "shared", {
+                  shouldDirty: true,
+                })
+              }
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="just-me" disabled={isPending}>
+                  Just for me
+                </TabsTrigger>
+                <TabsTrigger value="shared" disabled={isPending}>
+                  Shared
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <FieldDescription>
+              {shared
+                ? "No one owns a shared key."
+                : "Only you use this key. It is picked before any shared key."}
+            </FieldDescription>
+            {shared && (
+              <ResourceAccessSection
+                resource="llmProviderApiKey"
+                grants={form.watch("initialGrants") ?? []}
+                onGrantsChange={(grants) =>
+                  form.setValue("initialGrants", grants, { shouldDirty: true })
+                }
+              />
+            )}
+          </div>
+        )}
+        {/* SPDX-SnippetEnd */}
 
         {/* Region is a primary Bedrock field, not an advanced one: AWS enables
             models per region, so a key is unusable until it points at the right
@@ -1644,13 +1585,16 @@ export function LlmProviderApiKeyForm({
                 <FieldDescription>
                   <span>
                     {existingPrimaryKey
-                      ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope.`
-                      : "When multiple keys exist for the same provider and scope, the primary key is preferred."}
+                      ? `"${existingPrimaryKey.name}" is already ${shared ? "the primary shared key" : "your primary key"} for this provider.`
+                      : shared
+                        ? "When there are several shared keys for one provider, the primary key is preferred."
+                        : "When you have several keys for one provider, your primary key is preferred."}
                   </span>{" "}
                   {/* The mechanism, which the sentence above only implies: key
                       resolution takes the conversation's pinned key, then the
                       agent's configured one, and only then falls through a
-                      scope's keys — primary first, oldest after. */}
+                      owner's or the shared keys — primary first, oldest
+                      after. */}
                   <span>
                     Chats and agents without a key of their own fall back to it;
                     with no primary set, the oldest key is used.

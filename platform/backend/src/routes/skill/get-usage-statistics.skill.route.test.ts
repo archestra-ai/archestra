@@ -1,28 +1,25 @@
 import { SkillModel } from "@/models";
 import { describe, expect, test } from "@/test";
-import { useRouteTestApp } from "@/test/route-test-app";
 import { drainBackgroundWork } from "@/utils/background-work";
 import skillRoutes from "./skill.routes";
+import { useSkillRouteTestApp } from "./skill.test-helpers";
 
 describe("GET /api/skills/:id/usage-statistics", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("returns per-user daily counts for the last month", async ({
     makeUser,
+    makeSkill,
   }) => {
     const alice = await makeUser({ name: "Alice" });
-    const skill = await SkillModel.createWithFiles({
-      skill: {
-        organizationId: ctx.organizationId,
-        authorId: null,
-        name: "shared-skill",
-        description: "org-wide",
-        content: "# body",
-        metadata: {},
-        sourceType: "manual",
-        scope: "org",
-      },
-      files: [],
+    const skill = await makeSkill(ctx.organizationId, {
+      authorId: null,
+      name: "shared-skill",
+      description: "org-wide",
+      content: "# body",
+      metadata: {},
+      sourceType: "manual",
+      access: "org",
     });
     if (!skill) throw new Error("seed failed");
 
@@ -60,20 +57,16 @@ describe("GET /api/skills/:id/usage-statistics", () => {
 
   test("a personal skill of another user is 404, not 403", async ({
     makeUser,
+    makeSkill,
   }) => {
     const author = await makeUser();
-    const skill = await SkillModel.createWithFiles({
-      skill: {
-        organizationId: ctx.organizationId,
-        authorId: author.id,
-        name: "private-skill",
-        description: "private",
-        content: "# private",
-        metadata: {},
-        sourceType: "manual",
-        scope: "personal",
-      },
-      files: [],
+    const skill = await makeSkill(ctx.organizationId, {
+      authorId: author.id,
+      name: "private-skill",
+      description: "private",
+      content: "# private",
+      metadata: {},
+      sourceType: "manual",
     });
     if (!skill) throw new Error("seed failed");
 

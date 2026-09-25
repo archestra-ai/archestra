@@ -2,15 +2,21 @@
 
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useCreateApp } from "@/lib/app.query";
 import { appRunUrl } from "@/lib/apps/app-run-url";
 
 type CreateFormValues = {
   name: string;
+  initialGrants: InitialPermissionGrant[];
 };
 
 // Seeded as the new app's description so the blank scaffold has a get-started
@@ -32,7 +38,7 @@ export function AppCreateDialog({
   const createApp = useCreateApp();
 
   const form = useForm<CreateFormValues>({
-    defaultValues: { name: "" },
+    defaultValues: { name: "", initialGrants: [] },
   });
 
   const handleOpenChange = (next: boolean) => {
@@ -48,6 +54,10 @@ export function AppCreateDialog({
       name: values.name.trim(),
       description: DEFAULT_APP_DESCRIPTION,
       openInChat: true,
+      initialGrants: values.initialGrants.map(({ subject, actions }) => ({
+        subject,
+        actions,
+      })),
     });
     if (created) {
       handleOpenChange(false);
@@ -67,17 +77,12 @@ export function AppCreateDialog({
       onOpenChange={handleOpenChange}
       title="New app"
       description="This creates a blank app and opens it in chat, where you can start building."
-      size="small"
+      size="medium"
+      isDirty={form.formState.isDirty}
       onSubmit={onSubmit}
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handleOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton />
           <Button type="submit" disabled={createApp.isPending}>
             {createApp.isPending ? "Creating…" : "Create"}
           </Button>
@@ -105,6 +110,13 @@ export function AppCreateDialog({
           </p>
         ) : null}
       </div>
+      <InitialResourcePermissions
+        resource="app"
+        grants={form.watch("initialGrants")}
+        onChange={(initialGrants) =>
+          form.setValue("initialGrants", initialGrants, { shouldDirty: true })
+        }
+      />
     </StandardFormDialog>
   );
 }

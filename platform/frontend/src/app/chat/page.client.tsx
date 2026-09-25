@@ -105,7 +105,11 @@ import {
 } from "@/lib/agent-runtime.query";
 import { trackEvent } from "@/lib/analytics";
 import { useApp } from "@/lib/app.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import {
   clearOAuthPendingChatResume,
   getOAuthPendingChatResume,
@@ -142,11 +146,7 @@ import {
   setReviewContext,
   subscribeReviewContext,
 } from "@/lib/chat/chat-review-context";
-import {
-  useConversationShare,
-  useForkConversation,
-  useForkSharedConversation,
-} from "@/lib/chat/chat-share.query";
+import { useForkConversation } from "@/lib/chat/chat-share.query";
 import { classifyChatSubmitAction } from "@/lib/chat/chat-submit-action";
 import {
   applyFeedbackToMessages,
@@ -204,9 +204,9 @@ import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProject, useProjectFiles } from "@/lib/projects/projects.query";
+import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
-import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { ViewTransition } from "@/lib/view-transition";
 import {
@@ -340,12 +340,8 @@ export function ChatPageContent({
     message: string;
   } | null>(null);
   const forkConversationMutation = useForkConversation();
-  const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
 
-  const { data: isAgentAdmin } = useHasPermissions({
-    agent: ["admin"],
-  });
   const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
@@ -358,12 +354,6 @@ export function ChatPageContent({
   const { data: canReadLlmModels } = useHasPermissions({
     llmModel: ["read"],
   });
-  const { data: canReadTeams } = useHasPermissions({
-    team: ["read"],
-  });
-  const { data: canUpdateAgent } = useHasPermissions({
-    agent: ["team-admin"],
-  });
   const { data: canSeeAgentPicker, isLoading: isAgentPickerPermissionLoading } =
     useHasPermissions({
       chatAgentPicker: ["enable"],
@@ -371,11 +361,6 @@ export function ChatPageContent({
   const { data: canCreateProjectPerm } = useHasPermissions({
     project: ["create"],
   });
-  const { data: teams } = useTeams({ enabled: !!canReadTeams });
-
-  // Non-admin users with no teams cannot create agents
-  const cannotCreateDueToNoTeams =
-    !isAgentAdmin && (!teams || teams.length === 0);
 
   const isMobile = useIsMobile();
 
@@ -843,24 +828,50 @@ export function ChatPageContent({
       ? getConversationDisplayTitle(conversation.title, conversation.messages)
       : "Chat",
   );
+  const sessionCapabilities = useScopedCapabilities();
   const canManageShare =
     !!conversationId &&
     !!conversation &&
-    conversation.userId === session?.user.id &&
+    (conversation.userId === session?.user.id ||
+      sessionCapabilities.data?.some(
+        (grant) =>
+          grant.resource === "conversation" &&
+          grant.action === "manage-permissions" &&
+          // A grant on every chat is project oversight; it never manages the
+          // sharing of one chat.
+          grant.scope === conversationId,
+      ) === true) &&
     // Locked chats cannot be shared (the backend rejects it).
     isActionAvailableForConversation(conversation, "share");
-  useConversationShare(canManageShare ? conversationId : undefined);
 
   // Turning this chat into a project is owner-only (same as sharing) and
   // restricted to a user chat not already in a project.
   const canCreateProjectFromThisChat =
     canManageShare &&
     !!conversation &&
+    conversation.userId === session?.user.id &&
     canCreateProjectFromChat({
       hasCreatePermission: canCreateProjectPerm === true,
       conversation,
     });
-  const isShared = !!conversation?.share;
+  const sharingPolicy = useResourcePermissions(
+    "conversation",
+    conversationId ?? "",
+    canManageShare === true,
+  );
+  const isShared = sharingPolicy.data
+    ? [
+        ...sharingPolicy.data.grants,
+        ...sharingPolicy.data.inheritedGrants,
+      ].some(
+        (grant) =>
+          grant.actions.includes("read") &&
+          !(
+            grant.subject.type === "user" &&
+            grant.subject.id === conversation?.userId
+          ),
+      )
+    : !!conversation?.share;
   const isReadOnlyConversation =
     !!conversationId &&
     !!conversation &&
@@ -1885,6 +1896,10 @@ export function ChatPageContent({
     useHasPlaywrightMcpTools(browserToolsAgentId, {
       enabled: shouldCheckBrowserTools,
     });
+  const { data: canUpdateAgent } = useHasPermissions(
+    { agent: ["update"] },
+    browserToolsAgentId ?? "",
+  );
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
@@ -2666,28 +2681,18 @@ export function ChatPageContent({
       return;
     }
 
-    const result = conversation?.share?.id
-      ? await forkSharedConversationMutation.mutateAsync({
-          shareId: conversation.share.id,
-          agentId: effectiveForkAgentId,
-        })
-      : await forkConversationMutation.mutateAsync({
-          conversationId,
-          agentId: effectiveForkAgentId,
-        });
+    // A shared chat forks through the same route as an owned one: the server
+    // lets anyone its permissions let read the chat start a copy.
+    const result = await forkConversationMutation.mutateAsync({
+      conversationId,
+      agentId: effectiveForkAgentId,
+    });
 
     if (result) {
       setIsForkDialogOpen(false);
       router.push(`/chat/${result.id}`);
     }
-  }, [
-    conversationId,
-    conversation?.share?.id,
-    effectiveForkAgentId,
-    forkConversationMutation,
-    forkSharedConversationMutation,
-    router,
-  ]);
+  }, [conversationId, effectiveForkAgentId, forkConversationMutation, router]);
 
   const handleExportMarkdown = useCallback(() => {
     if (!conversationId || messages.length === 0) return;
@@ -3138,14 +3143,10 @@ export function ChatPageContent({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          {cannotCreateDueToNoTeams ? (
+          {!canCreateAgent ? (
             <ButtonWithTooltip
               disabled
-              disabledText={
-                canCreateAgent
-                  ? "You need to be a member of at least one team to create agents"
-                  : "You don't have permission to create agents"
-              }
+              disabledText={"You don't have permission to create agents"}
             >
               <Plus className="h-4 w-4" />
               Create Agent
@@ -3952,13 +3953,10 @@ export function ChatPageContent({
               <Button
                 onClick={handleForkConversation}
                 disabled={
-                  !effectiveForkAgentId ||
-                  forkConversationMutation.isPending ||
-                  forkSharedConversationMutation.isPending
+                  !effectiveForkAgentId || forkConversationMutation.isPending
                 }
               >
-                {forkConversationMutation.isPending ||
-                forkSharedConversationMutation.isPending
+                {forkConversationMutation.isPending
                   ? "Creating..."
                   : "Start Chat"}
               </Button>

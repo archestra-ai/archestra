@@ -52,8 +52,8 @@ export function OwnerSelectField({
       <div className="space-y-1">
         <Label>Key owner</Label>
         <FieldDescription>
-          Create this key on behalf of another member — it becomes their
-          personal key to view and manage.
+          The owner can reveal the key’s token. Access for others is controlled
+          by its permissions.
         </FieldDescription>
       </div>
       <UserSearchableSelect

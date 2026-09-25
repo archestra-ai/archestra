@@ -52,6 +52,7 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   AppearanceSettingsSchema,
@@ -537,7 +538,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         defaultEnvironmentDescription: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultNetworkPolicy: typeof body.networkPolicy;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: TrustedImageRegistries | null;
       }> = {};
@@ -552,9 +552,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if ("networkPolicy" in body) {
         data.defaultNetworkPolicy = body.networkPolicy ?? null;
-      }
-      if ("restricted" in body) {
-        data.defaultEnvironmentRestricted = body.restricted ?? false;
       }
       if ("validationRegex" in body) {
         data.defaultEnvironmentValidationRegex = body.validationRegex ?? null;
@@ -1486,6 +1483,15 @@ async function assertCallerCanGrantRole(params: {
   userId: string;
   organizationId: string;
 }) {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.validateSubjectAssignment({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    subjects: [{ type: "role", id: params.role.id }],
+  });
+  // SPDX-SnippetEnd
   const callerPermissions = await getPermissionsForUserContext({
     userId: params.userId,
     organizationId: params.organizationId,

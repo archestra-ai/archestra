@@ -13,7 +13,6 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ScopeBadge } from "@/components/scope-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -88,12 +87,6 @@ export function EntitiesTable() {
         header: "Type",
         size: 150,
         cell: ({ row }) => entityTypeLabel(row.original.type),
-      },
-      {
-        id: "visibility",
-        header: "Visibility",
-        size: 150,
-        cell: ({ row }) => <ScopeBadge scope={row.original.scope} showLabel />,
       },
       {
         id: "tools",
@@ -280,10 +273,7 @@ function EntitySummary({ entity }: { entity: CoverageEntity }) {
 
   return (
     <span className="flex flex-col gap-3">
-      <span className="flex items-center gap-2">
-        <span>{entityTypeLabel(entity.type)}</span>
-        <ScopeBadge scope={entity.scope} showLabel />
-      </span>
+      <span>{entityTypeLabel(entity.type)}</span>
       <span className="flex flex-wrap gap-x-6 gap-y-2">
         {stats.map((stat) => (
           <span key={stat.label} className="flex items-baseline gap-1.5">

@@ -28,21 +28,20 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
   let originalOwner: Agent;
   let targetAgent: Agent;
 
-  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization }) => {
+  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     activeOrganizationId = organizationId;
     user = await makeAdmin({ email: "operator@example.com" });
+    await makeMember(user.id, organizationId, { role: "admin" });
     originalOwner = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     targetAgent = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
 
@@ -110,7 +109,6 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     await ChatOpsChannelBindingModel.update(second.id, {
       agentId: newerOwner.id,
@@ -148,7 +146,6 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
 
     const invalidSettings = await apply({
@@ -240,7 +237,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     });
   });
 
-  test("enforces target agent type and personal-agent restrictions", async ({
+  test("enforces internal-agent type and permits scoped publication despite legacy visibility", async ({
     makeAgent,
     makeUser,
   }) => {
@@ -250,20 +247,19 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId,
       authorId: user.id,
       agentType: "mcp_gateway",
-      scope: "org",
     });
     const ownPersonalAgent = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const otherUser = await makeUser();
     const otherPersonalAgent = await makeAgent({
       organizationId,
       authorId: otherUser.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
     });
     const anotherUsersDm = await ChatOpsChannelBindingModel.create({
       organizationId,
@@ -317,15 +313,15 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     });
 
     expect(nonInternal.statusCode).toBe(400);
-    expect(personalChannel.statusCode).toBe(400);
-    expect(otherPersonalDm.statusCode).toBe(403);
-    expect(wrongOwnerDm.statusCode).toBe(403);
+    expect(personalChannel.statusCode, personalChannel.body).toBe(200);
+    expect(otherPersonalDm.statusCode, otherPersonalDm.body).toBe(200);
+    expect(wrongOwnerDm.statusCode, wrongOwnerDm.body).toBe(200);
     expect(
       (await ChatOpsChannelBindingModel.findById(channelBinding.id))?.agentId,
-    ).toBe(originalOwner.id);
+    ).toBe(ownPersonalAgent.id);
     expect(
       (await ChatOpsChannelBindingModel.findById(dmBinding.id))?.agentId,
-    ).toBe(originalOwner.id);
+    ).toBe(otherPersonalAgent.id);
   });
 
   test("rolls back binding updates when a pending DM conflicts", async () => {
@@ -404,7 +400,6 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     const foreignAgent = await makeAgent({
       organizationId: otherOrganization.id,
       agentType: "agent",
-      scope: "org",
     });
     const foreignBinding = await ChatOpsChannelBindingModel.create({
       organizationId: otherOrganization.id,
@@ -447,13 +442,14 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
   test("creates pending DMs for the same email independently in each organization", async ({
     makeAgent,
     makeOrganization,
+    makeMember,
   }) => {
     const otherOrganization = await makeOrganization();
+    await makeMember(user.id, otherOrganization.id, { role: "admin" });
     const otherTarget = await makeAgent({
       organizationId: otherOrganization.id,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
 
     const first = await apply({
@@ -498,16 +494,11 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       organizationId,
       authorId: teamOwner.id,
       agentType: "agent",
-      scope: "team",
-      teams: [privateTeam.id],
+      access: { teams: [privateTeam.id] },
     });
     const binding = await makeBinding(originalOwner.id);
     user = member;
-    vi.mocked(hasPermission).mockImplementation(async (permissions) =>
-      permissions.agent?.includes("admin")
-        ? { success: false, error: new Error("Forbidden") }
-        : { success: true, error: null },
-    );
+    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
 
     const response = await apply({
       targetAgentId: inaccessibleAgent.id,
@@ -520,10 +511,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       ],
     });
 
-    expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({
-      error: { message: "Agent not found" },
-    });
+    expect(response.statusCode).toBe(403);
     expect(
       (await ChatOpsChannelBindingModel.findById(binding.id))?.agentId,
     ).toBe(originalOwner.id);

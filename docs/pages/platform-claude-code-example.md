@@ -19,8 +19,8 @@ an existing Claude Pro/Max subscription keeps paying for inference. Cover:
   ANTHROPIC_CUSTOM_HEADERS as X-Archestra-Virtual-Key, plus X-Archestra-Agent-Id.
 - The Virtual key alternative (ANTHROPIC_AUTH_TOKEN, standard virtual key).
 - Prerequisites: claude CLI on PATH, proxy/gateway access, llmVirtualKey:create
-  (best-effort for attribution, required for Virtual key mode), skill:admin for
-  the shared-skills bundle.
+  (best-effort for attribution, required for Virtual key mode), global skill read, use, and manage-permissions grants for
+  the shared-skills snapshot bundle.
 - What the script configures, in order: MCP gateway via claude mcp add,
   ~/.claude/settings.json merge (one-time .archestra-backup of an existing
   file), shared-skills plugin marketplace install. Nothing is undone

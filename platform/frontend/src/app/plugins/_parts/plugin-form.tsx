@@ -6,6 +6,7 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { GithubAuthConfigFields } from "@/components/github-auth-config-fields";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -23,7 +24,6 @@ import {
 } from "@/components/ui/select";
 import { PluginContentFields } from "./plugin-content-fields";
 import type { PluginDraft } from "./plugin-draft";
-import { PluginScopeSelector } from "./plugin-scope-selector";
 
 const SYNCED_FROM_GITHUB =
   "These values are synced from GitHub. Change sync settings below.";
@@ -53,6 +53,7 @@ export function PluginForm({
   isGithubPlugin = false,
   githubAppConfigs,
   isCreate = false,
+  pluginId,
 }: {
   draft: PluginDraft;
   onChange: (patch: Partial<PluginDraft>) => void;
@@ -69,6 +70,14 @@ export function PluginForm({
   githubAppConfigs?: { id: string; name: string }[];
   /** Client type is part of a plugin's identity, so it is set once, at create. */
   isCreate?: boolean;
+  /**
+   * The saved plugin whose access policy this form edits.
+   *
+   * Access is a grant now. A saved plugin answers "who can reach this" from
+   * its own policy, so the form shows that policy rather than the retired
+   * visibility fields, which nothing reads once the plugin has converted.
+   */
+  pluginId?: string;
 }) {
   return (
     <SettingsSectionGroup>
@@ -115,13 +124,11 @@ export function PluginForm({
       {/* No heading: the visibility control names the section itself. */}
       <SettingsSection>
         <fieldset disabled={readOnly} className="space-y-4">
-          <PluginScopeSelector
-            scope={draft.scope}
-            onScopeChange={(scope) => onChange({ scope })}
-            teamIds={draft.teamIds}
-            onTeamIdsChange={(teamIds) => onChange({ teamIds })}
-            userIds={draft.userIds}
-            onUserIdsChange={(userIds) => onChange({ userIds })}
+          <ResourceAccessSection
+            resource="plugin"
+            id={pluginId}
+            grants={draft.initialGrants}
+            onGrantsChange={(initialGrants) => onChange({ initialGrants })}
           />
           <ProfileLabels
             ref={labelsRef}

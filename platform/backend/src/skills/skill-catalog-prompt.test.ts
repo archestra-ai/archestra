@@ -1,9 +1,20 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import { EnvironmentModel, SkillModel } from "@/models";
-import { afterAll, beforeEach, describe, expect, test } from "@/test";
+import { selectEffectiveNativeSkills } from "@/services/agent-activation-skills";
+import {
+  accessGrants,
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { Agent } from "@/types";
-import { buildSkillCatalogPrompt } from "./skill-catalog-prompt";
+import {
+  buildSkillCatalogPrompt,
+  listAccessibleCatalogSkills,
+} from "./skill-catalog-prompt";
 
 /**
  * Characterization of the `<available_skills>` block and its activation
@@ -21,9 +32,9 @@ async function seedSkill(organizationId: string) {
       content: "# PDF Processing\nUse pdftotext.",
       metadata: {},
       sourceType: "manual",
-      scope: "org",
     },
     files: [],
+    ...accessGrants("org"),
   });
 }
 
@@ -132,9 +143,9 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
         content: "Default env instructions.",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     await SkillModel.createWithFiles({
       skill: {
@@ -144,10 +155,10 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
         content: "Other env instructions.",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
       environmentIds: [otherEnv.id],
+      ...accessGrants("org"),
     });
     // built-in skills are exempt from environment isolation, mirroring the
     // built-in catalog exemption on tools.
@@ -160,9 +171,9 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
         metadata: {},
         sourceType: "built_in",
         sourceRef: "built-in-skill",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     const defaultCatalog = await buildSkillCatalogPrompt({
@@ -207,9 +218,9 @@ describe("buildSkillCatalogPrompt agent-designated skills", () => {
         agentName: "Research Bot",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     const prompt = await buildSkillCatalogPrompt({
@@ -222,5 +233,57 @@ describe("buildSkillCatalogPrompt agent-designated skills", () => {
     );
     expect(prompt).toContain("runs in that subagent");
     expect(prompt).toContain("skill__<name> tool");
+  });
+});
+
+// Same-named skills (names are unique per author) resolve by who each skill
+// reaches, read from its grants: the caller's own skill first, then a team
+// skill, then an organization skill. Every new skill stores the retired
+// scope column as "personal", so ranking by it put shared skills last.
+describe("native skill precedence follows grants", () => {
+  test("the caller's own skill wins, then a team skill, then an organization skill", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeSkill,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    const orgAuthor = await makeUser();
+    const teamAuthor = await makeUser();
+    for (const user of [caller, orgAuthor, teamAuthor])
+      await makeMember(user.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, teamAuthor.id);
+    await makeTeamMember(team.id, caller.id);
+
+    const teamSkill = await makeSkill(org.id, {
+      name: "runbook",
+      authorId: teamAuthor.id,
+      access: { teams: [team.id] },
+    });
+    // Newer, so recency alone would pick it over the team skill.
+    await makeSkill(org.id, {
+      name: "runbook",
+      authorId: orgAuthor.id,
+      access: "org",
+    });
+    const winner = async () =>
+      selectEffectiveNativeSkills(
+        await listAccessibleCatalogSkills({
+          organizationId: org.id,
+          userId: caller.id,
+        }),
+        caller.id,
+      ).find((skill) => skill.name === "runbook")?.id;
+
+    expect(await winner()).toBe(teamSkill.id);
+
+    const ownSkill = await makeSkill(org.id, {
+      name: "runbook",
+      authorId: caller.id,
+    });
+    expect(await winner()).toBe(ownSkill.id);
   });
 });

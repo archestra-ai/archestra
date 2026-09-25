@@ -130,10 +130,10 @@ it("filters resources without losing selections and supports reviewing selected 
   ).not.toBeInTheDocument();
   await user.click(screen.getByLabelText("Read"));
   await user.clear(screen.getByRole("textbox", { name: "Search permissions" }));
-  await user.click(screen.getByRole("button", { name: "Selected only" }));
+  await user.click(screen.getByRole("button", { name: /^Selected \(/ }));
   expect(screen.getByLabelText("Read")).toBeChecked();
   expect(screen.getByLabelText("Query")).toBeChecked();
-  await user.click(screen.getByRole("button", { name: "Clear All" }));
+  await user.click(screen.getByRole("button", { name: "Clear" }));
   expect(
     screen.getByText("No selected permissions match your search."),
   ).toBeVisible();

@@ -2,12 +2,13 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
-import ConversationShareModel from "@/models/conversation-share";
 import FileModel from "@/models/file";
 import ProjectModel from "@/models/project";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 import { ApiError } from "@/types";
 
 async function putFile(params: {
@@ -342,10 +343,10 @@ test("converting a shared chat keeps the share and moves its files", async ({
     conversationId: conv.id,
     filename: "report.md",
   });
-  await ConversationShareModel.upsert({
-    conversationId: conv.id,
+  await shareForTest({
+    resource: "conversation",
+    scope: conv.id,
     organizationId: org.id,
-    createdByUserId: user.id,
     visibility: "organization",
     teamIds: [],
     userIds: [],
@@ -359,11 +360,15 @@ test("converting a shared chat keeps the share and moves its files", async ({
     });
 
   expect(filesMoved).toBe(1);
-  const share = await ConversationShareModel.findByConversationId({
-    conversationId: conv.id,
+  const policy = await ResourcePermissionPolicyModel.find({
     organizationId: org.id,
+    resource: "conversation",
+    scope: conv.id,
   });
-  expect(share).not.toBeNull();
+  expect(policy?.grants).toContainEqual({
+    subject: { type: "organization", id: "*" },
+    actions: ["read"],
+  });
   const projectFiles = await FileModel.listByProject({
     organizationId: org.id,
     projectId: project.id,

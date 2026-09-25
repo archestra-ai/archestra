@@ -13,12 +13,13 @@ import {
   A2AMessageModel,
   A2ATaskModel,
   AgentRunModel,
-  AgentRunShareModel,
   AgentWorkspaceModel,
   InteractionModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
+import MemberModel from "@/models/member";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
@@ -27,8 +28,11 @@ import {
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
 import { projectService } from "@/services/project";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { shareForTest } from "@/test/sharing";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { Agent, User } from "@/types";
 
 vi.mock("@/observability");
@@ -81,7 +85,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: {
         image: "example.com/coding-agent:latest",
         command: null,
@@ -147,6 +150,28 @@ describe("Agent Runtime routes", () => {
     await app.close();
   });
 
+  test("read-only agent access cannot start a runtime or reach credential preflight", async ({
+    makeCustomRole,
+  }) => {
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+    const key = { organizationId, resource: "agent" as const, scope: agent.id };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [{ subject: { type: "user", id: user.id }, actions: ["read"] }],
+    });
+    vi.mocked(startDetachedAgentTask).mockClear();
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/runs`,
+      payload: { message: "Start" },
+    });
+    expect(response.statusCode, response.body).toBe(403);
+    expect(startDetachedAgentTask).not.toHaveBeenCalled();
+  });
+
   test("audits native sign-in without retaining the authorization code and gates an unsigned user's run", async ({
     makeAgent,
     makeUser,
@@ -157,7 +182,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: {
         ...agent.runtime,
         command: ["archestra-claude-code"],
@@ -207,7 +231,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: { ...agent.runtime, image: "example.test/custom-claude:v2" },
     });
     const secondUrl = `/api/agents/${secondAgent.id}/runtime/claude-code/account`;
@@ -281,7 +304,7 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: privateOwner.id,
       agentType: "agent",
-      scope: "personal",
+      access: "personal",
       runtime: agent.runtime,
     });
     const otherOrganization = await makeOrganization();
@@ -289,7 +312,6 @@ describe("Agent Runtime routes", () => {
       organizationId: otherOrganization.id,
       authorId: privateOwner.id,
       agentType: "agent",
-      scope: "org",
       runtime: agent.runtime,
     });
     user = await makeUser();
@@ -315,7 +337,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     const selectedTask = await createTask(agent.id);
     const otherTask = await createTask(otherAgent.id);
@@ -335,10 +356,10 @@ describe("Agent Runtime routes", () => {
     const visibleTeam = await makeTeam(organizationId, user.id, {
       name: "Runtime reviewers",
     });
-    await AgentRunShareModel.upsert({
-      taskId: selectedTask.id,
+    await shareForTest({
+      resource: "agentRun",
+      scope: selectedTask.id,
       organizationId,
-      createdByUserId: user.id,
       visibility: "team",
       teamIds: [visibleTeam.id],
       userIds: [],
@@ -461,15 +482,13 @@ describe("Agent Runtime routes", () => {
     });
     user = owner;
     for (const visibility of ["user", "organization"] as const) {
-      const response = await app.inject({
-        method: "PUT",
-        url: `/api/agent-runs/${task.id}/share`,
-        payload: {
-          visibility,
-          ...(visibility === "user" ? { userIds: [recipient.id] } : {}),
-        },
+      await shareForTest({
+        resource: "agentRun",
+        scope: task.id,
+        organizationId,
+        visibility: visibility,
+        userIds: visibility === "user" ? [recipient.id] : [],
       });
-      expect(response.statusCode).toBe(200);
       expect(await readRun()).toMatchObject({
         shareUserNames: visibility === "user" ? [recipient.name] : [],
         shareTeamNames: [],
@@ -483,11 +502,12 @@ describe("Agent Runtime routes", () => {
       });
       user = owner;
     }
-    const response = await app.inject({
-      method: "DELETE",
-      url: `/api/agent-runs/${task.id}/share`,
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: null,
     });
-    expect(response.statusCode).toBe(200);
     user = creator;
     expect(await readRun()).toMatchObject({
       initiatorName: owner.name,
@@ -517,10 +537,10 @@ describe("Agent Runtime routes", () => {
     await createRun({ taskId: task.id, actorUserId: owner.id });
 
     for (const visibility of ["user", "team"] as const) {
-      await AgentRunShareModel.upsert({
-        taskId: task.id,
+      await shareForTest({
+        resource: "agentRun",
+        scope: task.id,
         organizationId,
-        createdByUserId: owner.id,
         visibility,
         teamIds: visibility === "team" ? [team.id] : [],
         userIds: visibility === "user" ? [recipient.id] : [],
@@ -552,11 +572,6 @@ describe("Agent Runtime routes", () => {
                 : null,
           }),
         ]);
-        const settings = await app.inject({
-          method: "GET",
-          url: `/api/agent-runs/${task.id}/share`,
-        });
-        expect(settings.statusCode).toBe(viewer === owner ? 200 : 404);
         const details = await app.inject({
           method: "GET",
           url: `/api/agent-runs/${task.id}`,
@@ -682,6 +697,14 @@ describe("Agent Runtime routes", () => {
   test("does not start a run inside a project the caller cannot read", async ({
     makeUser,
   }) => {
+    await ResourcePermissions.updatePolicy({
+      organizationId,
+      userId: user.id,
+      resource: "project",
+      scope: "*",
+      revision: 1,
+      grants: [],
+    });
     const otherUser = await makeUser();
     const project = await projectService.create({
       organizationId,
@@ -1056,7 +1079,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       llmApiKeyId: providerKey.id,
       modelId: model.id,
       runtime: { ...agent.runtime, command: ["archestra-codex"] },
@@ -1112,7 +1134,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: {
         ...agent.runtime,
         credentials: [
@@ -1223,7 +1244,6 @@ describe("Agent Runtime routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: { ...agent.runtime, ports: [3000, 3000, 9000] },
     });
     const task = await createTask(agent.id);
@@ -1256,6 +1276,91 @@ describe("Agent Runtime routes", () => {
     );
   });
 
+  test("project wildcard access and read-all do not reveal private runs", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const owner = user;
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "Private runtime project",
+      description: null,
+    });
+    const task = await createTask(agent.id);
+    await createRun({
+      taskId: task.id,
+      actorUserId: owner.id,
+      projectId: project.id,
+    });
+    const role = await makeCustomRole(organizationId, {
+      permission: { project: ["read"] },
+    });
+    // `read` on every chat, the grant the retired project:read-all became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "conversation",
+      roleId: role.id,
+      actions: ["read"],
+    });
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId, { role: role.role });
+    const key = { organizationId, resource: "project" as const, scope: "*" };
+    const wildcard = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: wildcard?.revision ?? 0,
+      grants: [{ subject: { type: "user", id: reader.id }, actions: ["read"] }],
+    });
+    user = reader;
+    expect(
+      (await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      await projectService.listExecutions({
+        id: project.id,
+        organizationId,
+        userId: reader.id,
+      }),
+    ).toEqual([]);
+    const directKey = { ...key, scope: project.id };
+    const direct = await ResourcePermissionPolicyModel.find(directKey);
+    const shared = await ResourcePermissionPolicyModel.replace({
+      ...directKey,
+      revision: direct?.revision ?? 0,
+      grants: [{ subject: { type: "user", id: reader.id }, actions: ["read"] }],
+    });
+    expect(
+      (await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      await projectService.listExecutions({
+        id: project.id,
+        organizationId,
+        userId: reader.id,
+      }),
+    ).toHaveLength(1);
+    await ResourcePermissionPolicyModel.replace({
+      ...directKey,
+      revision: shared?.revision ?? 0,
+      grants: [],
+    });
+    expect(
+      (await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      await projectService.listExecutions({
+        id: project.id,
+        organizationId,
+        userId: reader.id,
+      }),
+    ).toEqual([]);
+  });
+
   test("opens a run read-only through a shared project for a read-all member", async ({
     makeUser,
     makeMember,
@@ -1267,12 +1372,15 @@ describe("Agent Runtime routes", () => {
       name: "Shared project run",
       description: null,
     });
-    await projectService.setShare({
-      id: project.id,
+    await ResourcePermissions.updatePolicy({
       organizationId,
       userId: user.id,
-      visibility: "organization",
-      teamIds: [],
+      resource: "project",
+      scope: project.id,
+      revision: 1,
+      grants: [
+        { subject: { type: "organization", id: "*" }, actions: ["read"] },
+      ],
     });
     const task = await createTask(agent.id);
     await createRun({
@@ -1282,7 +1390,14 @@ describe("Agent Runtime routes", () => {
     });
 
     const role = await makeCustomRole(organizationId, {
-      permission: { project: ["read", "read-all"] },
+      permission: { project: ["read"] },
+    });
+    // `read` on every chat, the grant the retired project:read-all became.
+    await grantRoleEverywhere({
+      organizationId: organizationId,
+      resource: "conversation",
+      roleId: role.id,
+      actions: ["read"],
     });
     const reader = await makeUser();
     await makeMember(reader.id, organizationId, { role: role.role });
@@ -1311,7 +1426,7 @@ describe("Agent Runtime routes", () => {
   }) => {
     const task = await createTask(agent.id);
     await createRun({ taskId: task.id, actorUserId: user.id });
-    const owner = user;
+    const _owner = user;
 
     const colleague = await makeAdmin();
     await makeMember(colleague.id, organizationId, { role: "member" });
@@ -1325,16 +1440,12 @@ describe("Agent Runtime routes", () => {
     expect(beforeShare.statusCode).toBe(404);
 
     // The owner shares it organization-wide.
-    user = owner;
-    const shared = await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "organization" },
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: "organization",
     });
-    expect(shared.statusCode).toBe(200);
-    expect(shared.json()).toEqual(
-      expect.objectContaining({ taskId: task.id, visibility: "organization" }),
-    );
 
     // The colleague now gets a read-only view flagged as shared.
     user = colleague;
@@ -1346,27 +1457,6 @@ describe("Agent Runtime routes", () => {
     expect(afterShare.json()).toEqual(
       expect.objectContaining({ taskId: task.id, viewerRole: "shared" }),
     );
-
-    const [audit] = await db
-      .select({
-        action: schema.auditLogsTable.action,
-        resourceId: schema.auditLogsTable.resourceId,
-        before: schema.auditLogsTable.before,
-        after: schema.auditLogsTable.after,
-      })
-      .from(schema.auditLogsTable)
-      .where(
-        and(
-          eq(schema.auditLogsTable.action, "agentRun.shared"),
-          eq(schema.auditLogsTable.resourceId, task.id),
-        ),
-      );
-    expect(audit).toMatchObject({
-      action: "agentRun.shared",
-      resourceId: task.id,
-      before: null,
-      after: expect.objectContaining({ visibility: "organization" }),
-    });
   });
 
   test("limits a team share to members of the shared team", async ({
@@ -1386,15 +1476,13 @@ describe("Agent Runtime routes", () => {
     const outsider = await makeAdmin();
     await makeMember(outsider.id, organizationId, { role: "member" });
 
-    const shared = await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "team", teamIds: [team.id] },
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: "team",
+      teamIds: [team.id],
     });
-    expect(shared.statusCode).toBe(200);
-    expect(shared.json()).toEqual(
-      expect.objectContaining({ visibility: "team", teamIds: [team.id] }),
-    );
 
     user = teamMember;
     const memberView = await app.inject({
@@ -1426,12 +1514,13 @@ describe("Agent Runtime routes", () => {
     const uninvited = await makeAdmin();
     await makeMember(uninvited.id, organizationId, { role: "member" });
 
-    const shared = await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "user", userIds: [invited.id] },
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: "user",
+      userIds: [invited.id],
     });
-    expect(shared.statusCode).toBe(200);
 
     user = invited;
     const invitedView = await app.inject({
@@ -1448,73 +1537,110 @@ describe("Agent Runtime routes", () => {
     expect(uninvitedView.statusCode).toBe(404);
   });
 
-  test("revokes sharing and keeps share management owner-only", async ({
+  test("session grants unlock output without lending the owner's terminal or continuation", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const owner = user;
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId);
+    const task = await createTask(agent.id);
+    await createRun({ taskId: task.id, actorUserId: owner.id });
+    await ResourcePermissions.updatePolicy({
+      organizationId,
+      userId: owner.id,
+      resource: "agentRun",
+      scope: task.id,
+      // Creating the run wrote its owner's policy at revision 1.
+      revision: 1,
+      grants: [
+        {
+          subject: { type: "user", id: owner.id },
+          actions: ["read", "manage-permissions"],
+        },
+        {
+          subject: { type: "user", id: reader.id },
+          actions: ["read", "manage-permissions"],
+        },
+      ],
+    });
+    user = reader;
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/agent-runs/${task.id}`,
+    });
+    expect(view.statusCode, view.body).toBe(200);
+    expect(view.json().viewerRole).toBe("shared");
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/agent-runs/${task.id}/continue`,
+          payload: { message: "continue" },
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/agent-runs/${task.id}`,
+        })
+      ).statusCode,
+    ).toBe(404);
+    user = owner;
+    await ResourcePermissions.updatePolicy({
+      organizationId,
+      userId: owner.id,
+      resource: "agentRun",
+      scope: task.id,
+      revision: 2,
+      grants: [
+        {
+          subject: { type: "user", id: owner.id },
+          actions: ["read", "manage-permissions"],
+        },
+      ],
+    });
+    user = reader;
+    expect(
+      (await app.inject({ method: "GET", url: `/api/agent-runs/${task.id}` }))
+        .statusCode,
+    ).toBe(404);
+  });
+
+  test("revoking a share takes a colleague's access away again", async ({
     makeAdmin,
     makeMember,
   }) => {
     const task = await createTask(agent.id);
     await createRun({ taskId: task.id, actorUserId: user.id });
-    const owner = user;
-
-    await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "organization" },
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: "organization",
     });
-
-    // A non-owner can neither read nor change the share settings.
     const colleague = await makeAdmin();
     await makeMember(colleague.id, organizationId, { role: "member" });
     user = colleague;
-    const readShare = await app.inject({
+    const shared = await app.inject({
       method: "GET",
-      url: `/api/agent-runs/${task.id}/share`,
+      url: `/api/agent-runs/${task.id}`,
     });
-    expect(readShare.statusCode).toBe(404);
-    const forbiddenShare = await app.inject({
-      method: "PUT",
-      url: `/api/agent-runs/${task.id}/share`,
-      payload: { visibility: "organization" },
-    });
-    expect(forbiddenShare.statusCode).toBe(404);
+    expect(shared.statusCode).toBe(200);
 
-    // The owner revokes the share.
-    user = owner;
-    const unshared = await app.inject({
-      method: "DELETE",
-      url: `/api/agent-runs/${task.id}/share`,
+    await shareForTest({
+      resource: "agentRun",
+      scope: task.id,
+      organizationId,
+      visibility: null,
     });
-    expect(unshared.statusCode).toBe(200);
-    expect(unshared.json()).toEqual({ success: true });
-
-    // The colleague loses access again.
-    user = colleague;
     const afterRevoke = await app.inject({
       method: "GET",
       url: `/api/agent-runs/${task.id}`,
     });
     expect(afterRevoke.statusCode).toBe(404);
-
-    const [audit] = await db
-      .select({
-        action: schema.auditLogsTable.action,
-        resourceId: schema.auditLogsTable.resourceId,
-        before: schema.auditLogsTable.before,
-        after: schema.auditLogsTable.after,
-      })
-      .from(schema.auditLogsTable)
-      .where(
-        and(
-          eq(schema.auditLogsTable.action, "agentRun.unshared"),
-          eq(schema.auditLogsTable.resourceId, task.id),
-        ),
-      );
-    expect(audit).toMatchObject({
-      action: "agentRun.unshared",
-      resourceId: task.id,
-      before: expect.objectContaining({ visibility: "organization" }),
-      after: { success: true },
-    });
   });
 
   test("continues only an owned retained workspace and audits the new turn", async ({

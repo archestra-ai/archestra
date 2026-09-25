@@ -47,6 +47,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   appConnectorAudienceRef,
   buildConnectorResourceUri,
@@ -152,7 +153,8 @@ describe("validateMCPGatewayToken", () => {
   });
 
   describe("team token validation", () => {
-    test("validates org token for any profile", async ({
+    test("validates org token for an organization-granted profile", async ({
+      makeAgent,
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -164,8 +166,8 @@ describe("validateMCPGatewayToken", () => {
         isOrganizationToken: true,
       });
 
-      const profileId = crypto.randomUUID();
-      const result = await validateMCPGatewayToken(profileId, value);
+      const profile = await makeAgent({ organizationId: org.id });
+      const result = await validateMCPGatewayToken(profile.id, value);
 
       expect(result).not.toBeNull();
       expect(result?.tokenId).toBe(token.id);
@@ -183,7 +185,10 @@ describe("validateMCPGatewayToken", () => {
       const org = await makeOrganization();
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
 
       const { token, value } = await TeamTokenModel.create({
         organizationId: org.id,
@@ -211,7 +216,10 @@ describe("validateMCPGatewayToken", () => {
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
 
       // Agent assigned to team2 only
-      const agent = await makeAgent({ teams: [team2.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team2.id] },
+      });
 
       // Token for team1
       const { value } = await TeamTokenModel.create({
@@ -241,7 +249,10 @@ describe("validateMCPGatewayToken", () => {
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
-      const agent = await makeAgent({ teams: [team2.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team2.id] },
+      });
       const { value } = await TeamTokenModel.create({
         organizationId: org.id,
         name: "Team 1 Token",
@@ -250,7 +261,7 @@ describe("validateMCPGatewayToken", () => {
 
       const teamHasAgentAccessSpy = vi.spyOn(
         AgentTeamModel,
-        "teamHasAgentAccess",
+        "credentialHasAgentAccess",
       );
 
       const firstResult = await validateMCPGatewayToken(agent.id, value);
@@ -266,6 +277,7 @@ describe("validateMCPGatewayToken", () => {
     });
 
     test("reuses resolved team tokens across profiles", async ({
+      makeAgent,
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -278,11 +290,11 @@ describe("validateMCPGatewayToken", () => {
       const validateTeamTokenSpy = vi.spyOn(TeamTokenModel, "validateToken");
 
       const firstResult = await validateMCPGatewayToken(
-        crypto.randomUUID(),
+        (await makeAgent({ organizationId: org.id })).id,
         value,
       );
       const secondResult = await validateMCPGatewayToken(
-        crypto.randomUUID(),
+        (await makeAgent({ organizationId: org.id })).id,
         value,
       );
 
@@ -295,6 +307,52 @@ describe("validateMCPGatewayToken", () => {
   });
 
   describe("user token validation", () => {
+    test("a private gateway requires use rather than read and revocation takes effect on the same token", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const owner = await makeUser();
+      const role = await makeCustomRole(org.id, { permission: {} });
+      await makeMember(user.id, org.id, { role: role.role });
+      const gateway = await makeAgent({
+        organizationId: org.id,
+        authorId: owner.id,
+        agentType: "mcp_gateway",
+        access: "personal",
+      });
+      const { value } = await UserTokenModel.create(user.id, org.id);
+      const key = {
+        organizationId: org.id,
+        resource: "mcpGateway" as const,
+        scope: gateway.id,
+      };
+      const subject = { type: "user" as const, id: user.id };
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: 0,
+        grants: [{ subject, actions: ["read"] }],
+      });
+      expect(await validateMCPGatewayToken(gateway.id, value)).toBeNull();
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: 1,
+        grants: [{ subject, actions: ["use"] }],
+      });
+      expect(await validateMCPGatewayToken(gateway.id, value)).toMatchObject({
+        userId: user.id,
+      });
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: 2,
+        grants: [],
+      });
+      expect(await validateMCPGatewayToken(gateway.id, value)).toBeNull();
+    });
     test("validates user token when user has team access to profile", async ({
       makeOrganization,
       makeUser,
@@ -309,7 +367,10 @@ describe("validateMCPGatewayToken", () => {
 
       const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
       await makeTeamMember(team.id, user.id);
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
 
       const { token, value } = await UserTokenModel.create(
         user.id,
@@ -345,7 +406,10 @@ describe("validateMCPGatewayToken", () => {
       const team2 = await makeTeam(org.id, user2.id, { name: "Team 2" });
 
       // Agent is only assigned to team2
-      const agent = await makeAgent({ teams: [team2.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team2.id] },
+      });
 
       // Create token for user1 (who is NOT in team2)
       const { value } = await UserTokenModel.create(
@@ -378,7 +442,10 @@ describe("validateMCPGatewayToken", () => {
       });
 
       // Agent assigned to team
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
 
       // Create token for admin user
       const { token, value } = await UserTokenModel.create(
@@ -409,7 +476,10 @@ describe("validateMCPGatewayToken", () => {
 
       const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
       await makeTeamMember(team.id, user.id);
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
       const { value } = await UserTokenModel.create(user.id, org.id);
       const userHasAgentAccessSpy = vi.spyOn(
         AgentTeamModel,
@@ -420,10 +490,11 @@ describe("validateMCPGatewayToken", () => {
 
       expect(result).not.toBeNull();
       expect(userHasAgentAccessSpy).toHaveBeenCalledTimes(1);
-      expect(userHasAgentAccessSpy.mock.calls[0]?.[3]).toMatchObject({
+      expect(
+        userHasAgentAccessSpy.mock.calls[0]?.[0].agentAccessContext,
+      ).toMatchObject({
         id: agent.id,
         organizationId: agent.organizationId,
-        scope: "team",
         authorId: agent.authorId,
       });
 
@@ -443,7 +514,7 @@ describe("validateMCPGatewayToken", () => {
       await makeMember(adminUser.id, org.id, { role: "admin" });
 
       // Agent with no teams
-      const agent = await makeAgent({ teams: [] });
+      const agent = await makeAgent({ organizationId: org.id });
 
       // Create admin user token
       const { token, value } = await UserTokenModel.create(
@@ -475,7 +546,10 @@ describe("validateMCPGatewayToken", () => {
 
       // Create team with other user, agent in that team
       const team = await makeTeam(org.id, otherUser.id, { name: "Other Team" });
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
 
       // Token for user with no teams
       const { value } = await UserTokenModel.create(
@@ -504,7 +578,10 @@ describe("validateMCPGatewayToken", () => {
 
       // Create team with other user, agent in that team
       const team = await makeTeam(org.id, otherUser.id, { name: "Other Team" });
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
 
       // Token for admin with no teams
       const { token, value } = await UserTokenModel.create(
@@ -997,8 +1074,7 @@ describe("validateExternalIdpToken", () => {
     const team2 = await makeTeam(org.id, otherUser.id, { name: "Team 2" });
     const agent = await makeAgent({
       organizationId: org.id,
-      teams: [team2.id],
-      scope: "team",
+      access: { teams: [team2.id] },
     });
 
     const idp = await makeIdentityProvider(org.id, {
@@ -1042,7 +1118,7 @@ describe("validateExternalIdpToken", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       identityProviderId: idp.id,
-      teams: [], // no teams assigned
+      // no teams assigned
     });
 
     mockValidateJwt.mockResolvedValueOnce({
@@ -1083,7 +1159,6 @@ describe("validateExternalIdpToken", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       identityProviderId: idp.id,
-      teams: [],
     });
 
     mockValidateJwt.mockResolvedValueOnce({
@@ -1131,8 +1206,7 @@ describe("validateExternalIdpToken", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       identityProviderId: idp.id,
-      teams: [team.id],
-      scope: "team",
+      access: { teams: [team.id] },
     });
 
     mockValidateJwt.mockResolvedValueOnce({
@@ -1227,6 +1301,117 @@ describe("validateExternalIdpToken", () => {
 
     expect(outcome.result).toBeNull();
     expect(outcome.reason).toBe("no_email_claim");
+  });
+
+  // An IdP-authenticated caller reaches a gateway through its grants and
+  // nothing else. A gateway with no teams used to read as organization-wide;
+  // that label is retired, so an empty grant list admits nobody but the
+  // administrators whose grant sits at `*`.
+  test("admits a gateway user through the gateway's use grant, never its retired scope", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      identityProviderId: idp.id,
+    });
+    const key = {
+      organizationId: org.id,
+      resource: "mcpGateway" as const,
+      scope: gateway.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    const emptied = await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [],
+    });
+    const jwt = () =>
+      mockValidateJwt.mockResolvedValueOnce({
+        sub: "member-sub",
+        email: user.email,
+        name: user.name,
+        rawClaims: { sub: "member-sub", email: user.email },
+      });
+
+    jwt();
+    expect(await validateExternalIdpToken(gateway.id, FAKE_JWT)).toBeNull();
+
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: emptied?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
+      ],
+    });
+    jwt();
+    expect((await validateExternalIdpToken(gateway.id, FAKE_JWT))?.userId).toBe(
+      user.id,
+    );
+  });
+
+  test("admits any member to the organization's LLM proxy and nobody to a retired proxy row", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const user = await makeUser();
+    await makeMember(author.id, org.id, { role: "member" });
+    await makeMember(user.id, org.id, { role: "member" });
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    // The retired scope says the opposite of the rule in both cases.
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+      identityProviderId: idp.id,
+      access: "personal",
+      authorId: author.id,
+    });
+    const retired = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: false,
+      identityProviderId: idp.id,
+    });
+    const jwt = () =>
+      mockValidateJwt.mockResolvedValueOnce({
+        sub: "member-sub",
+        email: user.email,
+        name: user.name,
+        rawClaims: { sub: "member-sub", email: user.email },
+      });
+
+    jwt();
+    expect(
+      (await validateExternalIdpToken(proxy.id, FAKE_JWT, "llmProxy"))?.userId,
+    ).toBe(user.id);
+    jwt();
+    expect(
+      await validateExternalIdpToken(retired.id, FAKE_JWT, "llmProxy"),
+    ).toBeNull();
   });
 });
 
@@ -1863,7 +2048,6 @@ describe("createAgentServer tools/list", () => {
         organizationId: org.id,
         name: "bug-tracker",
         serverType: "remote",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       // Not assigned — reached only through accessAllTools dynamic access.
@@ -1927,7 +2111,6 @@ describe("createAgentServer tools/list", () => {
       organizationId: org.id,
       name: "PizzaTracker",
       serverType: "app",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     // A raw (pre-sanitization) stored description must never reach the model:
@@ -2014,7 +2197,6 @@ describe("createAgentServer tools/list", () => {
       organizationId: org.id,
       name: "bug-tracker",
       serverType: "app",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: appCatalog.id, scope: "org" });
     await makeTool({
@@ -2032,7 +2214,6 @@ describe("createAgentServer tools/list", () => {
       organizationId: org.id,
       name: "maps",
       serverType: "remote",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: remoteCatalog.id, scope: "org" });
     await makeTool({
@@ -2054,7 +2235,6 @@ describe("createAgentServer tools/list", () => {
       organizationId: org.id,
       name: "weather",
       serverType: "remote",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: assignedCatalog.id, scope: "org" });
     const assignedUiTool = await makeTool({
@@ -2139,7 +2319,6 @@ describe("createAgentServer tools/list", () => {
       organizationId: org.id,
       name: "get-time",
       serverType: "app",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: appCatalog.id, scope: "org" });
     // Unassigned owned-app launch tool — reachable only through dynamic access.
@@ -2199,7 +2378,6 @@ describe("createAgentServer tools/list", () => {
       organizationId: org.id,
       name: "maps",
       serverType: "remote",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: extCatalog.id, scope: "org" });
     const uiTool = await makeTool({
@@ -2271,7 +2449,6 @@ describe("createAgentServer tools/list", () => {
       organizationId: org.id,
       name: "todo",
       serverType: "app",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: appCatalog.id, scope: "org" });
     const openTool = await makeTool({
@@ -2335,7 +2512,6 @@ describe("createAgentServer tools/list", () => {
       organizationId: org.id,
       name: "todo",
       serverType: "app",
-      scope: "org",
     });
     await makeMcpServer({ catalogId: appCatalog.id, scope: "org" });
     const openTool = await makeTool({
@@ -2964,7 +3140,6 @@ describe("createAgentServer tools/list", () => {
     const app = await makeApp({
       organizationId: org.id,
       authorId: user.id,
-      scope: "org",
     });
 
     const callRenderApp = async (agentId: string) => {

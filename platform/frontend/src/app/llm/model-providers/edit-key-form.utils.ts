@@ -10,8 +10,8 @@ import {
 /**
  * Whether the edit-key form can be submitted. Editing keeps the existing secret
  * (the API key shows as a masked placeholder and AWS keys aren't prefilled), so
- * a name-only edit needs no secret. Beyond team-scope consistency, the edit
- * dialog can still require a credential in two cases — both only reachable by a
+ * a name-only edit needs no secret. The edit dialog can still require a
+ * credential in two cases — both only reachable by a
  * deliberate auth-method switch, which must supply the credential it is
  * switching to: Bedrock SigV4 (the AWS key pair) and a subscription tab on a
  * key that does not hold that subscription (a completed sign-in).
@@ -20,16 +20,10 @@ export function isEditApiKeyFormValid(
   values: LlmProviderApiKeyFormValues,
   existingKey?: { subscriptionKind?: string | null },
 ): boolean {
-  const scopeOk = values.scope !== "team" || Boolean(values.teamId);
   if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
-    return (
-      scopeOk && Boolean(values.awsAccessKeyId && values.awsSecretAccessKey)
-    );
+    return Boolean(values.awsAccessKeyId && values.awsSecretAccessKey);
   }
-  if (subscriptionSignInRequired(values, existingKey)) {
-    return false;
-  }
-  return scopeOk;
+  return !subscriptionSignInRequired(values, existingKey);
 }
 
 /**

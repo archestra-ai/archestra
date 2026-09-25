@@ -7,7 +7,10 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
+import {
+  getAgentTypePermissionChecker,
+  isAgentTypeAdmin,
+} from "@/auth/agent-type-permissions";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
@@ -154,9 +157,6 @@ const EditAgentToolArgsSchema = z
             "Replace the agent's directly assigned knowledge connectors with this set.",
           )
           .optional(),
-        scope: AgentScopeSchema.optional().describe(
-          "Updated visibility scope for the agent.",
-        ),
         toolExposureMode: ToolExposureModeSchema.optional().describe(
           "How tools should be loaded for MCP clients and models.",
         ),
@@ -179,10 +179,6 @@ const EditAgentToolArgsSchema = z
         systemPrompt: UpdateAgentSchemaBase.shape.systemPrompt
           .optional()
           .describe("New system prompt for the agent."),
-        teams: z
-          .array(UuidIdSchema)
-          .optional()
-          .describe("Replace the teams attached to a team-scoped agent."),
       })
       .strict(),
   )
@@ -288,12 +284,29 @@ const registry = defineArchestraTools([
               })
             : false;
 
+        const checker =
+          context.userId && context.organizationId
+            ? await getAgentTypePermissionChecker({
+                userId: context.userId,
+                organizationId: context.organizationId,
+              })
+            : null;
         const results = await AgentModel.findAllPaginated(
           { limit, offset: 0 },
           undefined,
           {
             organizationId: context.organizationId,
             agentType: "agent",
+            ...(checker && context.organizationId
+              ? {
+                  authorization: {
+                    organizationId: context.organizationId,
+                    baseReadTypes: checker.hasBaseAction?.("agent", "read")
+                      ? ["agent" as const]
+                      : [],
+                  },
+                }
+              : {}),
             ...(args.name ? { name: args.name } : {}),
             providerApiKeyId: args.providerApiKeyId,
             // Hide other users' personal agents. MCP tools only need the
@@ -333,7 +346,16 @@ const registry = defineArchestraTools([
               knowledgeAccess,
               knowledgeBases,
             )
-          : knowledgeBases.filter((kb) => kb.visibility === "org-wide");
+          : context.organizationId
+            ? await knowledgeSourceAccessControlService.filterPublishedToOrganization(
+                {
+                  organizationId: context.organizationId,
+                  resource: "knowledgeBase",
+                  sources: knowledgeBases,
+                  action: "read",
+                },
+              )
+            : [];
         const kbMap = new Map(visibleKnowledgeBases.map((kb) => [kb.id, kb]));
         const connectorMap = new Map(connectors.map((c) => [c.id, c]));
 

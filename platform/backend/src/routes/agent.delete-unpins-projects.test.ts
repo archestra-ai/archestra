@@ -38,7 +38,7 @@ describe("DELETE /api/agents/:id — projects pinning the agent", () => {
   test("unpins the agent, so restoring it does not re-pin the project", async ({
     makeInternalAgent,
   }) => {
-    const agent = await makeInternalAgent({ organizationId, scope: "org" });
+    const agent = await makeInternalAgent({ organizationId });
     const project = await projectService.create({
       organizationId,
       userId: admin.id,
@@ -63,8 +63,8 @@ describe("DELETE /api/agents/:id — projects pinning the agent", () => {
   });
 
   test("leaves other projects' pins alone", async ({ makeInternalAgent }) => {
-    const doomed = await makeInternalAgent({ organizationId, scope: "org" });
-    const keeper = await makeInternalAgent({ organizationId, scope: "org" });
+    const doomed = await makeInternalAgent({ organizationId });
+    const keeper = await makeInternalAgent({ organizationId });
     const other = await projectService.create({
       organizationId,
       userId: admin.id,

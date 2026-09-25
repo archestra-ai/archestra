@@ -235,16 +235,20 @@ describe("ChatOpsManager security validation", () => {
 
   test("auto-assigns the sole agent when a channel has no agent yet", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     mockA2AExecutor();
     const org = await makeOrganization();
+    const sender = await makeUser({ email: "channel-member@example.com" });
+    await makeMember(sender.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     await unboundChannelBinding(org.id);
 
     const provider = createMockProvider();
     await makeManagerWith(provider).processMessage({
-      message: createMockMessage(),
+      message: createMockMessage({ senderEmail: sender.email }),
       provider,
     });
 
@@ -276,9 +280,13 @@ describe("ChatOpsManager security validation", () => {
 
   test("prompts with the picker (no auto-assign) when multiple agents and no default", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
+    const sender = await makeUser({ email: "channel-member@example.com" });
+    await makeMember(sender.id, org.id);
     await makeInternalAgent({ organizationId: org.id });
     await makeInternalAgent({ organizationId: org.id });
     await unboundChannelBinding(org.id);
@@ -288,7 +296,7 @@ describe("ChatOpsManager security validation", () => {
     provider.sendAgentSelectionCard = cardSpy;
 
     const result = await makeManagerWith(provider).processMessage({
-      message: createMockMessage(),
+      message: createMockMessage({ senderEmail: sender.email }),
       provider,
     });
 
@@ -308,7 +316,7 @@ describe("ChatOpsManager security validation", () => {
     const user = await makeUser({ email: "joey@example.com" });
     await makeInternalAgent({
       organizationId: org.id,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     await unboundChannelBinding(org.id);
@@ -347,7 +355,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -430,8 +437,7 @@ describe("ChatOpsManager security validation", () => {
     // reach the denial branch.
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     // The sender is not on the agent's team.
@@ -468,8 +474,7 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, owner.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await makeUser({ email: "outsider2@example.com" });
@@ -507,7 +512,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -587,7 +591,6 @@ describe("ChatOpsManager security validation", () => {
       makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
       makeInternalAgent: (overrides: {
         organizationId: string;
-        teams: string[];
       }) => Promise<{ id: string; name: string }>;
     }) {
       const user = await fx.makeUser({ email: "retry@example.com" });
@@ -596,7 +599,6 @@ describe("ChatOpsManager security validation", () => {
       await fx.makeTeamMember(team.id, user.id);
       const agent = await fx.makeInternalAgent({
         organizationId: org.id,
-        teams: [team.id],
       });
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
       await ChatOpsChannelBindingModel.create({
@@ -757,7 +759,6 @@ describe("ChatOpsManager security validation", () => {
       makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
       makeInternalAgent: (overrides: {
         organizationId: string;
-        teams: string[];
       }) => Promise<{ id: string; name: string }>;
     }) {
       const user = await fx.makeUser({ email: "mute@example.com" });
@@ -766,7 +767,6 @@ describe("ChatOpsManager security validation", () => {
       await fx.makeTeamMember(team.id, user.id);
       const agent = await fx.makeInternalAgent({
         organizationId: org.id,
-        teams: [team.id],
       });
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
       await ChatOpsChannelBindingModel.create({
@@ -968,7 +968,6 @@ describe("ChatOpsManager security validation", () => {
     const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "Work Anthropic",
       provider: "anthropic",
-      scope: "org",
     });
     const model = await ModelModel.create({
       externalId: "anthropic/claude-test-model",
@@ -986,7 +985,6 @@ describe("ChatOpsManager security validation", () => {
 
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
       llmApiKeyId: apiKey.id,
       modelId: model.id,
     });
@@ -1057,7 +1055,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -1120,7 +1117,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -1172,7 +1168,6 @@ describe("ChatOpsManager security validation", () => {
     makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
     makeInternalAgent: (opts: {
       organizationId: string;
-      teams: string[];
     }) => Promise<{ id: string }>;
   }): Promise<{ senderEmail: string }> {
     const senderEmail = "member@example.com";
@@ -1182,7 +1177,6 @@ describe("ChatOpsManager security validation", () => {
     await ctx.makeTeamMember(team.id, user.id);
     const agent = await ctx.makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -1332,7 +1326,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -1404,7 +1397,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -1503,7 +1495,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -1559,7 +1550,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -1615,8 +1605,7 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, adminUser.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      scope: "team",
-      teams: [team.id],
+      access: { teams: [team.id] },
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -1669,8 +1658,7 @@ describe("ChatOpsManager security validation", () => {
     const agent = await makeInternalAgent({
       organizationId: org.id,
       name: "Sales Agent",
-      teams: [team.id],
-      scope: "team",
+      access: { teams: [team.id] },
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -1725,7 +1713,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -1780,7 +1767,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -1832,7 +1818,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
 
     await ChatOpsChannelBindingModel.create({
@@ -1895,7 +1880,6 @@ describe("ChatOpsManager security validation", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
 
     await ChatOpsChannelBindingModel.create({
@@ -1974,7 +1958,6 @@ describe("ChatOpsManager security validation", () => {
       await makeTeamMember(team.id, user.id);
       const agent = await makeInternalAgent({
         organizationId: org.id,
-        teams: [team.id],
       });
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -2034,12 +2017,10 @@ describe("ChatOpsManager security validation", () => {
 
       const defaultAgent = await makeInternalAgent({
         organizationId: org.id,
-        teams: [team.id],
         name: "Support",
       });
       const salesAgent = await makeInternalAgent({
         organizationId: org.id,
-        teams: [team.id],
         name: "Sales",
       });
       await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [team.id]);
@@ -2101,7 +2082,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const accessibleAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Accessible Agent",
-      scope: "team",
+      access: { teams: [team.id] },
     });
     await AgentTeamModel.assignTeamsToAgent(accessibleAgent.id, [team.id]);
 
@@ -2111,7 +2092,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     const inaccessibleAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Inaccessible Agent",
-      scope: "team",
+      access: { teams: [otherTeam.id] },
     });
     await AgentTeamModel.assignTeamsToAgent(inaccessibleAgent.id, [
       otherTeam.id,
@@ -2128,14 +2109,16 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     expect(agents[0].name).toBe("Accessible Agent");
   });
 
-  test("returns all agents when senderEmail is not provided", async ({
+  test("returns organization-shared agents for an organization member", async ({
     makeUser,
+    makeMember,
     makeOrganization,
     makeTeam,
     makeInternalAgent,
   }) => {
     const user = await makeUser({ email: "admin@example.com" });
     const org = await makeOrganization();
+    await makeMember(user.id, org.id);
     const team = await makeTeam(org.id, user.id);
 
     const agent = await makeInternalAgent({
@@ -2154,7 +2137,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     expect(agents.some((a) => a.id === agent.id)).toBe(true);
   });
 
-  test("returns all agents when senderEmail does not match any user", async ({
+  test("returns no agents when senderEmail does not match any user", async ({
     makeUser,
     makeOrganization,
     makeTeam,
@@ -2176,9 +2159,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
       isDm: false,
     });
 
-    // Falls back to all agents when user can't be resolved
-    expect(agents.length).toBeGreaterThanOrEqual(1);
-    expect(agents.some((a) => a.id === agent.id)).toBe(true);
+    expect(agents).toEqual([]);
   });
 
   test("admin user sees all agents regardless of team membership", async ({
@@ -2228,12 +2209,11 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     const orgAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Org Agent",
-      scope: "org",
     });
     const personalAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Personal Agent",
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
 
@@ -2244,6 +2224,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     });
 
     expect(agents.some((a) => a.id === orgAgent.id)).toBe(true);
+    // A channel is shared, so a personal agent is never offered there.
     expect(agents.some((a) => a.id === personalAgent.id)).toBe(false);
   });
 
@@ -2260,12 +2241,11 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     const orgAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Org Agent",
-      scope: "org",
     });
     const ownPersonalAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "My Personal Agent",
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
 
@@ -2288,12 +2268,12 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     const user = await makeUser({ email: "dmuser2@example.com" });
     const otherUser = await makeUser({ email: "otherauthor@example.com" });
     const org = await makeOrganization();
-    await makeMember(user.id, org.id, { role: "admin" });
+    await makeMember(user.id, org.id, { role: "member" });
 
     const otherPersonalAgent = await makeInternalAgent({
       organizationId: org.id,
       name: "Other Personal Agent",
-      scope: "personal",
+      access: "personal",
       authorId: otherUser.id,
     });
 
@@ -2940,7 +2920,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3026,7 +3005,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3080,7 +3058,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3146,7 +3123,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3256,7 +3232,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3376,7 +3351,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3515,7 +3489,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3643,7 +3616,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3757,7 +3729,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3876,7 +3847,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
@@ -3952,7 +3922,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -4024,7 +3993,6 @@ describe("ChatOpsManager attachment passthrough", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -4193,7 +4161,6 @@ describe("ChatOpsManager Slack conversation context", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -4252,7 +4219,6 @@ describe("ChatOpsManager Slack conversation context", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -4304,7 +4270,6 @@ describe("ChatOpsManager Slack conversation context", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -4360,7 +4325,6 @@ describe("ChatOpsManager Slack conversation context", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -4509,7 +4473,6 @@ describe("ChatOpsManager server-side sessions", () => {
     makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
     makeInternalAgent: (opts: {
       organizationId: string;
-      teams: string[];
     }) => Promise<{ id: string }>;
     extraEmails?: string[];
   }): Promise<{ senderEmail: string }> {
@@ -4524,7 +4487,6 @@ describe("ChatOpsManager server-side sessions", () => {
     }
     const agent = await ctx.makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     await ChatOpsChannelBindingModel.create({
@@ -4933,7 +4895,6 @@ describe("ChatOpsManager per-channel instructions", () => {
       makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
       makeInternalAgent: (opts: {
         organizationId: string;
-        teams: string[];
       }) => Promise<{ id: string }>;
     },
     binding: {
@@ -4950,7 +4911,6 @@ describe("ChatOpsManager per-channel instructions", () => {
     await ctx.makeTeamMember(team.id, user.id);
     const agent = await ctx.makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
     const created = await ChatOpsChannelBindingModel.create({

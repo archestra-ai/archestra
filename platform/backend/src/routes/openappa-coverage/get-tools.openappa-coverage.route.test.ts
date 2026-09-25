@@ -87,7 +87,7 @@ describe("GET /api/openappa/coverage/tools", () => {
     const privateCatalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
       name: "Private server",
     });
     const privateTool = await makeTool({

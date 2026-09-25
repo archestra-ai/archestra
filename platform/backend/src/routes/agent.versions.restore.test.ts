@@ -13,10 +13,10 @@ import {
   AgentVersionModel,
   EnvironmentModel,
   HookFileModel,
-  OrganizationModel,
   ToolModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { createRestrictedEnvironment } from "@/test/environments";
 import type { User } from "@/types";
 
 vi.mock("@/observability");
@@ -711,7 +711,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
   }) => {
     const agent = await makeAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     await AgentModel.update(agent.id, { description: "changed" });
@@ -732,11 +732,10 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
   });
 
   /**
-   * A caller who may edit the agent but holds no `deploy-to-restricted`: the
-   * predefined member role grants agent update but not that action, and a
-   * personal agent they authored clears the scope check. The suite's default
-   * user is an org admin, who holds every action and so can never trip the
-   * environment gate.
+   * A caller who may edit the agent but holds no `use` grant on a restricted
+   * environment: a plain member, whose personal agent they author clears the
+   * access check. The suite's default user is an org admin, whose full access
+   * at `*` reaches every environment and so can never trip the gate.
    */
   async function makeRestrictedDeployer(
     makeUser: (overrides?: { email?: string }) => Promise<User>,
@@ -747,53 +746,22 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     return member;
   }
 
-  test("403s when the version moves the agent into a restricted default environment", async ({
-    makeAgent,
-    makeUser,
-    makeMember,
-  }) => {
-    // `environmentId: null` is not "no environment" — it is the implicit
-    // default one, which an org can mark restricted. The update route gates
-    // that target, so a restore must gate it too.
-    await OrganizationModel.patch(organizationId, {
-      defaultEnvironmentRestricted: true,
-    });
-    const environment = await EnvironmentModel.create({
-      organizationId,
-      name: `Prod ${crypto.randomUUID().slice(0, 8)}`,
-    });
-
-    const author = await makeRestrictedDeployer(makeUser, makeMember);
-    const agent = await makeAgent({
-      organizationId,
-      scope: "personal",
-      authorId: author.id,
-    });
-    await AgentModel.update(agent.id, { environmentId: environment.id });
-    user = author;
-
-    const response = await restore(agent.id, 1);
-    expect(response.statusCode).toBe(403);
-
-    const agentRow = await AgentModel.findById(agent.id, undefined, true);
-    expect(agentRow?.environmentId).toBe(environment.id);
-  });
-
   test("403s when the version moves the agent into a restricted named environment", async ({
     makeAgent,
     makeUser,
     makeMember,
   }) => {
-    const environment = await EnvironmentModel.create({
+    // Restricted now means no organization or role grant on the environment:
+    // deploying there takes a `use` grant the author does not hold.
+    const environment = await createRestrictedEnvironment({
       organizationId,
-      name: `Restricted ${crypto.randomUUID().slice(0, 8)}`,
-      restricted: true,
+      data: { name: `Restricted ${crypto.randomUUID().slice(0, 8)}` },
     });
 
     const author = await makeRestrictedDeployer(makeUser, makeMember);
     const agent = await makeAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
       environmentId: environment.id,
     });
@@ -823,7 +791,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const author = await makeRestrictedDeployer(makeUser, makeMember);
     const agent = await makeAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
     });
     await AgentModel.update(agent.id, { environmentId: environment.id });

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type ReactElement, useState } from "react";
+import { cloneElement, type ReactElement, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/auth.query");
@@ -185,6 +185,8 @@ const item = {
   imageApprovalRequired: false,
   multitenant: false,
   catalogReinstallRequired: false,
+  // Editing the item is its own `update` grant, read from the list response.
+  effectiveActions: ["read", "update"],
 } as unknown as CatalogItem;
 
 const personalInstall = {
@@ -340,8 +342,14 @@ describe("McpServerCard uninstall permission", () => {
 
   it("withholds settings and refuses ownership transfer without catalog access", async () => {
     const user = userEvent.setup();
-    grantAllExcept({ mcpServerInstallation: ["admin"] });
-    renderCard(card);
+    // No `update` grant on the item and no registry-wide `update`: the
+    // retired `mcpServerInstallation:admin` action no longer decides this.
+    grantAllExcept({ mcpRegistry: ["update"] });
+    renderCard(
+      cloneElement(card, {
+        item: { ...item, effectiveActions: ["read"] } as CatalogItem,
+      }),
+    );
 
     expect(
       screen.queryByRole("button", {

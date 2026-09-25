@@ -16,13 +16,11 @@ import {
   A2ATaskModel,
   AgentModel,
   AgentRunModel,
-  AgentRunShareModel,
   AgentWorkspaceModel,
-  MemberModel,
+  ProjectAccessModel,
   ProjectModel,
-  ProjectShareModel,
-  TeamModel,
 } from "@/models";
+import ResourcePermissionAccessModel from "@/models/resource-permission-access";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import {
   isAnyAgentRuntimeBackendDriverEnabled,
@@ -47,11 +45,11 @@ import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
   type AgentRunSession,
   AgentRunSessionResponseSchema,
-  AgentRunShareVisibilitySchema,
   type AgentRunStartupProgress,
   ApiError,
   constructResponseSchema,
@@ -60,7 +58,6 @@ import {
   type ResolvedAgentRuntime,
   SelectAgentRunListItemSchema,
   SelectAgentRunSessionSchema,
-  SelectAgentRunShareWithTargetsSchema,
   StartAgentRunResponseSchema,
   UpdateAgentRunSchema,
 } from "@/types";
@@ -558,6 +555,17 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agent, runtime } = await requireReadableAgentRuntime(request);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "agent",
+        scope: agent.id,
+        action: "use",
+      });
+      // SPDX-SnippetEnd
       if (request.body.projectId) {
         await requireReadableProject({
           projectId: request.body.projectId,
@@ -748,12 +756,16 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
       if (shared) {
-        const explicitlyShared =
-          await AgentRunShareModel.findAccessibleByTaskId({
-            taskId: request.params.taskId,
-            organizationId: request.organizationId,
-            userId: request.user.id,
-          });
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const explicitlyShared = await ResourcePermissionAccessModel.canRead({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          resource: "agentRun",
+          scope: request.params.taskId,
+        });
+        // SPDX-SnippetEnd
         const sharedThroughProject = shared.projectId
           ? await mayReadProjectSession({
               projectId: shared.projectId,
@@ -794,6 +806,17 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const run = await requireOwnedRun(request);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "agent",
+        scope: run.agentId,
+        action: "use",
+      });
+      // SPDX-SnippetEnd
       const workspace = await AgentWorkspaceModel.findByWorkloadName(
         run.workloadName,
       );
@@ -976,151 +999,6 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await A2ATaskModel.delete(run.taskId);
       request.auditAfter = { deleted: true };
       return reply.send({ deleted: true as const });
-    },
-  );
-
-  fastify.get(
-    "/api/agent-runs/:taskId/share",
-    {
-      schema: {
-        operationId: RouteId.GetAgentRunShare,
-        description: "Get share status for an Agent Runtime run",
-        tags: ["Agents"],
-        params: z.object({ taskId: z.string().uuid() }),
-        response: constructResponseSchema(
-          SelectAgentRunShareWithTargetsSchema.nullable(),
-        ),
-      },
-    },
-    async (request, reply) => {
-      // Only the owner may read or change share settings.
-      await requireOwnedRun(request);
-      const share = await AgentRunShareModel.findByTaskId({
-        taskId: request.params.taskId,
-        organizationId: request.organizationId,
-      });
-      return reply.send(share);
-    },
-  );
-
-  fastify.put(
-    "/api/agent-runs/:taskId/share",
-    {
-      schema: {
-        operationId: RouteId.ShareAgentRun,
-        description:
-          "Share an Agent Runtime run with your organization, specific teams, or specific users",
-        tags: ["Agents"],
-        params: z.object({ taskId: z.string().uuid() }),
-        body: z
-          .object({
-            visibility: AgentRunShareVisibilitySchema,
-            teamIds: z.array(z.string()).optional(),
-            userIds: z.array(z.string()).optional(),
-          })
-          .superRefine((value, ctx) => {
-            if (
-              value.visibility === "team" &&
-              (value.teamIds ?? []).length === 0
-            ) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Select at least one team",
-                path: ["teamIds"],
-              });
-            }
-
-            if (
-              value.visibility === "user" &&
-              (value.userIds ?? []).length === 0
-            ) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Select at least one user",
-                path: ["userIds"],
-              });
-            }
-          }),
-        response: constructResponseSchema(SelectAgentRunShareWithTargetsSchema),
-      },
-    },
-    async (request, reply) => {
-      const run = await requireOwnedRun(request);
-      request.auditResourceId = { value: run.taskId };
-      request.auditBefore = await AgentRunShareModel.findByTaskId({
-        taskId: run.taskId,
-        organizationId: request.organizationId,
-      });
-
-      const teamIds = Array.from(new Set(request.body.teamIds ?? []));
-      const userIds = Array.from(new Set(request.body.userIds ?? []));
-
-      if (request.body.visibility === "team") {
-        const teams = await TeamModel.findByIds(teamIds);
-        const validTeamIds = new Set(
-          teams
-            .filter((team) => team.organizationId === request.organizationId)
-            .map((team) => team.id),
-        );
-        if (validTeamIds.size !== teamIds.length) {
-          throw new ApiError(400, "One or more selected teams are invalid");
-        }
-      }
-
-      if (request.body.visibility === "user") {
-        const validUserIds = new Set(
-          await MemberModel.findUserIdsInOrganization({
-            organizationId: request.organizationId,
-            userIds,
-          }),
-        );
-        if (validUserIds.size !== userIds.length) {
-          throw new ApiError(400, "One or more selected users are invalid");
-        }
-      }
-
-      const share = await AgentRunShareModel.upsert({
-        taskId: run.taskId,
-        organizationId: request.organizationId,
-        createdByUserId: request.user.id,
-        visibility: request.body.visibility,
-        teamIds: request.body.visibility === "team" ? teamIds : [],
-        userIds: request.body.visibility === "user" ? userIds : [],
-      });
-      request.auditAfter = share;
-      return reply.send(share);
-    },
-  );
-
-  fastify.delete(
-    "/api/agent-runs/:taskId/share",
-    {
-      schema: {
-        operationId: RouteId.UnshareAgentRun,
-        description: "Revoke sharing of an Agent Runtime run",
-        tags: ["Agents"],
-        params: z.object({ taskId: z.string().uuid() }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
-      },
-    },
-    async (request, reply) => {
-      const run = await requireOwnedRun(request);
-      request.auditResourceId = { value: run.taskId };
-      request.auditBefore = await AgentRunShareModel.findByTaskId({
-        taskId: run.taskId,
-        organizationId: request.organizationId,
-      });
-
-      const deleted = await AgentRunShareModel.delete({
-        taskId: run.taskId,
-        organizationId: request.organizationId,
-        userId: request.user.id,
-      });
-      if (!deleted) {
-        throw new ApiError(404, "Share not found");
-      }
-      request.auditAfter = { success: true };
-      return reply.send({ success: true });
     },
   );
 
@@ -1316,7 +1194,7 @@ async function requireReadableProject(params: {
   const project = await ProjectModel.findById(params.projectId);
   if (
     !project ||
-    !(await ProjectShareModel.userCanAccessProject({
+    !(await ProjectAccessModel.userCanAccessProject({
       project,
       userId: params.userId,
       organizationId: params.organizationId,
@@ -1335,7 +1213,8 @@ async function mayReadProjectSession(params: {
   const project = await ProjectModel.findById(params.projectId);
   if (
     !project ||
-    !(await ProjectShareModel.userCanAccessProject({
+    !(await ProjectAccessModel.userCanAccessProject({
+      sessionAccess: true,
       project,
       userId: params.userId,
       organizationId: params.organizationId,
@@ -1343,12 +1222,13 @@ async function mayReadProjectSession(params: {
   ) {
     return false;
   }
-  return userHasPermission(
-    params.userId,
-    params.organizationId,
-    "project",
-    "read-all",
-  );
+  return ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "conversation",
+    scope: "*",
+    action: "read",
+  });
 }
 
 async function requireReadableAgentRuntime(
@@ -1384,7 +1264,7 @@ async function requireReadableAgent(request: AgentRequest): Promise<Agent> {
     organizationId: request.organizationId,
   });
   try {
-    checker.require("agent", "read");
+    checker.require("agent", { action: "read", scope: candidate.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
@@ -1407,18 +1287,12 @@ async function requireWritableAgent(params: {
     userId: params.request.user.id,
     organizationId: params.request.organizationId,
   });
-  checker.require("agent", "update");
-  const userTeamIds = checker.isAdmin("agent")
-    ? []
-    : await TeamModel.getUserTeamIds(params.request.user.id);
+  checker.require("agent", { action: "update", scope: params.agent.id });
   requireAgentModifyPermission({
+    agentId: params.agent.id,
+    action: "update",
     checker,
     agentType: "agent",
-    agentScope: params.agent.scope,
-    agentAuthorId: params.agent.authorId,
-    agentTeamIds: params.agent.teams.map((team) => team.id),
-    userTeamIds,
-    userId: params.request.user.id,
   });
 }
 

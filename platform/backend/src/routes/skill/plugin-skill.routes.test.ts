@@ -2,8 +2,17 @@ import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { PluginModel, PluginSkillUsageEventModel } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import pluginSkillRoutes from "./plugin-skill.routes";
@@ -76,13 +85,26 @@ describe("plugin Skill routes", () => {
   const ctx = useRouteTestApp(pluginSkillRoutes);
   let originalEnabled: boolean;
 
-  beforeEach(() => {
+  beforeEach(async ({ makeMember }) => {
+    // Plugin visibility reads grants, and a grant reaches only a member of
+    // the organization.
+    await makeMember(ctx.user.id, ctx.organizationId);
     originalEnabled = config.plugins.enabled;
     config.plugins.enabled = true;
     mockUserHasPermission.mockReset();
     // the catalog reader is not a plugin admin, so visibility is scope-based
     mockUserHasPermission.mockImplementation(
       async (_userId, _organizationId, _resource, action) => action === "read",
+    );
+    grantEverywhere(["plugin"], async () =>
+      Boolean(
+        await mockUserHasPermission.getMockImplementation()?.(
+          "",
+          "",
+          "plugin",
+          "admin" as never,
+        ),
+      ),
     );
   });
 
@@ -91,11 +113,12 @@ describe("plugin Skill routes", () => {
     vi.restoreAllMocks();
   });
 
-  async function seedPlugin(input: CreatePlugin) {
+  async function seedPlugin(input: CreatePlugin, access?: TestAccess) {
     const plugin = await PluginModel.create({
       organizationId: ctx.organizationId,
       userId: ctx.user.id,
       input,
+      ...accessGrants(access),
     });
     if (!plugin) throw new Error("seed plugin creation failed");
     return plugin;
@@ -118,7 +141,7 @@ describe("plugin Skill routes", () => {
   });
 
   test("lists portable skills across plugins, skipping invalid manifests", async () => {
-    const ste = await seedPlugin(stePlugin({ scope: "org" }));
+    const ste = await seedPlugin(stePlugin(), "org");
     PluginSkillUsageEventModel.recordUsage({
       pluginId: ste.id,
       skillPath: "skills/ste-writing",
@@ -126,35 +149,39 @@ describe("plugin Skill routes", () => {
     });
     await drainBackgroundWork();
     // a plugin without any SKILL.md contributes nothing
-    await seedPlugin({
-      displayName: "Hooks only",
-      description: "",
-      clientType: "codex",
-      scope: "org",
-      files: [
-        {
-          path: "hooks/hooks.json",
-          content: "{}\n",
-          encoding: "utf8",
-          mode: "100644",
-        },
-      ],
-    });
+    await seedPlugin(
+      {
+        displayName: "Hooks only",
+        description: "",
+        clientType: "codex",
+        files: [
+          {
+            path: "hooks/hooks.json",
+            content: "{}\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+      "org",
+    );
     // an invalid manifest (no description) is not a skill
-    await seedPlugin({
-      displayName: "Broken skill",
-      description: "",
-      clientType: "cursor",
-      scope: "org",
-      files: [
-        {
-          path: "skills/broken/SKILL.md",
-          content: "---\nname: broken\n---\nno description\n",
-          encoding: "utf8",
-          mode: "100644",
-        },
-      ],
-    });
+    await seedPlugin(
+      {
+        displayName: "Broken skill",
+        description: "",
+        clientType: "cursor",
+        files: [
+          {
+            path: "skills/broken/SKILL.md",
+            content: "---\nname: broken\n---\nno description\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+      "org",
+    );
 
     const response = await ctx.app.inject({
       method: "GET",
@@ -189,13 +216,13 @@ describe("plugin Skill routes", () => {
     makeUser,
     makeMember,
   }) => {
-    await seedPlugin(stePlugin({ displayName: "Org bundle", scope: "org" }));
+    await seedPlugin(stePlugin({ displayName: "Org bundle" }), "org");
     const other = await makeUser();
     await makeMember(other.id, ctx.organizationId);
     const personal = await PluginModel.create({
       organizationId: ctx.organizationId,
       userId: other.id,
-      input: stePlugin({ displayName: "Personal bundle", scope: "personal" }),
+      input: stePlugin({ displayName: "Personal bundle" }),
     });
     if (!personal) throw new Error("seed plugin creation failed");
 
@@ -231,7 +258,7 @@ describe("plugin Skill routes", () => {
   });
 
   test("detail returns the parsed manifest and relative resource files", async () => {
-    const plugin = await seedPlugin(stePlugin({ scope: "org" }));
+    const plugin = await seedPlugin(stePlugin(), "org");
 
     const response = await ctx.app.inject({
       method: "GET",
@@ -266,7 +293,7 @@ describe("plugin Skill routes", () => {
   });
 
   test("returns usage statistics only for a visible plugin skill", async () => {
-    const plugin = await seedPlugin(stePlugin({ scope: "org" }));
+    const plugin = await seedPlugin(stePlugin(), "org");
     PluginSkillUsageEventModel.recordUsage({
       pluginId: plugin.id,
       skillPath: "skills/ste-writing",
@@ -294,7 +321,6 @@ describe("plugin Skill routes", () => {
     mockUserHasPermission.mockResolvedValue(true);
     const plugin = await seedPlugin(
       stePlugin({
-        scope: "org",
         files: [
           {
             path: "SKILL.md",
@@ -430,6 +456,7 @@ describe("plugin Skill routes", () => {
           })),
         ],
       }),
+      "org",
     );
 
     const list = await ctx.app.inject({
@@ -512,7 +539,7 @@ describe("plugin Skill routes", () => {
   });
 
   test("plugin readers can reuse instructions and bundled resource bytes", async () => {
-    const plugin = await seedPlugin(stePlugin({ scope: "org" }));
+    const plugin = await seedPlugin(stePlugin(), "org");
 
     const response = await ctx.app.inject({
       method: "GET",
@@ -535,7 +562,7 @@ describe("plugin Skill routes", () => {
     makeUser,
     makeMember,
   }) => {
-    const plugin = await seedPlugin(stePlugin({ scope: "org" }));
+    const plugin = await seedPlugin(stePlugin(), "org");
 
     const wrongPath = await ctx.app.inject({
       method: "GET",
@@ -548,7 +575,7 @@ describe("plugin Skill routes", () => {
     const personal = await PluginModel.create({
       organizationId: ctx.organizationId,
       userId: other.id,
-      input: stePlugin({ displayName: "Personal bundle", scope: "personal" }),
+      input: stePlugin({ displayName: "Personal bundle" }),
     });
     if (!personal) throw new Error("seed plugin creation failed");
     const invisible = await ctx.app.inject({
@@ -559,7 +586,7 @@ describe("plugin Skill routes", () => {
   });
 
   test("a deleted plugin's skills disappear", async () => {
-    const plugin = await seedPlugin(stePlugin({ scope: "org" }));
+    const plugin = await seedPlugin(stePlugin(), "org");
     await PluginModel.delete({
       id: plugin.id,
       organizationId: ctx.organizationId,

@@ -18,6 +18,8 @@ import { schema } from "@/database";
  */
 export type AclEntry =
   | "org:*"
+  // Request-only identity; AclEntrySchema deliberately rejects persistence.
+  | `principal:${string}`
   | `team:${string}`
   | `user_email:${string}`
   | `group:${string}`

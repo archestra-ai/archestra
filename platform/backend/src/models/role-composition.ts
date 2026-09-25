@@ -28,12 +28,12 @@ export default class RoleCompositionModel {
       );
   }
 
-  static async getTeamRoles(params: {
+  static async getTeamSources(params: {
     teamId: string;
     organizationId: string;
-  }): Promise<string[]> {
+  }) {
     const teams = await db
-      .select({ roles: schema.teamsTable.roles })
+      .select({ id: schema.teamsTable.id, roles: schema.teamsTable.roles })
       .from(schema.teamsTable)
       .where(
         and(
@@ -47,7 +47,7 @@ export default class RoleCompositionModel {
       )`,
         ),
       );
-    return [...new Set(teams.flatMap((team) => team.roles))];
+    return teams;
   }
 
   static async getUserSources(params: {

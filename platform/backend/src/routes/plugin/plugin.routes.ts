@@ -1,7 +1,7 @@
+import { randomUUID } from "node:crypto";
 import {
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
   parseLabelsParam,
-  ResourceVisibilityScopeSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -27,8 +27,8 @@ import {
   GithubMarketplaceChangedError,
   prepareGithubMarketplaceImports,
 } from "@/plugins/github-marketplace-import";
-import { validatePluginVisibility } from "@/services/plugin-visibility";
 import { transferResourceOwnership } from "@/services/resource-ownership";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   resolveGithubAppInstallationToken,
   resolveGithubPatToken,
@@ -162,9 +162,7 @@ const GithubMarketplaceImportSchema = GithubMarketplaceSourceSchema.and(
         PLUGIN_MARKETPLACE_IMPORT_LIMIT,
         `Select at most ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins per import`,
       ),
-    scope: ResourceVisibilityScopeSchema.default("personal"),
-    teamIds: z.array(z.string().min(1)).max(100).default([]),
-    userIds: z.array(z.string().min(1)).max(100).default([]),
+    initialGrants: CreatePluginSchema.shape.initialGrants,
     syncInterval: z
       .union([PluginGithubSyncIntervalSchema, z.null()])
       .default("1d"),
@@ -230,12 +228,13 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, query }, reply) => {
-      const isAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "plugin",
-        "admin",
-      );
+      const isAdmin = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "plugin",
+        scope: "*",
+        action: "update",
+      });
       const accessiblePluginIds = isAdmin
         ? undefined
         : await PluginTeamModel.getUserAccessiblePluginIds({
@@ -304,12 +303,23 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { organizationId, user, body } = request;
       await requirePluginAdmin({ organizationId, userId: user.id });
-      await validatePluginVisibility({
-        organizationId,
-        scope: body.scope,
-        teamIds: body.teamIds,
-        userIds: body.userIds,
-      });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (body.initialGrants?.length) {
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "plugin",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: "Imported plugin",
+            authorId: user.id,
+          },
+        });
+      }
+      // SPDX-SnippetEnd
       const githubToken = await resolveGithubToken({
         ...body,
         organizationId,
@@ -348,11 +358,13 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
               description: selection.description,
               clientType: selection.clientType,
               supportedPlatforms: selection.supportedPlatforms,
-              scope: body.scope,
-              teamIds: body.teamIds,
-              userIds: body.userIds,
               files: imported.files,
             },
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            initialPermissionGrants: body.initialGrants ?? [],
+            // SPDX-SnippetEnd
             source: {
               repo: imported.repo,
               ref: selection.sourceRef,
@@ -436,9 +448,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             description: z.string().max(1_000).default(""),
             clientType: ClientTypeSchema,
             supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
-            scope: ResourceVisibilityScopeSchema.optional(),
-            teamIds: z.array(z.string().min(1)).max(100).optional(),
-            userIds: z.array(z.string().min(1)).max(100).optional(),
+            initialGrants: CreatePluginSchema.shape.initialGrants,
             approvedCommitSha: GithubCommitShaSchema,
             trackingRef: z.string().trim().min(1).nullable().optional(),
           }),
@@ -464,12 +474,23 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       );
       assertApprovedCommit(imported.commitSha, body.approvedCommitSha);
-      await validatePluginVisibility({
-        organizationId,
-        scope: body.scope ?? "personal",
-        teamIds: body.teamIds ?? [],
-        userIds: body.userIds ?? [],
-      });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (body.initialGrants?.length) {
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "plugin",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.displayName,
+            authorId: user.id,
+          },
+        });
+      }
+      // SPDX-SnippetEnd
       const plugin = await PluginModel.create({
         organizationId,
         userId: user.id,
@@ -478,11 +499,13 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: body.description,
           clientType: body.clientType,
           supportedPlatforms: body.supportedPlatforms,
-          scope: body.scope,
-          teamIds: body.teamIds,
-          userIds: body.userIds,
           files: imported.files,
         },
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialPermissionGrants: body.initialGrants ?? [],
+        // SPDX-SnippetEnd
         source: {
           repo: imported.repo,
           ref: body.trackingRef ?? body.ref ?? imported.requestedRef ?? null,
@@ -702,16 +725,32 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, user, body }, reply) => {
       await requirePluginAdmin({ organizationId, userId: user.id });
-      await validatePluginVisibility({
-        organizationId,
-        scope: body.scope ?? "personal",
-        teamIds: body.teamIds ?? [],
-        userIds: body.userIds ?? [],
-      });
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "plugin",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.displayName,
+            authorId: user.id,
+          },
+        });
+        // SPDX-SnippetEnd
+      }
       const plugin = await PluginModel.create({
         organizationId,
         userId: user.id,
         input: body,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialPermissionGrants: body.initialGrants ?? [],
+        // SPDX-SnippetEnd
       });
       if (!plugin) {
         throw new ApiError(409, "A plugin with this plugin identity exists");
@@ -748,7 +787,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdatePlugin,
         description:
-          "Update plugin metadata, visibility, GitHub source settings, or files",
+          "Update plugin metadata, GitHub source settings, or files. Access is edited through the resource permissions API.",
         tags: ["Plugins"],
         params: PluginParamsSchema,
         body: UpdatePluginSchema,
@@ -795,12 +834,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           }
         : body;
-      await validatePluginVisibility({
-        organizationId,
-        scope: body.scope ?? existing.scope,
-        teamIds: body.teamIds ?? existing.teams.map((team) => team.id),
-        userIds: body.userIds ?? existing.users.map((member) => member.id),
-      });
       const plugin = await PluginModel.update({
         id: params.id,
         organizationId,
@@ -879,16 +912,17 @@ async function requirePluginAdmin(params: {
   organizationId: string;
   userId: string;
 }): Promise<void> {
-  const allowed = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "plugin",
-    "admin",
-  );
+  const allowed = await ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "plugin",
+    scope: "*",
+    action: "update",
+  });
   if (!allowed) {
     throw new ApiError(
       403,
-      "You need plugin:admin permission to approve executable plugins",
+      "You need permission to manage every plugin to approve executable plugins",
     );
   }
 }

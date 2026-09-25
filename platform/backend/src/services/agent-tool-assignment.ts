@@ -3,7 +3,6 @@ import {
   AgentModel,
   AgentToolModel,
   AgentVersionModel,
-  AppAccessModel,
   AppModel,
   AppToolModel,
   InternalMcpCatalogModel,
@@ -12,6 +11,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { resolveAppAssignableToolRows } from "@/services/apps/app-assignable-tools";
 import {
   type AgentScope,
@@ -569,11 +569,23 @@ async function getAssignmentTargetContext(
     throw new Error(`Agent with ID ${agentId} not found`);
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const { audience, teamIds } =
+    agent.agentType === "llm_proxy"
+      ? { audience: "org" as const, teamIds: [] }
+      : await ResourcePermissionPolicyModel.findAudience({
+          organizationId: agent.organizationId,
+          resource: agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+          scope: agent.id,
+        });
+  // SPDX-SnippetEnd
   return {
     organizationId: agent.organizationId,
-    scope: agent.scope,
+    scope: audience,
     authorId: agent.authorId,
-    teamIds: agent.teams.map((team) => team.id),
+    teamIds,
   };
 }
 
@@ -586,11 +598,19 @@ async function getAppAssignmentTargetContext(
     throw new Error(`App with ID ${appId} not found`);
   }
 
-  const teamIds = await AppAccessModel.getTeamsForApp(appId);
-
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const { audience, teamIds } =
+    await ResourcePermissionPolicyModel.findAudience({
+      organizationId: app.organizationId,
+      resource: "app",
+      scope: app.id,
+    });
+  // SPDX-SnippetEnd
   return {
     organizationId: app.organizationId,
-    scope: app.scope,
+    scope: audience,
     authorId: app.authorId,
     teamIds,
   };

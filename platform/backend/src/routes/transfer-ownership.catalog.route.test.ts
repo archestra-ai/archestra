@@ -34,7 +34,7 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
           organizationId,
           authorId: ownerId,
           name,
-          scope: "personal",
+          access: "personal",
         });
       };
       app = createFastifyInstance();
@@ -85,6 +85,8 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
               "createdByServiceAccountId",
               "createdBy",
               "authorName",
+              // The creator's own grant follows the record to its new owner.
+              "resourcePermissions",
             ].includes(key),
         ),
       );
@@ -131,7 +133,9 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
   }) => {
     const resource = await create();
     organizationId = (await makeOrganization()).id;
-    expect((await transfer(resource.id)).statusCode).toBe(403);
+    // A resource outside the caller's organization reads as absent rather than
+    // refused, so a probe cannot confirm that the id exists elsewhere.
+    expect((await transfer(resource.id)).statusCode).toBe(404);
   });
 
   test("rejects an unknown resource", async () => {

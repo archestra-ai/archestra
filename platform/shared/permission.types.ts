@@ -14,17 +14,12 @@ export const actions = [
   "read",
   "update",
   "delete",
-  "team-admin",
-  "admin",
   "cancel",
   "enable",
   "query",
   "execute",
-  "deploy-to-restricted",
   "manage",
   "manage-deleted",
-  "read-all",
-  "share-org",
   "impersonate",
 ] as const;
 

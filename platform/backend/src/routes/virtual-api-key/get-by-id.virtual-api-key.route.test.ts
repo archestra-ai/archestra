@@ -17,10 +17,12 @@ describe("GET /api/llm-virtual-keys/:id", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    const organization = await makeOrganization();
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization({ legacyPermissions: true });
     organizationId = organization.id;
     user = await makeUser();
+    // Grants reach organization members only.
+    await makeMember(user.id, organizationId, { role: "member" });
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(false);
 

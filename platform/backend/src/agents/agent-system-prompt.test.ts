@@ -25,7 +25,7 @@ import { AgentModel, SkillModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import {
   APP_BUILD_CONDUCT_INSTRUCTION,
   buildAgentSystemPrompt,
@@ -79,9 +79,9 @@ async function seedSkill(organizationId: string) {
       content: "# PDF Processing\nUse pdftotext.",
       metadata: {},
       sourceType: "manual",
-      scope: "org",
     },
     files: [],
+    ...accessGrants("org"),
   });
 }
 

@@ -29,9 +29,10 @@ import type {
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationCompactionModel from "./conversation-compaction";
-import ConversationShareModel from "./conversation-share";
 import ProjectModel from "./project";
-import ProjectShareModel from "./project-share";
+import ProjectAccessModel from "./project-access";
+import ResourcePermissionAccessModel from "./resource-permission-access";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 class ConversationModel {
   /**
@@ -41,10 +42,27 @@ class ConversationModel {
   static async create(
     data: InsertConversation & { id?: string },
   ): Promise<Conversation> {
-    const [conversation] = await db
-      .insert(schema.conversationsTable)
-      .values(data)
-      .returning();
+    // A chat is governed by its policy from the moment it exists: the owner's
+    // grant is what lets them open the share editor and share it.
+    const conversation = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(schema.conversationsTable)
+        .values(data)
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: created.organizationId,
+        resource: "conversation",
+        scope: created.id,
+        authorId: created.userId,
+        grants: [],
+      });
+      // SPDX-SnippetEnd
+      return created;
+    });
 
     // All tools assigned to the agent are enabled by default.
     // Users can customize enabled tools per-conversation after creation.
@@ -166,10 +184,7 @@ class ConversationModel {
         .select({
           conversation: getTableColumns(schema.conversationsTable),
           message: getTableColumns(schema.messagesTable),
-          share: {
-            id: schema.conversationSharesTable.id,
-            visibility: schema.conversationSharesTable.visibility,
-          },
+          shareVisibility: conversationShareVisibility(),
           projectName: schema.projectsTable.name,
           projectIcon: schema.projectsTable.icon,
           // No systemPrompt here: list rows only need identity/config refs,
@@ -210,13 +225,6 @@ class ConversationModel {
           ),
         )
         .leftJoin(
-          schema.conversationSharesTable,
-          eq(
-            schema.conversationsTable.id,
-            schema.conversationSharesTable.conversationId,
-          ),
-        )
-        .leftJoin(
           schema.projectsTable,
           eq(schema.conversationsTable.projectId, schema.projectsTable.id),
         )
@@ -244,7 +252,7 @@ class ConversationModel {
           }
           conversationMap.set(conversationId, {
             ...withVisibleAgent(row.conversation, row.agent),
-            share: row.share?.id ? row.share : null,
+            share: shareSummary(row.shareVisibility),
             projectName: row.projectName ?? null,
             projectIcon: listProjectIcon(row.projectIcon),
             unread: isConversationUnread(row.conversation),
@@ -290,10 +298,7 @@ class ConversationModel {
       const rows = await db
         .select({
           conversation: getTableColumns(schema.conversationsTable),
-          share: {
-            id: schema.conversationSharesTable.id,
-            visibility: schema.conversationSharesTable.visibility,
-          },
+          shareVisibility: conversationShareVisibility(),
           projectName: schema.projectsTable.name,
           projectIcon: schema.projectsTable.icon,
           // No systemPrompt here: list rows only need identity/config refs,
@@ -314,13 +319,6 @@ class ConversationModel {
           eq(schema.conversationsTable.agentId, schema.agentsTable.id),
         )
         .leftJoin(
-          schema.conversationSharesTable,
-          eq(
-            schema.conversationsTable.id,
-            schema.conversationSharesTable.conversationId,
-          ),
-        )
-        .leftJoin(
           schema.projectsTable,
           eq(schema.conversationsTable.projectId, schema.projectsTable.id),
         )
@@ -330,7 +328,7 @@ class ConversationModel {
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
-        share: row.share?.id ? row.share : null,
+        share: shareSummary(row.shareVisibility),
         projectName: row.projectName ?? null,
         projectIcon: listProjectIcon(row.projectIcon),
         unread: isConversationUnread(row.conversation),
@@ -387,10 +385,7 @@ class ConversationModel {
       .select({
         conversation: getTableColumns(schema.conversationsTable),
         message: getTableColumns(schema.messagesTable),
-        share: {
-          id: schema.conversationSharesTable.id,
-          visibility: schema.conversationSharesTable.visibility,
-        },
+        shareVisibility: conversationShareVisibility(),
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -409,13 +404,6 @@ class ConversationModel {
       .leftJoin(
         schema.messagesTable,
         eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
-      )
-      .leftJoin(
-        schema.conversationSharesTable,
-        eq(
-          schema.conversationsTable.id,
-          schema.conversationSharesTable.conversationId,
-        ),
       )
       .where(
         and(
@@ -459,7 +447,7 @@ class ConversationModel {
 
     return {
       ...withVisibleAgent(firstRow.conversation, firstRow.agent),
-      share: firstRow.share?.id ? firstRow.share : null,
+      share: shareSummary(firstRow.shareVisibility),
       messages,
       chatErrors,
       compactions,
@@ -610,7 +598,8 @@ class ConversationModel {
     organizationId: string;
     /**
      * Resolves whether the caller may read chats they did not author that are
-     * reachable only through project membership (i.e. holds `project:read-all`).
+     * reachable only through project membership (i.e. holds `read` on every
+     * chat — the grant at `*` that the retired `project:read-all` became).
      * Injected by the route layer so this model needs no `@/auth` dependency,
      * and invoked lazily — only when access would otherwise be granted via the
      * project-membership branch below. Owned chats and explicit conversation
@@ -624,26 +613,32 @@ class ConversationModel {
       return ownedConversation;
     }
 
-    const accessibleShare =
-      await ConversationShareModel.findAccessibleByConversationId({
-        conversationId: params.id,
-        organizationId: params.organizationId,
-        userId: params.userId,
-      });
-
-    if (accessibleShare) {
-      // Shared conversations intentionally return another user's conversation
-      // once share access has been validated for this org/user pair.
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // A chat is shared through its permission policy. Returning another
+    // user's conversation is intentional once that policy grants read. A grant
+    // on every chat is left out: it reaches only chats inside a project the
+    // caller can open, which the branch below decides.
+    const sharedWithCaller = await ResourcePermissionAccessModel.canRead({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "conversation",
+      scope: params.id,
+      includeWildcard: false,
+    });
+    if (sharedWithCaller) {
       return ConversationModel.findByIdInOrganization({
         id: params.id,
         organizationId: params.organizationId,
       });
     }
+    // SPDX-SnippetEnd
 
     // Project membership grants a read-only view of chats in the project
     // (writing stays author-only — every mutating route resolves the
     // conversation by owner). Reading a chat the caller did NOT author is
-    // additionally gated by `project:read-all`, uniformly — including when the
+    // additionally gated by `read` on every chat, uniformly — including when the
     // caller owns the project.
     const [bare] = await db
       .select({
@@ -667,7 +662,8 @@ class ConversationModel {
     const project = await ProjectModel.findById(bare.projectId);
     if (
       !project ||
-      !(await ProjectShareModel.userCanAccessProject({
+      !(await ProjectAccessModel.userCanAccessProject({
+        sessionAccess: true,
         project,
         userId: params.userId,
         organizationId: params.organizationId,
@@ -690,10 +686,7 @@ class ConversationModel {
       .select({
         conversation: getTableColumns(schema.conversationsTable),
         message: getTableColumns(schema.messagesTable),
-        share: {
-          id: schema.conversationSharesTable.id,
-          visibility: schema.conversationSharesTable.visibility,
-        },
+        shareVisibility: conversationShareVisibility(),
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -712,13 +705,6 @@ class ConversationModel {
       .leftJoin(
         schema.messagesTable,
         eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
-      )
-      .leftJoin(
-        schema.conversationSharesTable,
-        eq(
-          schema.conversationsTable.id,
-          schema.conversationSharesTable.conversationId,
-        ),
       )
       .where(
         and(
@@ -760,7 +746,7 @@ class ConversationModel {
 
     return {
       ...withVisibleAgent(firstRow.conversation, firstRow.agent),
-      share: firstRow.share?.id ? firstRow.share : null,
+      share: shareSummary(firstRow.shareVisibility),
       messages,
       chatErrors,
       compactions,
@@ -1147,10 +1133,7 @@ class ConversationModel {
     const rows = await db
       .select({
         conversation: getTableColumns(schema.conversationsTable),
-        share: {
-          id: schema.conversationSharesTable.id,
-          visibility: schema.conversationSharesTable.visibility,
-        },
+        shareVisibility: conversationShareVisibility(),
         projectName: schema.projectsTable.name,
         projectIcon: schema.projectsTable.icon,
         agent: {
@@ -1169,13 +1152,6 @@ class ConversationModel {
         eq(schema.conversationsTable.agentId, schema.agentsTable.id),
       )
       .leftJoin(
-        schema.conversationSharesTable,
-        eq(
-          schema.conversationsTable.id,
-          schema.conversationSharesTable.conversationId,
-        ),
-      )
-      .leftJoin(
         schema.projectsTable,
         eq(schema.conversationsTable.projectId, schema.projectsTable.id),
       )
@@ -1184,7 +1160,7 @@ class ConversationModel {
 
     return rows.map((row) => ({
       ...withVisibleAgent(row.conversation, row.agent),
-      share: row.share?.id ? row.share : null,
+      share: shareSummary(row.shareVisibility),
       projectName: row.projectName ?? null,
       projectIcon: listProjectIcon(row.projectIcon),
       unread: isConversationUnread(row.conversation),
@@ -1333,4 +1309,24 @@ function withVisibleAgent(
       llmApiKeyId: agent.llmApiKeyId,
     },
   };
+}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/** Who the chat is shared with, read from its permission policy. */
+function conversationShareVisibility() {
+  return ResourcePermissionPolicyModel.sharedAudience({
+    organizationId: schema.conversationsTable.organizationId,
+    resource: "conversation",
+    scopeColumn: schema.conversationsTable.id,
+    ownerColumn: schema.conversationsTable.userId,
+  });
+}
+// SPDX-SnippetEnd
+
+function shareSummary(
+  visibility: "organization" | "team" | "user" | null,
+): Conversation["share"] {
+  return visibility ? { visibility } : null;
 }

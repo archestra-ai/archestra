@@ -3,7 +3,7 @@ title: Pricing Model
 category: Archestra Platform
 order: 2
 description: How Archestra Platform is priced and licensed
-lastUpdated: 2026-08-08
+lastUpdated: 2026-09-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,8 @@ Please don't hesitate to talk to sales@archestra.ai for the quote.
 
 The following components are licensed under the Enterprise License and are not part of the AGPL-licensed open source build (subject to the Small Team Clause above):
 
-- Role Based Access Control (granular control over what different categories of users are able to see in the platform)
+- Role-based access control, including custom roles
+- Granular access control: per-resource permissions for people, teams, roles, and service accounts
 - SSO & OIDC
 - Knowledge Base and RAG with access control
 - Data retention windows (automatic deletion of LLM logs, MCP logs, idle chats, and audit logs)

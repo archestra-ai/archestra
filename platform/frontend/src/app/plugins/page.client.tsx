@@ -16,7 +16,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { OsLogos } from "@/app/connection/os-logos";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -30,13 +30,12 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
-  ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -59,7 +58,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   usePluginLabelKeys,
@@ -70,7 +69,6 @@ import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   type PluginListItem,
   useBulkDeletePlugins,
-  useBulkUpdatePluginVisibility,
   useDeletePlugin,
   usePlugins,
 } from "@/lib/plugins/plugin.query";
@@ -137,9 +135,10 @@ function PluginsList() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { data: canViewPluginDetails } = useHasPermissions({
-    plugin: ["read", "admin"],
-  });
+  const { data: canViewPluginDetails } = useHasPermissions(
+    { plugin: ["read", "update"] },
+    "*",
+  );
 
   const search = (searchParams.get("search") ?? "").trim().toLowerCase();
   const client = searchParams.get("client") ?? "all";
@@ -158,8 +157,6 @@ function PluginsList() {
     isLoadingError,
     refetch,
   } = usePlugins(true, { labels: labelsFilter });
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
 
   const setFilter = useCallback(
     (name: string, value: string) => {
@@ -203,55 +200,10 @@ function PluginsList() {
               plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
             if (pluginRepo !== sourceRepo) return false;
           }
-          if (scopeFilter.scope && plugin.scope !== scopeFilter.scope)
-            return false;
-          const teamIds = scopeFilter.teamIds ?? [];
-          const authorIds = scopeFilter.authorIds ?? [];
-          const excludeAuthorIds = scopeFilter.excludeAuthorIds ?? [];
-          if (
-            scopeFilter.scope === "team" &&
-            teamIds.length > 0 &&
-            !plugin.teams.some((team) => teamIds.includes(team.id))
-          ) {
-            return false;
-          }
-          if (
-            scopeFilter.scope === "personal" &&
-            authorIds.length > 0 &&
-            (!plugin.authorId || !authorIds.includes(plugin.authorId))
-          ) {
-            return false;
-          }
-          if (
-            scopeFilter.scope === "personal" &&
-            excludeAuthorIds.length > 0 &&
-            plugin.authorId &&
-            excludeAuthorIds.includes(plugin.authorId)
-          ) {
-            return false;
-          }
-          if (
-            scopeFilter.excludeOtherPersonal &&
-            plugin.scope === "personal" &&
-            plugin.authorId &&
-            currentUserId &&
-            plugin.authorId !== currentUserId
-          ) {
-            return false;
-          }
           return true;
         })
         .sort(comparePluginCatalogOrder),
-    [
-      plugins,
-      search,
-      client,
-      platform,
-      source,
-      sourceRepo,
-      scopeFilter,
-      currentUserId,
-    ],
+    [plugins, search, client, platform, source, sourceRepo],
   );
 
   // Only imported plugins have a repository, so the filter stays hidden until
@@ -308,7 +260,6 @@ function PluginsList() {
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkInstallOpen, setBulkInstallOpen] = useState(false);
-  const bulkVisibility = useBulkUpdatePluginVisibility();
   const bulkDelete = useBulkDeletePlugins();
   const { rangeSelection, ...bulkSelection } = useBulkSelection({
     rows: filteredPlugins,
@@ -319,7 +270,6 @@ function PluginsList() {
       platform,
       source,
       sourceRepo,
-      scopeFilter,
       labels: labelsFilter,
     }),
   });
@@ -348,6 +298,7 @@ function PluginsList() {
           ? "plugin-featured-action"
           : undefined,
         permissions: installAction.permissions,
+        permissionScope: installAction.permissionScope,
         onClick: () => setInstallingPlugin(plugin),
         disabled: !plugin.enabled,
         disabledTooltip: !plugin.enabled
@@ -358,6 +309,7 @@ function PluginsList() {
         icon: <Pencil className="h-4 w-4" />,
         label: editAction.label,
         permissions: editAction.permissions,
+        permissionScope: editAction.permissionScope,
         href: pluginActionHref(editAction),
       },
     ];
@@ -367,6 +319,7 @@ function PluginsList() {
         label: deleteAction.label,
         variant: "destructive",
         permissions: deleteAction.permissions,
+        permissionScope: deleteAction.permissionScope,
         onClick: () => setDeletingPlugin(plugin),
       },
     ];
@@ -492,22 +445,7 @@ function PluginsList() {
         );
       },
     },
-    {
-      id: "visibility",
-      size: 190,
-      header: "Visibility",
-      cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.scope}
-          teams={row.original.teams}
-          users={row.original.users}
-          authorId={row.original.authorId}
-          authorName={undefined}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
-      ),
-    },
+
     {
       id: "actions",
       size: 110,
@@ -557,18 +495,21 @@ function PluginsList() {
         title="Plugins"
         description={PLUGINS_DESCRIPTION}
         actionButton={
-          !showEmptyState &&
-          !isInitialPluginsLoad && (
-            <PermissionButton
-              permissions={{ plugin: ["create", "admin"] }}
-              asChild
-            >
-              <Link href="/plugins/new">
-                <Plus className="h-4 w-4" />
-                Add new plugin
-              </Link>
-            </PermissionButton>
-          )
+          <div className="flex items-center gap-2">
+            {!showEmptyState && !isInitialPluginsLoad && (
+              <PermissionButton
+                permissions={{ plugin: ["create", "update"] }}
+                permissionScope="*"
+                asChild
+              >
+                <Link href="/plugins/new">
+                  <Plus className="h-4 w-4" />
+                  Add new plugin
+                </Link>
+              </PermissionButton>
+            )}
+            <ResourceListActions resource="plugin" />
+          </div>
         }
       >
         <TableCardView storageKey="archestra-plugins-view" defaultMode="table">
@@ -581,17 +522,6 @@ function PluginsList() {
                   leading
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   moreFilters={[
-                    {
-                      key: "visibility",
-                      label: "Visibility",
-                      active: scopeFilter.hasActiveScopeFilters,
-                      control: (
-                        <ResourceScopeFilter
-                          ownerLabelPlural="plugins"
-                          adminPermission={{ plugin: ["admin"] }}
-                        />
-                      ),
-                    },
                     {
                       key: "platform",
                       label: "Platform",
@@ -716,18 +646,19 @@ function PluginsList() {
                     })}
                   />
                 </FilterBar>
-                <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
+                <ActiveFilterBadges />
               </CollectionFilters>
 
               <BulkActions
                 count={bulkSelection.selected.length}
                 noun="plugin"
                 onClear={bulkSelection.clearSelection}
-                busy={bulkVisibility.isPending || bulkDelete.isPending}
+                busy={bulkDelete.isPending}
                 selectAllMatching={bulkSelection.selectAllMatching}
               >
                 <PermissionButton
-                  permissions={{ plugin: ["read", "admin"] }}
+                  permissions={{ plugin: ["read", "update"] }}
+                  permissionScope="*"
                   variant="outline"
                   size="sm"
                   disabled={!!bulkInstall.error}
@@ -738,16 +669,18 @@ function PluginsList() {
                   <span>Install</span>
                 </PermissionButton>
                 <PermissionButton
-                  permissions={{ plugin: ["update", "admin"] }}
+                  permissions={{ plugin: ["update"] }}
+                  permissionScope="*"
                   variant="outline"
                   size="sm"
                   onClick={() => setBulkVisibilityOpen(true)}
                 >
                   <Pencil className="h-4 w-4" />
-                  <span>Edit visibility</span>
+                  <span>Add access</span>
                 </PermissionButton>
                 <PermissionButton
-                  permissions={{ plugin: ["delete", "admin"] }}
+                  permissions={{ plugin: ["delete", "update"] }}
+                  permissionScope="*"
                   variant="destructive"
                   size="sm"
                   onClick={() => setBulkDeleteOpen(true)}
@@ -822,15 +755,7 @@ function PluginsList() {
                                 plugin.clientType}
                             </span>
                           </Badge>
-                          <ResourceVisibilityBadge
-                            scope={plugin.scope}
-                            teams={plugin.teams}
-                            users={plugin.users}
-                            authorId={plugin.authorId}
-                            authorName={undefined}
-                            currentUserId={currentUserId}
-                            showSelfAsMe
-                          />
+
                           {!plugin.enabled ? (
                             <Badge variant="outline">Disabled</Badge>
                           ) : null}
@@ -888,23 +813,15 @@ function PluginsList() {
         />
       )}
       {bulkVisibilityOpen && (
-        <BulkVisibilityDialog
-          items={bulkSelection.selected}
-          noun="plugin"
+        <BulkResourceAccessDialog
+          resource="plugin"
+          items={bulkSelection.selected.map((plugin) => ({
+            id: plugin.id,
+            name: plugin.displayName,
+          }))}
           open={bulkVisibilityOpen}
           onOpenChange={setBulkVisibilityOpen}
-          isPending={bulkVisibility.isPending}
-          onApply={async (change) => {
-            const result = await bulkVisibility.mutateAsync({
-              plugins: bulkSelection.selected.map((plugin) => ({
-                id: plugin.id,
-                name: plugin.displayName,
-              })),
-              ...change,
-            });
-            if (result.succeeded.length > 0) bulkSelection.clearSelection();
-            return result.succeeded.length > 0;
-          }}
+          onApplied={bulkSelection.clearSelection}
         />
       )}
       {bulkInstallOpen && (
@@ -950,7 +867,11 @@ function PluginsEmptyState() {
       title="No plugins yet."
       description="Create a plugin for Claude Code, Codex, Copilot CLI, or Cursor."
       action={
-        <PermissionButton permissions={{ plugin: ["create", "admin"] }} asChild>
+        <PermissionButton
+          permissions={{ plugin: ["create", "update"] }}
+          permissionScope="*"
+          asChild
+        >
           <Link href="/plugins/new">
             <Plus className="mr-2 h-4 w-4" />
             Add your first plugin

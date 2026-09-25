@@ -1,12 +1,16 @@
 "use client";
 
 import type * as React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FormDialogViewContext } from "@/components/form-dialog-view";
 
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -23,6 +27,12 @@ export type FormDialogProps = {
   onOpenChange: (open: boolean) => void;
   title: string | React.ReactNode;
   description?: string | React.ReactNode;
+  /**
+   * An action for the dialog as a whole. It takes the close button's corner,
+   * so a dialog that sets one must be closable another way (a footer button
+   * and outside-click both still work).
+   */
+  headerAction?: React.ReactNode;
   size?: DialogSize;
   children: React.ReactNode;
   preventCloseOnInteractOutside?: boolean;
@@ -55,6 +65,7 @@ export function FormDialog({
   onOpenChange,
   title,
   description,
+  headerAction,
   size = "medium",
   children,
   preventCloseOnInteractOutside,
@@ -65,13 +76,44 @@ export function FormDialog({
   initialFocusRef,
   onClick,
 }: FormDialogProps) {
-  const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
+  const [view, setView] = useState<{
+    title: string;
+    description: string;
+  } | null>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const setDialogView = useCallback(
+    (next: { title: string; description: string } | null) => {
+      if (next && document.activeElement instanceof HTMLElement)
+        returnFocus.current = document.activeElement;
+      setView(next);
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!view) returnFocus.current?.focus();
+  }, [view]);
+  const [viewDirty, setViewDirty] = useState(false);
+  const [body, setBody] = useState<HTMLDivElement | null>(null);
+  const [footer, setFooter] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) {
+      setView(null);
+      setViewDirty(false);
+    }
+  }, [open]);
+  const guard = useUnsavedChangesGuard({
+    isDirty: isDirty || viewDirty,
+    onOpenChange,
+  });
+  const displayedTitle = view?.title ?? title;
+  const displayedDescription = view?.description ?? description;
 
   return (
     <>
       <Dialog open={open} onOpenChange={guard.handleOpenChange}>
         <DialogContent
           className={cn(sizeClasses[size], className)}
+          showCloseButton={!headerAction}
           onClick={onClick}
           onInteractOutside={
             preventCloseOnInteractOutside
@@ -91,7 +133,14 @@ export function FormDialog({
           }
         >
           <DialogDismissProvider requestClose={guard.requestClose}>
-            <DialogHeader className={headerClassName}>
+            {/* Takes the close button's corner, so the title and description
+                keep the full width instead of wrapping around it. */}
+            {headerAction && (
+              <div className="absolute top-3 right-3 z-10">{headerAction}</div>
+            )}
+            <DialogHeader
+              className={cn(headerAction && "pr-36", headerClassName)}
+            >
               {/* The DialogTitle/DialogDescription elements persist across
                   wizard steps, so a title that switches between a string and
                   an element would delete a bare text node in place — which
@@ -100,21 +149,53 @@ export function FormDialog({
                   wrapper span by the string content swaps a whole element on
                   every string<->element or string<->string change instead. */}
               <DialogTitle>
-                <span key={typeof title === "string" ? title : "node"}>
-                  {title}
+                <span
+                  key={
+                    typeof displayedTitle === "string" ? displayedTitle : "node"
+                  }
+                >
+                  {displayedTitle}
                 </span>
               </DialogTitle>
-              {description && (
+              {displayedDescription && (
                 <DialogDescription>
                   <span
-                    key={typeof description === "string" ? description : "node"}
+                    key={
+                      typeof displayedDescription === "string"
+                        ? displayedDescription
+                        : "node"
+                    }
                   >
-                    {description}
+                    {displayedDescription}
                   </span>
                 </DialogDescription>
               )}
             </DialogHeader>
-            {children}
+            <FormDialogViewContext.Provider
+              value={{
+                setView: setDialogView,
+                setDirty: setViewDirty,
+                body,
+                footer,
+              }}
+            >
+              <div hidden={!!view} className={view ? undefined : "contents"}>
+                {children}
+              </div>
+              {view && (
+                <>
+                  <DialogBody>
+                    <div ref={setBody} />
+                  </DialogBody>
+                  <DialogStickyFooter className="mt-0">
+                    <div
+                      ref={setFooter}
+                      className="flex w-full justify-end gap-2"
+                    />
+                  </DialogStickyFooter>
+                </>
+              )}
+            </FormDialogViewContext.Provider>
           </DialogDismissProvider>
         </DialogContent>
       </Dialog>

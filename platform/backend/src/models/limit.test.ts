@@ -3,7 +3,6 @@ import db, { schema } from "@/database";
 import { describe, expect, test, vi } from "@/test";
 import { CreateLimitSchema } from "@/types";
 import AgentModel from "./agent";
-import AgentTeamModel from "./agent-team";
 import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import LimitModel, { LimitValidationService } from "./limit";
 import ModelModel from "./model";
@@ -947,10 +946,12 @@ describe("LimitModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({ name: "Test Agent" });
+      await makeAgent({
+        name: "Test Agent",
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
       await makeMember(user.id, org.id, { role: "admin" });
-
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
       const limit = await LimitModel.create({
         entityType: "team",
@@ -1367,10 +1368,12 @@ describe("LimitValidationService", () => {
       const org = await makeOrganization();
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({ name: "Test Agent" });
+      const agent = await makeAgent({
+        name: "Test Agent",
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
       await makeMember(user.id, org.id, { role: "admin" });
-
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
       const agentLimit = await LimitModel.create({
         entityType: "agent",
@@ -1477,10 +1480,12 @@ describe("LimitValidationService", () => {
       const org = await makeOrganization();
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
-      const agent = await makeAgent({ name: "Test Agent" });
+      const agent = await makeAgent({
+        name: "Test Agent",
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
       await makeMember(user.id, org.id, { role: "admin" });
-
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
       const teamLimit = await LimitModel.create({
         entityType: "team",
@@ -1870,10 +1875,9 @@ describe("LimitValidationService", () => {
       const agent = await makeAgent({
         name: "Test Agent",
         organizationId: org.id,
+        access: { teams: [team.id] },
       });
       await makeMember(admin.id, org.id, { role: "admin" });
-
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
       const limit = await LimitModel.create({
         entityType: "organization",
@@ -1917,9 +1921,9 @@ describe("LimitValidationService", () => {
       const agent = await makeAgent({
         name: "Test Agent",
         organizationId: org.id,
+        access: { teams: [team.id] },
       });
       await makeMember(admin.id, org.id, { role: "admin" });
-      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
       const secret = await makeSecret();
       const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
@@ -2010,10 +2014,12 @@ describe("cleanupLimitsIfNeeded", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const limit = await LimitModel.create({
       entityType: "agent",
@@ -2134,10 +2140,12 @@ describe("cleanupLimitsIfNeeded", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const agentLimit = await LimitModel.create({
       entityType: "agent",
@@ -2190,10 +2198,12 @@ describe("cleanupLimitsIfNeeded", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const limit = await LimitModel.create({
       entityType: "agent",
@@ -2548,10 +2558,12 @@ describe("cleanupLimitsIfNeeded", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const limit = await LimitModel.create({
       lastCleanup: null,
@@ -2589,10 +2601,12 @@ describe("cleanupLimitsIfNeeded", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const agentLimit = await LimitModel.create({
       entityType: "agent",
@@ -2709,10 +2723,12 @@ describe("cleanupLimitsIfNeeded", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     const agentLimit = await LimitModel.create({
       entityType: "agent",
@@ -2815,12 +2831,14 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     const secret = await makeSecret();
     const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create limits for all 5 entity types
     const vkLimit = await LimitModel.create({
@@ -2975,10 +2993,12 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create two agent limits - one with old lastCleanup, one with recent
     const oldLimit = await LimitModel.create({
@@ -3051,12 +3071,14 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     const secret = await makeSecret();
     const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create limits for all entity types with high thresholds so they don't block
     await LimitModel.create({
@@ -3145,11 +3167,13 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ name: "Test Agent" });
+    const agent = await makeAgent({
+      name: "Test Agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     const otherAgent = await makeAgent({ name: "Other Agent" });
     await makeMember(user.id, org.id, { role: "admin" });
-
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create limit for agent
     const agentLimit = await LimitModel.create({

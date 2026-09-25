@@ -1,4 +1,8 @@
-import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_APP_NAME,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -600,7 +604,7 @@ describe("InternalMcpCatalogModel", () => {
       makeOrganization,
     }) => {
       const user = await makeUser();
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       const catalog = await InternalMcpCatalogModel.create(
         {
@@ -617,41 +621,49 @@ describe("InternalMcpCatalogModel", () => {
       expect(catalog.authorName).toBeDefined();
     });
 
-    test("create with teams populates team details", async ({
+    // A catalog item's `teams` are the teams its grants reach.
+    test("a catalog item's teams are the teams its grants reach", async ({
       makeUser,
       makeOrganization,
       makeTeam,
+      makeInternalMcpCatalog,
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      const catalog = await InternalMcpCatalogModel.create(
-        {
-          name: "team-scoped-catalog",
-          serverType: "remote",
-          scope: "team",
-          teams: [team.id],
-        },
-        { organizationId: org.id, authorId: user.id },
-      );
+      const created = await makeInternalMcpCatalog({
+        access: { teams: [team.id] },
+        organizationId: org.id,
+        authorId: user.id,
+      });
+      const catalog = await InternalMcpCatalogModel.findById(created.id, {
+        organizationId: org.id,
+      });
 
-      expect(catalog.scope).toBe("team");
-      expect(catalog.teams).toHaveLength(1);
-      expect(catalog.teams[0].id).toBe(team.id);
+      expect(catalog?.teams).toEqual([
+        expect.objectContaining({ id: team.id, name: team.name }),
+      ]);
+      // `scope` is read from the grants, not the retired column.
+      expect(catalog?.scope).toBe("team");
     });
 
     test("findById with access check denies non-authorized user", async ({
       makeUser,
+      makeMember,
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
       const author = await makeUser();
       const otherUser = await makeUser();
       const org = await makeOrganization();
+      // Grants reach organization members only; both are members, so the
+      // denial below is the personal grant at work, not a missing membership.
+      await makeMember(author.id, org.id);
+      await makeMember(otherUser.id, org.id);
 
       const catalog = await makeInternalMcpCatalog({
-        scope: "personal",
+        access: "personal",
         organizationId: org.id,
         authorId: author.id,
       });
@@ -672,16 +684,28 @@ describe("InternalMcpCatalogModel", () => {
       });
       expect(denied).toBeNull();
 
-      // Admin can access
+      // An admin reaches it through the admin role's Full grant at `*`; the
+      // `isAdmin` hint alone no longer opens it.
+      const adminUser = await makeUser();
+      await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
       const adminAccess = await InternalMcpCatalogModel.findById(catalog.id, {
-        userId: otherUser.id,
+        userId: adminUser.id,
         isAdmin: true,
         organizationId: org.id,
       });
       expect(adminAccess).not.toBeNull();
+      expect(
+        await InternalMcpCatalogModel.findById(catalog.id, {
+          userId: otherUser.id,
+          isAdmin: true,
+          organizationId: org.id,
+        }),
+      ).toBeNull();
     });
 
-    test("update with teams syncs team assignments", async ({
+    // Writing the retired team rows on update no longer changes who the item
+    // is shared with, so its `teams` keep showing the granted team.
+    test("an update's retired team rows do not change the granted teams", async ({
       makeUser,
       makeOrganization,
       makeTeam,
@@ -693,31 +717,34 @@ describe("InternalMcpCatalogModel", () => {
       const team2 = await makeTeam(org.id, user.id);
 
       const catalog = await makeInternalMcpCatalog({
-        scope: "team",
+        access: { teams: [team1.id] },
         organizationId: org.id,
-        teams: [team1.id],
       });
 
       const updated = await InternalMcpCatalogModel.update(catalog.id, {
         teams: [team2.id],
       });
 
-      expect(updated?.teams).toHaveLength(1);
-      expect(updated?.teams[0].id).toBe(team2.id);
+      expect(updated?.teams.map((team) => team.id)).toEqual([team1.id]);
     });
 
     test("searchByQuery respects scope filtering", async ({
       makeUser,
+      makeMember,
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
       const author = await makeUser();
       const otherUser = await makeUser();
       const org = await makeOrganization();
+      // Grants reach organization members only; both are members, so the
+      // denial below is the personal grant at work, not a missing membership.
+      await makeMember(author.id, org.id);
+      await makeMember(otherUser.id, org.id);
 
       await makeInternalMcpCatalog({
         name: "searchscope-personal-item",
-        scope: "personal",
+        access: "personal",
         organizationId: org.id,
         authorId: author.id,
       });
@@ -800,7 +827,7 @@ describe("InternalMcpCatalogModel", () => {
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const source = await makeInternalMcpCatalog({ organizationId: org.id });
       const clone = await makeInternalMcpCatalog({
         organizationId: org.id,
@@ -817,7 +844,7 @@ describe("InternalMcpCatalogModel", () => {
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const source = await makeInternalMcpCatalog({ organizationId: org.id });
       const clone = await makeInternalMcpCatalog({
         organizationId: org.id,
@@ -845,7 +872,7 @@ describe("InternalMcpCatalogModel", () => {
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const source = await makeInternalMcpCatalog({ organizationId: org.id });
       await ToolModel.create({
         catalogId: source.id,

@@ -158,6 +158,18 @@ function createOpenAiRouteTestApp() {
   return app;
 }
 
+beforeEach(async () => {
+  for (const modelId of ["gpt-4o", "gpt-4o-mini"]) {
+    await ModelModel.create({
+      externalId: `openai/${modelId}`,
+      provider: "openai",
+      modelId,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+  }
+});
+
 describe("OpenAI proxy streaming", () => {
   let openAiStubOptions: { interruptAtChunk?: number };
 
@@ -610,7 +622,6 @@ describe("OpenAI cost tracking", () => {
       name: "User OAuth OpenAI Proxy",
       agentType: "llm_proxy",
       isDefault: true,
-      scope: "org",
     });
     const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
     const oauthClientId = crypto.randomUUID();
@@ -1158,6 +1169,48 @@ describe("OpenAI Responses proxy", () => {
     });
   });
 
+  test("an ordinary member's own credential reaches a model the catalog has not seen", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Unlisted model caller" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "unlisted-model-key",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    const model = "gpt-5.7-unlisted";
+
+    const call = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer access-token",
+          "x-archestra-virtual-key": passthroughToken,
+        },
+        payload: { model, input: "Hello!" },
+      });
+
+    // Twice on purpose: the first sighting catalogues the model, and the
+    // second is the request that reads the policy written for it. A member
+    // with no model grant of their own could reach an unlisted model before
+    // scoped permissions existed, and must still reach it after.
+    expect((await call()).statusCode).toBe(200);
+    expect((await call()).statusCode).toBe(200);
+    expect(
+      await ModelModel.findByProviderAndModelId("openai", model),
+    ).not.toBeNull();
+  });
+
   test("routes a Codex ChatGPT bearer to its subscription backend without treating it as an IdP JWT", async ({
     makeAgent,
     makeIdentityProvider,
@@ -1550,11 +1603,13 @@ describe("OpenAI Responses proxy", () => {
     makeLlmProviderApiKey,
     makeSecret,
     makeUser,
+    makeMember,
   }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
     const agent = await makeAgent({ name: "Codex mapped key" });
     const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
     const secret = await makeSecret({
       secret: { apiKey: "sk-mapped-provider-key" },
     });

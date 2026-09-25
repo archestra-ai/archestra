@@ -23,14 +23,14 @@ describe("POST /api/chatops/bindings/dm", () => {
   let organizationId: string;
   let targetAgent: Agent;
 
-  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization }) => {
+  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     user = await makeAdmin({ email: "operator@example.com" });
+    await makeMember(user.id, organizationId, { role: "admin" });
     targetAgent = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
 
     app = createFastifyInstance();
@@ -70,7 +70,6 @@ describe("POST /api/chatops/bindings/dm", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     const existing = await ChatOpsChannelBindingModel.create({
       organizationId,
@@ -106,7 +105,6 @@ describe("POST /api/chatops/bindings/dm", () => {
       organizationId: otherOrganization.id,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
     });
     const otherBinding = await ChatOpsChannelBindingModel.create({
       organizationId: otherOrganization.id,

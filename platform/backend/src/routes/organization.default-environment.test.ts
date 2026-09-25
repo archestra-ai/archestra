@@ -243,7 +243,7 @@ describe("PATCH /api/organization/default-environment", () => {
     expect(res.json().defaultEnvironmentNamespace).toBeNull();
   });
 
-  test("persists restricted and leaves it unchanged when omitted", async ({
+  test("refuses the retired restricted field", async ({
     makeUser,
     makeOrganization,
   }) => {
@@ -254,34 +254,15 @@ describe("PATCH /api/organization/default-environment", () => {
     organizationId = organization.id;
     app = await buildApp(user, organizationId);
 
-    // Defaults to false.
-    expect(organization.defaultEnvironmentRestricted).toBe(false);
-
-    const setRestricted = await app.inject({
+    // The Default environment is open to all now; a client that still asks to
+    // restrict it must hear that it did not happen.
+    const response = await app.inject({
       method: "PATCH",
       url: "/api/organization/default-environment",
       payload: { restricted: true },
     });
-    expect(setRestricted.statusCode).toBe(200);
-    expect(setRestricted.json().defaultEnvironmentRestricted).toBe(true);
-
-    // PATCH only name; restricted must be preserved.
-    const updateName = await app.inject({
-      method: "PATCH",
-      url: "/api/organization/default-environment",
-      payload: { name: "Renamed" },
-    });
-    expect(updateName.statusCode).toBe(200);
-    expect(updateName.json().defaultEnvironmentRestricted).toBe(true);
-
-    // Turn it back off.
-    const clearRestricted = await app.inject({
-      method: "PATCH",
-      url: "/api/organization/default-environment",
-      payload: { restricted: false },
-    });
-    expect(clearRestricted.statusCode).toBe(200);
-    expect(clearRestricted.json().defaultEnvironmentRestricted).toBe(false);
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toContain("This field is retired");
   });
 
   test("can set and clear the default environment network policy", async ({

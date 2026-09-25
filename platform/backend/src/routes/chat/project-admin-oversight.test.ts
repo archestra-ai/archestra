@@ -24,9 +24,7 @@ describe("chat reads — hidden from project admins", () => {
 
     const owner = await makeUser();
     await makeMember(owner.id, organizationId, {});
-    agentId = (
-      await makeAgent({ organizationId, authorId: owner.id, scope: "org" })
-    ).id;
+    agentId = (await makeAgent({ organizationId, authorId: owner.id })).id;
 
     const project = await projectService.create({
       organizationId,

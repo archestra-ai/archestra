@@ -185,7 +185,6 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     const agentResponse = await createAgent(
       request,
       `OpenAPPA root flow ${suffix}`,
-      "personal",
     );
     agentId = ((await agentResponse.json()) as { id: string }).id;
 
@@ -424,7 +423,6 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     const agentResponse = await createAgent(
       request,
       `OpenAPPA dispatch flow ${suffix}`,
-      "personal",
     );
     agentId = ((await agentResponse.json()) as { id: string }).id;
     await makeApiRequest({

@@ -197,6 +197,7 @@ describe("permission-sync pass (containers / epoch / resume / groups)", () => {
         name: "auto-sync",
         connectorType: "github",
         visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
         config: {
           type: "github",
           githubUrl: "https://api.github.com",
@@ -1914,7 +1915,7 @@ describe("a disabled connector runs no permission pass", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "perforce",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       enabled: false,
     });
 

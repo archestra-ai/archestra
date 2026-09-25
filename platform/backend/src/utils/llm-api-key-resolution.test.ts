@@ -31,13 +31,14 @@ describe("resolveProviderApiKey", () => {
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-personal-key" } });
     await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -58,11 +59,10 @@ describe("resolveProviderApiKey", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const secret = await makeSecret({ secret: { apiKey: "sk-org-key" } });
     await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "anthropic",
-      scope: "org",
     });
 
     const result = await resolveProviderApiKey({
@@ -79,9 +79,11 @@ describe("resolveProviderApiKey", () => {
     makeOrganization,
     makeUser,
     makeSecret,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-custom-base" } });
 
     const { LlmProviderApiKeyModel } = await import("@/models");
@@ -109,9 +111,11 @@ describe("resolveProviderApiKey", () => {
     makeOrganization,
     makeUser,
     makeSecret,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const secret = await makeSecret({ secret: { apiKey: "sk-runtime-base" } });
 
     const { LlmProviderApiKeyModel } = await import("@/models");
@@ -142,31 +146,28 @@ describe("resolveProviderApiKey", () => {
     makeSecret,
     makeAgent,
     makeConversation,
+    makeMember,
+    makeLlmProviderApiKey,
   }) => {
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
 
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
-    const agent = await makeAgent({ name: "Azure Chat Agent", teams: [] });
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({ name: "Azure Chat Agent" });
     const fallbackSecret = await makeSecret({
       secret: { apiKey: "sk-fallback" },
     });
 
-    await LlmProviderApiKeyModel.create({
-      organizationId: org.id,
-      secretId: fallbackSecret.id,
+    await makeLlmProviderApiKey(org.id, fallbackSecret.id, {
       name: "Fallback Azure Key",
       provider: "azure",
-      scope: "org",
       baseUrl: "https://fallback.example.com/openai",
       inferenceBaseUrl: "https://fallback-runtime.example.com/openai",
     });
-    const selectedKey = await LlmProviderApiKeyModel.create({
-      organizationId: org.id,
-      secretId: null,
+    const selectedKey = await makeLlmProviderApiKey(org.id, null, {
       name: "Selected Keyless Azure Key",
       provider: "azure",
-      scope: "org",
       baseUrl: "https://discovery.example.com/openai",
       inferenceBaseUrl: "https://runtime.example.com/openai",
     });
@@ -192,11 +193,13 @@ describe("resolveProviderApiKey", () => {
     makeOrganization,
     makeUser,
     makeSecret,
+    makeMember,
   }) => {
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
 
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const fallbackSecret = await makeSecret({
       secret: { apiKey: "sk-fallback" },
     });
@@ -235,9 +238,11 @@ describe("resolveProviderApiKey", () => {
   test("returns undefined apiKey when no key configured and no env var", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
 
     const result = await resolveProviderApiKey({
       organizationId: org.id,
@@ -254,14 +259,15 @@ describe("resolveProviderApiKey", () => {
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
 
     const orgSecret = await makeSecret({ secret: { apiKey: "sk-org-wide" } });
     await makeLlmProviderApiKey(org.id, orgSecret.id, {
       provider: "anthropic",
-      scope: "org",
     });
 
     const personalSecret = await makeSecret({
@@ -269,7 +275,6 @@ describe("resolveProviderApiKey", () => {
     });
     await makeLlmProviderApiKey(org.id, personalSecret.id, {
       provider: "anthropic",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -290,23 +295,23 @@ describe("resolveProviderApiKey", () => {
     makeTeamMember,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const team = await makeTeam(org.id, user.id, { name: "Test Team" });
     await makeTeamMember(team.id, user.id);
 
     const orgSecret = await makeSecret({ secret: { apiKey: "sk-org-wide" } });
     await makeLlmProviderApiKey(org.id, orgSecret.id, {
       provider: "openai",
-      scope: "org",
     });
 
     const teamSecret = await makeSecret({ secret: { apiKey: "sk-team" } });
     await makeLlmProviderApiKey(org.id, teamSecret.id, {
       provider: "openai",
-      scope: "team",
-      teamId: team.id,
+      access: { teams: [team.id] },
     });
 
     const result = await resolveProviderApiKey({
@@ -316,7 +321,8 @@ describe("resolveProviderApiKey", () => {
     });
 
     expect(result.apiKey).toBe("sk-team");
-    expect(result.source).toBe("team");
+    // `source` echoes the retired scope column, which a shared key no longer
+    // carries per audience; the resolved value identifies the key.
   });
 
   test("supports legacy secret formats (anthropicApiKey)", async ({
@@ -324,13 +330,12 @@ describe("resolveProviderApiKey", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const secret = await makeSecret({
       secret: { anthropicApiKey: "sk-legacy-key" },
     });
     await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "anthropic",
-      scope: "org",
     });
 
     const result = await resolveProviderApiKey({
@@ -354,15 +359,16 @@ describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard"
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
+    await makeMember(owner.id, org.id);
     const secret = await makeSecret({
       secret: { apiKey: codexCredential("owner-account") },
     });
     const ownerKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: owner.id,
     });
 
@@ -382,16 +388,18 @@ describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard"
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
+    await makeMember(owner.id, org.id);
     const otherUser = await makeUser();
+    await makeMember(otherUser.id, org.id);
     const ownerSecret = await makeSecret({
       secret: { apiKey: codexCredential("owner-account") },
     });
     const ownerKey = await makeLlmProviderApiKey(org.id, ownerSecret.id, {
       provider: "openai",
-      scope: "personal",
       userId: owner.id,
     });
     const otherSecret = await makeSecret({
@@ -399,7 +407,6 @@ describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard"
     });
     const otherKey = await makeLlmProviderApiKey(org.id, otherSecret.id, {
       provider: "openai",
-      scope: "personal",
       userId: otherUser.id,
     });
 
@@ -420,16 +427,18 @@ describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard"
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
+    await makeMember(owner.id, org.id);
     const otherUser = await makeUser();
+    await makeMember(otherUser.id, org.id);
     const ownerSecret = await makeSecret({
       secret: { apiKey: codexCredential("owner-account") },
     });
     const ownerKey = await makeLlmProviderApiKey(org.id, ownerSecret.id, {
       provider: "openai",
-      scope: "personal",
       userId: owner.id,
     });
     // A plain personal OpenAI API key is NOT a subscription — the agent is
@@ -439,7 +448,6 @@ describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard"
     });
     await makeLlmProviderApiKey(org.id, plainSecret.id, {
       provider: "openai",
-      scope: "personal",
       userId: otherUser.id,
     });
 
@@ -462,7 +470,7 @@ describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard"
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     // The routes reject non-personal subscription keys; create through the
     // model to simulate a smuggled credential and pin the serve-time backstop.
     const secret = await makeSecret({
@@ -470,7 +478,6 @@ describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard"
     });
     await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
-      scope: "org",
     });
 
     const result = await resolveProviderApiKey({
@@ -485,7 +492,7 @@ describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard"
   test("ignores a subscription credential in the provider env var", async ({
     makeOrganization,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     config.chat.openai.apiKey = codexCredential("env-account");
 
     const result = await resolveProviderApiKey({
@@ -513,15 +520,16 @@ describe("resolveProviderApiKey — cross-provider subscription marker", () => {
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
+    await makeMember(owner.id, org.id);
     const secret = await makeSecret({
       secret: { apiKey: chatgptCredential },
     });
     await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "xai",
-      scope: "personal",
       userId: owner.id,
     });
 
@@ -540,16 +548,18 @@ describe("resolveProviderApiKey — cross-provider subscription marker", () => {
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const owner = await makeUser();
+    await makeMember(owner.id, org.id);
     const actingUser = await makeUser();
+    await makeMember(actingUser.id, org.id);
     const secret = await makeSecret({
       secret: { apiKey: chatgptCredential },
     });
     const ownerKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "xai",
-      scope: "personal",
       userId: owner.id,
     });
     // The acting user owns a legitimate ChatGPT subscription key —
@@ -564,7 +574,6 @@ describe("resolveProviderApiKey — cross-provider subscription marker", () => {
     });
     await makeLlmProviderApiKey(org.id, actingSecret.id, {
       provider: "openai",
-      scope: "personal",
       userId: actingUser.id,
     });
 
@@ -603,9 +612,11 @@ describe("resolveProviderApiKey endpoint selection by model", () => {
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const [secretA, secretB] = await Promise.all([
       makeSecret({ secret: { apiKey: "EMPTY" } }),
       makeSecret({ secret: { apiKey: "EMPTY" } }),
@@ -613,12 +624,10 @@ describe("resolveProviderApiKey endpoint selection by model", () => {
     // Created first, so the ownership ladder returns this one for every model.
     const serverA = await makeLlmProviderApiKey(org.id, secretA.id, {
       provider: "vllm",
-      scope: "org",
       baseUrl: "http://vllm-a:8000/v1",
     });
     const serverB = await makeLlmProviderApiKey(org.id, secretB.id, {
       provider: "vllm",
-      scope: "org",
       baseUrl: "http://vllm-b:8000/v1",
     });
 
@@ -656,21 +665,21 @@ describe("resolveProviderApiKey endpoint selection by model", () => {
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const [secretA, secretB] = await Promise.all([
       makeSecret({ secret: { apiKey: "EMPTY" } }),
       makeSecret({ secret: { apiKey: "EMPTY" } }),
     ]);
     const serverA = await makeLlmProviderApiKey(org.id, secretA.id, {
       provider: "vllm",
-      scope: "org",
       baseUrl: "http://vllm-a:8000/v1",
     });
     const serverB = await makeLlmProviderApiKey(org.id, secretB.id, {
       provider: "vllm",
-      scope: "org",
       baseUrl: "http://vllm-b:8000/v1",
     });
     const qwen = await makeVllmModel("Qwen/Qwen2.5-7B-Instruct");
@@ -696,10 +705,13 @@ describe("resolveProviderApiKey endpoint selection by model", () => {
     makeTeam,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const otherUser = await makeUser();
+    await makeMember(otherUser.id, org.id);
     const otherTeam = await makeTeam(org.id, otherUser.id);
     const [secretA, secretB] = await Promise.all([
       makeSecret({ secret: { apiKey: "EMPTY" } }),
@@ -707,13 +719,11 @@ describe("resolveProviderApiKey endpoint selection by model", () => {
     ]);
     const orgServer = await makeLlmProviderApiKey(org.id, secretA.id, {
       provider: "vllm",
-      scope: "org",
       baseUrl: "http://vllm-a:8000/v1",
     });
     const foreignServer = await makeLlmProviderApiKey(org.id, secretB.id, {
       provider: "vllm",
-      scope: "team",
-      teamId: otherTeam.id,
+      access: { teams: [otherTeam.id] },
       baseUrl: "http://vllm-restricted:8000/v1",
     });
     const qwen = await makeVllmModel("Qwen/Qwen2.5-7B-Instruct");
@@ -737,21 +747,21 @@ describe("resolveProviderApiKey endpoint selection by model", () => {
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const [personalSecret, orgSecret] = await Promise.all([
       makeSecret({ secret: { apiKey: "sk-personal" } }),
       makeSecret({ secret: { apiKey: "sk-org" } }),
     ]);
     const personalKey = await makeLlmProviderApiKey(org.id, personalSecret.id, {
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
     const orgKey = await makeLlmProviderApiKey(org.id, orgSecret.id, {
       provider: "openai",
-      scope: "org",
     });
     // Only the org key has synced this model, but for a credential provider
     // both keys reach the same catalog — moving spend to another account
@@ -783,13 +793,14 @@ describe("resolveProviderApiKey endpoint selection by model", () => {
     makeUser,
     makeSecret,
     makeLlmProviderApiKey,
+    makeMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const secret = await makeSecret({ secret: { apiKey: "EMPTY" } });
     const server = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "vllm",
-      scope: "org",
       baseUrl: "http://vllm-a:8000/v1",
     });
 

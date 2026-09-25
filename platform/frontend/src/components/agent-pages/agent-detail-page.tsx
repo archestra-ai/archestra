@@ -39,6 +39,7 @@ import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourcePermissions } from "@/components/resource-permissions";
 import { TransferAgentOwnershipDialog } from "@/components/transfer-agent-ownership-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -326,6 +327,7 @@ function AgentDetails({
         ]),
     ...(showConnect && !connectFirst ? (["connect"] as const) : []),
     ...(hasAgentRuntime ? (["runs"] as const) : []),
+    ...(!isBuiltIn ? (["permissions"] as const) : []),
   ];
   const sectionParam = searchParams.get("section");
   const section = resolveAgentDetailSection(sections, sectionParam);
@@ -455,7 +457,14 @@ function AgentDetails({
       // was created in.
       maxWidth="wizard"
       minWidth="phone"
-      contentOverflowX={activeFormGroups.length > 0 ? "clip" : "auto"}
+      // A scrolling box would trap the sticky save footer, so it could not
+      // pin to the bottom of the window. Only the wide sections, such as
+      // Runs, need one.
+      contentOverflowX={
+        activeFormGroups.length > 0 || section === "permissions"
+          ? "clip"
+          : "auto"
+      }
       title={
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
@@ -627,7 +636,15 @@ function AgentDetails({
         />
       )}
       <div className="min-w-0">
-        {section === "runs" ? (
+        {section === "permissions" ? (
+          <ResourcePermissions
+            resource={
+              agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent"
+            }
+            scope={agent.id}
+            onDirtyChange={setIsDirty}
+          />
+        ) : section === "runs" ? (
           <AgentRuns agentId={agent.id} />
         ) : section === "connect" ? (
           <AgentConnectContent kind={kind} agent={agent} />
@@ -795,6 +812,7 @@ function sectionLabel(
 }
 
 const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
+  permissions: "Permissions",
   settings: "Settings",
   general: "General",
   tools: "Tools, Skills & Knowledge",

@@ -1,6 +1,8 @@
-import { SkillModel, SkillTeamModel } from "@/models";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { SkillModel } from "@/models";
 import { builtInSkillSourceRef } from "@/skills/built-in-skills";
-import type { ResourceVisibilityScope } from "@/types/visibility";
+import { accessGrants, beforeEach, type TestAccess } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 
 export const MANIFEST = [
   "---",
@@ -49,9 +51,10 @@ export async function seedBuiltInSkill(params: {
       metadata: {},
       sourceType: "built_in",
       sourceRef: builtInSkillSourceRef(params.builtInSkillId),
-      scope: "org",
     },
     files: [],
+    // Built-in skills are published to the whole organization.
+    ...accessGrants("org"),
   });
   if (!skill) throw new Error("seed failed");
   return skill;
@@ -62,9 +65,9 @@ export async function seedImportedSkill(params: {
   organizationId: string;
   name: string;
   sourceRef: string;
-  scope: ResourceVisibilityScope;
+  /** Who the skill is shared with; defaults to its author alone. */
+  access?: TestAccess;
   authorId?: string | null;
-  teamIds?: string[];
 }) {
   const skill = await SkillModel.createWithFiles({
     skill: {
@@ -76,13 +79,19 @@ export async function seedImportedSkill(params: {
       metadata: {},
       sourceType: "github",
       sourceRef: params.sourceRef,
-      scope: params.scope,
     },
     files: [],
+    ...accessGrants(params.access),
   });
   if (!skill) throw new Error("seed failed");
-  if (params.teamIds?.length) {
-    await SkillTeamModel.syncSkillTeams(skill.id, params.teamIds);
-  }
   return skill;
+}
+
+/** Authenticated skill routes require a real organization membership. */
+export function useSkillRouteTestApp(routes: FastifyPluginAsyncZod) {
+  const ctx = useRouteTestApp(routes);
+  beforeEach(async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+  });
+  return ctx;
 }

@@ -150,7 +150,8 @@ describe("AgentVersionModel", () => {
 
     const updated = await AgentModel.update(agent.id, { teams: [team.id] });
 
-    expect(updated?.teams.map((t) => t.id)).toEqual([team.id]);
+    // Who the agent is shared with is its grants; the retired team rows this
+    // writes change neither the displayed teams nor the version.
     expect(updated?.latestVersion).toBe(1);
     expect(await listVersions(agent)).toHaveLength(1);
   });

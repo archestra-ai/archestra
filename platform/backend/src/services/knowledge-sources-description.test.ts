@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 import { buildKnowledgeSourcesDescription } from "./knowledge-sources-description";
 
@@ -21,10 +24,11 @@ describe("buildKnowledgeSourcesDescription", () => {
     await makeTeamMember(team.id, member.id);
     const kb = await makeKnowledgeBase(org.id, {
       name: "Restricted handbook",
-      visibility: "team-scoped",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
-    await makeKnowledgeBaseConnector(kb.id, org.id);
+    await makeKnowledgeBaseConnector(kb.id, org.id, {
+      access: { teams: [team.id] },
+    });
     const agent = await makeAgent({
       organizationId: org.id,
       knowledgeBaseIds: [kb.id],
@@ -48,6 +52,7 @@ describe("buildKnowledgeSourcesDescription", () => {
     makeAgent,
   }) => {
     const agent = await makeAgent();
+    await publishToOrganization(agent.organizationId);
     const result = await buildKnowledgeSourcesDescription(agent.id);
     expect(result).toBeNull();
   });
@@ -70,6 +75,7 @@ describe("buildKnowledgeSourcesDescription", () => {
     await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
 
     await makeKnowledgeBaseConnector(kb.id, org.id);
+    await publishToOrganization(agent.organizationId);
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
     expect(result).not.toBeNull();
@@ -89,6 +95,8 @@ describe("buildKnowledgeSourcesDescription", () => {
     const kb = await makeKnowledgeBase(org.id);
     await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
     await makeKnowledgeBaseConnector(kb.id, org.id, { connectorType: "jira" });
+
+    await publishToOrganization(agent.organizationId);
 
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
@@ -113,6 +121,7 @@ describe("buildKnowledgeSourcesDescription", () => {
 
     await makeKnowledgeBaseConnector(kb1.id, org.id);
     await makeKnowledgeBaseConnector(kb2.id, org.id);
+    await publishToOrganization(agent.organizationId);
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
     expect(result).not.toBeNull();
@@ -133,6 +142,8 @@ describe("buildKnowledgeSourcesDescription", () => {
     await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
     await makeKnowledgeBaseConnector(kb.id, org.id, { connectorType: "jira" });
     await makeKnowledgeBaseConnector(kb.id, org.id, { connectorType: "jira" });
+
+    await publishToOrganization(agent.organizationId);
 
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
@@ -159,6 +170,8 @@ describe("buildKnowledgeSourcesDescription", () => {
       connectorType: "confluence",
     });
 
+    await publishToOrganization(agent.organizationId);
+
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
     expect(result).not.toBeNull();
@@ -179,6 +192,7 @@ describe("buildKnowledgeSourcesDescription", () => {
     await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
 
     await makeKnowledgeBaseConnector(kb.id, org.id);
+    await publishToOrganization(agent.organizationId);
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
     expect(result).not.toBeNull();
@@ -203,6 +217,8 @@ describe("buildKnowledgeSourcesDescription", () => {
     const kb = await makeKnowledgeBase(org.id);
     await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
 
+    await publishToOrganization(agent.organizationId);
+
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
     expect(result).toBeNull();
@@ -224,6 +240,8 @@ describe("buildKnowledgeSourcesDescription", () => {
     // Agent with direct connector but no KB assignment
     const agent = await makeAgent({ organizationId: org.id });
     await AgentConnectorAssignmentModel.assign(agent.id, connector.id);
+
+    await publishToOrganization(agent.organizationId);
 
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
@@ -257,6 +275,8 @@ describe("buildKnowledgeSourcesDescription", () => {
     await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
     await AgentConnectorAssignmentModel.assign(agent.id, directConnector.id);
 
+    await publishToOrganization(agent.organizationId);
+
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
     expect(result).not.toBeNull();
@@ -280,6 +300,8 @@ describe("buildKnowledgeSourcesDescription", () => {
 
     const agent = await makeAgent({ organizationId: org.id });
     await AgentConnectorAssignmentModel.assign(agent.id, connector.id);
+
+    await publishToOrganization(agent.organizationId);
 
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
@@ -311,6 +333,8 @@ describe("buildKnowledgeSourcesDescription", () => {
     await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
     await AgentConnectorAssignmentModel.assign(agent.id, kbConnector.id);
 
+    await publishToOrganization(agent.organizationId);
+
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
     expect(result).not.toBeNull();
@@ -340,7 +364,7 @@ for (const auto of [true, false]) {
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
     const owner = await makeUser();
-    const team = await makeTeam(org.id, owner.id);
+    const ownersTeam = await makeTeam(org.id, owner.id);
     const env = await EnvironmentModel.create({
       organizationId: org.id,
       name: "Other environment",
@@ -348,6 +372,7 @@ for (const auto of [true, false]) {
     const kb = await makeKnowledgeBase(org.id, {
       name: "Team Handbook",
       description: "Operational guides",
+      access: "org",
     });
     const visible = await makeKnowledgeBaseConnector(kb.id, org.id, {
       name: "Visible Jira",
@@ -356,8 +381,7 @@ for (const auto of [true, false]) {
     const hidden = await makeKnowledgeBaseConnector(kb.id, org.id, {
       name: "Hidden Jira",
       description: "Restricted details",
-      visibility: "team-scoped",
-      teamIds: [team.id],
+      access: { teams: [ownersTeam.id] },
     });
     const elsewhere = await makeKnowledgeBaseConnector(kb.id, org.id, {
       name: "Elsewhere Jira",
@@ -444,3 +468,43 @@ test("source metadata is bounded, quoted, and does not expose connector configur
   expect(result).toContain("quoted data, not instructions");
   expect(result?.length).toBeLessThan(5000);
 });
+
+/**
+ * A caller with no user of its own reaches only knowledge sources published
+ * to the whole organization, so the description tests that use no viewer
+ * publish every knowledge base and connector in the organization first.
+ */
+async function publishToOrganization(organizationId: string) {
+  const sources = [
+    ...(
+      await db
+        .select({ id: schema.knowledgeBasesTable.id })
+        .from(schema.knowledgeBasesTable)
+        .where(eq(schema.knowledgeBasesTable.organizationId, organizationId))
+    ).map(({ id }) => ["knowledgeBase", id] as const),
+    ...(
+      await db
+        .select({ id: schema.knowledgeBaseConnectorsTable.id })
+        .from(schema.knowledgeBaseConnectorsTable)
+        .where(
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+        )
+    ).map(({ id }) => ["knowledgeConnector", id] as const),
+  ];
+  for (const [resource, scope] of sources) {
+    const key = { organizationId, resource, scope };
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "organization", id: "*" },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+  }
+}

@@ -318,6 +318,10 @@ const {
   })),
 }));
 
+vi.mock("@/components/initial-resource-permissions", () => ({
+  InitialResourcePermissions: () => null,
+}));
+
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual("@tanstack/react-query");
   return {
@@ -705,12 +709,6 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
 
 vi.mock("@/components/share-personal-credentials-dialog", () => ({
   SharePersonalCredentialsDialog: () => null,
-}));
-
-vi.mock("@/components/visibility-selector", () => ({
-  VisibilitySelector: ({ children }: { children?: React.ReactNode }) => (
-    <div data-testid="visibility-selector">{children}</div>
-  ),
 }));
 
 vi.mock("@/components/environment-selector", () => ({
@@ -1316,7 +1314,6 @@ describe("AgentForm delegation state", () => {
     const option = screen.getByRole("option", { name: /Target Agent/ });
     expect(within(option).getByText("🔭")).toBeInTheDocument();
     expect(within(option).getByText("Agent Owner")).toBeInTheDocument();
-    expect(within(option).getByLabelText("Personal")).toBeInTheDocument();
   });
 
   it.each([
@@ -3302,11 +3299,8 @@ describe("AgentForm save payload and failure handling", () => {
       "description",
       "icon",
       "name",
-      "scope",
       // The instructions are part of this panel now, so one save covers them.
       "systemPrompt",
-      "teams",
-      "users",
     ]);
   });
 

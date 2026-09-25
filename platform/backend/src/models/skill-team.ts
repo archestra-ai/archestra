@@ -1,70 +1,53 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { and, eq } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import type { ResourceVisibilityScope } from "@/types/visibility";
-import SkillUserModel from "./skill-user";
-import TeamModel from "./team";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
- * Team assignments and scope-based access for skills.
- *
- * Mirrors {@link AgentTeamModel}: a skill is accessible when it is org-scoped,
- * authored by the user (personal scope), or team-scoped and assigned to one of
- * the user's teams. Skill admins bypass these checks.
+ * Grant-based access checks for skills, plus the retired `skill_team`
+ * junction's readers that the cutover and the edit forms still use.
  */
 class SkillTeamModel {
   /**
-   * Skill IDs a user can access within an organization: org-scoped skills,
-   * their own personal skills, and team-scoped skills assigned to one of their
-   * teams. Without a `userId` (org/team-token sessions) only org-scoped skills
-   * are returned.
-   *
-   * Admins bypass scope filtering entirely, so callers should skip this for
-   * them rather than passing a flag.
+   * Skill IDs a user can read within an organization: a grant on the skill, or
+   * at `*`, decides. Without a `userId` (org/team-token sessions) only a skill
+   * published to the organization at large is returned.
    */
   static async getUserAccessibleSkillIds(params: {
     organizationId: string;
     userId?: string;
   }): Promise<string[]> {
     const { organizationId, userId } = params;
-    if (userId === undefined) {
-      const result = await db.execute<{ id: string }>(sql`
-        SELECT id FROM skills
-        WHERE scope = 'org' AND organization_id = ${organizationId}
-      `);
-      return result.rows.map((r) => r.id);
-    }
-
-    const result = await db.execute<{ id: string }>(sql`
-      SELECT id FROM skills
-        WHERE scope = 'org' AND organization_id = ${organizationId}
-      UNION
-      SELECT id FROM skills
-        WHERE author_id = ${userId} AND scope = 'personal'
-          AND organization_id = ${organizationId}
-      UNION
-      -- Shared with this person by name. The grant sits beside the scope, so a
-      -- personal skill can reach a colleague without being published wider.
-      SELECT su.skill_id AS id
-        FROM skill_user su
-        INNER JOIN skills s ON su.skill_id = s.id
-        WHERE su.user_id = ${userId} AND s.organization_id = ${organizationId}
-      UNION
-      SELECT skill_team.skill_id AS id
-        FROM skill_team
-        INNER JOIN skills s ON skill_team.skill_id = s.id
-        WHERE ${TeamModel.effectiveMembershipCondition({ userId, teamIdColumn: schema.skillTeamsTable.teamId })}
-          AND s.scope = 'team'
-          AND s.organization_id = ${organizationId}
-    `);
-    return result.rows.map((r) => r.id);
+    const rows = await db
+      .select({ id: schema.skillsTable.id })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, organizationId),
+          userId === undefined
+            ? ResourcePermissionPolicyModel.organizationAccessCondition({
+                organizationId,
+                resource: "skill",
+                scopeColumn: schema.skillsTable.id,
+                action: "read",
+              })
+            : ResourcePermissionPolicyModel.grantCondition({
+                organizationId,
+                userId,
+                resource: "skill",
+                action: "read",
+                scopeColumn: schema.skillsTable.id,
+              }),
+        ),
+      );
+    return rows.map((row) => row.id);
   }
 
   /**
    * Whether a user can access a specific skill within an organization. A skill
-   * from another organization is never accessible. Admins always can; otherwise
-   * org → all, personal → author only, team → member of an assigned team.
-   * Without a `userId` (org/team-token sessions) only org-scoped skills are
-   * accessible.
+   * from another organization is never accessible. A user needs a grant on the
+   * skill (or at `*`); without a `userId` (org/team-token sessions) only an
+   * organization-wide grant counts.
    *
    * Takes the already-loaded skill row — every caller resolves the skill
    * before checking access, so there is no need to re-fetch it here.
@@ -72,84 +55,70 @@ class SkillTeamModel {
   static async userHasSkillAccess(params: {
     organizationId: string;
     userId?: string;
-    skill: {
-      id: string;
-      organizationId: string;
-      scope: ResourceVisibilityScope;
-      authorId: string | null;
-    };
-    isSkillAdmin: boolean;
+    skill: { id: string; organizationId: string };
+    action?: "read" | "use";
   }): Promise<boolean> {
     const { skill, organizationId, userId } = params;
     if (skill.organizationId !== organizationId) return false;
-    if (params.isSkillAdmin) return true;
-
-    switch (skill.scope) {
-      case "org":
-        return true;
-      case "personal": {
-        if (userId === undefined) return false;
-        if (skill.authorId === userId) return true;
-        return SkillUserModel.userHasGrant(skill.id, userId);
-      }
-      case "team": {
-        if (userId === undefined) return false;
-        const [match] = await db
-          .select({ teamId: schema.skillTeamsTable.teamId })
-          .from(schema.skillTeamsTable)
-          .where(
-            and(
-              eq(schema.skillTeamsTable.skillId, skill.id),
-              TeamModel.effectiveMembershipCondition({
-                userId,
-                teamIdColumn: schema.skillTeamsTable.teamId,
-              }),
-            ),
-          )
-          .limit(1);
-        return match !== undefined;
-      }
-      default:
-        return false;
+    const action = params.action ?? "read";
+    if (userId !== undefined) {
+      const [granted] = await db
+        .select({ id: schema.skillsTable.id })
+        .from(schema.skillsTable)
+        .where(
+          and(
+            eq(schema.skillsTable.id, skill.id),
+            ResourcePermissionPolicyModel.grantCondition({
+              organizationId,
+              userId,
+              resource: "skill",
+              action,
+              scopeColumn: schema.skillsTable.id,
+            }),
+          ),
+        )
+        .limit(1);
+      return granted !== undefined;
     }
+
+    const policies = await ResourcePermissionPolicyModel.findApplicable({
+      organizationId,
+      resource: "skill",
+      scope: skill.id,
+    });
+    return policies.some((policy) =>
+      ResourcePermissionPolicyModel.isOrganizationWide({
+        policy,
+        scope: skill.id,
+        action,
+      }),
+    );
   }
 
-  /** Team IDs assigned to a skill. */
+  /** The teams a skill's own policy grants read to. */
   static async getTeamsForSkill(skillId: string): Promise<string[]> {
-    const rows = await db
-      .select({ teamId: schema.skillTeamsTable.teamId })
-      .from(schema.skillTeamsTable)
-      .where(eq(schema.skillTeamsTable.skillId, skillId));
-    return rows.map((r) => r.teamId);
+    const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
+      resources: ["skill"],
+      scopes: [skillId],
+    });
+    return recipients.get(skillId)?.teamIds ?? [];
   }
 
-  /** Team details (id + name) for several skills in one query (no N+1). */
+  /** Team details (id + name) for {@link getTeamsForSkill}, for several skills. */
   static async getTeamDetailsForSkills(
     skillIds: string[],
   ): Promise<Map<string, Array<{ id: string; name: string }>>> {
-    const map = new Map<string, Array<{ id: string; name: string }>>();
-    for (const id of skillIds) {
-      map.set(id, []);
-    }
-    if (skillIds.length === 0) return map;
-
-    const rows = await db
-      .select({
-        skillId: schema.skillTeamsTable.skillId,
-        teamId: schema.skillTeamsTable.teamId,
-        teamName: schema.teamsTable.name,
-      })
-      .from(schema.skillTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.skillTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(inArray(schema.skillTeamsTable.skillId, skillIds));
-
-    for (const { skillId, teamId, teamName } of rows) {
-      map.get(skillId)?.push({ id: teamId, name: teamName });
-    }
-    return map;
+    const details =
+      await ResourcePermissionPolicyModel.findReadRecipientDetails({
+        resources: ["skill"],
+        scopes: skillIds,
+      });
+    return new Map(
+      skillIds.map((id) => [
+        id,
+        (details.get(id)?.teams ?? []).map(({ id, name }) => ({ id, name })),
+      ]),
+    );
   }
 
   /** Replace a skill's team assignments with the given set. */

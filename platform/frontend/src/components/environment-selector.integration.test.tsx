@@ -32,13 +32,15 @@ const savedId = "10000000-0000-4000-8000-000000000001";
 const savedEnvironment = {
   id: savedId,
   name: "Restricted test environment",
-  restricted: true,
+  // The listing answers deploy authority per environment; this one is closed
+  // to the caller, which is what makes its option disabled below.
+  canDeploy: false,
   description: null,
 };
 const otherEnvironment = {
   id: "10000000-0000-4000-8000-000000000002",
   name: "Other test environment",
-  restricted: false,
+  canDeploy: true,
   description: null,
 };
 const server = setupServer();
@@ -137,7 +139,7 @@ describe("EnvironmentSelector modes", () => {
       name: /^Restricted test environment/,
     });
     expect(restricted).toHaveAttribute("aria-disabled", "true");
-    expect(restricted).toHaveTextContent("skill:deploy-to-restricted");
+    expect(restricted).toHaveTextContent(/This environment is restricted/);
     await user.click(
       screen.getByRole("option", { name: "Other test environment" }),
     );

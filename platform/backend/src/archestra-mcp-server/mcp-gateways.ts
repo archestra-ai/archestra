@@ -5,7 +5,6 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import {
-  AgentScopeSchema,
   ToolExposureModeSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -60,16 +59,9 @@ const EditMcpGatewayToolArgsSchema = z
     name: UpdateAgentSchemaBase.shape.name
       .optional()
       .describe("New name for the MCP gateway."),
-    scope: AgentScopeSchema.optional().describe(
-      "Updated visibility scope for the MCP gateway.",
-    ),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
       "How tools should be loaded for MCP clients and models.",
     ),
-    teams: z
-      .array(UuidIdSchema)
-      .optional()
-      .describe("Replace the teams attached to a team-scoped MCP gateway."),
     knowledgeBaseIds: UpdateAgentSchemaBase.shape.knowledgeBaseIds
       .describe(
         "Replace the MCP gateway's assigned knowledge bases with this set.",

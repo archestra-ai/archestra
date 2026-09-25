@@ -14,6 +14,10 @@ import { schema } from "@/database";
  *    `audit-log-action-labels.ts` ACTION_LABEL map.
  */
 export const AuditEventNameSchema = z.enum([
+  "resourcePermissions.updated",
+  "hook.created",
+  "hook.updated",
+  "hook.deleted",
   // Resource CRUD — alphabetical by prefix
   "agent.created",
   "agent.updated",
@@ -25,12 +29,15 @@ export const AuditEventNameSchema = z.enum([
   // recorded with identity only — a purge record must not preserve a copy of
   // the content the caller asked to destroy.
   "agent.purged",
+  // No route writes this any more (the bulk visibility endpoint is gone); it
+  // stays so records written before the removal still parse.
   "agent.bulk_updated",
   "agent.bulk_deleted",
   "agentRun.created",
   "agentRun.canceled",
   "agentRun.updated",
   "agentRun.deleted",
+  // No route emits these any more; kept so earlier records still parse.
   "agentRun.shared",
   "agentRun.unshared",
   "credential.created",
@@ -54,6 +61,7 @@ export const AuditEventNameSchema = z.enum([
   "app.created",
   "app.updated",
   "app.deleted",
+  // Retired with the bulk visibility endpoint; kept so old records parse.
   "app.bulk_updated",
   "app.bulk_deleted",
   "chatOpsBinding.created",
@@ -107,12 +115,16 @@ export const AuditEventNameSchema = z.enum([
   "knowledgeDirectory.created",
   "knowledgeDirectory.updated",
   "knowledgeDirectory.deleted",
+  // Retired with the directory bulk visibility endpoint; kept so old records
+  // still parse.
   "knowledgeDirectory.bulk_updated",
   "knowledgeDirectory.bulk_deleted",
   "knowledgeFile.created",
   "knowledgeFile.updated",
   "knowledgeFile.content_upserted",
   "knowledgeFile.deleted",
+  // Retired with the document bulk visibility endpoint; kept so old records
+  // still parse.
   "knowledgeFile.bulk_updated",
   "knowledgeFile.bulk_deleted",
   "limit.created",
@@ -166,6 +178,7 @@ export const AuditEventNameSchema = z.enum([
   "project.deleted",
   "project.restored",
   "project.purged",
+  // No route emits this any more; kept so earlier records still parse.
   "project.bulk_updated",
   "project.bulk_deleted",
   "role.created",
@@ -183,9 +196,10 @@ export const AuditEventNameSchema = z.enum([
   "serviceAccount.bulk_updated",
   "skill.created",
   "skill.updated",
-  // Visibility changed / soft-deleted across a batch of skills in one request.
-  // Distinct from the per-skill actions so a sweep over many skills is
-  // recognizable as one act rather than a burst of unrelated edits.
+  // Soft-deleted across a batch of skills in one request. Distinct from the
+  // per-skill actions so a sweep over many skills is recognizable as one act
+  // rather than a burst of unrelated edits. `bulk_updated` was the retired
+  // bulk visibility endpoint; it stays so records written before still parse.
   "skill.bulk_updated",
   "skill.deleted",
   "skill.bulk_deleted",

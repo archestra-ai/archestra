@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,7 @@ lastUpdated: 2026-09-11
 This document is the canonical reference for deployment Environments. Include:
 - What an environment is and the implicit "Default" environment (null)
 - Who can view vs. manage environments (environment:read / create / update / delete), Settings > Environments
-- Restricted environments and the per-resource deploy-to-restricted permissions
+- Who may deploy into an environment: its `use` grants
 - Environment isolation: how an environment scopes which tools, knowledge,
   skills, and delegation targets an agent / MCP gateway can use
   (strict matching; Default is a peer, not a wildcard; skills can be
@@ -40,15 +40,19 @@ New resources go to Default unless you say otherwise. In **Settings → Environm
 
 The setting only applies when nobody picks an environment. Choosing one on the create form's **Configuration** step always wins, including choosing Default. Changing the setting never moves resources that already exist.
 
-A creator who lacks the `deploy-to-restricted` permission for a restricted landing environment gets Default instead, so the setting never blocks a resource they are otherwise allowed to create.
+A creator who may not deploy into the landing environment gets Default instead, so the setting never blocks a resource they are otherwise allowed to create.
 
 ### Use case
 
 Acme wants engineers to try MCP servers without touching production traffic. An admin points new MCP servers at `explore`, which allows egress only to package registries. Everything an engineer installs starts there. Once a server is ready, an admin reassigns it to `production`.
 
-## Restricted environments
+## Deploy Permissions
 
-An environment can be marked **restricted**. Assigning a resource to a restricted environment requires the `deploy-to-restricted` permission on that resource — `mcpRegistry:deploy-to-restricted` for MCP servers, for example. Each resource is gated on its own permission, so an organization can allow agents and apps in a restricted environment while still limiting who deploys MCP servers there. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
+Deploying into an environment requires a `use` grant on it. Set grants on the environment's **Permissions** tab — the same control you use to share an agent or a skill.
+
+A new environment is open to the whole organization. To lock one down, remove the organization grant and grant `use` to the people or teams who may deploy there. You can let a team deploy to `staging` without letting them near `production`, for example. One grant covers everything deployed there: MCP servers, agents, apps, gateways, and knowledge connectors.
+
+The Default environment is always open to anyone who can create the resource.
 
 ## Trusted image registries
 

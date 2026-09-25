@@ -1,13 +1,13 @@
 import { SkillModel, SkillTeamModel } from "@/models";
-import { describe, expect, test } from "@/test";
-import type { ResourceVisibilityScope } from "@/types/visibility";
+import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
+import { accessGrants, describe, expect, type TestAccess, test } from "@/test";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 async function seedSkill(params: {
   organizationId: string;
   name: string;
-  scope: ResourceVisibilityScope;
+  access?: TestAccess;
   authorId?: string | null;
-  teamIds?: string[];
 }) {
   const skill = await SkillModel.createWithFiles({
     skill: {
@@ -18,49 +18,142 @@ async function seedSkill(params: {
       content: `# ${params.name}`,
       metadata: {},
       sourceType: "manual",
-      scope: params.scope,
     },
     files: [],
-    teamIds: params.teamIds,
+    ...accessGrants(params.access),
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;
 }
 
 describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
+  test("an organization credential cannot read a private skill shared with a role", async ({
+    makeOrganization,
+    makeUser,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const role = await makeCustomRole(org.id, { permission: {} });
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "role-shared-private-skill",
+      authorId: author.id,
+    });
+    const key = {
+      organizationId: org.id,
+      resource: "skill" as const,
+      scope: skill.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "role", id: role.id }, actions: ["read", "use"] },
+      ],
+    });
+
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).not.toContain(skill.id);
+  });
+  test("restricting a migrated public skill to a role revokes organization credential access", async ({
+    makeOrganization,
+    makeUser,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization({ legacyPermissions: true });
+    const author = await makeUser();
+    const role = await makeCustomRole(org.id, { permission: {} });
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "formerly-public-skill",
+      access: "org",
+      authorId: author.id,
+    });
+    await runScopedResourcePermissionCutover();
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).toContain(skill.id);
+    const key = {
+      organizationId: org.id,
+      resource: "skill" as const,
+      scope: skill.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "role", id: role.id }, actions: ["read", "use"] },
+      ],
+    });
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).not.toContain(skill.id);
+    await runScopedResourcePermissionCutover();
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).not.toContain(skill.id);
+    const restricted = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: restricted?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "organization", id: "*" },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+    expect(
+      await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: org.id,
+      }),
+    ).toContain(skill.id);
+  });
   test("returns org skills, own personal skills, and team skills", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
     makeTeamMember,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const other = await makeUser();
+    await makeMember(other.id, org.id);
     const team = await makeTeam(org.id, user.id);
     await makeTeamMember(team.id, user.id);
 
     const orgSkill = await seedSkill({
       organizationId: org.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
     const ownSkill = await seedSkill({
       organizationId: org.id,
       name: "own-skill",
-      scope: "personal",
       authorId: user.id,
     });
     const teamSkill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
     const othersPersonal = await seedSkill({
       organizationId: org.id,
       name: "others-skill",
-      scope: "personal",
       authorId: other.id,
     });
 
@@ -80,18 +173,20 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
   test("excludes team skills for non-members", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
   }) => {
     const org = await makeOrganization();
     const owner = await makeUser();
+    await makeMember(owner.id, org.id);
     const outsider = await makeUser();
+    await makeMember(outsider.id, org.id);
     const team = await makeTeam(org.id, owner.id);
 
     const teamSkill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
 
     const accessible = new Set(
@@ -106,28 +201,28 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
   test("without a userId returns only org-scoped skills", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
+    await makeMember(author.id, org.id);
     const team = await makeTeam(org.id, author.id);
 
     const orgSkill = await seedSkill({
       organizationId: org.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
     const personalSkill = await seedSkill({
       organizationId: org.id,
       name: "personal-skill",
-      scope: "personal",
       authorId: author.id,
     });
     const teamSkill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
 
     const accessible = new Set(
@@ -143,15 +238,17 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
   test("does not return another organization's org skills", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const orgA = await makeOrganization();
     const orgB = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, orgA.id);
 
     const orgSkillA = await seedSkill({
       organizationId: orgA.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
 
     const accessible = new Set(
@@ -168,13 +265,15 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
   test("org skills are accessible to everyone", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const skill = await seedSkill({
       organizationId: org.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
 
     expect(
@@ -182,7 +281,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: user.id,
         skill,
-        isSkillAdmin: false,
       }),
     ).toBe(true);
   });
@@ -190,14 +288,16 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
   test("personal skills are accessible only to the author", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
+    await makeMember(author.id, org.id);
     const other = await makeUser();
+    await makeMember(other.id, org.id);
     const skill = await seedSkill({
       organizationId: org.id,
       name: "personal-skill",
-      scope: "personal",
       authorId: author.id,
     });
 
@@ -206,7 +306,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: author.id,
         skill,
-        isSkillAdmin: false,
       }),
     ).toBe(true);
     expect(
@@ -214,37 +313,29 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: other.id,
         skill,
-        isSkillAdmin: false,
       }),
     ).toBe(false);
-    // admins bypass scope
-    expect(
-      await SkillTeamModel.userHasSkillAccess({
-        organizationId: org.id,
-        userId: other.id,
-        skill,
-        isSkillAdmin: true,
-      }),
-    ).toBe(true);
   });
 
   test("team skills are accessible only to team members", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
     makeTeamMember,
   }) => {
     const org = await makeOrganization();
     const member = await makeUser();
+    await makeMember(member.id, org.id);
     const outsider = await makeUser();
+    await makeMember(outsider.id, org.id);
     const team = await makeTeam(org.id, member.id);
     await makeTeamMember(team.id, member.id);
 
     const skill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
 
     expect(
@@ -252,7 +343,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: member.id,
         skill,
-        isSkillAdmin: false,
       }),
     ).toBe(true);
     expect(
@@ -260,7 +350,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: org.id,
         userId: outsider.id,
         skill,
-        isSkillAdmin: false,
       }),
     ).toBe(false);
   });
@@ -268,14 +357,16 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
   test("a skill from another organization is never accessible", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const orgA = await makeOrganization();
     const orgB = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, orgA.id);
     const orgSkillA = await seedSkill({
       organizationId: orgA.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
 
     // an org-scoped skill is open within its org but never cross-org, even
@@ -285,7 +376,6 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         organizationId: orgB.id,
         userId: user.id,
         skill: orgSkillA,
-        isSkillAdmin: true,
       }),
     ).toBe(false);
   });
@@ -293,49 +383,46 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
   test("without a userId only org-scoped skills are accessible", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
+    await makeMember(author.id, org.id);
     const team = await makeTeam(org.id, author.id);
 
     const orgSkill = await seedSkill({
       organizationId: org.id,
       name: "org-skill",
-      scope: "org",
+      access: "org",
     });
     const personalSkill = await seedSkill({
       organizationId: org.id,
       name: "personal-skill",
-      scope: "personal",
       authorId: author.id,
     });
     const teamSkill = await seedSkill({
       organizationId: org.id,
       name: "team-skill",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
 
     expect(
       await SkillTeamModel.userHasSkillAccess({
         organizationId: org.id,
         skill: orgSkill,
-        isSkillAdmin: false,
       }),
     ).toBe(true);
     expect(
       await SkillTeamModel.userHasSkillAccess({
         organizationId: org.id,
         skill: personalSkill,
-        isSkillAdmin: false,
       }),
     ).toBe(false);
     expect(
       await SkillTeamModel.userHasSkillAccess({
         organizationId: org.id,
         skill: teamSkill,
-        isSkillAdmin: false,
       }),
     ).toBe(false);
   });

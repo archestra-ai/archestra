@@ -1,5 +1,5 @@
 import { and, asc, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
   Environment,
@@ -8,6 +8,7 @@ import type {
   TrustedImageRegistries,
 } from "@/types";
 import { EnvironmentLabelModel } from "./entity-labels";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 // === Public API ===
 
@@ -18,7 +19,6 @@ interface EnvironmentWithAssignedCount {
   description: string | null;
   namespace: string | null;
   networkPolicy: NetworkPolicy | null;
-  restricted: boolean;
   validationRegex: string | null;
   trustedImageRegistries: TrustedImageRegistries | null;
   sortOrder: number;
@@ -53,7 +53,6 @@ class EnvironmentModel {
         description: schema.environmentsTable.description,
         namespace: schema.environmentsTable.namespace,
         networkPolicy: schema.environmentsTable.networkPolicy,
-        restricted: schema.environmentsTable.restricted,
         validationRegex: schema.environmentsTable.validationRegex,
         trustedImageRegistries: schema.environmentsTable.trustedImageRegistries,
         sortOrder: schema.environmentsTable.sortOrder,
@@ -141,9 +140,10 @@ class EnvironmentModel {
     description?: string | null;
     namespace?: string | null;
     networkPolicy?: NetworkPolicy | null;
-    restricted?: boolean;
     validationRegex?: string | null;
     trustedImageRegistries?: TrustedImageRegistries | null;
+    /** The creator, who gets full access. */
+    authorId?: string | null;
   }): Promise<typeof schema.environmentsTable.$inferSelect> {
     const {
       organizationId,
@@ -151,25 +151,40 @@ class EnvironmentModel {
       description,
       namespace,
       networkPolicy,
-      restricted,
       validationRegex,
       trustedImageRegistries,
     } = params;
-    const [row] = await db
-      .insert(schema.environmentsTable)
-      .values({
+    const sortOrder = await EnvironmentModel.nextSortOrder(organizationId);
+    return withDbTransaction(async (tx) => {
+      const [row] = await tx
+        .insert(schema.environmentsTable)
+        .values({
+          organizationId,
+          name,
+          description: description ?? null,
+          namespace: namespace ?? null,
+          networkPolicy: networkPolicy ?? null,
+          validationRegex: validationRegex ?? null,
+          trustedImageRegistries: trustedImageRegistries ?? null,
+          sortOrder,
+        })
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // A new environment is open to anyone who can create what is deployed
+      // into it, as environments always were. Its Permissions tab narrows it.
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
         organizationId,
-        name,
-        description: description ?? null,
-        namespace: namespace ?? null,
-        networkPolicy: networkPolicy ?? null,
-        restricted: restricted ?? false,
-        validationRegex: validationRegex ?? null,
-        trustedImageRegistries: trustedImageRegistries ?? null,
-        sortOrder: await EnvironmentModel.nextSortOrder(organizationId),
-      })
-      .returning();
-    return row;
+        resource: "environment",
+        scope: row.id,
+        authorId: params.authorId ?? null,
+        publishToOrganization: true,
+      });
+      // SPDX-SnippetEnd
+      return row;
+    });
   }
 
   static async update(params: {
@@ -179,7 +194,6 @@ class EnvironmentModel {
     description?: string | null;
     namespace?: string | null;
     networkPolicy?: NetworkPolicy | null;
-    restricted?: boolean;
     validationRegex?: string | null;
     trustedImageRegistries?: TrustedImageRegistries | null;
   }): Promise<typeof schema.environmentsTable.$inferSelect | null> {
@@ -190,7 +204,6 @@ class EnvironmentModel {
       description,
       namespace,
       networkPolicy,
-      restricted,
       validationRegex,
       trustedImageRegistries,
     } = params;
@@ -199,7 +212,6 @@ class EnvironmentModel {
     if (description !== undefined) patch.description = description;
     if (namespace !== undefined) patch.namespace = namespace;
     if (networkPolicy !== undefined) patch.networkPolicy = networkPolicy;
-    if (restricted !== undefined) patch.restricted = restricted;
     if (validationRegex !== undefined) patch.validationRegex = validationRegex;
     if (trustedImageRegistries !== undefined)
       patch.trustedImageRegistries = trustedImageRegistries;

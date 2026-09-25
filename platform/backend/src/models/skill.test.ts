@@ -19,7 +19,7 @@ import {
   hasPublishableFilePathSet,
   isPublishableSkillFilePath,
 } from "@/skills/validation";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import type { InsertSkill, Skill } from "@/types";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { drainBackgroundWork } from "@/utils/background-work";
@@ -33,7 +33,6 @@ function skillInput(overrides: Partial<InsertSkill>): InsertSkill {
     content: "# body",
     metadata: {},
     sourceType: "manual",
-    scope: "personal" as ResourceVisibilityScope,
     ...overrides,
   };
 }
@@ -58,7 +57,7 @@ async function agentBindingCounts(skillId: string) {
   };
 }
 
-describe("SkillModel name uniqueness by scope", () => {
+describe("SkillModel name uniqueness per author", () => {
   test("two users can each own a personal skill with the same name", async ({
     makeOrganization,
     makeUser,
@@ -72,7 +71,6 @@ describe("SkillModel name uniqueness by scope", () => {
         organizationId: org.id,
         authorId: userA.id,
         name: "notes",
-        scope: "personal",
       }),
       files: [],
     });
@@ -81,7 +79,6 @@ describe("SkillModel name uniqueness by scope", () => {
         organizationId: org.id,
         authorId: userB.id,
         name: "notes",
-        scope: "personal",
       }),
       files: [],
     });
@@ -102,7 +99,6 @@ describe("SkillModel name uniqueness by scope", () => {
         organizationId: org.id,
         authorId: author.id,
         name: "notes",
-        scope: "personal",
       }),
       files: [],
     });
@@ -111,7 +107,6 @@ describe("SkillModel name uniqueness by scope", () => {
         organizationId: org.id,
         authorId: author.id,
         name: "notes",
-        scope: "personal",
       }),
       files: [],
     });
@@ -120,7 +115,10 @@ describe("SkillModel name uniqueness by scope", () => {
     expect(second).toBeNull();
   });
 
-  test("a shared (org) name is unique across the organization", async ({
+  // Names were unique per org among shared skills. A name is now unique per
+  // author, whoever the skill is shared with: the author segment of its
+  // `skill://` URI makes the address unique.
+  test("two authors can each share a skill with the same name", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -133,25 +131,25 @@ describe("SkillModel name uniqueness by scope", () => {
         organizationId: org.id,
         authorId: userA.id,
         name: "shared",
-        scope: "org",
       }),
       files: [],
+      ...accessGrants("org"),
     });
     const b = await SkillModel.createWithFiles({
       skill: skillInput({
         organizationId: org.id,
         authorId: userB.id,
         name: "shared",
-        scope: "org",
       }),
       files: [],
+      ...accessGrants("org"),
     });
 
     expect(a).not.toBeNull();
-    expect(b).toBeNull();
+    expect(b).not.toBeNull();
   });
 
-  test("a personal name and a shared name can coexist", async ({
+  test("one author cannot hold a personal and a shared skill of the same name", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -163,7 +161,6 @@ describe("SkillModel name uniqueness by scope", () => {
         organizationId: org.id,
         authorId: author.id,
         name: "dup",
-        scope: "personal",
       }),
       files: [],
     });
@@ -172,13 +169,13 @@ describe("SkillModel name uniqueness by scope", () => {
         organizationId: org.id,
         authorId: author.id,
         name: "dup",
-        scope: "org",
       }),
       files: [],
+      ...accessGrants("org"),
     });
 
     expect(personal).not.toBeNull();
-    expect(org_).not.toBeNull();
+    expect(org_).toBeNull();
   });
 });
 
@@ -195,7 +192,6 @@ describe("SkillModel.updateWithFiles team sync atomicity", () => {
         organizationId: org.id,
         authorId: author.id,
         name: "to-promote",
-        scope: "personal",
       }),
       files: [],
     });
@@ -229,7 +225,6 @@ describe("SkillModel.findImportNameCollisions", () => {
         organizationId: org.id,
         authorId: owner.id,
         name: "notes",
-        scope: "personal",
       }),
       files: [],
     });
@@ -255,7 +250,6 @@ describe("SkillModel.findImportNameCollisions", () => {
         organizationId: org.id,
         authorId: importer.id,
         name: "notes",
-        scope: "personal",
       }),
       files: [],
     });
@@ -269,7 +263,7 @@ describe("SkillModel.findImportNameCollisions", () => {
     expect(collisions.has("notes")).toBe(true);
   });
 
-  test("a shared (org) skill is a collision regardless of who owns it", async ({
+  test("another author's shared skill of the same name is not a collision", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -282,9 +276,9 @@ describe("SkillModel.findImportNameCollisions", () => {
         organizationId: org.id,
         authorId: owner.id,
         name: "shared",
-        scope: "org",
       }),
       files: [],
+      ...accessGrants("org"),
     });
 
     const collisions = await SkillModel.findImportNameCollisions({
@@ -293,7 +287,7 @@ describe("SkillModel.findImportNameCollisions", () => {
       names: ["shared"],
     });
 
-    expect(collisions.has("shared")).toBe(true);
+    expect(collisions.has("shared")).toBe(false);
   });
 });
 
@@ -871,9 +865,9 @@ describe("SkillModel soft delete", () => {
       skill: skillInput({
         organizationId: org.id,
         name: "notes",
-        scope: "org",
       }),
       files: [],
+      ...accessGrants("org"),
     });
     if (!first) throw new Error("seed failed");
     await SkillModel.delete(first.id);
@@ -891,9 +885,9 @@ describe("SkillModel soft delete", () => {
       skill: skillInput({
         organizationId: org.id,
         name: "notes",
-        scope: "org",
       }),
       files: [],
+      ...accessGrants("org"),
     });
     expect(second).not.toBeNull();
   });
@@ -973,63 +967,74 @@ describe("SkillModel restore + status filter", () => {
     expect(await SkillModel.findDeletedById(skill.id, "other-org")).toBeNull();
   });
 
-  test("getRestoreConflictMessage flags a reclaimed name for shared and personal scopes", async ({
+  test("getRestoreConflictMessage flags a name the same author reclaimed", async ({
     makeOrganization,
     makeUser,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
+    const other = await makeUser();
 
-    // shared (org/team) name reclaimed by another active shared skill
-    const shared = await SkillModel.createWithFiles({
-      skill: skillInput({ organizationId: org.id, name: "dup", scope: "org" }),
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "mine",
+        authorId: author.id,
+      }),
       files: [],
+      ...accessGrants("org"),
     });
-    if (!shared) throw new Error("seed failed");
-    await SkillModel.delete(shared.id);
-    const sharedDeleted = await SkillModel.findDeletedById(shared.id, org.id);
-    if (!sharedDeleted) throw new Error("deleted lookup failed");
+    if (!skill) throw new Error("seed failed");
+    await SkillModel.delete(skill.id);
+    const deleted = await SkillModel.findDeletedById(skill.id, org.id);
+    if (!deleted) throw new Error("deleted lookup failed");
     // nothing has taken the name yet
-    expect(
-      await SkillModel.getRestoreConflictMessage(sharedDeleted),
-    ).toBeNull();
+    expect(await SkillModel.getRestoreConflictMessage(deleted)).toBeNull();
+
+    // Another author taking the name is no conflict.
     await SkillModel.createWithFiles({
-      skill: skillInput({ organizationId: org.id, name: "dup", scope: "team" }),
+      skill: skillInput({
+        organizationId: org.id,
+        name: "mine",
+        authorId: other.id,
+      }),
+      files: [],
+      ...accessGrants("org"),
+    });
+    expect(await SkillModel.getRestoreConflictMessage(deleted)).toBeNull();
+
+    // The same author taking it again is, whatever the audience.
+    await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "mine",
+        authorId: author.id,
+      }),
       files: [],
     });
-    expect(await SkillModel.getRestoreConflictMessage(sharedDeleted)).toContain(
-      "shared skill",
+    expect(await SkillModel.getRestoreConflictMessage(deleted)).toContain(
+      "same author",
     );
 
-    // personal name reclaimed by the same author
-    const personal = await SkillModel.createWithFiles({
-      skill: skillInput({
-        organizationId: org.id,
-        name: "mine",
-        scope: "personal",
-        authorId: author.id,
-      }),
+    // A skill with no author (a built-in) is unconstrained, so it never
+    // conflicts on restore.
+    const builtIn = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "free" }),
       files: [],
+      ...accessGrants("org"),
     });
-    if (!personal) throw new Error("seed failed");
-    await SkillModel.delete(personal.id);
-    const personalDeleted = await SkillModel.findDeletedById(
-      personal.id,
-      org.id,
-    );
-    if (!personalDeleted) throw new Error("deleted lookup failed");
+    if (!builtIn) throw new Error("seed failed");
+    await SkillModel.delete(builtIn.id);
     await SkillModel.createWithFiles({
-      skill: skillInput({
-        organizationId: org.id,
-        name: "mine",
-        scope: "personal",
-        authorId: author.id,
-      }),
+      skill: skillInput({ organizationId: org.id, name: "free" }),
       files: [],
+      ...accessGrants("org"),
     });
+    const builtInDeleted = await SkillModel.findDeletedById(builtIn.id, org.id);
+    if (!builtInDeleted) throw new Error("deleted lookup failed");
     expect(
-      await SkillModel.getRestoreConflictMessage(personalDeleted),
-    ).toContain("personal skill");
+      await SkillModel.getRestoreConflictMessage(builtInDeleted),
+    ).toBeNull();
   });
 
   test("status=deleted lists only the trash and never leaks into source repos", async ({
@@ -1040,19 +1045,19 @@ describe("SkillModel restore + status filter", () => {
       skill: skillInput({
         organizationId: org.id,
         name: "kept",
-        scope: "org",
         sourceRef: "acme/kept@main:SKILL.md",
       }),
       files: [],
+      ...accessGrants("org"),
     });
     const trashed = await SkillModel.createWithFiles({
       skill: skillInput({
         organizationId: org.id,
         name: "gone",
-        scope: "org",
         sourceRef: "acme/gone@main:SKILL.md",
       }),
       files: [],
+      ...accessGrants("org"),
     });
     if (!active || !trashed) throw new Error("seed failed");
     await SkillModel.delete(trashed.id);
@@ -1363,11 +1368,11 @@ describe("publishable file paths: SQL and TypeScript agree", () => {
         skill: skillInput({
           organizationId: org.id,
           name: `path-case-${String(index).padStart(2, "0")}`,
-          scope: "org",
         }),
         files: [
           { path, content: "x", kind: "reference", encoding: "utf8" as const },
         ],
+        ...accessGrants("org"),
       });
       if (!skill) throw new Error(`seed failed for ${JSON.stringify(path)}`);
       byPath.set(path, skill.id);
@@ -1433,8 +1438,9 @@ describe("spec-compliant skill names: SQL and TypeScript agree", () => {
 
     for (const name of NAMES) {
       const skill = await SkillModel.createWithFiles({
-        skill: skillInput({ organizationId: org.id, name, scope: "org" }),
+        skill: skillInput({ organizationId: org.id, name }),
         files: [],
+        ...accessGrants("org"),
       });
       if (!skill) throw new Error(`seed failed for ${JSON.stringify(name)}`);
       byName.set(name, skill.id);
@@ -1509,9 +1515,9 @@ describe("spec-compliant skill field lengths: SQL and TypeScript agree", () => {
           organizationId: org.id,
           name: `desc-${rows.length}`,
           description,
-          scope: "org",
         }),
         files: [],
+        ...accessGrants("org"),
       });
       if (!skill) throw new Error("seed failed for a description shape");
       rows.push({
@@ -1526,9 +1532,9 @@ describe("spec-compliant skill field lengths: SQL and TypeScript agree", () => {
           organizationId: org.id,
           name: `compat-${rows.length}`,
           compatibility,
-          scope: "org",
         }),
         files: [],
+        ...accessGrants("org"),
       });
       if (!skill) throw new Error("seed failed for a compatibility shape");
       rows.push({
@@ -1595,7 +1601,6 @@ describe("colliding file paths: SQL and TypeScript agree", () => {
         skill: skillInput({
           organizationId: org.id,
           name: `collide-case-${String(index).padStart(2, "0")}`,
-          scope: "org",
         }),
         files: paths.map((path) => ({
           path,
@@ -1603,6 +1608,7 @@ describe("colliding file paths: SQL and TypeScript agree", () => {
           kind: "reference" as const,
           encoding: "utf8" as const,
         })),
+        ...accessGrants("org"),
       });
       if (!skill) throw new Error(`seed failed for set ${index}`);
       bySet.set(index, skill.id);

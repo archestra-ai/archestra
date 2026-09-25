@@ -133,7 +133,6 @@ export function ProviderAuthRequiredCard({
                   name: label,
                   provider,
                   apiKey: secret,
-                  scope: "personal",
                 });
               }
               toast.success(

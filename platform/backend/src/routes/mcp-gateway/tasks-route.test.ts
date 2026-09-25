@@ -60,8 +60,8 @@ describe("MCP Gateway - Tasks extension", () => {
     makeTool: (a: object) => Promise<{ id: string }>;
     makeAgentTool: (a: string, b: string) => Promise<unknown>;
   }) {
-    const agent = await fixtures.makeAgent();
     const org = await fixtures.makeOrganization();
+    const agent = await fixtures.makeAgent({ organizationId: org.id });
     const token = await TeamTokenModel.create({
       organizationId: org.id,
       name: "Org Token",

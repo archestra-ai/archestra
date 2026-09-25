@@ -9,7 +9,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/organization.query");
 
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
@@ -28,7 +28,7 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
   baseUrl: null,
   inferenceBaseUrl: null,
   extraHeaders: [],
-  scope: "personal",
+  shared: false,
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
@@ -82,6 +82,9 @@ function renderForm(
 }
 
 beforeEach(() => {
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as unknown as ReturnType<typeof useSession>);
   vi.clearAllMocks();
   vi.mocked(useFeature).mockReturnValue(false);
   vi.mocked(useProviderBaseUrls).mockReturnValue({
@@ -102,23 +105,24 @@ beforeEach(() => {
 });
 
 describe("LlmProviderApiKeyForm dirty tracking", () => {
-  // The unsaved-changes guard keys off formState.isDirty; the scope selector
-  // updates the form via setValue, which only marks dirty when shouldDirty is
-  // passed — otherwise the guard never fires for a scope change.
-  it("marks the form dirty when the scope changes", async () => {
+  it("marks permission changes dirty so closing cannot silently discard them", async () => {
     const user = userEvent.setup();
-    renderForm();
-
-    expect(screen.getByTestId("is-dirty")).toHaveTextContent("false");
-
-    // The scope selector is collapsed to the current choice ("Personal");
-    // expand it, then pick "Organization" — that change must dirty the form.
-    await user.click(screen.getByRole("button", { name: /personal/i }));
-    await user.click(screen.getByRole("button", { name: /organization/i }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-dirty")).toHaveTextContent("true");
+    renderForm({
+      shared: true,
+      initialGrants: [
+        {
+          subject: { type: "team", id: "support" },
+          name: "Support",
+          actions: ["read"],
+        },
+      ],
     });
+    expect(screen.getByTestId("is-dirty")).toHaveTextContent("false");
+    await user.click(
+      screen.getByRole("button", { name: "Remove access for Support" }),
+    );
+    expect(screen.getByTestId("is-dirty")).toHaveTextContent("true");
+    expect(form.getValues("initialGrants")).toEqual([]);
   });
 
   // The transport tabs write `provider` without shouldDirty on purpose: they

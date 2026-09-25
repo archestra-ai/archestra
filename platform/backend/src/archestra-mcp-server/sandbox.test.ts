@@ -33,6 +33,7 @@ import { fileStore } from "@/skills-sandbox/file-store";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { SkillSandboxError } from "@/skills-sandbox/types";
 import {
+  accessGrants,
   afterAll,
   afterEach,
   beforeEach,
@@ -1467,9 +1468,9 @@ describe("sandbox tools (runtime enabled)", () => {
             content: "# doomed",
             metadata: {},
             sourceType: "manual",
-            scope: "org",
           },
           files: [],
+          ...accessGrants("org"),
         });
         if (!skill) throw new Error("skill seed failed");
         const v1 = await SkillVersionModel.findBySkillAndVersion(skill.id, 1);
@@ -2271,11 +2272,15 @@ describe("project file scope (save_file, scoped search/my_file)", () => {
         projectId: theirs.id,
         content: "secret rules",
       });
+      // The admin role holds Full on every project, so read as a plain member.
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: "member" });
+      const memberContext = { ...context, userId: member.id };
 
       const result = await executeArchestraTool(
         TOOL_READ_FILE_FULL_NAME,
         { filename: PROJECT_INSTRUCTIONS_FILENAME, project_id: theirs.id },
-        context,
+        memberContext,
       );
 
       expect(result.isError).toBe(true);
@@ -2285,7 +2290,7 @@ describe("project file scope (save_file, scoped search/my_file)", () => {
       const missing = await executeArchestraTool(
         TOOL_READ_FILE_FULL_NAME,
         { filename: PROJECT_INSTRUCTIONS_FILENAME, project_id: missingId },
-        context,
+        memberContext,
       );
       expect(textOf(missing).replace(missingId, "<id>")).toBe(
         textOf(result).replace(theirs.id, "<id>"),

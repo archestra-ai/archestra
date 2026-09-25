@@ -86,24 +86,6 @@ class ModelUserModel {
     return match !== undefined;
   }
 
-  /** The model ids, of those given, this user holds a grant on. */
-  static async filterGrantedIds(
-    modelIds: string[],
-    userId: string,
-  ): Promise<Set<string>> {
-    if (modelIds.length === 0) return new Set();
-    const rows = await db
-      .select({ id: schema.modelUsersTable.modelId })
-      .from(schema.modelUsersTable)
-      .where(
-        and(
-          inArray(schema.modelUsersTable.modelId, modelIds),
-          eq(schema.modelUsersTable.userId, userId),
-        ),
-      );
-    return new Set(rows.map((row) => row.id));
-  }
-
   /** Grantee details for several models in one query (no N+1). */
   static async getUserDetailsForModels(
     modelIds: string[],

@@ -101,6 +101,57 @@ export function makeAgentCatalog({
   };
 }
 
+export function makeExternalAgent(
+  overrides: Partial<ExternalAgent> = {},
+): ExternalAgent {
+  return {
+    id: "external-agent",
+    organizationId: "org-1",
+    name: "Partner Agent",
+    description: "Delegates work to a partner system",
+    discoveryMode: "well_known",
+    discoveryUrl: "https://agent.example.com",
+    agentCard: { name: "Partner Agent" },
+    cardHash: "card-hash",
+    lastDiscoveredAt: "2026-09-08T12:00:00.000Z",
+    createdAt: "2026-09-08T12:00:00.000Z",
+    updatedAt: "2026-09-08T12:00:00.000Z",
+    scope: "org",
+    authorId: "user-1",
+    createdByServiceAccountId: null,
+    authorName: "Test User",
+    createdBy: {
+      id: "user-1",
+      type: "user",
+      name: "Test User",
+      email: "test@example.com",
+    },
+    teams: [],
+    users: [],
+    connection: {
+      id: "connection-1",
+      remoteAgentId: "external-agent",
+      selectedInterface: {
+        url: "https://agent.example.com/a2a",
+        protocolBinding: "JSONRPC",
+        protocolVersion: "1.0",
+      },
+      securityRequirement: null,
+      authType: "none",
+      authConfig: {},
+      enabled: true,
+      lastVerifiedAt: "2026-09-08T12:00:00.000Z",
+      createdAt: "2026-09-08T12:00:00.000Z",
+      updatedAt: "2026-09-08T12:00:00.000Z",
+      hasCredential: false,
+    },
+    toolId: "tool-1",
+    assignmentCount: 1,
+    lastUsedAt: null,
+    ...overrides,
+  };
+}
+
 export const agentsSeed = makeAgentsList();
 
 function makePagination(

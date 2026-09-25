@@ -8,7 +8,6 @@ import {
   TaskModel,
 } from "@/models";
 import { taskQueueService } from "@/task-queue";
-import type { KnowledgeSourceVisibility } from "@/types";
 
 /**
  * Shared update side-effects for a connector that syncs permissions, so the
@@ -37,8 +36,8 @@ import type { KnowledgeSourceVisibility } from "@/types";
  */
 export async function supersedePermissionSyncAfterSettingsChange(params: {
   connectorId: string;
-  /** Visibility AFTER the update: a connector switched away syncs no more. */
-  visibility: KnowledgeSourceVisibility;
+  /** The permission-sync switch AFTER the update: switched off, it syncs no more. */
+  syncPermissionsFromSource: boolean;
   /** Enabled state AFTER the update; a disabled connector syncs no more. */
   enabled: boolean;
 }): Promise<void> {
@@ -69,7 +68,7 @@ export async function supersedePermissionSyncAfterSettingsChange(params: {
   // replacement pass — only the stop above. Its shim goes with it, so a pass
   // queued here would find no pod and fail for a connector nobody is waiting
   // on.
-  if (params.visibility !== "auto-sync-permissions" || !params.enabled) return;
+  if (!params.syncPermissionsFromSource || !params.enabled) return;
 
   // De-duplicated like every other permission-sync trigger: a burst of edits
   // queues one pass, and it reads the settings current when it runs.

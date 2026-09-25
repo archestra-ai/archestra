@@ -1,25 +1,18 @@
+import { randomUUID } from "node:crypto";
 import {
   parseLabelsParam,
-  ResourceVisibilityScopeSchema,
+  ResourcePermissionGrantSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  assertOauthClientTeams,
-  authorizeOauthClientCreateScope,
-  getOauthClientPermissionChecker,
-  type OauthClientPermissionChecker,
-  requireOauthClientModifyPermission,
-  resolveOauthClientScopeUpdate,
-  withOauthClientTeamFkErrorMapped,
-} from "@/auth/oauth-client-permissions";
+import { requireOauthClientAccess } from "@/auth/oauth-client-permissions";
 import {
   AgentModel,
   McpOauthClientModel,
   OauthClientLabelModel,
-  TeamModel,
 } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   constructResponseSchema,
@@ -28,7 +21,6 @@ import {
   McpOauthClientSchema,
   McpOauthClientWithSecretSchema,
 } from "@/types";
-import type { McpOauthClient } from "@/types/mcp-oauth-client";
 import { registerEntityLabelRoutes } from "./entity-labels";
 
 /**
@@ -41,18 +33,15 @@ import { registerEntityLabelRoutes } from "./entity-labels";
  *   authenticate through the client may reach those gateways on top of their own
  *   RBAC. Empty means pure identity passthrough.
  *
- * `scope`/`teams` control who can see and manage the client (3-tier visibility
- * like agents), not what its tokens can reach at runtime. Create defaults to
- * `personal`; on update, omitted values leave the current scope/teams untouched.
+ * Who can see and manage the client is its grants, edited on its Permissions
+ * tab; nothing here decides what its tokens can reach beyond the gateways.
  */
-const McpOauthClientBodySchema = z
+const McpOauthClientFields = z
   .object({
     name: z.string().min(1).max(256),
     grantType: McpOauthClientGrantTypeSchema.default("client_credentials"),
     allowedGatewayIds: z.array(z.string().uuid()).optional(),
     redirectUris: z.array(z.string().url()).optional(),
-    scope: ResourceVisibilityScopeSchema.optional(),
-    teams: z.array(z.string()).optional(),
     labels: z
       .array(LabelWithDetailsSchema)
       .optional()
@@ -61,31 +50,47 @@ const McpOauthClientBodySchema = z
           "to clear them.",
       ),
   })
-  .superRefine((value, ctx) => {
-    if (value.grantType === "authorization_code") {
-      if (!value.redirectUris || value.redirectUris.length === 0) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["redirectUris"],
-          message:
-            "At least one redirect URI is required for authorization_code clients",
-        });
-      }
-    } else if (
-      !value.allowedGatewayIds ||
-      value.allowedGatewayIds.length === 0
-    ) {
+  .strict();
+
+const validateMcpOauthClientBody = (
+  value: z.infer<typeof McpOauthClientFields>,
+  ctx: z.RefinementCtx,
+) => {
+  if (value.grantType === "authorization_code") {
+    if (!value.redirectUris || value.redirectUris.length === 0) {
       ctx.addIssue({
         code: "custom",
-        path: ["allowedGatewayIds"],
+        path: ["redirectUris"],
         message:
-          "At least one gateway is required for client_credentials clients",
+          "At least one redirect URI is required for authorization_code clients",
       });
     }
-  });
+  } else if (!value.allowedGatewayIds || value.allowedGatewayIds.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["allowedGatewayIds"],
+      message:
+        "At least one gateway is required for client_credentials clients",
+    });
+  }
+};
 
-const CreateMcpOauthClientBodySchema = McpOauthClientBodySchema;
-const UpdateMcpOauthClientBodySchema = McpOauthClientBodySchema;
+const CreateMcpOauthClientBodySchema = McpOauthClientFields.extend({
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  initialGrants: z
+    .array(ResourcePermissionGrantSchema)
+    .max(200)
+    .optional()
+    .describe(
+      "Who else starts with access, beside the creator who always gets full access.",
+    ),
+  // SPDX-SnippetEnd
+}).superRefine(validateMcpOauthClientBody);
+const UpdateMcpOauthClientBodySchema = McpOauthClientFields.superRefine(
+  validateMcpOauthClientBody,
+);
 
 const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   registerEntityLabelRoutes(fastify, {
@@ -117,16 +122,11 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId, query }, reply) => {
-      const checker = await getOauthClientPermissionChecker({
-        userId: user.id,
-        organizationId,
-        resource: "mcpOauthClient",
-      });
       const oauthClients = await McpOauthClientModel.findAllByOrganization({
         organizationId,
         search: query.search,
         labels: parseLabelsParam(query.labels),
-        viewer: { userId: user.id, isAdmin: checker.isAdmin },
+        viewer: { userId: user.id },
       });
       return reply.send(oauthClients);
     },
@@ -145,25 +145,23 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, user, organizationId }, reply) => {
-      const checker = await getOauthClientPermissionChecker({
-        userId: user.id,
-        organizationId,
-        resource: "mcpOauthClient",
-      });
-      const scope = body.scope ?? "personal";
-      const requestedTeams = body.teams ?? [];
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      authorizeOauthClientCreateScope({
-        checker,
-        scope,
-        teamIds: requestedTeams,
-        userTeamIds,
-      });
-      // Omit teams if scope is not 'team' — scope takes precedence
-      const teams = scope === "team" ? requestedTeams : [];
-      await assertOauthClientTeams({ scope, teamIds: teams, organizationId });
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "mcpOauthClient",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: user.id,
+          },
+        });
+        // SPDX-SnippetEnd
+      }
 
       if (body.allowedGatewayIds && body.allowedGatewayIds.length > 0) {
         await validateMcpOauthClientConfig({
@@ -171,19 +169,15 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           allowedGatewayIds: body.allowedGatewayIds,
         });
       }
-      const { oauthClient, clientSecret } =
-        await withOauthClientTeamFkErrorMapped(() =>
-          McpOauthClientModel.create({
-            organizationId,
-            name: body.name,
-            grantType: body.grantType,
-            allowedGatewayIds: body.allowedGatewayIds,
-            redirectUris: body.redirectUris,
-            scope,
-            teams,
-            authorId: user.id,
-          }),
-        );
+      const { oauthClient, clientSecret } = await McpOauthClientModel.create({
+        organizationId,
+        name: body.name,
+        grantType: body.grantType,
+        allowedGatewayIds: body.allowedGatewayIds,
+        redirectUris: body.redirectUris,
+        authorId: user.id,
+        initialGrants: body.initialGrants,
+      });
       if (body.labels?.length) {
         await OauthClientLabelModel.syncLabels(oauthClient.id, body.labels);
       }
@@ -208,33 +202,12 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, body, user, organizationId }, reply) => {
-      const { existing, checker, userTeamIds } =
-        await authorizeMcpOauthClientModify({
-          id: params.id,
-          userId: user.id,
-          organizationId,
-        });
-
-      const resolvedTeams = resolveOauthClientScopeUpdate({
-        checker,
-        existingScope: existing.scope,
-        existingTeamIds: existing.teams.map((team) => team.id),
-        requestedScope: body.scope,
-        requestedTeamIds: body.teams,
-        userTeamIds,
-      });
-      // Omit teams if the final scope is not 'team' — scope takes precedence
-      const finalScope = body.scope ?? existing.scope;
-      const teams =
-        finalScope === "team"
-          ? resolvedTeams
-          : resolvedTeams !== undefined
-            ? []
-            : undefined;
-      await assertOauthClientTeams({
-        scope: finalScope,
-        teamIds: teams ?? existing.teams.map((team) => team.id),
+      await requireOauthClientAccess({
         organizationId,
+        userId: user.id,
+        resource: "mcpOauthClient",
+        id: params.id,
+        action: "update",
       });
 
       if (body.allowedGatewayIds && body.allowedGatewayIds.length > 0) {
@@ -243,17 +216,13 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           allowedGatewayIds: body.allowedGatewayIds,
         });
       }
-      const oauthClient = await withOauthClientTeamFkErrorMapped(() =>
-        McpOauthClientModel.update({
-          id: params.id,
-          organizationId,
-          name: body.name,
-          allowedGatewayIds: body.allowedGatewayIds,
-          redirectUris: body.redirectUris,
-          scope: body.scope,
-          teams,
-        }),
-      );
+      const oauthClient = await McpOauthClientModel.update({
+        id: params.id,
+        organizationId,
+        name: body.name,
+        allowedGatewayIds: body.allowedGatewayIds,
+        redirectUris: body.redirectUris,
+      });
       if (!oauthClient) {
         throw new ApiError(404, "MCP OAuth client not found");
       }
@@ -282,10 +251,12 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, user, organizationId }, reply) => {
-      await authorizeMcpOauthClientModify({
-        id: params.id,
-        userId: user.id,
+      await requireOauthClientAccess({
         organizationId,
+        userId: user.id,
+        resource: "mcpOauthClient",
+        id: params.id,
+        action: "update",
       });
       const result = await McpOauthClientModel.rotateSecret({
         id: params.id,
@@ -313,10 +284,12 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, user, organizationId }, reply) => {
-      await authorizeMcpOauthClientModify({
-        id: params.id,
-        userId: user.id,
+      await requireOauthClientAccess({
         organizationId,
+        userId: user.id,
+        resource: "mcpOauthClient",
+        id: params.id,
+        action: "delete",
       });
       const success = await McpOauthClientModel.delete({
         id: params.id,
@@ -331,46 +304,6 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default mcpOauthClientsRoutes;
-
-/**
- * Load the client and enforce 3-tier scope authorization for
- * update/rotate-secret/delete. Returns the client plus the checker/team
- * context so update can run its scope-change validation without re-fetching.
- */
-async function authorizeMcpOauthClientModify(params: {
-  id: string;
-  userId: string;
-  organizationId: string;
-}): Promise<{
-  existing: McpOauthClient;
-  checker: OauthClientPermissionChecker;
-  userTeamIds: string[];
-}> {
-  const existing = await McpOauthClientModel.findById({
-    id: params.id,
-    organizationId: params.organizationId,
-  });
-  if (!existing) {
-    throw new ApiError(404, "MCP OAuth client not found");
-  }
-  const checker = await getOauthClientPermissionChecker({
-    userId: params.userId,
-    organizationId: params.organizationId,
-    resource: "mcpOauthClient",
-  });
-  const userTeamIds = checker.isAdmin
-    ? []
-    : await TeamModel.getUserTeamIds(params.userId);
-  requireOauthClientModifyPermission({
-    checker,
-    scope: existing.scope,
-    authorId: existing.authorId,
-    clientTeamIds: existing.teams.map((team) => team.id),
-    userTeamIds,
-    userId: params.userId,
-  });
-  return { existing, checker, userTeamIds };
-}
 
 async function validateMcpOauthClientConfig(params: {
   organizationId: string;

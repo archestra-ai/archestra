@@ -124,7 +124,7 @@ async function createConversation(params: {
 }): Promise<string> {
   const { request, makeApiRequest, createAgent, agentName } = params;
 
-  const agentResponse = await createAgent(request, agentName, "personal");
+  const agentResponse = await createAgent(request, agentName);
   const agent = (await agentResponse.json()) as { id: string };
 
   const conversationResponse = await makeApiRequest({

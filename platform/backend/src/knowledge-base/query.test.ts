@@ -225,7 +225,12 @@ describe("QueryService", () => {
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    // Chunk ACL tokens decide access only for a connector that syncs
+    // permissions from its source; any other connector is gated by its grant
+    // alone, which would make both documents visible.
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      syncPermissionsFromSource: true,
+    });
     setupEmbeddingConfig();
     setupSingleQueryExpansion();
 

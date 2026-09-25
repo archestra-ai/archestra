@@ -32,7 +32,7 @@ import { isAutoSyncPermissionsActive } from "./source-access-control";
 export async function enqueuePermissionSyncAfterContentSync(params: {
   connector: Pick<
     KnowledgeBaseConnector,
-    "id" | "visibility" | "connectorType"
+    "id" | "syncPermissionsFromSource" | "connectorType"
   >;
   documentsIngested: number;
 }): Promise<void> {
@@ -42,7 +42,7 @@ export async function enqueuePermissionSyncAfterContentSync(params: {
   // pass is ever enqueued, so existing auto-sync connectors go dormant
   // instead of syncing behind hidden or unlicensed UI.
   if (!isAutoSyncPermissionsActive()) return;
-  if (connector.visibility !== "auto-sync-permissions") return;
+  if (!connector.syncPermissionsFromSource) return;
   // Defensive: a connector type without permission-sync support has no pass to
   // run (the route also forbids auto-sync for such types).
   if (!getConnector(connector.connectorType).supportsPermissionSync) return;

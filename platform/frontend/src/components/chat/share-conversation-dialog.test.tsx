@@ -1,250 +1,112 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactElement, ReactNode } from "react";
-import { toast } from "sonner";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useSession } from "@/lib/auth/auth.query";
-import { useOrganizationMembers } from "@/lib/organization.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
+import { ShareAgentRunDialog } from "./share-agent-run-dialog";
 import { ShareConversationDialog } from "./share-conversation-dialog";
 
-const mockShareMutateAsync = vi.fn();
-const mockUnshareMutateAsync = vi.fn();
-const mockUseConversationShare = vi.fn<
-  () => {
-    data: {
-      id: string;
-      visibility: "organization" | "team" | "user";
-      teamIds: string[];
-      userIds: string[];
-    } | null;
-    isLoading: boolean;
-  }
->(() => ({
-  data: null,
-  isLoading: false,
-}));
+const origin = "http://localhost:9000";
+const scope = "11111111-1111-4111-8111-111111111111";
+const server = setupServer();
+beforeAll(() => {
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
+  Element.prototype.scrollIntoView = vi.fn();
+  archestraApiClient.setConfig({ baseUrl: origin });
+  server.listen({ onUnhandledRequest: "error" });
+});
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
-vi.mock("@/lib/chat/chat-share.query", () => ({
-  useConversationShare: () => mockUseConversationShare(),
-  useShareConversation: vi.fn(() => ({
-    mutateAsync: mockShareMutateAsync,
-    isPending: false,
-  })),
-  useUnshareConversation: vi.fn(() => ({
-    mutateAsync: mockUnshareMutateAsync,
-    isPending: false,
-  })),
-}));
-
-vi.mock("sonner");
-
-vi.mock("@/lib/auth/auth.query");
-
-vi.mock("@/lib/teams/team.query");
-
-vi.mock("@/lib/organization.query");
-
-vi.mock("@/components/ui/assignment-combobox", () => ({
-  AssignmentCombobox: ({
-    items,
-    selectedIds,
-    onToggle,
-  }: {
-    items: Array<{ id: string; name: string }>;
-    selectedIds: string[];
-    onToggle: (id: string) => void;
-  }) => (
-    <div>
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          aria-pressed={selectedIds.includes(item.id)}
-          onClick={() => onToggle(item.id)}
-        >
-          {item.name}
-        </button>
-      ))}
-    </div>
-  ),
-}));
-
-vi.mock("@/components/visibility-selector", () => ({
-  VisibilitySelector: ({
-    value,
-    options,
-    onValueChange,
-    children,
-  }: {
-    value: string;
-    options: Array<{ value: string; label: string }>;
-    onValueChange: (
-      value: "private" | "organization" | "team" | "user",
-    ) => void;
-    children?: ReactNode;
-  }) => (
-    <div>
-      <div>{value}</div>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() =>
-            onValueChange(
-              option.value as "private" | "organization" | "team" | "user",
-            )
-          }
-        >
-          {option.label}
-        </button>
-      ))}
-      {children}
-    </div>
-  ),
-}));
-
-/**
- * The dialog embeds the app-access notice, which reads the apps cache, so every
- * render needs a query client even when the test is only about visibility.
- */
-function renderDialog(ui: ReactElement) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+it.each([
+  "conversation",
+  "agentRun",
+] as const)("%s adds team access in one dialog and saves only session capabilities", async (resource) => {
+  const user = userEvent.setup();
+  const ownerGrant = {
+    subject: { type: "user", id: "owner" },
+    name: "Owner",
+    actions: ["read", "manage-permissions"],
+  };
+  let policy = {
+    resource,
+    scope,
+    name: "Review",
+    revision: 1,
+    grants: [ownerGrant],
+    inheritedGrants: [],
+    effectiveActions: ["read", "manage-permissions"],
+  };
+  let saved: unknown;
+  server.use(
+    http.get(`${origin}/api/resource-permissions/${resource}/${scope}`, () =>
+      HttpResponse.json(policy),
+    ),
+    http.get(
+      `${origin}/api/resource-permissions/${resource}/${scope}/subjects`,
+      () =>
+        HttpResponse.json([
+          { subject: { type: "team", id: "support" }, name: "Support" },
+        ]),
+    ),
+    http.put(
+      `${origin}/api/resource-permissions/${resource}/${scope}`,
+      async ({ request }) => {
+        saved = await request.json();
+        policy = { ...policy, revision: 2 };
+        return HttpResponse.json(policy);
+      },
+    ),
   );
-}
-
-describe("ShareConversationDialog", () => {
-  beforeEach(() => {
-    vi.mocked(useSession).mockReturnValue({
-      data: {
-        user: {
-          id: "current-user-id",
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      {resource === "conversation" ? (
+        <ShareConversationDialog
+          conversationId={scope}
+          appIds={["app-1"]}
+          open
+          onOpenChange={vi.fn()}
+        />
+      ) : (
+        <ShareAgentRunDialog taskId={scope} open onOpenChange={vi.fn()} />
+      )}
+    </QueryClientProvider>,
+  );
+  const dialog = screen.getByRole("dialog");
+  await screen.findByText("Owner");
+  if (resource === "conversation")
+    expect(
+      screen.getByText(/Apps in this chat have their own permissions/),
+    ).toBeVisible();
+  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
+  await user.click(screen.getByRole("button", { name: /Teams/ }));
+  await user.click(screen.getByRole("combobox", { name: "Add teams" }));
+  await user.click(await screen.findByRole("option", { name: /Support/ }));
+  expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
+  expect(screen.queryByText("Can edit")).not.toBeInTheDocument();
+  expect(screen.queryByText("Full access")).not.toBeInTheDocument();
+  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
+  await user.click(
+    within(dialog).getByRole("button", { name: "Save permissions" }),
+  );
+  await waitFor(() =>
+    expect(saved).toEqual({
+      revision: 1,
+      grants: [
+        {
+          subject: { type: "user", id: "owner" },
+          actions: ["read", "manage-permissions"],
         },
-      },
-    } as ReturnType<typeof useSession>);
-    vi.mocked(useTeams).mockReturnValue({
-      data: [{ id: "team-1", name: "Engineering" }],
-    } as unknown as ReturnType<typeof useTeams>);
-    vi.mocked(useOrganizationMembers).mockReturnValue({
-      data: [{ id: "user-1", name: "Taylor", email: "taylor@example.com" }],
-    } as unknown as ReturnType<typeof useOrganizationMembers>);
-    mockUseConversationShare.mockReturnValue({
-      data: null,
-      isLoading: false,
-    });
-    mockShareMutateAsync.mockReset();
-    mockShareMutateAsync.mockResolvedValue({
-      id: "share-1",
-      visibility: "organization",
-      teamIds: [],
-      userIds: [],
-    });
-    mockUnshareMutateAsync.mockReset();
-    vi.mocked(toast.success).mockReset();
-    Object.defineProperty(window, "location", {
-      value: { origin: "http://localhost:3000" },
-      configurable: true,
-    });
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText: vi.fn() },
-      configurable: true,
-    });
-  });
-
-  it("shares a conversation with selected teams", async () => {
-    const user = userEvent.setup();
-
-    renderDialog(
-      <ShareConversationDialog
-        conversationId="conv-1"
-        open
-        onOpenChange={() => {}}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: /Private/i }));
-    await user.click(screen.getByRole("button", { name: /Teams/i }));
-    await user.click(screen.getByRole("button", { name: "Engineering" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(mockShareMutateAsync).toHaveBeenCalledWith({
-      conversationId: "conv-1",
-      visibility: "team",
-      teamIds: ["team-1"],
-      userIds: [],
-      suppressSuccessToast: true,
-    });
-  });
-
-  it("keeps the dialog open, shows the share URL, and copies it after saving a visible share", async () => {
-    const user = userEvent.setup();
-    const onOpenChange = vi.fn();
-    const writeText = vi.fn();
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText },
-      configurable: true,
-    });
-
-    renderDialog(
-      <ShareConversationDialog
-        conversationId="conv-1"
-        open
-        onOpenChange={onOpenChange}
-      />,
-    );
-
-    expect(
-      screen.queryByText("http://localhost:3000/chat/conv-1"),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Organization/i }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(onOpenChange).not.toHaveBeenCalledWith(false);
-    expect(screen.getByText("http://localhost:3000/chat/conv-1")).toBeVisible();
-    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/chat/conv-1");
-    expect(toast.success).toHaveBeenCalledWith(
-      "Chat visibility updated and share link copied",
-    );
-  });
-
-  it("shows an inline copyable share URL for saved visible shares", async () => {
-    const user = userEvent.setup();
-    const writeText = vi.fn();
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText },
-      configurable: true,
-    });
-    mockUseConversationShare.mockReturnValue({
-      data: {
-        id: "share-1",
-        visibility: "organization",
-        teamIds: [],
-        userIds: [],
-      },
-      isLoading: false,
-    });
-
-    renderDialog(
-      <ShareConversationDialog
-        conversationId="conv-1"
-        open
-        onOpenChange={() => {}}
-      />,
-    );
-
-    expect(screen.getByText("http://localhost:3000/chat/conv-1")).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "Copy Link" }),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
-
-    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/chat/conv-1");
-  });
+        { subject: { type: "team", id: "support" }, actions: ["read"] },
+      ],
+    }),
+  );
 });

@@ -513,8 +513,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       organizationId,
       authorId: adminUser.id,
       agentType: "agent",
-      scope: "team",
-      teams: [sharedTeam.id],
+      access: { teams: [sharedTeam.id] },
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
@@ -555,8 +554,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       organizationId,
       authorId: adminUser.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [sharedTeam.id],
+      access: { teams: [sharedTeam.id] },
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
@@ -600,8 +598,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       organizationId,
       authorId: adminUser.id,
       agentType: "agent",
-      scope: "team",
-      teams: [gatewayTeam.id],
+      access: { teams: [gatewayTeam.id] },
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
@@ -649,8 +646,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       organizationId,
       authorId: adminUser.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [gatewayTeam.id],
+      access: { teams: [gatewayTeam.id] },
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
@@ -688,8 +684,6 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       organizationId,
       authorId: adminUser.id,
       agentType: "agent",
-      scope: "org",
-      teams: [],
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
@@ -731,8 +725,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       organizationId,
       authorId: adminUser.id,
       agentType: "agent",
-      scope: "team",
-      teams: [sharedTeam.id],
+      access: { teams: [sharedTeam.id] },
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
@@ -774,8 +767,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       organizationId,
       authorId: adminUser.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [sharedTeam.id],
+      access: { teams: [sharedTeam.id] },
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
@@ -1494,8 +1486,7 @@ describe("GET /api/agents/:agentId/tools", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "team",
-      teams: [sharedTeam.id],
+      access: { teams: [sharedTeam.id] },
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({ name: "agent-tool", catalogId: catalog.id });
@@ -1544,8 +1535,7 @@ describe("GET /api/agents/:agentId/tools", () => {
       organizationId,
       authorId: user.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [sharedTeam.id],
+      access: { teams: [sharedTeam.id] },
     });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({

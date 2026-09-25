@@ -38,7 +38,7 @@ describe("/api/apps lifecycle (create → get → list → update → delete)", 
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Dashboard", html: "<h1>v1</h1>", scope: "org" },
+      payload: { name: "Dashboard", html: "<h1>v1</h1>" },
     });
     expect(created.statusCode).toBe(200);
     const appId = created.json().id as string;

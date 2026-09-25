@@ -5,6 +5,7 @@ import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { expect, test } from "@/test";
+import { shareForTest } from "@/test/sharing";
 
 test("conversationFilesService.list groups generated + attachments with basenamed names and content URLs", async ({
   makeUser,
@@ -192,6 +193,7 @@ test("project chat: projectFiles is every project file (any author, any chat), f
   // Org-wide sharing requires the member role's project:share-org.
   await makeMember(owner.id, org.id);
   const member = await makeUser({ email: "files-member@test.com" });
+  await makeMember(member.id, org.id);
   const agent = await makeAgent({ organizationId: org.id });
 
   const project = await projectService.create({
@@ -202,10 +204,10 @@ test("project chat: projectFiles is every project file (any author, any chat), f
   });
   // shared org-wide: the member legitimately has project access, which is what
   // lets them have a chat here and read the project's files.
-  await projectService.setShare({
-    id: project.id,
+  await shareForTest({
+    resource: "project",
+    scope: project.id,
     organizationId: org.id,
-    userId: owner.id,
     visibility: "organization",
     teamIds: [],
   });
@@ -306,9 +308,11 @@ test("project chat: the project's instructions file never lists as an ordinary r
   makeUser,
   makeOrganization,
   makeAgent,
+  makeMember,
 }) => {
   const org = await makeOrganization();
   const owner = await makeUser({});
+  await makeMember(owner.id, org.id);
   const agent = await makeAgent({ organizationId: org.id });
 
   const project = await projectService.create({

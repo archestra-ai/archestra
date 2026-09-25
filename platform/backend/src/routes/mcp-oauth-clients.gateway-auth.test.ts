@@ -64,7 +64,7 @@ describe("MCP OAuth client gateway authorization", () => {
     expect(result?.userId).toBeUndefined();
   });
 
-  test("authorizes a scoped gateway for a TEAM-visibility-scoped client (scoping is management-plane only)", async ({
+  test("authorizes a scoped gateway for a client shared with a team (grants are management-plane only)", async ({
     makeOrganization,
     makeUser,
     makeTeam,
@@ -82,8 +82,9 @@ describe("MCP OAuth client gateway authorization", () => {
       authorId: author.id,
       name: "team-scoped service",
       allowedGatewayIds: [gateway.id],
-      scope: "team",
-      teams: [team.id],
+      initialGrants: [
+        { subject: { type: "team", id: team.id }, actions: ["read"] },
+      ],
     });
     const token = await mintToken({
       clientId: oauthClient.clientId,
@@ -340,8 +341,7 @@ describe("MCP OAuth client gateway authorization", () => {
     const gateway = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [owningTeam.id],
+      access: { teams: [owningTeam.id] },
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,
@@ -386,8 +386,7 @@ describe("MCP OAuth client gateway authorization", () => {
     const gateway = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [owningTeam.id],
+      access: { teams: [owningTeam.id] },
     });
     // The client is scoped to that gateway, so authenticating through it grants
     // access.
@@ -432,14 +431,12 @@ describe("MCP OAuth client gateway authorization", () => {
     const grantedGateway = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [owningTeam.id],
+      access: { teams: [owningTeam.id] },
     });
     const otherGateway = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      scope: "team",
-      teams: [owningTeam.id],
+      access: { teams: [owningTeam.id] },
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: org.id,

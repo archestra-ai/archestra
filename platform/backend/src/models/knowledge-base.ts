@@ -1,3 +1,4 @@
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import {
   and,
   count,
@@ -6,7 +7,7 @@ import {
   ilike,
   inArray,
   isNotNull,
-  ne,
+  not,
   notInArray,
   or,
   sql,
@@ -21,6 +22,7 @@ import type {
 } from "@/types";
 import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
  * Filters shared by the list and its count, so a page can never show N rows
@@ -51,55 +53,59 @@ function buildOrgFilters(params: {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    ...(params.canReadAll === false
+    ...(params.viewerUserId
       ? [
-          or(
-            eq(schema.knowledgeBasesTable.visibility, "org-wide"),
-            ...(params.viewerUserId
-              ? [
-                  and(
-                    eq(schema.knowledgeBasesTable.visibility, "private"),
-                    eq(
-                      schema.knowledgeBasesTable.createdBy,
-                      params.viewerUserId,
-                    ),
-                  ),
-                ]
-              : []),
-            ...(params.viewerTeamIds ?? []).map((id) =>
-              and(
-                eq(schema.knowledgeBasesTable.visibility, "team-scoped"),
-                sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
-              ),
-            ),
-          ),
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId: params.organizationId,
+            resource: "knowledgeBase",
+            scopeColumn: schema.knowledgeBasesTable.id,
+            userId: params.viewerUserId,
+            action: "read",
+          }),
         ]
-      : []),
+      : params.canReadAll === false
+        ? [
+            // A caller with no user of its own reaches what is published to
+            // the organization at large, plus what its teams were granted.
+            or(
+              ResourcePermissionPolicyModel.organizationAccessCondition({
+                organizationId: params.organizationId,
+                resource: "knowledgeBase",
+                scopeColumn: schema.knowledgeBasesTable.id,
+                action: "read",
+              }),
+              ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+                organizationId: params.organizationId,
+                resource: "knowledgeBase",
+                scopeColumn: schema.knowledgeBasesTable.id,
+                teamIds: params.viewerTeamIds ?? [],
+              }),
+            ),
+          ]
+        : []),
     // SPDX-SnippetEnd
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // The personal / team / org label and the team filter come from each
+    // knowledge base's own grants, not the retired visibility columns.
     ...(params.scope
       ? [
-          eq(
-            schema.knowledgeBasesTable.visibility,
-            (
-              {
-                personal: "private",
-                team: "team-scoped",
-                org: "org-wide",
-              } as const
-            )[params.scope],
-          ),
+          ResourcePermissionPolicyModel.audienceIs({
+            ...ownAudienceContext(params.organizationId),
+            audience: params.scope,
+          }),
         ]
       : []),
     ...(params.teamIds?.length
       ? [
-          or(
-            ...params.teamIds.map(
-              (id) =>
-                sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
-            ),
-          ),
+          ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+            ...ownAudienceContext(params.organizationId),
+            teamIds: params.teamIds,
+          }),
         ]
       : []),
+    // SPDX-SnippetEnd
     ...(params.authorIds?.length
       ? [inArray(schema.knowledgeBasesTable.createdBy, params.authorIds)]
       : []),
@@ -117,7 +123,12 @@ function buildOrgFilters(params: {
     ...(params.excludeOtherPersonal
       ? [
           or(
-            ne(schema.knowledgeBasesTable.visibility, "private"),
+            not(
+              ResourcePermissionPolicyModel.audienceIs({
+                ...ownAudienceContext(params.organizationId),
+                audience: "personal",
+              }),
+            ),
             params.viewerUserId
               ? eq(schema.knowledgeBasesTable.createdBy, params.viewerUserId)
               : sql`false`,
@@ -228,18 +239,46 @@ class KnowledgeBaseModel {
       );
   }
 
-  static async create(data: InsertKnowledgeBase): Promise<KnowledgeBase> {
-    const [result] = await db
-      .insert(schema.knowledgeBasesTable)
-      .values(
-        await CreatedByModel.forInsert({
-          data: data,
-          userIdField: "createdBy",
-        }),
-      )
-      .returning();
+  static async create(
+    data: InsertKnowledgeBase,
+    /** Explicit starting audience; omitted derives one from the visibility. */
+    options?: {
+      initialPermissionGrants?: ResourcePermissionGrant[];
+      /** Publish to the whole organization; for system callers only. */
+      publishToOrganization?: boolean;
+    },
+  ): Promise<KnowledgeBase> {
+    // The access policy is written with the row it governs, so a failure
+    // cannot leave a knowledge base nobody can reach.
+    return await withDbTransaction(async (tx) => {
+      const [result] = await tx
+        .insert(schema.knowledgeBasesTable)
+        .values(
+          await CreatedByModel.forInsert({
+            data: data,
+            userIdField: "createdBy",
+            transaction: tx,
+          }),
+        )
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: result.organizationId,
+        resource: "knowledgeBase",
+        scope: result.id,
+        grants: options?.initialPermissionGrants,
+        // The creator gets full access, like the author of every other
+        // resource. A base a system caller creates has no creator.
+        authorId: CreatedByModel.id(result, result.createdBy) ?? null,
+        publishToOrganization: options?.publishToOrganization,
+      });
+      // SPDX-SnippetEnd
 
-    return result;
+      return result;
+    });
   }
 
   /**
@@ -473,3 +512,12 @@ class KnowledgeBaseModel {
 }
 
 export default KnowledgeBaseModel;
+
+function ownAudienceContext(organizationId: string) {
+  return {
+    organizationId,
+    resource: "knowledgeBase" as const,
+    scopeColumn: schema.knowledgeBasesTable.id,
+    ownerColumn: schema.knowledgeBasesTable.createdBy,
+  };
+}

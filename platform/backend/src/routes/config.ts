@@ -248,8 +248,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerAlertingEnabled: config.mcpServer.alertingEnabled,
           // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
-          // The same predicate the routes gate on, so the UI can never offer
-          // a feature whose endpoints answer 404.
           agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),
           agentRuntimeCatalogImages: config.agentRuntime.catalogImages,
           agentRuntimeBackend: config.agentRuntime.enabled

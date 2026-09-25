@@ -7,6 +7,7 @@ import type { User } from "@/types";
 vi.mock("@/auth");
 
 import { userHasPermission } from "@/auth";
+import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -15,10 +16,11 @@ describe("DELETE /api/llm-virtual-keys/:id", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    const organization = await makeOrganization();
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization({ legacyPermissions: true });
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(false);
 
@@ -48,6 +50,7 @@ describe("DELETE /api/llm-virtual-keys/:id", () => {
     makeSecret,
   }) => {
     mockUserHasPermission.mockResolvedValue(true);
+    grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {

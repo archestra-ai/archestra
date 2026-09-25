@@ -48,7 +48,6 @@ import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
-import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -123,8 +122,10 @@ function ProjectDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { open: editOpen, setOpen: setEditOpen } =
     useDialogFlagUrlParam("edit");
-  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
-  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const { data: isProjectAdmin } = useHasPermissions(
+    { project: ["update"] },
+    "*",
+  );
 
   // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
   // version footer would float in the left column — hide it.
@@ -166,9 +167,7 @@ function ProjectDetail() {
   const canManage = canManageProject(project.viewerRole, !!isProjectAdmin);
   const canDelete = canDeleteProject({
     viewerRole: project.viewerRole,
-    visibility: project.visibility,
     isProjectAdmin: !!isProjectAdmin,
-    canShareOrg: !!canShareOrg,
   });
   // The oversight-only view (a foreign project surfaced purely via project:admin)
   // additionally hides chats: no composer, no chats list, no pin, no new
@@ -191,15 +190,6 @@ function ProjectDetail() {
           description={project.description ?? ""}
           actionButton={
             <div className="flex items-center gap-2">
-              {/* The same scope pill (personal/team/org) the list and card views
-                  show, so a project's sharing doesn't disappear when you open
-                  it. The administrator badge below says something different —
-                  why the composer, chats and pin are missing. */}
-              <ScopeBadge
-                scope={projectVisibilityToScope(project.visibility)}
-                teamNames={project.shareTeamNames}
-                userNames={project.shareUserNames}
-              />
               {isAdminView && (
                 <Badge variant="secondary">
                   Viewing as administrator
@@ -207,7 +197,7 @@ function ProjectDetail() {
                 </Badge>
               )}
               {/* The project has no facts row of its own, so its creator sits
-                  beside the scope pill in the header. Hidden in the admin view,
+                  in the header. Hidden in the admin view,
                   where the badge above already names the owner. */}
               {!isAdminView && (
                 <CreatedByCell

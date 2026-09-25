@@ -16,6 +16,7 @@ import { hasPermission, userHasPermission } from "@/auth/utils";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
 vi.mock("@/auth/utils", () => ({
@@ -39,6 +40,7 @@ describe("mcp server inspect route — outbound enterprise credential", () => {
     await makeMember(user.id, organization.id);
     vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
     vi.mocked(userHasPermission).mockResolvedValue(true);
+    grantEverywhere(["mcpRegistry"]);
 
     server = createServer((req, res) => {
       const chunks: Buffer[] = [];

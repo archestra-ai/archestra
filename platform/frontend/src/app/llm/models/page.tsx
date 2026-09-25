@@ -16,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Server,
+  Shield,
   UserRoundCheck,
   Users,
 } from "lucide-react";
@@ -44,6 +45,8 @@ import {
 } from "@/components/model-badges";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
+import { ResourcePermissionDialog } from "@/components/resource-permission-dialog";
 import { SearchInput } from "@/components/search-input";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -63,6 +66,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
   useModelLabelKeys,
@@ -106,6 +113,23 @@ export default function ModelsPage() {
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
+  const [permissionModelId, setPermissionModelId] = useState<string | null>(
+    null,
+  );
+  const { data: baseCanUpdate } = useHasPermissions({ llmModel: ["update"] });
+  const { data: scopedCapabilities } = useScopedCapabilities();
+  const canUpdateModel = useCallback(
+    (id: string) =>
+      !!baseCanUpdate ||
+      !!scopedCapabilities?.some(
+        (grant) =>
+          grant.resource === "llmModel" &&
+          grant.action === "update" &&
+          (grant.scope === "*" || grant.scope === id),
+      ),
+    [baseCanUpdate, scopedCapabilities],
+  );
+
   const selectedLabels = useSelectedLabels();
   const [isCreateApiKeyDialogOpen, setIsCreateApiKeyDialogOpen] =
     useState(false);
@@ -245,17 +269,20 @@ export default function ModelsPage() {
     );
 
   const refreshModelsButton = (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={handleRefresh}
-      disabled={isRefreshingModels}
-    >
-      <RefreshCw
-        className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
-      />
-      {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleRefresh}
+        disabled={isRefreshingModels}
+      >
+        <RefreshCw
+          className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
+        />
+        {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
+      </Button>
+      <ResourceListActions resource="llmModel" />
+    </div>
   );
 
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
@@ -526,19 +553,26 @@ export default function ModelsPage() {
                     id: row.original.id,
                     ignored: !row.original.ignored,
                   }),
-                disabled: updateModel.isPending,
+                disabled:
+                  updateModel.isPending || !canUpdateModel(row.original.id),
               },
               {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
+                disabled: !canUpdateModel(row.original.id),
                 onClick: () => openEditDialog(row.original),
+              },
+              {
+                icon: <Shield className="h-4 w-4" />,
+                label: "Permissions",
+                onClick: () => setPermissionModelId(row.original.id),
               },
             ]}
           />
         ),
       },
     ],
-    [updateModel, openEditDialog],
+    [updateModel, openEditDialog, canUpdateModel],
   );
 
   if (isModelsLoadError) {
@@ -785,6 +819,17 @@ export default function ModelsPage() {
         description="Add a new LLM provider API key to load its available models."
       />
 
+      {permissionModelId && (
+        <ResourcePermissionDialog
+          resource="llmModel"
+          scope={permissionModelId}
+          title="Model permissions"
+          open
+          onOpenChange={(open) => {
+            if (!open) setPermissionModelId(null);
+          }}
+        />
+      )}
       {editingModel && (
         <EditModelDialog
           model={editingModel}

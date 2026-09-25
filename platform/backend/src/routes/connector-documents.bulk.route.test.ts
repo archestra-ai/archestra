@@ -13,10 +13,12 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
   let organizationId: string;
   let connectorId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     config.kb.autoSyncPermissionsEnabled = true;
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
+    // An admin's organization-wide grant reaches every connector.
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     const connector = await KnowledgeBaseConnectorModel.create({
       organizationId,

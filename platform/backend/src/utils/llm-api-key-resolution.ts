@@ -92,10 +92,9 @@ export async function resolveProviderApiKey(params: {
   } else if (!providerRequiresPerUserCredential(provider)) {
     // Per-user providers have no org-scope key to fall back to, and there's no
     // acting user to resolve a personal key — leave it unresolved.
-    resolvedApiKey = await LlmProviderApiKeyModel.findByScope(
+    resolvedApiKey = await LlmProviderApiKeyModel.findOrganizationWideKey(
       organizationId,
       provider,
-      "org",
     );
   }
 
@@ -157,11 +156,7 @@ export async function resolveProviderApiKey(params: {
         }
         if (
           subscriptionKind &&
-          !(
-            userId !== undefined &&
-            resolvedApiKey.scope === "personal" &&
-            resolvedApiKey.userId === userId
-          )
+          !(userId !== undefined && resolvedApiKey.userId === userId)
         ) {
           return await substituteOwnSubscriptionKey({
             organizationId,

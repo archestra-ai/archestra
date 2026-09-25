@@ -9,6 +9,7 @@ import {
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
+import TeamModel from "@/models/team";
 import ToolModel from "@/models/tool";
 import UserModel from "@/models/user";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -381,8 +382,9 @@ describe("battery helper bridge", () => {
     await makeTeam(organizationId, userId, { name: "twin" });
     await makeTeam(organizationId, userId, { name: "twin" });
     const outsider = await makeUser({ email: "carol@example.com" });
-    // A team row outliving its user's membership reaches no audience.
-    await makeTeamMember(parent.id, outsider.id);
+    // A team row outliving its user's membership reaches no audience. The
+    // fixture would make the user a member, so the row is written directly.
+    await TeamModel.addMember(parent.id, outsider.id, "member", false);
 
     const ask = async (artifact: Record<string, string>) => {
       const response = await consult({

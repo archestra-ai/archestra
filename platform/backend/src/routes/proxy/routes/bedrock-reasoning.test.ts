@@ -17,11 +17,22 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { afterEach, describe, expect, test } from "@/test";
+import { ModelModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockProxyRoutes from "./bedrock";
 
 const MODEL_ID = "anthropic.claude-haiku-4-5-20251001-v1:0";
+beforeEach(async () => {
+  await ModelModel.create({
+    externalId: `bedrock/${MODEL_ID}`,
+    provider: "bedrock",
+    modelId: MODEL_ID,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  });
+});
+
 const REDACTED_BLOB =
   "cnNuX0VYQU1QTEVfcmVkYWN0ZWRfcmVhc29uaW5nX3BsYWNlaG9sZGVyX25vdF9hX3JlYWxfYmxvYg==";
 

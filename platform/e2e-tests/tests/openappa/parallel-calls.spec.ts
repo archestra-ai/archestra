@@ -764,7 +764,6 @@ test("prevents duplicate remedy execution and releases retried call only once", 
 type CreateAgent = (
   request: APIRequestContext,
   name: string,
-  scope: "personal" | "team" | "org",
 ) => Promise<APIResponse>;
 
 type DeleteAgent = (
@@ -827,11 +826,7 @@ async function setupGovernedChat(params: {
     expectedRevision: originalPolicy.revision,
   });
 
-  const agentResponse = await params.createAgent(
-    request,
-    params.agentName,
-    "personal",
-  );
+  const agentResponse = await params.createAgent(request, params.agentName);
   const agentId = ((await agentResponse.json()) as { id: string }).id;
   for (const toolName of params.toolNames) {
     const toolId = await findToolId(makeApiRequest, request, toolName);

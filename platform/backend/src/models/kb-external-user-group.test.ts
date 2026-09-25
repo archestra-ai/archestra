@@ -14,7 +14,7 @@ describe("KbExternalUserGroupModel", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "github",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
 
     await KbExternalUserGroupModel.upsertMany([
@@ -53,7 +53,7 @@ describe("KbExternalUserGroupModel", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "github",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
 
     const seed = (groupId: string) => ({
@@ -98,7 +98,7 @@ describe("KbExternalUserGroupModel", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "github",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     const alice = await makeUser({ email: "alice@example.com" });
     await makeMember(alice.id, org.id);
@@ -150,11 +150,11 @@ describe("KbExternalUserGroupModel", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connectorA = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "github",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
     const connectorB = await makeKnowledgeBaseConnector(kb.id, org.id, {
       connectorType: "jira",
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
     });
 
     await KbExternalUserGroupModel.upsertMany([

@@ -9,13 +9,13 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import {
   InteractionModel,
   KnowledgeBaseConnectorModel,
   OpenAppaSessionModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   constructResponseSchema,
@@ -104,12 +104,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // log:read scopes the view to the caller's own attributed rows;
       // log:admin lifts it within the active organization.
-      const canSeeAllLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "log",
-        "admin",
-      );
+      const canSeeAllLogs = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "log",
+        scope: "*",
+        action: "read",
+      });
 
       fastify.log.info(
         {
@@ -207,12 +208,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      const canSeeAllLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "log",
-        "admin",
-      );
+      const canSeeAllLogs = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "log",
+        scope: "*",
+        action: "read",
+      });
       return reply.send(
         await InteractionModel.findSummariesPaginated({
           pagination: { limit, offset },
@@ -295,12 +297,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       const cursorQuery = { limit, cursor };
 
-      const canSeeAllLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "log",
-        "admin",
-      );
+      const canSeeAllLogs = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "log",
+        scope: "*",
+        action: "read",
+      });
 
       fastify.log.info(
         {
@@ -360,12 +363,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { sessionId }, user, organizationId }, reply) => {
-      const canSeeAllLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "log",
-        "admin",
-      );
+      const canSeeAllLogs = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "log",
+        scope: "*",
+        action: "read",
+      });
       return reply.send(
         await OpenAppaSessionModel.lineage({
           organizationId,
@@ -397,12 +401,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
-      const canSeeAllLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "log",
-        "admin",
-      );
+      const canSeeAllLogs = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "log",
+        scope: "*",
+        action: "read",
+      });
 
       const externalAgentIds = await InteractionModel.getUniqueExternalAgentIds(
         {
@@ -429,12 +434,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
-      const canSeeAllLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "log",
-        "admin",
-      );
+      const canSeeAllLogs = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "log",
+        scope: "*",
+        action: "read",
+      });
       if (!canSeeAllLogs) {
         // Own-logs view: the only user to filter by is the caller — anything
         // more would enumerate the org roster through a side door.
@@ -476,12 +482,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Own-logs view: a row attributed to someone else (or to nobody — no
       // X-Archestra-User-Id) does not exist for this caller. 404, not 403,
       // so existence is not disclosed.
-      const canSeeAllLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "log",
-        "admin",
-      );
+      const canSeeAllLogs = await ResourcePermissions.allows({
+        userId: user.id,
+        organizationId: organizationId,
+        resource: "log",
+        scope: "*",
+        action: "read",
+      });
       if (!canSeeAllLogs && interaction.userId !== user.id) {
         throw new ApiError(404, "Interaction not found");
       }

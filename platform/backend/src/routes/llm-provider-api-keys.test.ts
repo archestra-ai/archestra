@@ -1,5 +1,6 @@
 import { providerDisplayNames } from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -8,6 +9,7 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { ApiError } from "@/types";
@@ -77,6 +79,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
@@ -162,11 +165,12 @@ describe("GET /api/llm-provider-api-keys/available", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
     setupAdminApp();
     app = await createApp(organizationId, user);
   });
@@ -182,7 +186,6 @@ describe("GET /api/llm-provider-api-keys/available", () => {
     const secret = await makeSecret();
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
     const model = await ModelModel.create({
@@ -239,7 +242,6 @@ describe("GET /api/llm-provider-api-keys/available", () => {
     });
     const ownerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "xai",
-      scope: "personal",
       userId: owner.id,
       name: "SuperGrok",
     });
@@ -278,7 +280,6 @@ describe("GET /api/llm-provider-api-keys/available", () => {
     });
     const ownerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "xai",
-      scope: "personal",
       userId: owner.id,
       name: "Owner xAI Key",
     });
@@ -338,7 +339,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Test Anthropic Key",
         provider: "anthropic",
         apiKey: "sk-ant-test-key-12345",
-        scope: "personal",
       },
     });
 
@@ -361,7 +361,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Inference URL Create Test",
         provider: "openai",
         apiKey: "sk-openai-inference-url-create-test",
-        scope: "personal",
         baseUrl: "https://discovery.example.com/v1",
         inferenceBaseUrl: "https://runtime.example.com/v1",
       },
@@ -386,33 +385,62 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Org Wide Test Key",
         provider: "anthropic",
         apiKey: "sk-ant-org-wide-test-key",
-        scope: "org",
+        shared: true,
       },
     });
 
     expect(response.statusCode).toBe(200);
     const apiKey = response.json();
+    // A shared key has no owner; the retired column mirrors that as "org".
+    expect(apiKey.userId).toBeNull();
     expect(apiKey.scope).toBe("org");
   });
 
-  test("rejects non-personal scope for per-user providers (github-copilot)", async () => {
-    for (const scope of ["org", "team"] as const) {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/llm-provider-api-keys",
-        payload: {
-          name: `Shared Copilot ${scope}`,
-          provider: "github-copilot",
-          apiKey: "gho_shared_token",
-          scope,
-          ...(scope === "team"
-            ? { teamId: "00000000-0000-0000-0000-000000000000" }
-            : {}),
-        },
-      });
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toContain("per-user");
-    }
+  test("rejects a shared key for per-user providers (github-copilot)", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Shared Copilot",
+        provider: "github-copilot",
+        apiKey: "gho_shared_token",
+        shared: true,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("per-user");
+  });
+
+  test("refuses the retired scope and teamId fields", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Legacy Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-legacy",
+        scope: "team",
+        teamId: "00000000-0000-0000-0000-000000000000",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("refuses grants on a key just for its creator", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Own Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-own",
+        initialGrants: [
+          { subject: { type: "organization", id: "*" }, actions: ["use"] },
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("just for you");
   });
 
   test("should get a specific LLM provider API key by ID", async () => {
@@ -423,7 +451,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Get By ID Test Key",
         provider: "anthropic",
         apiKey: "sk-ant-get-by-id-test",
-        scope: "personal",
       },
     });
     const createdKey = createResponse.json();
@@ -456,7 +483,6 @@ describe("LLM Provider API Keys CRUD", () => {
     });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "xai",
-      scope: "personal",
       userId: user.id,
       name: "SuperGrok",
     });
@@ -481,7 +507,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Original Name",
         provider: "anthropic",
         apiKey: "sk-ant-update-test",
-        scope: "personal",
       },
     });
     const createdKey = createResponse.json();
@@ -507,7 +532,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Delete Test Key",
         provider: "anthropic",
         apiKey: "sk-ant-delete-test",
-        scope: "personal",
       },
     });
     const createdKey = createResponse.json();
@@ -556,7 +580,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "OCR Key",
         provider: "anthropic",
         apiKey: "sk-ant-ocr-test",
-        scope: "personal",
       },
     });
     const createdKey = createResponse.json();
@@ -591,7 +614,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Personal Anthropic Key 1",
         provider: "anthropic",
         apiKey: "sk-ant-personal-test-1",
-        scope: "personal",
       },
     });
     expect(key1Response.statusCode).toBe(200);
@@ -603,7 +625,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Personal Anthropic Key 2",
         provider: "anthropic",
         apiKey: "sk-ant-personal-test-2",
-        scope: "personal",
       },
     });
     expect(key2Response.statusCode).toBe(200);
@@ -617,7 +638,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Personal Anthropic Key",
         provider: "anthropic",
         apiKey: "sk-ant-multi-provider-test",
-        scope: "personal",
       },
     });
     expect(anthropicResponse.statusCode).toBe(200);
@@ -629,7 +649,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Personal OpenAI Key",
         provider: "openai",
         apiKey: "sk-openai-multi-provider-test",
-        scope: "personal",
       },
     });
     expect(openaiResponse.statusCode).toBe(200);
@@ -643,7 +662,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Original Name",
         provider: "bedrock",
         apiKey: "sk-bedrock-create-empty-base-url-test",
-        scope: "personal",
       },
     });
     expect(createResponse.statusCode).toBe(200);
@@ -663,7 +681,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Original Name",
         provider: "bedrock",
         apiKey: "sk-bedrock-update-empty-base-url-test",
-        scope: "personal",
         baseUrl: "https://bedrock.us-east-1.amazonaws.com",
       },
     });
@@ -694,7 +711,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Inference URL Update Test",
         provider: "openai",
         apiKey: "sk-openai-inference-url-update-test",
-        scope: "personal",
         baseUrl: "https://discovery.example.com/v1",
       },
     });
@@ -729,7 +745,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Base URL Update With Stored Inference URL Test",
         provider: "openai",
         apiKey: "sk-openai-base-url-update-test",
-        scope: "personal",
         baseUrl: "https://discovery.example.com/v1",
         inferenceBaseUrl: "https://runtime.example.com/v1",
       },
@@ -765,7 +780,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Inference URL Clear Test",
         provider: "openai",
         apiKey: "sk-openai-inference-url-clear-test",
-        scope: "personal",
         baseUrl: "https://discovery.example.com/v1",
         inferenceBaseUrl: "https://runtime.example.com/v1",
       },
@@ -802,7 +816,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Inference URL Update With Key Test",
         provider: "openai",
         apiKey: "sk-openai-original-key",
-        scope: "personal",
         baseUrl: "https://discovery.example.com/v1",
       },
     });
@@ -837,7 +850,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Original Name",
         provider: "ollama",
-        scope: "personal",
       },
     });
     expect(createResponse.statusCode).toBe(200);
@@ -871,7 +883,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Ollama Local",
         provider: "ollama",
-        scope: "personal",
         baseUrl: "http://localhost:11434/v1",
       },
     });
@@ -900,7 +911,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "vLLM Local",
         provider: "vllm",
-        scope: "personal",
         baseUrl: "http://192.168.1.50:8000/v1",
       },
     });
@@ -923,7 +933,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Unreachable Anthropic",
         provider: "anthropic",
         apiKey: "sk-ant-unreachable-test",
-        scope: "personal",
       },
     });
 
@@ -949,7 +958,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Rejected Anthropic",
         provider: "anthropic",
         apiKey: "sk-ant-rejected-test",
-        scope: "personal",
       },
     });
 
@@ -969,7 +977,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Local OpenAI-compatible",
         provider: "openai",
         apiKey: "sk-local-test",
-        scope: "personal",
         baseUrl: "http://localhost:8080/v1",
       },
     });
@@ -994,7 +1001,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Empty Models Anthropic",
         provider: "anthropic",
         apiKey: "sk-ant-empty-models-test",
-        scope: "personal",
       },
     });
 
@@ -1016,7 +1022,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Wrong Path Anthropic",
         provider: "anthropic",
         apiKey: "sk-ant-wrong-path-test",
-        scope: "personal",
         baseUrl: "https://anthropic.example.com/extra",
       },
     });
@@ -1043,7 +1048,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "HTML Anthropic",
         provider: "anthropic",
         apiKey: "sk-ant-html-test",
-        scope: "personal",
       },
     });
 
@@ -1066,7 +1070,6 @@ describe("LLM Provider API Keys CRUD", () => {
         name: "Throttled Anthropic",
         provider: "anthropic",
         apiKey: "sk-ant-throttled-test",
-        scope: "personal",
         baseUrl: "https://anthropic.example.com",
       },
     });
@@ -1092,7 +1095,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Ollama No Models",
         provider: "ollama",
-        scope: "personal",
         baseUrl: "http://localhost:11434/v1",
       },
     });
@@ -1110,7 +1112,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Azure Resource",
         provider: "azure",
-        scope: "personal",
         baseUrl: "https://my-resource.openai.azure.com/openai",
       },
     });
@@ -1141,7 +1142,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Azure Split Endpoint",
         provider: "azure",
-        scope: "personal",
         baseUrl: "https://discovery.example.com/openai",
       },
     });
@@ -1177,7 +1177,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Anthropic WIF",
         provider: "anthropic",
-        scope: "personal",
       },
     });
 
@@ -1199,13 +1198,13 @@ describe("LLM Provider API Keys CRUD", () => {
   });
 
   test("rejects keyless Anthropic keys when Workload Identity Federation is not configured", async () => {
+    config.llm.anthropic.vertexAi.enabled = false;
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
       payload: {
         name: "Anthropic Keyless",
         provider: "anthropic",
-        scope: "personal",
       },
     });
 
@@ -1221,7 +1220,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Anthropic WIF",
         provider: "anthropic",
-        scope: "personal",
       },
     });
     expect(createResponse.statusCode).toBe(200);
@@ -1256,7 +1254,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Azure Split Endpoint Create",
         provider: "azure",
-        scope: "personal",
         baseUrl: "https://discovery.example.com/openai",
         inferenceBaseUrl: "https://runtime.example.com/openai/v1",
       },
@@ -1293,7 +1290,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Azure Resource",
         provider: "azure",
-        scope: "personal",
         baseUrl: "https://my-resource.openai.azure.com/openai",
       },
     });
@@ -1323,7 +1319,6 @@ describe("LLM Provider API Keys CRUD", () => {
       payload: {
         name: "Azure Resource",
         provider: "azure",
-        scope: "personal",
         baseUrl: "https://my-resource.openai.azure.com/openai",
       },
     });
@@ -1366,7 +1361,6 @@ describe("LLM Provider API Keys — personal scope is self-service", () => {
         name: "GitHub Copilot",
         provider: "github-copilot",
         apiKey: "gho_my_token",
-        scope: "personal",
       },
     });
 
@@ -1382,14 +1376,13 @@ describe("LLM Provider API Keys — personal scope is self-service", () => {
         name: "My OpenAI",
         provider: "openai",
         apiKey: "sk-my-openai-key",
-        scope: "personal",
       },
     });
 
     expect(response.statusCode, response.body).toBe(200);
   });
 
-  test("a basic user cannot create an org-scoped key", async () => {
+  test("a basic user cannot create a shared key", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -1397,14 +1390,69 @@ describe("LLM Provider API Keys — personal scope is self-service", () => {
         name: "Org Key",
         provider: "anthropic",
         apiKey: "sk-ant-org-key",
-        scope: "org",
+        shared: true,
       },
     });
 
     expect(response.statusCode).toBe(403);
   });
 
-  test("a basic team member cannot create a team-scoped key without create permission", async ({
+  // A shared key has no owner, but its creator gets full access, like the
+  // author of every other resource. Before, a non-admin creator had to add
+  // themselves to reach the key they had just made.
+  test("a non-admin creator of a shared key gets full access to it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const creator = await makeUser();
+    await makeMember(creator.id, organizationId, { role: "editor" });
+    // An editor holds llmProviderApiKey:create.
+    mockUserHasPermission.mockResolvedValue(true);
+    mockHasPermission.mockResolvedValue({ success: true } as never);
+    const creatorApp = await createApp(organizationId, creator);
+    try {
+      const created = await creatorApp.inject({
+        method: "POST",
+        url: "/api/llm-provider-api-keys",
+        payload: {
+          name: "Shared by editor",
+          provider: "anthropic",
+          apiKey: "sk-ant-editor-shared",
+          shared: true,
+        },
+      });
+      expect(created.statusCode, created.body).toBe(200);
+      const key = created.json();
+      expect(key.userId).toBeNull();
+
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "llmProviderApiKey",
+        scope: key.id,
+      });
+      expect(policy?.grants).toEqual([
+        expect.objectContaining({
+          subject: { type: "user", id: creator.id },
+          actions: expect.arrayContaining(["manage-permissions", "delete"]),
+        }),
+      ]);
+      const read = await creatorApp.inject({
+        method: "GET",
+        url: `/api/llm-provider-api-keys/${key.id}`,
+      });
+      expect(read.statusCode, read.body).toBe(200);
+      // Someone else the grants do not name still cannot reach it.
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/llm-provider-api-keys/${key.id}`,
+      });
+      expect(other.statusCode).toBe(404);
+    } finally {
+      await creatorApp.close();
+    }
+  });
+
+  test("a basic team member cannot share a key with their team without create permission", async ({
     makeTeam,
     makeTeamMember,
   }) => {
@@ -1418,8 +1466,10 @@ describe("LLM Provider API Keys — personal scope is self-service", () => {
         name: "Team Key",
         provider: "anthropic",
         apiKey: "sk-ant-team-key",
-        scope: "team",
-        teamId: team.id,
+        shared: true,
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       },
     });
 
@@ -1456,7 +1506,6 @@ describe("LLM Provider API Keys Available Endpoint", () => {
     const secret = await makeSecret();
     const createdKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -1480,7 +1529,6 @@ describe("LLM Provider API Keys Available Endpoint", () => {
     const secret = await makeSecret();
     await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -1521,7 +1569,7 @@ describe("LLM Provider API Keys Team Scope", () => {
     await app.close();
   });
 
-  test("should create a team-scoped LLM provider API key", async ({
+  test("should create a shared key granted to a team", async ({
     makeTeam,
     makeTeamMember,
   }) => {
@@ -1535,30 +1583,26 @@ describe("LLM Provider API Keys Team Scope", () => {
         name: "Team Test Key",
         provider: "openai",
         apiKey: "sk-openai-team-test-key",
-        scope: "team",
-        teamId: team.id,
+        shared: true,
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     const apiKey = response.json();
-    expect(apiKey.scope).toBe("team");
-    expect(apiKey.teamId).toBe(team.id);
-  });
-
-  test("should require teamId for team-scoped LLM provider API keys", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/llm-provider-api-keys",
-      payload: {
-        name: "Team Key Without TeamId",
-        provider: "anthropic",
-        apiKey: "sk-ant-no-team-id",
-        scope: "team",
-      },
+    expect(apiKey.userId).toBeNull();
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "llmProviderApiKey",
+      scope: apiKey.id,
     });
-
-    expect(response.statusCode).toBe(400);
+    expect(policy?.grants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ subject: { type: "team", id: team.id } }),
+      ]),
+    );
   });
 });
 
@@ -1583,7 +1627,7 @@ describe("LLM Provider API Keys Scope Update", () => {
     await app.close();
   });
 
-  test("should update scope from personal to org", async () => {
+  test("ignores legacy scope updates after permissions become authoritative", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -1591,7 +1635,6 @@ describe("LLM Provider API Keys Scope Update", () => {
         name: "Scope Update Test Key",
         provider: "anthropic",
         apiKey: "sk-ant-scope-update-test",
-        scope: "personal",
       },
     });
     const createdKey = createResponse.json();
@@ -1604,13 +1647,15 @@ describe("LLM Provider API Keys Scope Update", () => {
       },
     });
 
+    // `scope` left the update body, so a caller still sending it neither
+    // rescopes the key nor fails: the stored visibility stands.
     expect(updateResponse.statusCode).toBe(200);
-    const updatedKey = updateResponse.json();
-    expect(updatedKey.scope).toBe("org");
-    expect(updatedKey.userId).toBeNull();
+    const stored = await LlmProviderApiKeyModel.findById(createdKey.id);
+    expect(stored?.scope).toBe("personal");
+    expect(stored?.userId).toBe(user.id);
   });
 
-  test("rejects a ChatGPT-subscription credential pasted into an org key without a scope change", async () => {
+  test("rejects a ChatGPT-subscription credential pasted into a shared key", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -1618,15 +1663,15 @@ describe("LLM Provider API Keys Scope Update", () => {
         name: "Org OpenAI Key",
         provider: "openai",
         apiKey: "sk-openai-org-key",
-        scope: "org",
+        shared: true,
       },
     });
     expect(createResponse.statusCode).toBe(200);
     const createdKey = createResponse.json();
 
-    // Only the secret value changes — scope/team stay org — so this must be
+    // Only the secret value changes — the key stays shared — so this must be
     // classified by the new value, or one person's subscription becomes the
-    // shared org credential.
+    // shared credential.
     const updateResponse = await app.inject({
       method: "PATCH",
       url: `/api/llm-provider-api-keys/${createdKey.id}`,
@@ -1673,7 +1718,7 @@ describe("LLM Provider API Keys Access Control", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("member should not be able to create org-scoped LLM provider API keys", async () => {
+  test("member should not be able to create shared LLM provider API keys", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -1681,7 +1726,7 @@ describe("LLM Provider API Keys Access Control", () => {
         name: "Unauthorized Key",
         provider: "anthropic",
         apiKey: "sk-ant-unauthorized",
-        scope: "org",
+        shared: true,
       },
     });
 
@@ -1730,7 +1775,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     const secret = await makeSecret({ secret: { apiKey: storedCredential } });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: memberUser.id,
     });
     await LlmProviderApiKeyModel.setRequiresReauthentication({
@@ -1767,7 +1811,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     const secret = await makeSecret({ secret: { apiKey: storedCredential } });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: owner.id,
     });
     const response = await app.inject({
@@ -1778,6 +1821,65 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     expect(await LlmProviderApiKeyModel.findById(key.id)).not.toBeNull();
   });
 
+  // An upgraded role's old `llmProviderApiKey:admin` became Full access at
+  // `*`. That grant must not reach another person's own key.
+  test("a full organization-wide grant does not reach another user's own key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "sk-owner-only" } });
+    const ownKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      userId: owner.id,
+    });
+    const wildcard = {
+      organizationId,
+      resource: "llmProviderApiKey" as const,
+      scope: "*",
+    };
+    const initial = await ResourcePermissionPolicyModel.find(wildcard);
+    await ResourcePermissionPolicyModel.replace({
+      ...wildcard,
+      revision: initial?.revision ?? 0,
+      grants: [
+        ...(initial?.grants ?? []),
+        {
+          subject: { type: "user", id: memberUser.id },
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
+      ],
+    });
+
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${ownKey.id}`,
+    });
+    expect(read.statusCode, read.body).toBe(404);
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/llm-provider-api-keys",
+    });
+    expect(list.json().map((key: { id: string }) => key.id)).not.toContain(
+      ownKey.id,
+    );
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${ownKey.id}`,
+      payload: { name: "Taken over" },
+    });
+    expect(update.statusCode, update.body).toBe(403);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${ownKey.id}`,
+    });
+    expect(removed.statusCode, removed.body).toBe(403);
+    expect((await LlmProviderApiKeyModel.findById(ownKey.id))?.name).toBe(
+      ownKey.name,
+    );
+  });
+
   test("rotates the caller's own personal subscription key in place", async ({
     makeSecret,
     makeLlmProviderApiKey,
@@ -1785,7 +1887,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     const secret = await makeSecret({ secret: { apiKey: storedCredential } });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: memberUser.id,
     });
 
@@ -1833,7 +1934,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     const secret = await makeSecret({ secret: { apiKey: "gho_old" } });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "github-copilot",
-      scope: "personal",
       userId: memberUser.id,
     });
 
@@ -1859,7 +1959,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     const secret = await makeSecret({ secret: { apiKey: storedCredential } });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: otherUser.id,
     });
 
@@ -1876,7 +1975,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     const secret = await makeSecret({ secret: { apiKey: "sk-org" } });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "org",
     });
 
     const response = await app.inject({
@@ -1896,7 +1994,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     const secret = await makeSecret({ secret: { apiKey: storedCredential } });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: memberUser.id,
     });
 
@@ -1917,7 +2014,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     const secret = await makeSecret({ secret: { apiKey: "sk-plain-stored" } });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: memberUser.id,
     });
 
@@ -1941,7 +2037,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     } as never);
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: memberUser.id,
     });
 
@@ -2002,7 +2097,6 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
         name: "Blocked Key",
         provider: "anthropic",
         apiKey: "sk-ant-blocked",
-        scope: "personal",
       },
     });
 
@@ -2020,7 +2114,6 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
         name: "Blocked Key",
         provider: "anthropic",
         apiKey: "sk-ant-blocked",
-        scope: "personal",
       },
     });
 
@@ -2037,7 +2130,6 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
         name: "Allowed Key",
         provider: "openai",
         apiKey: "sk-openai-allowed",
-        scope: "personal",
       },
     });
 
@@ -2052,7 +2144,6 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
         name: "Existing Key",
         provider: "anthropic",
         apiKey: "sk-ant-existing",
-        scope: "personal",
       },
     });
     expect(created.statusCode).toBe(200);
@@ -2105,7 +2196,6 @@ describe("validation errors name the provider the way the organization does", ()
         name: "Key",
         provider: "openai",
         apiKey: "sk-rejected",
-        scope: "personal",
       },
     });
 
@@ -2141,3 +2231,128 @@ describe("validation errors name the provider the way the organization does", ()
     expect(response.json().error.message).toContain("OpenAI");
   });
 });
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+describe("scoped provider key grants", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    organizationId = (await makeOrganization()).id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+    setupAdminApp();
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("shares a provider key with a named user at creation", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const recipient = await makeUser();
+    await makeMember(recipient.id, organizationId);
+    const outsider = await makeUser();
+    await makeMember(outsider.id, organizationId);
+
+    const grants = [
+      {
+        subject: { type: "user" as const, id: recipient.id },
+        actions: ["read" as const, "use" as const],
+      },
+    ];
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Shared at creation",
+        provider: "openai",
+        apiKey: "sk-test",
+        shared: true,
+        initialGrants: grants,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const id = response.json().id;
+
+    // A shared key has no owner, but its creator gets full access beside
+    // the audience they named.
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId,
+          resource: "llmProviderApiKey",
+          scope: id,
+        })
+      )?.grants,
+    ).toEqual([
+      ...grants,
+      {
+        subject: { type: "user", id: user.id },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+    ]);
+
+    const scoped = {
+      organizationId,
+      resource: "llmProviderApiKey" as const,
+      scope: id,
+    };
+    expect(
+      (
+        await ResourcePermissions.getEffective({
+          ...scoped,
+          userId: recipient.id,
+        })
+      ).grants.map((grant) => grant.action),
+    ).toEqual(["read", "use"]);
+    expect(
+      (
+        await ResourcePermissions.getEffective({
+          ...scoped,
+          userId: outsider.id,
+        })
+      ).grants,
+    ).toEqual([]);
+  });
+  test("rejects sharing a personal subscription at creation before creating its secret", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const recipient = await makeUser();
+    await makeMember(recipient.id, organizationId);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Personal subscription",
+        provider: "github-copilot",
+        apiKey: "gho_test",
+        initialGrants: [
+          {
+            subject: { type: "user", id: recipient.id },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json().error.message).toContain("cannot be shared");
+    expect(
+      await LlmProviderApiKeyModel.getVisibleKeys(
+        organizationId,
+        user.id,
+        [],
+        true,
+      ),
+    ).toEqual([]);
+  });
+});
+// SPDX-SnippetEnd

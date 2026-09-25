@@ -12,7 +12,6 @@ type SetupFixtures = {
   makeUser: () => Promise<{ id: string }>;
   makeAgent: (overrides: {
     agentType: "agent";
-    scope: "org";
     missingCredentialBehavior: MissingCredentialBehavior;
     accessAllTools: boolean;
   }) => Promise<{ id: string }>;
@@ -42,7 +41,6 @@ async function setupSharedAgent(
   });
   const agent = await fixtures.makeAgent({
     agentType: "agent",
-    scope: "org",
     missingCredentialBehavior: options.missingCredentialBehavior,
     accessAllTools: options.accessAllTools ?? false,
   });
@@ -271,7 +269,6 @@ test("treats a statically pinned tool as connected for everyone", async ({
   const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
   const agent = await makeAgent({
     agentType: "agent",
-    scope: "org",
     missingCredentialBehavior: "block",
     accessAllTools: false,
   });
@@ -316,7 +313,6 @@ test("falls back to the caller's own connection when a static pin is gone", asyn
   const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
   const agent = await makeAgent({
     agentType: "agent",
-    scope: "org",
     missingCredentialBehavior: "block",
     accessAllTools: false,
   });
@@ -358,7 +354,6 @@ test("reports a dead static pin as missing even for a caller with their own conn
   const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
   const agent = await makeAgent({
     agentType: "agent",
-    scope: "org",
     missingCredentialBehavior: "block",
     accessAllTools: false,
   });
@@ -411,7 +406,6 @@ test("treats enterprise-managed credentials as connected for everyone", async ({
   const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
   const agent = await makeAgent({
     agentType: "agent",
-    scope: "org",
     missingCredentialBehavior: "block",
     accessAllTools: false,
   });
@@ -447,7 +441,6 @@ test("treats a catalog's default connection as connected for everyone", async ({
   const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
   const agent = await makeAgent({
     agentType: "agent",
-    scope: "org",
     missingCredentialBehavior: "block",
     accessAllTools: false,
   });
@@ -495,7 +488,6 @@ test("ignores a catalog default connection pinned to another catalog's install",
   const otherCatalog = await makeInternalMcpCatalog({ name: "Ledger" });
   const agent = await makeAgent({
     agentType: "agent",
-    scope: "org",
     missingCredentialBehavior: "block",
     accessAllTools: false,
   });
@@ -543,7 +535,6 @@ test("counts a team install as connected for a member of that team", async ({
   const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
   const agent = await makeAgent({
     agentType: "agent",
-    scope: "org",
     missingCredentialBehavior: "block",
     accessAllTools: false,
   });
@@ -599,7 +590,6 @@ test("keeps each agent's missing connections to itself", async ({
   const makeAgentFor = async (catalogId: string) => {
     const agent = await makeAgent({
       agentType: "agent",
-      scope: "org",
       missingCredentialBehavior: "warn",
       accessAllTools: false,
     });

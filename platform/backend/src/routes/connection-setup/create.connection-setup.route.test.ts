@@ -714,13 +714,13 @@ describe("POST /api/connection-setups", () => {
     const personalKey = await makeLlmProviderApiKey(
       organizationId,
       (await makeSecret()).id,
-      { provider: "anthropic", scope: "personal", userId: user.id },
+      { provider: "anthropic", userId: user.id },
     );
     // ...and an org key the admin explicitly mapped as the connection default
     const mappedKey = await makeLlmProviderApiKey(
       organizationId,
       (await makeSecret()).id,
-      { provider: "anthropic", scope: "org" },
+      { provider: "anthropic" },
     );
     const { OrganizationModel } = await import("@/models");
     await OrganizationModel.patch(organizationId, {

@@ -1460,16 +1460,17 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
       makeMcpServer,
     });
 
-    // An editor/member-shaped caller: every ordinary connection permission,
-    // but not the org-wide admin capability.
-    mockHasPermission.mockImplementation(
-      async (permissions: Record<string, string[]>) => ({
-        success: !Object.values(permissions).some((actions) =>
-          actions.includes("admin"),
+    // An editor: every ordinary connection permission, but no `update` on
+    // every registry entry, the grant the org-wide admin capability became.
+    await db
+      .update(schema.membersTable)
+      .set({ role: "editor" })
+      .where(
+        and(
+          eq(schema.membersTable.userId, user.id),
+          eq(schema.membersTable.organizationId, organizationId),
         ),
-        error: null,
-      }),
-    );
+      );
 
     const res = await app.inject({
       method: "POST",
@@ -1602,29 +1603,36 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
     expect(cluster.deletedDeployments).toEqual([]);
   });
 
-  test("the route is gated on mcpServerInstallation:admin, which only admin-tier roles hold", async () => {
-    const { requiredEndpointPermissionsMap, predefinedPermissionsMap } =
-      await import("@archestra/shared/access-control");
-    const {
-      ADMIN_ROLE_NAME,
-      EDITOR_ROLE_NAME,
-      MEMBER_ROLE_NAME,
-      PLATFORM_ADMIN_ROLE_NAME,
-    } = await import("@archestra/shared");
+  test("the handler is gated on managing every registry entry, which only admin-tier roles hold", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { requiredEndpointPermissionsMap } = await import(
+      "@archestra/shared/access-control"
+    );
+    const { isMcpInstallationAdmin } = await import(
+      "@/auth/mcp-catalog-permissions"
+    );
 
     expect(requiredEndpointPermissionsMap[RouteId.HardResetMcpServer]).toEqual({
-      mcpServerInstallation: ["admin"],
+      mcpServerInstallation: ["update"],
     });
 
-    const holdsAdmin = (role: string) =>
-      Boolean(
-        predefinedPermissionsMap[
-          role as keyof typeof predefinedPermissionsMap
-        ]?.mcpServerInstallation?.includes("admin"),
-      );
-    expect(holdsAdmin(ADMIN_ROLE_NAME)).toBe(true);
-    expect(holdsAdmin(PLATFORM_ADMIN_ROLE_NAME)).toBe(true);
-    expect(holdsAdmin(EDITOR_ROLE_NAME)).toBe(false);
-    expect(holdsAdmin(MEMBER_ROLE_NAME)).toBe(false);
+    // The retired `mcpServerInstallation:admin` role action became `update`
+    // on the registry at `*`, which a new organization gives admin-tier roles.
+    const org = await makeOrganization();
+    const holdsAdmin = async (role: string) => {
+      const member = await makeUser();
+      await makeMember(member.id, org.id, { role });
+      return isMcpInstallationAdmin({
+        userId: member.id,
+        organizationId: org.id,
+      });
+    };
+    expect(await holdsAdmin("admin")).toBe(true);
+    expect(await holdsAdmin("platform_admin")).toBe(true);
+    expect(await holdsAdmin("editor")).toBe(false);
+    expect(await holdsAdmin("member")).toBe(false);
   });
 });

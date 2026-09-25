@@ -4,8 +4,11 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
+import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
 describe("service account routes", () => {
@@ -321,6 +324,16 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Route token",
     });
+    // Which accounts a caller reaches is a grant now. The organization's
+    // service-account policy is already converted when it is created, so a
+    // role added afterwards reaches accounts only through a grant an
+    // administrator gives it, never through its role actions.
+    await grantRoleEverywhere({
+      organizationId: organization.id,
+      resource: "serviceAccount",
+      roleId: role.id,
+      actions: ["read"],
+    });
 
     const response = await app.inject({
       method: "GET",
@@ -358,6 +371,7 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Route token",
     });
+    await runScopedResourcePermissionCutover();
     const verifyTokenSpy = vi.spyOn(ServiceAccountModel, "verifyToken");
 
     const response = await app.inject({
@@ -372,6 +386,10 @@ describe("service account API authentication", () => {
     expect(verifyTokenSpy).toHaveBeenCalledOnce();
   });
 
+  // Listing accounts is no longer role-gated — it answers from grants and a
+  // caller with none simply sees nothing — so the route that still asks for
+  // `serviceAccount:read` is the one that proves the middleware refuses a
+  // service-account principal whose role withholds it.
   test("rejects protected routes when the service account role lacks permission", async ({
     makeCustomRole,
     makeOrganization,
@@ -394,7 +412,7 @@ describe("service account API authentication", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/service-accounts",
+      url: "/api/service-accounts/labels/keys",
       headers: {
         authorization: serviceToken.token,
       },
@@ -483,13 +501,13 @@ describe("service account API authentication", () => {
     const organization = await makeOrganization();
     const owner = await makeUser();
     const agent = await makeAgent({
+      agentType: "agent",
       organizationId: organization.id,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const role = await makeCustomRole(organization.id, {
       permission: {
-        agent: ["admin"],
         chat: ["create"],
       },
     });
@@ -499,6 +517,23 @@ describe("service account API authentication", () => {
       role: role.role,
       createdBy: null,
     });
+    const key = {
+      organizationId: organization.id,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    const granted = await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "serviceAccount", id: serviceAccount.id },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+    expect(granted).not.toBeNull();
     const serviceToken = await ServiceAccountModel.createToken({
       serviceAccountId: serviceAccount.id,
       organizationId: organization.id,
@@ -547,7 +582,6 @@ describe("service account API authentication", () => {
     const agent = await makeAgent({
       organizationId: organization.id,
       authorId: user.id,
-      scope: "org",
     });
     await makeInteraction(agent.id, {
       userId: user.id,
@@ -574,9 +608,16 @@ describe("service account API authentication", () => {
     const organizationDataRole = await makeCustomRole(organization.id, {
       permission: {
         llmCost: ["read"],
-        log: ["read", "admin"],
+        log: ["read"],
         member: ["read"],
       },
+    });
+    // Every member's logs are `read` on the log at `*`, which log:admin became.
+    await grantRoleEverywhere({
+      organizationId: organization.id,
+      resource: "log",
+      roleId: organizationDataRole.id,
+      actions: ["read"],
     });
     const organizationDataAccount = await ServiceAccountModel.create({
       organizationId: organization.id,

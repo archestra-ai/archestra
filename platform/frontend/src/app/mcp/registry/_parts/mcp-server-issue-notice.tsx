@@ -119,9 +119,10 @@ export function McpServerIssueNotice({
   const [dismissOpen, setDismissOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const { data: session } = useSession();
-  const { data: canManageInstalls } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
+  const { data: canManageInstalls } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
   const { data: canEditCatalog } = useHasPermissions({
     mcpRegistry: ["update"],
   });

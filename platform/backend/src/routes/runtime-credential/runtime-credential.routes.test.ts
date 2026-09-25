@@ -38,7 +38,6 @@ describe("Runtime credential routes", () => {
       organizationId,
       authorId: user.id,
       agentType: "agent",
-      scope: "org",
       runtime: {
         image: "example.com/coding-agent:latest",
         command: null,

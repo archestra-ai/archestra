@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME, type ChatMessage } from "@archestra/shared";
 import config from "@/config";
 import { AgentModel, PluginModel, PluginSkillUsageEventModel } from "@/models";
-import { beforeEach, expect, test } from "@/test";
+import { accessGrants, beforeEach, expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { injectPluginSkillActivation } from "./inject-skill-activation";
 
@@ -18,13 +18,13 @@ test("injects and counts an accessible plugin Skill attachment", async ({
   const user = await makeUser();
   await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
   const plugin = await PluginModel.create({
+    ...accessGrants("org"),
     organizationId: agent.organizationId,
     userId: user.id,
     input: {
       displayName: "Portable bundle",
       description: "Portable skills",
       clientType: "claude-code",
-      scope: "org",
       files: [
         {
           path: "skills/release/SKILL.md",

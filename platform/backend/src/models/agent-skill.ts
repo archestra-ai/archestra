@@ -6,8 +6,10 @@ import type { AssignedSkill, PublishableSkill } from "@/types";
 import {
   afterIdPredicate,
   enabledSkillPredicate,
+  MAX_URI_MATCHES,
   publishableSkillColumns,
   publishableSkillPredicate,
+  skillReadablePredicate,
   skillUriKeyPredicate,
 } from "./skill";
 
@@ -144,21 +146,25 @@ class AgentSkillModel {
   }
 
   /**
-   * The single assigned skill a `skill://` URI names, or null.
+   * The assigned skills a `skill://` URI names: at most one for an author URI,
+   * every assigned skill of that name for a bare one.
    *
    * The by-key twin of {@link findSkillsByAgent}, for the same reason
    * `SkillModel.findOrgScopedByUriKey` exists: reading one skill's file should
    * cost one row, not the agent's whole assigned set. Carries the identical
    * join and gate predicates, so Custom mode cannot serve through a URI
-   * anything its listing withholds.
+   * anything its listing withholds. `readableBy` narrows the rows further to
+   * the skills that caller can read.
    */
-  static async findSkillByAgentAndUriKey(params: {
+  static async findSkillsByAgentAndUriKey(params: {
     agentId: string;
+    organizationId: string;
     environmentId: string | null;
     name: string;
     authorId: string | null;
-  }): Promise<PublishableSkill | null> {
-    const [row] = await db
+    readableBy?: { userId: string | null };
+  }): Promise<PublishableSkill[]> {
+    const rows = await db
       .select({ skill: publishableSkillColumns() })
       .from(schema.agentSkillsTable)
       .innerJoin(
@@ -169,15 +175,20 @@ class AgentSkillModel {
         and(
           eq(schema.agentSkillsTable.agentId, params.agentId),
           skillUriKeyPredicate(params),
+          skillReadablePredicate({
+            organizationId: params.organizationId,
+            readableBy: params.readableBy,
+          }),
           notDeleted(schema.skillsTable),
           enabledSkillPredicate(),
           skillInEnvironmentPredicate(params.environmentId),
           publishableSkillPredicate(),
         ),
       )
-      .limit(1);
+      .orderBy(asc(schema.skillsTable.id))
+      .limit(MAX_URI_MATCHES);
 
-    return row?.skill ?? null;
+    return rows.map((row) => row.skill);
   }
 
   /**

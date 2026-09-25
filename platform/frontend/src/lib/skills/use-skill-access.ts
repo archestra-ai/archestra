@@ -1,14 +1,16 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
+import type { ScopedPermission } from "@archestra/shared";
 
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useMyTeams } from "@/lib/teams/team.query";
+import { useScopedCapabilities } from "@/lib/auth/auth.query";
 
 /**
  * The fields of a skill the scope check reads. Both the list rows and the
  * detail/edit pages carry them, so either shape satisfies it.
  */
 interface SkillAccessSubject {
+  id?: string;
   scope: "personal" | "team" | "org";
   authorId: string | null;
   teams: Array<{ id: string }>;
@@ -32,13 +34,25 @@ export function computeCanModifySkill({
   isTeamAdmin,
   currentUserId,
   userTeamIds,
+  scopedGrants,
 }: {
+  scopedGrants?: readonly ScopedPermission[];
   skill: SkillAccessSubject | null | undefined;
   isAdmin: boolean;
   isTeamAdmin: boolean;
   currentUserId: string | undefined;
   userTeamIds: ReadonlySet<string>;
 }): boolean {
+  if (scopedGrants !== undefined)
+    return (
+      !!skill &&
+      scopedGrants.some(
+        (grant) =>
+          grant.resource === "skill" &&
+          (grant.scope === "*" || grant.scope === skill.id) &&
+          grant.action === "update",
+      )
+    );
   return computeCanModifyAgent({
     agent: skill && {
       scope: skill.scope,
@@ -64,52 +78,20 @@ export function computeCanModifySkill({
  * gated on the global admin role, not here.
  */
 export function useSkillAccess(skill: SkillAccessSubject | null | undefined) {
-  const { data: isAdmin, isPending: isAdminPending } = useHasPermissions({
-    skill: ["admin"],
-  });
-  const { data: isTeamAdmin, isPending: isTeamAdminPending } =
-    useHasPermissions({ skill: ["team-admin"] });
-  const { data: canUpdate, isPending: isUpdatePending } = useHasPermissions({
-    skill: ["update"],
-  });
-  const { data: canDelete } = useHasPermissions({ skill: ["delete"] });
-  const { data: canReadTeams, isPending: isTeamsPermissionPending } =
-    useHasPermissions({ team: ["read"] });
-  // `isLoading`, not `isPending`: the query is disabled until the team:read
-  // answer lands, and a disabled query stays `pending` forever, which would
-  // leave the whole hook undecided for anyone without that permission.
-  const { data: userTeams, isLoading: isTeamsLoading } = useMyTeams({
-    enabled: !!canReadTeams,
-  });
-  const { data: session } = useSession();
-
-  const canModify = computeCanModifySkill({
-    skill,
-    isAdmin: !!isAdmin,
-    isTeamAdmin: !!isTeamAdmin,
-    currentUserId: session?.user?.id,
-    userTeamIds: new Set((userTeams ?? []).map((team) => team.id)),
-  });
-
+  const capabilities = useScopedCapabilities();
+  const actions =
+    capabilities.data
+      ?.filter(
+        (grant) =>
+          grant.resource === "skill" &&
+          (grant.scope === "*" || grant.scope === skill?.id),
+      )
+      .map((grant) => grant.action) ?? [];
   return {
-    canModify,
-    /**
-     * The RBAC half alone. A control refused because the skill is not the
-     * caller's needs a different sentence from one refused because the caller
-     * holds no `skill:update` at all, and only this tells them apart.
-     */
-    canUpdate: !!canUpdate,
-    canEdit: !!canUpdate && canModify,
-    canDelete: !!canDelete && canModify,
-    // Every read `canModify` is composed from, not just the permission ones:
-    // the teams query decides the team-admin branch, so while it is in flight
-    // a team admin's own skill reads as "not yours" and the control it gates
-    // would flicker from refused to enabled once the answer lands.
-    isPending:
-      isAdminPending ||
-      isUpdatePending ||
-      isTeamAdminPending ||
-      isTeamsPermissionPending ||
-      isTeamsLoading,
+    canModify: actions.includes("update"),
+    canUpdate: actions.includes("update"),
+    canEdit: actions.includes("update"),
+    canDelete: actions.includes("delete"),
+    isPending: capabilities.isPending,
   };
 }

@@ -312,7 +312,6 @@ describe("archestra tool audit records", () => {
         content: "# audit-probe\nOriginal instructions.",
         metadata: {},
         sourceType: "manual",
-        scope: "personal",
       },
       files: [],
     });

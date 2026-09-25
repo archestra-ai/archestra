@@ -59,7 +59,7 @@ describe("/api/members/default-agent", () => {
     });
     const second = await makeInternalAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     expect(await current()).toBeNull();
@@ -80,7 +80,6 @@ describe("/api/members/default-agent", () => {
     });
     const orgDefault = await makeInternalAgent({
       organizationId,
-      scope: "org",
     });
     await OrganizationModel.patch(organizationId, {
       defaultAgentId: orgDefault.id,
@@ -103,7 +102,7 @@ describe("/api/members/default-agent", () => {
   }) => {
     // Pinning a default is about whose chats it starts, not about who owns
     // the agent: an organization-wide agent is as pinnable as one's own.
-    const orgAgent = await makeInternalAgent({ organizationId, scope: "org" });
+    const orgAgent = await makeInternalAgent({ organizationId });
 
     const response = await put(orgAgent.id);
 
@@ -119,18 +118,17 @@ describe("/api/members/default-agent", () => {
     const proxy = await makeAgent({
       organizationId,
       agentType: "llm_proxy",
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const gateway = await makeAgent({
       organizationId,
       agentType: "mcp_gateway",
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const foreign = await makeInternalAgent({
       organizationId: (await makeOrganization()).id,
-      scope: "org",
     });
     const before = await current();
 
@@ -150,7 +148,7 @@ describe("/api/members/default-agent", () => {
     await makeMember(stranger.id, organizationId);
     const strangersAgent = await makeInternalAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: stranger.id,
     });
 
@@ -179,7 +177,7 @@ describe("/api/members/default-agent", () => {
 
     await makeInternalAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     expect(await current()).toBeNull();
@@ -190,13 +188,12 @@ describe("/api/members/default-agent", () => {
   }) => {
     const only = await makeInternalAgent({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     await put(only.id);
     const orgDefault = await makeInternalAgent({
       organizationId,
-      scope: "org",
     });
     await OrganizationModel.patch(organizationId, {
       defaultAgentId: orgDefault.id,
@@ -224,7 +221,6 @@ describe("/api/members/default-agent", () => {
     });
     const orgDefault = await makeInternalAgent({
       organizationId,
-      scope: "org",
     });
     await OrganizationModel.patch(organizationId, {
       defaultAgentId: orgDefault.id,

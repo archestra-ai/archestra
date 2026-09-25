@@ -257,9 +257,10 @@ export function AuditLogTable() {
   // Server-side search rather than a client filter over the first N members:
   // an org larger than one page would otherwise silently hide every actor
   // whose name sorts past the cut-off.
-  const { data: canSeeAllAuditLogs } = useHasPermissions({
-    auditLog: ["admin"],
-  });
+  const { data: canSeeAllAuditLogs } = useHasPermissions(
+    { auditLog: ["read"] },
+    "*",
+  );
   const {
     users: actorUsers,
     onSearchQueryChange: onActorSearchChange,

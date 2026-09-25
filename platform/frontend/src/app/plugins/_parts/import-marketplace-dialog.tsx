@@ -3,7 +3,6 @@
 import {
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
   POPULAR_PLUGIN_MARKETPLACES,
-  type ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { RowSelectionState } from "@tanstack/react-table";
 import {
@@ -29,6 +28,8 @@ import {
   type GithubAuthMethod,
 } from "@/components/github-auth-config-fields";
 import { GithubPatFields } from "@/components/github-pat-fields";
+import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -71,7 +72,6 @@ import {
 import { cn } from "@/lib/utils";
 import { PluginClientIcon } from "./plugin-client-icon";
 import { PluginPreviewDialog } from "./plugin-preview-dialog";
-import { PluginScopeSelector } from "./plugin-scope-selector";
 
 type MarketplaceEntry = GithubPluginMarketplace["entries"][number];
 
@@ -126,11 +126,9 @@ export function ImportMarketplaceDialog({
     null,
   );
   const [discoverError, setDiscoverError] = useState<string | null>(null);
-  // scope applies to every plugin selected in this import
-  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
-  // people every plugin in this import is shared with directly
-  const [userIds, setUserIds] = useState<string[]>([]);
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   // check cadence for every plugin selected in this import: new commits become
   // review candidates and never replace approved bytes automatically.
   const [syncInterval, setSyncInterval] = useState<"15m" | "1h" | "1d">("1d");
@@ -188,9 +186,7 @@ export function ImportMarketplaceDialog({
     setPreviewEntry(null);
     previewPlugin.reset();
     setDiscoverError(null);
-    setScope("personal");
-    setTeamIds([]);
-    setUserIds([]);
+    setInitialGrants([]);
     setSyncInterval("1d");
     setPlatforms([...CONNECT_PLATFORM_OPTIONS]);
     setClients([]);
@@ -316,9 +312,10 @@ export function ImportMarketplaceDialog({
         approvedSourceSha: entry.sourceCommitSha ?? marketplace.commitSha,
         exclude: [],
       })),
-      scope,
-      teamIds: scope === "team" ? teamIds : [],
-      userIds: scope === "personal" ? userIds : [],
+      initialGrants: initialGrants.map(({ subject, actions }) => ({
+        subject,
+        actions,
+      })),
       syncInterval,
     });
     // only leave the dialog when something was actually created; a zero-create
@@ -811,13 +808,10 @@ export function ImportMarketplaceDialog({
               </SelectContent>
             </Select>
           </div>
-          <PluginScopeSelector
-            scope={scope}
-            onScopeChange={setScope}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
-            userIds={userIds}
-            onUserIdsChange={setUserIds}
+          <ResourceAccessSection
+            resource="plugin"
+            grants={initialGrants}
+            onGrantsChange={setInitialGrants}
           />
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
             <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">

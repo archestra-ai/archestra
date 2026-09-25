@@ -19,6 +19,7 @@ import {
 } from "fastify-type-provider-zod";
 import { afterEach, beforeEach, vi } from "vitest";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
+import { ModelModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
 const mockEvaluatePolicies = vi.fn<(...args: unknown[]) => Promise<unknown>>();
@@ -93,6 +94,13 @@ describe("Responses refusal terminal ordering", () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
+    await ModelModel.create({
+      externalId: "openai/gpt-5.6",
+      provider: "openai",
+      modelId: "gpt-5.6",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
     vi.clearAllMocks();
     vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
       () =>

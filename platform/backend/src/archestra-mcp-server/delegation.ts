@@ -10,7 +10,6 @@ import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
-import { userHasPermission } from "@/auth/utils";
 import {
   evaluateSingleMcpToolInvocationPolicy,
   policyBlockToToolError,
@@ -26,6 +25,7 @@ import {
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { executeOutboundA2aDelegation } from "@/services/a2a-outbound-client";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type { Agent } from "@/types";
 import {
   errorResult,
@@ -124,12 +124,13 @@ export async function getAgentTools(context: {
   let accessibleTools = allToolsWithDetails;
   if (userId && !skipAccessCheck) {
     // Check if user has agent admin permission directly (don't trust caller)
-    const isAgentAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "agent",
-      "admin",
-    );
+    const isAgentAdmin = await ResourcePermissions.allows({
+      userId: userId,
+      organizationId: organizationId,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
 
     const userAccessibleAgentIds =
       await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
@@ -402,12 +403,13 @@ async function buildAutoDelegationTools(params: {
 }): Promise<Tool[]> {
   const { agentId, organizationId, userId, environmentId } = params;
 
-  const isAgentAdmin = await userHasPermission(
-    userId,
-    organizationId,
-    "agent",
-    "admin",
-  );
+  const isAgentAdmin = await ResourcePermissions.allows({
+    userId: userId,
+    organizationId: organizationId,
+    resource: "agent",
+    scope: "*",
+    action: "update",
+  });
 
   const [targets, excludedIds] = await Promise.all([
     AgentModel.findAccessibleDelegationTargets({
@@ -475,12 +477,13 @@ async function resolveAutoDelegationTarget(params: {
   const { agentId, organizationId, userId, environmentId, targetAgentSlug } =
     params;
 
-  const isAgentAdmin = await userHasPermission(
-    userId,
-    organizationId,
-    "agent",
-    "admin",
-  );
+  const isAgentAdmin = await ResourcePermissions.allows({
+    userId: userId,
+    organizationId: organizationId,
+    resource: "agent",
+    scope: "*",
+    action: "update",
+  });
 
   const [targets, excludedIds] = await Promise.all([
     AgentModel.findAccessibleDelegationTargets({
@@ -533,12 +536,13 @@ async function resolveExplicitDelegationTarget(params: {
   // Check user access when a real caller is available. The caller user can be
   // present even when the selected gateway token is team/org scoped.
   if (userId && userId !== "system") {
-    const isAgentAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "agent",
-      "admin",
-    );
+    const isAgentAdmin = await ResourcePermissions.allows({
+      userId: userId,
+      organizationId: organizationId,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
 
     const userAccessibleAgentIds =
       await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);

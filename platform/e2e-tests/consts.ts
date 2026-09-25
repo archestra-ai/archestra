@@ -231,3 +231,13 @@ export const KEYCLOAK_K8S_INTERNAL_URL = IS_CI
  * CI uses the default namespace; local dev uses archestra-dev.
  */
 export const MCP_SERVER_NAMESPACE = IS_CI ? "default" : "archestra-dev";
+
+/**
+ * Lets the whole organization find and use an agent or gateway. Organization
+ * and team tokens reach only the objects that their audience holds a use grant
+ * on, so a spec that calls a gateway with the organization token grants this.
+ */
+export const ORGANIZATION_USE_GRANT = {
+  subject: { type: "organization", id: "*" },
+  actions: ["read", "use"],
+} as const;

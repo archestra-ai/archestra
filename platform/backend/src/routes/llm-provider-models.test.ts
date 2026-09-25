@@ -10,9 +10,11 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ModelTeamModel from "@/models/model-team";
 import OrganizationModel from "@/models/organization";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
 import { systemKeyManager } from "@/services/system-key-manager";
@@ -84,7 +86,7 @@ describe("chat model routes", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
-    await makeMember(user.id, organizationId);
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -117,13 +119,11 @@ describe("chat model routes", () => {
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       name: "Personal subscription",
       provider: "github-copilot",
-      scope: "personal",
       userId: user.id,
     });
     await makeLlmProviderApiKey(organizationId, secret.id, {
       name: "Unavailable provider",
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
     mockGetSecretValueForLlmProviderApiKey.mockResolvedValue(
@@ -216,7 +216,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -295,7 +294,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openrouter",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -362,7 +360,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -429,7 +426,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
-      scope: "personal",
       userId: user.id,
     });
 
@@ -500,7 +496,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openrouter",
-      scope: "personal",
       userId: user.id,
     });
     mockGetSecretValueForLlmProviderApiKey.mockResolvedValue("openrouter-key");
@@ -554,7 +549,6 @@ describe("chat model routes", () => {
     const ownSecret = await makeSecret({ secret: { apiKey: "own-token" } });
     const ownKey = await makeLlmProviderApiKey(organizationId, ownSecret.id, {
       provider: "microsoft-365-copilot",
-      scope: "personal",
       userId: user.id,
       name: "Microsoft 365 Copilot",
     });
@@ -567,7 +561,6 @@ describe("chat model routes", () => {
       otherSecret.id,
       {
         provider: "microsoft-365-copilot",
-        scope: "personal",
         userId: otherUser.id,
         name: "Microsoft 365 Copilot",
       },
@@ -582,7 +575,6 @@ describe("chat model routes", () => {
       foreignSecret.id,
       {
         provider: "microsoft-365-copilot",
-        scope: "org",
         name: "Microsoft 365 Copilot",
       },
     );
@@ -659,7 +651,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "ollama" } });
       const key = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "ollama-native",
-        scope: "org",
         name: "Ollama",
       });
       const listed = await fetchListedModel({ apiKeyId: key.id });
@@ -675,7 +666,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "ollama" } });
       const key = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "ollama-native",
-        scope: "org",
         name: "Ollama",
       });
       const listed = await fetchListedModel({
@@ -696,7 +686,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "ollama" } });
       const key = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "ollama-native",
-        scope: "org",
         name: "Ollama",
       });
       const listed = await fetchListedModel({
@@ -717,7 +706,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
-      scope: "org",
     });
     const embeddingModel = await ModelModel.create({
       externalId: "gemini/gemini-embedding-001",
@@ -924,7 +912,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "test-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
-      scope: "org",
     });
     const geminiModel = await ModelModel.create({
       externalId: "gemini/gemini-embedding-001",
@@ -1208,17 +1195,17 @@ describe("chat model routes", () => {
     const staleOpenRouterKey = await makeLlmProviderApiKey(
       organizationId,
       secret.id,
-      { provider: "openrouter", scope: "personal", userId: user.id },
+      { provider: "openrouter", userId: user.id },
     );
     const freshOpenAiKey = await makeLlmProviderApiKey(
       organizationId,
       secret.id,
-      { provider: "openai", scope: "personal", userId: user.id },
+      { provider: "openai", userId: user.id },
     );
     const freshGeminiKey = await makeLlmProviderApiKey(
       organizationId,
       secret.id,
-      { provider: "gemini", scope: "personal", userId: user.id },
+      { provider: "gemini", userId: user.id },
     );
 
     vi.spyOn(
@@ -1270,7 +1257,6 @@ describe("chat model routes", () => {
     const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openrouter",
-      scope: "personal",
       userId: user.id,
     });
     mockGetSecretValueForLlmProviderApiKey.mockResolvedValue("openrouter-key");
@@ -1355,17 +1341,35 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
       const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "gemini",
-        scope: "org",
       });
       const { frontierModel } = await createLinkedChatModels({
         apiKeyId: apiKey.id,
       });
 
       const devTeam = await makeTeam(organizationId, user.id);
-      await ModelTeamModel.syncModelTeams(frontierModel.id, [devTeam.id]);
+      await MemberModel.updateRole(user.id, organizationId, "member");
+      const key = {
+        organizationId,
+        resource: "llmModel" as const,
+        scope: frontierModel.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "team", id: devTeam.id },
+            actions: ["read", "use"],
+          },
+        ],
+      });
 
       // The caller is a plain member, not a catalog manager — no bypass.
-      mockUserHasPermission.mockResolvedValue(false);
+      mockUserHasPermission.mockImplementation(
+        async (_userId, _organizationId, resource, action) =>
+          !(resource === "llmModel" && action === "update"),
+      );
 
       const before = await app.inject({
         method: "GET",
@@ -1396,7 +1400,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
       const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "gemini",
-        scope: "org",
       });
       const { frontierModel } = await createLinkedChatModels({
         apiKeyId: apiKey.id,
@@ -1427,7 +1430,6 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
       const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "gemini",
-        scope: "org",
       });
       const { openModel, frontierModel } = await createLinkedChatModels({
         apiKeyId: apiKey.id,
@@ -1454,7 +1456,7 @@ describe("chat model routes", () => {
       expect(unrestricted.teams).toEqual([]);
     });
 
-    test("PATCH /api/llm-models/:id sets and clears team restrictions", async ({
+    test("PATCH /api/llm-models/:id refuses retired team restriction writes", async ({
       makeSecret,
       makeLlmProviderApiKey,
       makeTeam,
@@ -1462,32 +1464,26 @@ describe("chat model routes", () => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
       const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "gemini",
-        scope: "org",
       });
       const { frontierModel } = await createLinkedChatModels({
         apiKeyId: apiKey.id,
       });
       const devTeam = await makeTeam(organizationId, user.id);
+      await ModelTeamModel.syncModelTeams(frontierModel.id, [devTeam.id]);
 
+      // The retired field is refused rather than dropped, and the stored
+      // restriction stands.
       const restrict = await app.inject({
-        method: "PATCH",
-        url: `/api/llm-models/${frontierModel.id}`,
-        body: { teamIds: [devTeam.id] },
-      });
-      expect(restrict.statusCode).toBe(200);
-      expect(
-        await ModelTeamModel.getTeamIdsForModels([frontierModel.id]),
-      ).toEqual(new Map([[frontierModel.id, [devTeam.id]]]));
-
-      const clear = await app.inject({
         method: "PATCH",
         url: `/api/llm-models/${frontierModel.id}`,
         body: { teamIds: [] },
       });
-      expect(clear.statusCode).toBe(200);
-      expect(
-        await ModelTeamModel.getTeamIdsForModels([frontierModel.id]),
-      ).toEqual(new Map());
+      expect(restrict.statusCode).toBe(400);
+      await expect(
+        ModelTeamModel.getTeamIdsForModels([frontierModel.id]).then((teams) =>
+          teams.get(frontierModel.id),
+        ),
+      ).resolves.toEqual([devTeam.id]);
     });
   });
 

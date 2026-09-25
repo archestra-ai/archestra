@@ -32,7 +32,9 @@ Choose a maintained template from **Create Agent**. The **Runtime** picker sits 
 
 Maintained runtimes arrive preconfigured. Model or Authentication settings open by default; other settings are collapsed for review. **Archestra** uses the platform’s native agent loop with the selected model and tools, without a dedicated runtime. **Custom image** opens the model, image, and inference settings.
 
-Stable releases use `:latest` for the Claude Code, Codex, OpenCode, Hermes, and OpenClaw templates. New workspaces pull the current stable image. Release candidates and development builds keep fixed image tags. Existing Agents keep their saved image. To opt in once, set **Image** to the maintained `:latest` reference. Running workspaces keep their original image; start a new workspace to use an update.
+Stable releases use `:latest` for the Claude Code, Codex, OpenCode, Hermes, and OpenClaw templates. New workspaces pull the current stable image. Release candidates and development builds keep fixed image tags. Use a maintained `:latest` reference to opt in.
+
+Existing Agents keep their saved runtime image when the platform upgrades. To use a newer maintained image, update **Image** in the Agent's **Agent Runtime** settings and start a new run. Continuing an existing workspace keeps its original image.
 
 An attention icon marks missing or incompatible settings that need to be fixed before creation, even when the section is collapsed. Hover over the icon to see what needs to change. Claude personal accounts connect after saving. Codex requires your ChatGPT subscription before creation. Claude provider billing requires an explicit compatible connection.
 
@@ -261,9 +263,7 @@ Project access determines which members can review others' runs. Only the person
 
 ## Share A Run
 
-Share a run with your organization, teams, or individual users. Recipients can review its details and live or retained output. Sharing grants read-only access; terminal control stays with the person who started the run.
-
-Only the run owner can view or change its sharing recipients. Agent readers can see run history, initiators, and sharing scopes without access to recipient names.
+Runtime sessions use [granular access control](/docs/platform-access-control#session-sharing). Recipients can review details and live or retained output. **Can manage access** also allows changing recipients. Terminal control stays with the person who started the run.
 
 ## View Runs From An Agent
 

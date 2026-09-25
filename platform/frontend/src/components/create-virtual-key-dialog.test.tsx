@@ -1,6 +1,6 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { User } from "lucide-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
@@ -162,9 +162,8 @@ describe("CreateVirtualKeyDialog", () => {
     expect(
       screen
         .getByText("Provider Keys")
-        .compareDocumentPosition(
-          screen.getByText("Who can use this virtual key"),
-        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(screen.getByText("Permissions")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Map provider key" }));
@@ -175,8 +174,7 @@ describe("CreateVirtualKeyDialog", () => {
         name: "Self Admin's virtual key (2)",
         keyType: "standard",
         expiresAt: undefined,
-        scope: "personal",
-        teams: [],
+        initialGrants: [],
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: "provider-key-1" },
         ],
@@ -304,6 +302,7 @@ describe("CreateVirtualKeyDialog", () => {
       "Self Admin's virtual key (2)",
     );
 
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.click(screen.getByRole("button", { name: "Choose Bob" }));
 
     expect(screen.getByLabelText("Name")).toHaveValue(
@@ -342,34 +341,27 @@ function renderDialog(
     }>;
   } = {},
 ) {
+  // The permissions section reads the role and team catalog through queries.
   return render(
-    <CreateVirtualKeyDialog
-      open
-      onOpenChange={vi.fn()}
-      keyType={keyType}
-      parentableKeys={[]}
-      connectionBaseUrl="https://proxy.example.com"
-      defaultExpirationSeconds={null}
-      visibilityOptions={[
-        {
-          value: "personal",
-          label: "Personal",
-          description: "Only you can use this key",
-          icon: User,
-        },
-      ]}
-      teams={[]}
-      canReadTeams={false}
-      isVirtualKeyAdmin={options.isVirtualKeyAdmin ?? false}
-      currentUser={{ id: "u-self", name: "Self Admin" }}
-      existingKeys={
-        (options.existingKeys ?? [
-          {
-            authorId: "u-self",
-            keyType,
-          },
-        ]) as never[]
-      }
-    />,
+    <QueryClientProvider client={new QueryClient()}>
+      <CreateVirtualKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        keyType={keyType}
+        parentableKeys={[]}
+        connectionBaseUrl="https://proxy.example.com"
+        defaultExpirationSeconds={null}
+        isVirtualKeyAdmin={options.isVirtualKeyAdmin ?? false}
+        currentUser={{ id: "u-self", name: "Self Admin" }}
+        existingKeys={
+          (options.existingKeys ?? [
+            {
+              authorId: "u-self",
+              keyType,
+            },
+          ]) as never[]
+        }
+      />
+    </QueryClientProvider>,
   );
 }

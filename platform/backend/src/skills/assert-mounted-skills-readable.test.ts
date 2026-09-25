@@ -1,7 +1,6 @@
 import {
   AgentModel,
   EnvironmentModel,
-  SkillModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
   SkillVersionModel,
@@ -14,22 +13,19 @@ test("blocks replay after the mounted skill is removed from the agent policy", a
   makeUser,
   makeMember,
   makeAgent,
+  makeSkill,
 }) => {
   const organization = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, organization.id);
   const agent = await makeAgent({ organizationId: organization.id });
-  const skill = await SkillModel.createWithFiles({
-    skill: {
-      organizationId: organization.id,
-      name: "mounted-skill",
-      description: "A mounted skill",
-      content: "Follow the mounted procedure.",
-      metadata: {},
-      sourceType: "manual",
-      scope: "org",
-    },
-    files: [],
+  const skill = await makeSkill(organization.id, {
+    name: "mounted-skill",
+    description: "A mounted skill",
+    content: "Follow the mounted procedure.",
+    metadata: {},
+    sourceType: "manual",
+    access: "org",
   });
   if (!skill) throw new Error("skill seed failed");
   const version = await SkillVersionModel.findBySkillAndVersion(
@@ -88,6 +84,7 @@ test("blocks replay after the mounted skill leaves the agent environment", async
   makeUser,
   makeMember,
   makeAgent,
+  makeSkill,
 }) => {
   const organization = await makeOrganization();
   const user = await makeUser();
@@ -100,18 +97,14 @@ test("blocks replay after the mounted skill leaves the agent environment", async
     organizationId: organization.id,
     environmentId: environment.id,
   });
-  const skill = await SkillModel.createWithFiles({
-    skill: {
-      organizationId: organization.id,
-      name: "environment-mounted-skill",
-      description: "An environment-bound mounted skill",
-      content: "Follow the environment-bound procedure.",
-      metadata: {},
-      sourceType: "manual",
-      scope: "org",
-    },
-    files: [],
+  const skill = await makeSkill(organization.id, {
+    name: "environment-mounted-skill",
+    description: "An environment-bound mounted skill",
+    content: "Follow the environment-bound procedure.",
+    metadata: {},
+    sourceType: "manual",
     environmentIds: [environment.id],
+    access: "org",
   });
   if (!skill) throw new Error("skill seed failed");
   const version = await SkillVersionModel.findBySkillAndVersion(

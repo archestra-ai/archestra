@@ -33,7 +33,7 @@ import {
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useAllPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useCatalogTools,
   useInternalMcpCatalog,
@@ -98,10 +98,15 @@ export function McpAssignmentsDialog({
   const { data: allProfiles = [], isPending: isLoadingProfiles } =
     useProfiles();
 
-  // Fetch user permissions to determine admin/editor status
-  const { data: permissions } = useAllPermissions();
-  const isAgentAdmin = permissions?.agent?.includes("admin") ?? false;
-  const isMcpGatewayAdmin = permissions?.mcpGateway?.includes("admin") ?? false;
+  // Administering every agent or gateway is `update` on all of them (`*`).
+  const { data: isAgentAdmin = false } = useHasPermissions(
+    { agent: ["update"] },
+    "*",
+  );
+  const { data: isMcpGatewayAdmin = false } = useHasPermissions(
+    { mcpGateway: ["update"] },
+    "*",
+  );
 
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({ catalogId });

@@ -248,7 +248,7 @@ describe("internal MCP catalog routes", () => {
       organizationId,
       serverType: "app",
       name: "my-app-backing",
-      scope: "personal",
+      access: "personal",
     });
 
     const byId = await app.inject({
@@ -277,7 +277,6 @@ describe("internal MCP catalog routes", () => {
     const catalog = await makeInternalMcpCatalog({
       name: "other-org-catalog",
       organizationId: otherOrganization.id,
-      scope: "org",
     });
 
     const response = await app.inject({
@@ -293,7 +292,6 @@ describe("internal MCP catalog routes", () => {
     await makeInternalMcpCatalog({
       name: "active-org-catalog",
       organizationId,
-      scope: "org",
     });
 
     const activeOrgResponse = await app.inject({
@@ -312,7 +310,6 @@ describe("internal MCP catalog routes", () => {
     const foreignSource = await makeInternalMcpCatalog({
       name: "foreign-clone-source",
       organizationId: otherOrganization.id,
-      scope: "org",
     });
 
     const response = await app.inject({
@@ -350,7 +347,6 @@ describe("internal MCP catalog routes", () => {
     const source = await makeInternalMcpCatalog({
       name: "same-org-clone-source",
       organizationId,
-      scope: "org",
     });
 
     const response = await app.inject({
@@ -393,7 +389,6 @@ describe("internal MCP catalog routes", () => {
           serverType: "remote",
           serverUrl: "https://evil.example.com/mcp",
           environmentId: env.id,
-          scope: "org",
         },
       });
 
@@ -412,7 +407,6 @@ describe("internal MCP catalog routes", () => {
           serverType: "remote",
           serverUrl: "https://allowed.example.com/mcp",
           environmentId: env.id,
-          scope: "org",
         },
       });
 
@@ -429,7 +423,6 @@ describe("internal MCP catalog routes", () => {
           name: "self-hosted-in-restricted-env",
           serverType: "local",
           environmentId: env.id,
-          scope: "org",
           localConfig: { command: "node", arguments: ["server.js"] },
         },
       });
@@ -445,7 +438,6 @@ describe("internal MCP catalog routes", () => {
           name: "no-env-remote",
           serverType: "remote",
           serverUrl: "https://anything.example.com/mcp",
-          scope: "org",
         },
       });
 
@@ -529,7 +521,6 @@ describe("internal MCP catalog routes", () => {
         payload: {
           name: "clone-secret-src-local",
           serverType: "local",
-          scope: "org",
           localConfig: {
             command: "node",
             arguments: ["server.js"],
@@ -591,7 +582,6 @@ describe("internal MCP catalog routes", () => {
         payload: {
           name: "clone-secret-src-override",
           serverType: "local",
-          scope: "org",
           localConfig: {
             command: "node",
             arguments: ["server.js"],
@@ -665,7 +655,6 @@ describe("internal MCP catalog routes", () => {
           name: "clone-secret-src-oauth",
           serverType: "remote",
           serverUrl: "https://example.com/mcp",
-          scope: "org",
           oauthConfig: { ...oauthConfig, client_secret: "oauth-secret-value" },
         },
       })
@@ -706,7 +695,6 @@ describe("internal MCP catalog routes", () => {
         payload: {
           name: "clone-secret-src-multikey",
           serverType: "local",
-          scope: "org",
           localConfig: {
             command: "node",
             arguments: ["server.js"],
@@ -785,7 +773,6 @@ describe("internal MCP catalog routes", () => {
         payload: {
           name: "ignore-inbound-fk",
           serverType: "local",
-          scope: "org",
           localConfigSecretId: foreignSecret.id,
           localConfig: {
             command: "node",

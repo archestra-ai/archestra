@@ -12,13 +12,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
-import { BulkConnectorVisibilityDialog } from "@/app/knowledge/connectors/_parts/bulk-connector-visibility-dialog";
-import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { GoogleDriveOAuthResultToast } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
+import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -33,6 +32,7 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -68,7 +68,6 @@ import { useKnowledgeConnectorCatalog } from "@/lib/integration-overrides";
 import {
   useAllMatchingConnectors,
   useBulkDeleteConnectors,
-  useBulkUpdateConnectorVisibility,
   useConnector,
   useConnectorsPaginated,
   useDeleteConnector,
@@ -183,7 +182,6 @@ function ConnectorsList() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const bulkDelete = useBulkDeleteConnectors();
-  const bulkVisibility = useBulkUpdateConnectorVisibility();
 
   // Changing a filter invalidates an escalation rather than silently
   // re-pointing "all N" at a different N.
@@ -330,16 +328,7 @@ function ConnectorsList() {
         />
       ),
     },
-    {
-      id: "accessibleTo",
-      header: "Accessible to",
-      cell: ({ row }) => (
-        <ConnectorAccessBadge
-          visibility={row.original.visibility}
-          teamIds={row.original.teamIds}
-        />
-      ),
-    },
+
     {
       id: "schedule",
       header: "Schedule",
@@ -428,6 +417,7 @@ function ConnectorsList() {
       title="Connectors"
       description="Connectors sync documents from external sources — like Confluence, Jira, GitHub, Google Drive, and websites — into knowledge bases on a schedule, so your agents can search and answer from them."
       createLabel="Create Connector"
+      trailingActions={<ResourceListActions resource="knowledgeConnector" />}
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
     >
@@ -496,11 +486,7 @@ function ConnectorsList() {
                   count={selectedConnectors.length}
                   noun="connector"
                   onClear={clearSelection}
-                  busy={
-                    bulkDelete.isPending ||
-                    bulkVisibility.isPending ||
-                    isFetchingAllMatching
-                  }
+                  busy={bulkDelete.isPending || isFetchingAllMatching}
                   selectAllMatching={{
                     total: pagination?.total ?? items.length,
                     pageFullySelected:
@@ -519,7 +505,7 @@ function ConnectorsList() {
                     size="sm"
                     onClick={() => setBulkVisibilityOpen(true)}
                   >
-                    <span>Edit visibility</span>
+                    <span>Add access</span>
                   </PermissionButton>
                   <PermissionButton
                     permissions={{ knowledgeSource: ["delete"] }}
@@ -588,12 +574,7 @@ function ConnectorsList() {
                             />
                           </div>
                         }
-                      >
-                        <ConnectorAccessBadge
-                          visibility={connector.visibility}
-                          teamIds={connector.teamIds}
-                        />
-                      </TableCard>
+                      ></TableCard>
                     ))}
                   </TableCardList>
                 }
@@ -670,27 +651,12 @@ function ConnectorsList() {
           )}
 
           {bulkVisibilityOpen && (
-            <BulkConnectorVisibilityDialog
+            <BulkResourceAccessDialog
+              resource="knowledgeConnector"
+              items={selectedConnectors}
               open={bulkVisibilityOpen}
               onOpenChange={setBulkVisibilityOpen}
-              count={selectedConnectors.length}
-              isPending={bulkVisibility.isPending}
-              onApply={async (change) => {
-                const outcome = await bulkVisibility.mutateAsync({
-                  connectors: selectedConnectors,
-                  visibility: change.visibility,
-                  teamIds: change.teamIds,
-                });
-                reportBulkOutcome({
-                  outcome,
-                  verb: "Updated",
-                  failureVerb: "update",
-                  noun: "connector",
-                });
-                if (outcome.succeeded.length === 0) return false;
-                if (outcome.failed.length === 0) clearSelection();
-                return true;
-              }}
+              onApplied={clearSelection}
             />
           )}
 

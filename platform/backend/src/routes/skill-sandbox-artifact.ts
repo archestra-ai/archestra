@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { EDITABLE_TEXT_FILE_MAX_BYTES, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { FileNotDeletableError, fileStore } from "@/skills-sandbox/file-store";
 import {
@@ -79,7 +79,13 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // personal files are never exposed by this fallback.
         if (
           !resolved &&
-          (await userHasPermission(user.id, organizationId, "project", "admin"))
+          (await ResourcePermissions.allows({
+            userId: user.id,
+            organizationId: organizationId,
+            resource: "project",
+            scope: "*",
+            action: "update",
+          }))
         ) {
           resolved = await fileStore.getProjectScopedForAdmin({
             ref: artifactId,
@@ -180,7 +186,13 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Inside the try so the instructions-file guard below still applies.
         if (
           !deleted &&
-          (await userHasPermission(user.id, organizationId, "project", "admin"))
+          (await ResourcePermissions.allows({
+            userId: user.id,
+            organizationId: organizationId,
+            resource: "project",
+            scope: "*",
+            action: "update",
+          }))
         ) {
           deleted = await fileStore.deleteProjectScopedForAdmin({
             ref: artifactId,

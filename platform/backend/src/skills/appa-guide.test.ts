@@ -41,7 +41,8 @@ describe("APPA Guide feature availability", () => {
       organizationId: org.id,
       sourceRef,
     });
-    expect(skill?.scope).toBe("org");
+    expect(skill).not.toBeNull();
+    // Published to the organization by its grants (checked just below).
     const published = await SkillModel.findOrgScopedInEnvironment({
       organizationId: org.id,
       environmentId: null,

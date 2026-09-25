@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { urlSlugify } from "@archestra/shared";
+import { type ResourcePermissionGrant, urlSlugify } from "@archestra/shared";
 import {
   and,
   asc,
@@ -31,6 +31,7 @@ import CreatedByModel, { lookupCreator } from "./created-by";
 import { PluginLabelModel } from "./entity-labels";
 import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 class PluginModel {
   static async transferOwnership(params: {
@@ -350,6 +351,10 @@ class PluginModel {
     organizationId: string;
     userId: string;
     input: CreatePlugin;
+    /** The starting audience beyond the author; omitted means the author only. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
+    /** Publish to the whole organization; for system callers only. */
+    publishToOrganization?: boolean;
     /** Optional stable source identity for platform-owned imports. */
     pluginSlug?: string;
     sourceId?: string;
@@ -382,8 +387,9 @@ class PluginModel {
               id,
               organizationId: params.organizationId,
               authorId: params.userId,
-              scope:
-                params.input.scope ?? (params.sourceId ? "org" : "personal"),
+              // Retired mirror of the audience, kept consistent with the
+              // grants written below until the column is dropped.
+              scope: params.publishToOrganization ? "org" : "personal",
               clientType: params.input.clientType,
               supportedPlatforms: params.input.supportedPlatforms ?? ["posix"],
               pluginSlug,
@@ -418,18 +424,21 @@ class PluginModel {
         .onConflictDoNothing()
         .returning();
       if (!plugin) return null;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: plugin.organizationId,
+        resource: "plugin",
+        scope: plugin.id,
+        grants: params.initialPermissionGrants,
+        authorId: plugin.authorId,
+        publishToOrganization: params.publishToOrganization,
+      });
+      // SPDX-SnippetEnd
 
       const files = await insertFiles(tx, plugin.id, params.input.files);
-      await PluginTeamModel.syncPluginTeams(
-        plugin.id,
-        plugin.scope === "team" ? (params.input.teamIds ?? []) : [],
-        tx,
-      );
-      await PluginUserModel.syncPluginUsers(
-        plugin.id,
-        plugin.scope === "personal" ? (params.input.userIds ?? []) : [],
-        tx,
-      );
       return { ...plugin, files };
     });
     if (!created) return null;
@@ -476,7 +485,6 @@ class PluginModel {
         organizationId: params.organizationId,
       });
       if (!existing) return null;
-      const scope = params.input.scope ?? existing.scope;
 
       const fileUpdate = params.input.files;
       const contentHash = fileUpdate
@@ -555,7 +563,6 @@ class PluginModel {
           description: params.input.description,
           enabled: params.input.enabled,
           supportedPlatforms: params.input.supportedPlatforms,
-          scope,
           syncGeneration: sql`${schema.pluginsTable.syncGeneration} + 1`,
           ...sourceUpdate,
           ...githubSourceUpdate,
@@ -588,22 +595,6 @@ class PluginModel {
           .delete(schema.pluginFilesTable)
           .where(eq(schema.pluginFilesTable.pluginId, plugin.id));
         await insertFiles(tx, plugin.id, fileUpdate);
-      }
-      if (
-        params.input.scope !== undefined ||
-        params.input.teamIds !== undefined ||
-        params.input.userIds !== undefined
-      ) {
-        await PluginTeamModel.syncPluginTeams(
-          plugin.id,
-          scope === "team" ? (params.input.teamIds ?? []) : [],
-          tx,
-        );
-        await PluginUserModel.syncPluginUsers(
-          plugin.id,
-          scope === "personal" ? (params.input.userIds ?? []) : [],
-          tx,
-        );
       }
       const files = await findFilesWithTransaction(tx, plugin.id);
       return { ...plugin, files };
@@ -724,7 +715,6 @@ class PluginModel {
   static async findSkillManifestCandidates(params: {
     organizationId: string;
     accessiblePluginIds?: string[];
-    orgScopeOnly?: boolean;
   }): Promise<
     Array<{
       plugin: Plugin;
@@ -741,9 +731,6 @@ class PluginModel {
           eq(schema.pluginsTable.organizationId, params.organizationId),
           params.accessiblePluginIds
             ? inArray(schema.pluginsTable.id, params.accessiblePluginIds)
-            : undefined,
-          params.orgScopeOnly
-            ? eq(schema.pluginsTable.scope, "org")
             : undefined,
           notDeleted(schema.pluginsTable),
         ),

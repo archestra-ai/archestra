@@ -1,6 +1,6 @@
-import type { ResourceVisibilityScope } from "@archestra/shared";
 import type { ProfileLabel } from "@/components/agent-labels";
 import type { GithubAuthMethod } from "@/components/github-auth-config-fields";
+import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import type { PluginDetail } from "@/lib/plugins/plugin.query";
 import type {
   PluginClientType,
@@ -21,10 +21,7 @@ export interface PluginDraft {
   enabled: boolean;
   supportedPlatforms: PluginPlatform[];
   files: PluginFileDraft[];
-  scope: ResourceVisibilityScope;
-  teamIds: string[];
-  /** People the plugin is shared with by name; only meaningful with `personal`. */
-  userIds: string[];
+  initialGrants: InitialPermissionGrant[];
   labels: ProfileLabel[];
   githubRepoUrl: string;
   githubSyncRef: string;
@@ -51,9 +48,7 @@ export function blankPluginDraft(): PluginDraft {
         mode: "100644",
       },
     ],
-    scope: "personal",
-    teamIds: [],
-    userIds: [],
+    initialGrants: [],
     labels: [],
     githubRepoUrl: "",
     githubSyncRef: "",
@@ -77,9 +72,7 @@ export function pluginDraftFromPlugin(plugin: PluginDetail): PluginDraft {
       encoding,
       mode,
     })),
-    scope: plugin.scope,
-    teamIds: plugin.teams.map((team) => team.id),
-    userIds: plugin.users.map((member) => member.id),
+    initialGrants: [],
     labels: plugin.labels ?? [],
     githubRepoUrl: plugin.sourceRepo ?? "",
     githubSyncRef: plugin.githubSyncRef ?? plugin.sourceRef ?? "",

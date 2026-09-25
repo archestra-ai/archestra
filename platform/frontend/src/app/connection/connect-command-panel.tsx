@@ -236,9 +236,7 @@ export function ConnectCommandPanel({
   const deploymentPluginsEnabled =
     !configError && configData?.features.plugins === true;
   const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
-    useHasPermissions({
-      plugin: ["read", "admin"],
-    });
+    useHasPermissions({ plugin: ["read", "update"] }, "*");
   const pluginsQueryEnabled =
     pluginsEnabled && deploymentPluginsEnabled && canAdminPlugins === true;
   const { data: allPlugins, isPending: pluginsPending } =
@@ -1228,7 +1226,6 @@ export function ConnectCommandPanel({
                       name: providerCatalog.label(provider),
                       provider,
                       apiKey: token,
-                      scope: "personal",
                     });
                     // availableKeys invalidates → the command auto-generates.
                   } catch {

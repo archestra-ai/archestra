@@ -17,6 +17,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 import { LabelWithDetailsSchema } from "./label";
+import { RetiredSharingUpdateFieldSchema } from "./visibility";
 
 export type {
   ModelInputModality,
@@ -248,6 +249,7 @@ export const PatchModelBodySchema = createUpdateSchema(
      */
     customContextLength: CustomModelTokenLimitSchema,
     customOutputLength: CustomModelTokenLimitSchema,
+    teamIds: RetiredSharingUpdateFieldSchema,
     ignored: z.boolean().optional(),
     embeddingDimensions:
       SupportedEmbeddingDimensionsSchema.nullable().optional(),
@@ -261,14 +263,6 @@ export const PatchModelBodySchema = createUpdateSchema(
       .nullable()
       .optional(),
     outputModalities: z.array(ModelOutputModalitySchema).nullable().optional(),
-    /**
-     * Team restriction sync: when provided, replaces the model's team
-     * restrictions. Empty array clears the restriction (available to everyone).
-     */
-    teamIds: z.array(z.string()).optional(),
-    // People the model is shared with individually — the finer-grained peer of
-    // a team restriction. Omitted leaves grants alone; `[]` revokes them.
-    userIds: z.array(z.string()).optional(),
     // Per-model generation parameters sent on every native Ollama chat turn.
     configuredParameters: ConfiguredParametersSchema.nullable().optional(),
     // Key/value labels. Omitted leaves existing labels untouched; `[]` clears

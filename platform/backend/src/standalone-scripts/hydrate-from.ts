@@ -107,9 +107,9 @@ try {
         .where(inArray(schema.secretsTable.id, referencedSecretIds))
     : [];
 
-  // Collapsing scope to 'personal' means many source keys can flatten onto
-  // the same (org, provider, scope='personal', user_id) tuple — the partial
-  // unique index `chat_api_keys_primary_personal_unique` allows only one
+  // Collapsing every key onto the dev user as its owner means many source
+  // keys can flatten onto the same (org, provider, user_id) tuple — the
+  // partial unique index `chat_api_keys_primary_owner_unique` allows only one
   // `isPrimary=true` row in that bucket. Pre-seed the "already-primary"
   // providers from target's existing rows (the dev may have already added a
   // primary by hand) AND track within the source set; only keep
@@ -124,7 +124,6 @@ try {
   const primaryFilters = [
     eq(schema.llmProviderApiKeysTable.organizationId, targetOrgId),
     eq(schema.llmProviderApiKeysTable.userId, targetUserId),
-    eq(schema.llmProviderApiKeysTable.scope, "personal"),
     eq(schema.llmProviderApiKeysTable.isPrimary, true),
   ];
   if (sourceKeyIds.length) {

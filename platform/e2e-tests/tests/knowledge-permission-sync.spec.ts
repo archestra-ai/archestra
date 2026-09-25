@@ -102,8 +102,7 @@ test.describe("knowledge base auto-sync-permissions (GitHub)", () => {
           name: "GitHub auto-sync",
           knowledgeBaseIds: [knowledgeBaseId],
           connectorType: "github",
-          visibility: "auto-sync-permissions",
-          teamIds: [],
+          syncPermissionsFromSource: true,
           config: {
             type: "github",
             githubUrl: `${WIREMOCK_INTERNAL_URL}/github`,
@@ -116,7 +115,7 @@ test.describe("knowledge base auto-sync-permissions (GitHub)", () => {
       })
     ).json();
     connectorId = connector.id;
-    expect(connector.visibility).toBe("auto-sync-permissions");
+    expect(connector.syncPermissionsFromSource).toBe(true);
 
     const docAcl = async (): Promise<string[] | null> => {
       const res = await makeApiRequest({

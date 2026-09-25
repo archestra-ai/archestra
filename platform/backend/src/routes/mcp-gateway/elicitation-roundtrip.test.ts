@@ -41,9 +41,11 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
+    const organizationId = (await makeOrganization()).id;
+    // The token must belong to the agent's organization.
+    const agent = await makeAgent({ organizationId });
     const token = await TeamTokenModel.create({
-      organizationId: (await makeOrganization()).id,
+      organizationId,
       name: "Org Token",
       teamId: null,
       isOrganizationToken: true,
@@ -126,8 +128,9 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
+    // The token must belong to the agent's organization.
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
     const token = await TeamTokenModel.create({
       organizationId: org.id,
       name: "Org Token",
@@ -246,8 +249,9 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
+    // The token must belong to the agent's organization.
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
     const token = await TeamTokenModel.create({
       organizationId: org.id,
       name: "Org Token",
@@ -299,9 +303,11 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
+    const organizationId = (await makeOrganization()).id;
+    // The token must belong to the agent's organization.
+    const agent = await makeAgent({ organizationId });
     const token = await TeamTokenModel.create({
-      organizationId: (await makeOrganization()).id,
+      organizationId,
       name: "Org Token",
       teamId: null,
       isOrganizationToken: true,
@@ -350,9 +356,11 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
+    const organizationId = (await makeOrganization()).id;
+    // The token must belong to the agent's organization.
+    const agent = await makeAgent({ organizationId });
     const token = await TeamTokenModel.create({
-      organizationId: (await makeOrganization()).id,
+      organizationId,
       name: "Shared Token",
       teamId: null,
       isOrganizationToken: true,
@@ -425,15 +433,18 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
+    const organizationId = (await makeOrganization()).id;
+    // The token must belong to the agent's organization.
+    const agent = await makeAgent({ organizationId });
     const token = await TeamTokenModel.create({
-      organizationId: (await makeOrganization()).id,
+      organizationId,
       name: "Org Token",
       teamId: null,
       isOrganizationToken: true,
     });
+    // Another caller who can reach the same agent.
     const otherToken = await TeamTokenModel.create({
-      organizationId: (await makeOrganization()).id,
+      organizationId,
       name: "Other Token",
       teamId: null,
       isOrganizationToken: true,
@@ -540,15 +551,17 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
+    // Both tokens reach the agent: they share its organization.
+    const organizationId = (await makeOrganization()).id;
+    const agent = await makeAgent({ organizationId });
     const ownerToken = await TeamTokenModel.create({
-      organizationId: (await makeOrganization()).id,
+      organizationId,
       name: "Owner Token",
       teamId: null,
       isOrganizationToken: true,
     });
     const otherToken = await TeamTokenModel.create({
-      organizationId: (await makeOrganization()).id,
+      organizationId,
       name: "Other Token",
       teamId: null,
       isOrganizationToken: true,

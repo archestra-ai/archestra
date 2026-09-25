@@ -27,7 +27,6 @@ interface RolePermissionBuilderProps {
   onChange: (permission: Permissions) => void;
   userPermissions: Permissions;
   readOnly?: boolean;
-  readOnlyTooltip?: string;
 }
 
 // Human-readable labels for actions
@@ -36,17 +35,12 @@ const actionLabels: Record<Action, string> = {
   read: "Read",
   update: "Update",
   delete: "Delete",
-  "team-admin": "Team Admin",
-  admin: "Admin",
   cancel: "Cancel",
   enable: "Enable",
   query: "Query",
   execute: "Execute",
-  "deploy-to-restricted": "Deploy to Restricted",
   manage: "Manage",
   "manage-deleted": "Manage Deleted",
-  "read-all": "Read All Chats",
-  "share-org": "Share Org-Wide",
   impersonate: "Impersonate",
 };
 
@@ -58,7 +52,6 @@ export function RolePermissionBuilder({
   onChange,
   userPermissions,
   readOnly = false,
-  readOnlyTooltip,
 }: RolePermissionBuilderProps) {
   const [search, setSearch] = useState("");
   const [selectedOnly, setSelectedOnly] = useState(false);
@@ -265,29 +258,7 @@ export function RolePermissionBuilder({
     .filter(({ resources }) => resources.length > 0);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground" aria-live="polite">
-          <span className="font-medium tabular-nums text-foreground">
-            {getTotalPermissionCount()}
-          </span>{" "}
-          <span>
-            {getTotalPermissionCount() === 1 ? "permission" : "permissions"}{" "}
-            across {Object.keys(permission).length}{" "}
-            {Object.keys(permission).length === 1 ? "resource" : "resources"}
-          </span>
-        </p>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange({})}
-          disabled={readOnly || getTotalPermissionCount() === 0}
-          title={readOnly ? readOnlyTooltip : undefined}
-        >
-          Clear All
-        </Button>
-      </div>
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-48 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -306,8 +277,20 @@ export function RolePermissionBuilder({
           aria-pressed={selectedOnly}
           onClick={() => setSelectedOnly(!selectedOnly)}
         >
-          Selected only
+          <span className="tabular-nums">
+            Selected ({getTotalPermissionCount()})
+          </span>
         </Button>
+        {!readOnly && getTotalPermissionCount() > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange({})}
+          >
+            <span>Clear</span>
+          </Button>
+        )}
       </div>
       <div className="divide-y border-y">
         {visibleCategories.map(({ category, resources }) => {

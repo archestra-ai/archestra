@@ -181,8 +181,8 @@ describe("AgentActivationSkillsEditor", () => {
       }),
     ).toBeVisible();
     expect(
-      within(dialog).getByRole("columnheader", { name: "Visibility" }),
-    ).toBeVisible();
+      within(dialog).queryByRole("columnheader", { name: "Visibility" }),
+    ).toBeNull();
     expect(within(dialog).queryByText("incident-response")).toBeNull();
     expect(within(dialog).getByText("Research Server")).toBeVisible();
   });

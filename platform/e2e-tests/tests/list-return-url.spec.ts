@@ -20,12 +20,7 @@ test("restores a list page's search filter after visiting a detail page and navi
   goToPage,
 }) => {
   const agentName = makeRandomString(10, "list-return-url-");
-  const createResponse = await createAgent(
-    request,
-    agentName,
-    "personal",
-    "agent",
-  );
+  const createResponse = await createAgent(request, agentName, "agent");
   const agent = await createResponse.json();
 
   try {

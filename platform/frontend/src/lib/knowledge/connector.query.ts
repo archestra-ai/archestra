@@ -12,7 +12,6 @@ import {
 
 const {
   bulkDeleteConnectors,
-  bulkUpdateConnectors,
   getConnectors,
   getConnector,
   createConnector,
@@ -146,32 +145,6 @@ export function useBulkDeleteConnectors() {
  * switching a connector to it fail-closes its corpus and depends on the
  * connector's own type.
  */
-export function useBulkUpdateConnectorVisibility() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      connectors,
-      visibility,
-      teamIds,
-    }: {
-      connectors: readonly { id: string }[];
-      visibility: "org-wide" | "team-scoped";
-      teamIds: string[];
-    }) =>
-      bulkUpdateConnectors({
-        body: {
-          ids: connectors.map((connector) => connector.id),
-          visibility,
-          teamIds,
-        },
-      }).then(({ data, error }) => {
-        throwOnApiError(error, { toastOnError: false });
-        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
-      }),
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: ["connectors"] }),
-  });
-}
 
 export function useConnector(id: string | undefined) {
   return useQuery({

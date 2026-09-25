@@ -3,7 +3,14 @@ import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
@@ -17,10 +24,11 @@ describe("GET /api/llm-virtual-keys/:id/value", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    const organization = await makeOrganization();
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization({ legacyPermissions: true });
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(false);
 
@@ -50,7 +58,6 @@ describe("GET /api/llm-virtual-keys/:id/value", () => {
       organizationId,
       name: "My passthrough",
       keyType: "passthrough",
-      scope: "personal",
       authorId: user.id,
     });
 
@@ -78,11 +85,11 @@ describe("GET /api/llm-virtual-keys/:id/value", () => {
     const { virtualKey } = await VirtualApiKeyModel.create({
       organizationId,
       name: "Org shared key",
-      scope: "org",
       authorId: author.id,
       providerApiKeys: [
         { provider: parentKey.provider, providerApiKeyId: parentKey.id },
       ],
+      ...accessGrants("org"),
     });
 
     const response = await app.inject({

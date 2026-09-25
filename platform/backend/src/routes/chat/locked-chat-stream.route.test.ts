@@ -144,7 +144,7 @@ describe("POST /api/chat (locked chat)", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     agentId = agent.id;
 

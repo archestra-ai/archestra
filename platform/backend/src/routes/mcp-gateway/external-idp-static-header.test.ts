@@ -168,7 +168,6 @@ describe("MCP Gateway - external IdP with stored static-header credential", () =
       name: CATALOG_NAME,
       serverType: "remote",
       serverUrl: UPSTREAM_URL,
-      scope: "org",
       userConfig: {
         api_token: {
           type: "string",

@@ -1,8 +1,9 @@
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { EnvironmentModel } from "@/models";
 import AgentExcludedSkillModel from "@/models/agent-excluded-skill";
 import SkillModel from "@/models/skill";
-import { expect, test } from "@/test";
+import { accessGrants, describe, expect, type TestAccess, test } from "@/test";
 import type { Agent, InsertSkill, Skill } from "@/types";
 import {
   explainAssignmentRejection,
@@ -21,21 +22,21 @@ async function assignSkill(params: { agentId: string; skillId: string }) {
 
 async function makeSkill(
   organizationId: string,
-  overrides: Partial<InsertSkill> = {},
+  overrides: Partial<Omit<InsertSkill, "scope">> & { access?: TestAccess } = {},
   environmentIds: string[] = [],
 ): Promise<Skill> {
+  const { access = "org", ...skillOverrides } = overrides;
   const skill = await SkillModel.createWithFiles({
     skill: {
       organizationId,
       name: `skill-${crypto.randomUUID().slice(0, 8)}`,
       description: "A test skill",
       content: "# Instructions",
-      scope: "org",
-      latestVersion: 1,
-      ...overrides,
-    } as InsertSkill,
+      ...skillOverrides,
+    },
     files: [],
     environmentIds,
+    ...accessGrants(access),
   });
   if (!skill) throw new Error("failed to create test skill");
   return skill;
@@ -89,8 +90,8 @@ test("Auto mode publishes org-scoped skills and honours exclusions", async ({
     organizationId: org.id,
     accessAllSkills: true,
   });
-  await makeSkill(org.id, { name: "org-a", scope: "org" });
-  const excluded = await makeSkill(org.id, { name: "org-b", scope: "org" });
+  await makeSkill(org.id, { name: "org-a" });
+  const excluded = await makeSkill(org.id, { name: "org-b" });
 
   await AgentExcludedSkillModel.replaceExclusions({
     agentId: agent.id,
@@ -116,11 +117,11 @@ test("Auto mode never publishes team skills, whoever is connecting", async ({
     accessAllSkills: true,
   });
 
-  await makeSkill(org.id, { name: "org-skill", scope: "org" });
-  await makeSkill(org.id, { name: "team-skill", scope: "team" });
+  await makeSkill(org.id, { name: "org-skill" });
+  await makeSkill(org.id, { name: "team-skill", access: "personal" });
   await makeSkill(org.id, {
     name: "personal-skill",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
 
@@ -141,7 +142,7 @@ test("an assigned personal skill is served on any gateway", async ({
   const agent = await makeAgent({ organizationId: org.id });
   const personal = await makeSkill(org.id, {
     name: "personal-skill",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
 
@@ -261,6 +262,7 @@ test("resolution returns null for an unknown agent", async () => {
       agentId: crypto.randomUUID(),
       name: "anything",
       authorId: null,
+      callerUserId: null,
     }),
   ).toBeNull();
 });
@@ -280,10 +282,13 @@ async function expectPathsAgree(agentId: string, skills: Skill[]) {
     const byKey = await resolveExposedSkill({
       agentId,
       name: skill.name,
-      authorId: skill.scope === "personal" ? skill.authorId : null,
+      // The address a listing gives the skill: its author, or bare when it has
+      // none. A bare lookup resolves only among skills the caller can read.
+      authorId: skill.authorId,
+      callerUserId: skill.authorId,
     });
     expect(
-      byKey?.id ?? null,
+      byKey && "skill" in byKey ? byKey.skill.id : null,
       `${skill.name} (${skill.scope}) disagreed between the set and by-key paths`,
     ).toBe(exposedIds.has(skill.id) ? skill.id : null);
   }
@@ -301,12 +306,15 @@ test("Auto mode resolves the same set by key as it lists", async ({
     accessAllSkills: true,
   });
 
-  const listed = await makeSkill(org.id, { name: "listed", scope: "org" });
-  const excluded = await makeSkill(org.id, { name: "excluded", scope: "org" });
-  const team = await makeSkill(org.id, { name: "team-skill", scope: "team" });
+  const listed = await makeSkill(org.id, { name: "listed" });
+  const excluded = await makeSkill(org.id, { name: "excluded" });
+  const team = await makeSkill(org.id, {
+    name: "team-skill",
+    access: "personal",
+  });
   const personal = await makeSkill(org.id, {
     name: "personal-skill",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
   const templated = await makeSkill(org.id, {
@@ -339,14 +347,15 @@ test("Custom mode resolves the same set by key as it lists", async ({
   const author = await makeUser({ email: "author@test.com" });
   const agent = await makeAgent({ organizationId: org.id });
 
-  const assigned = await makeSkill(org.id, { name: "assigned", scope: "org" });
+  const assigned = await makeSkill(org.id, { name: "assigned" });
   const assignedTeam = await makeSkill(org.id, {
     name: "assigned-team",
-    scope: "team",
+    access: "personal",
+    authorId: author.id,
   });
   const assignedPersonal = await makeSkill(org.id, {
     name: "assigned-personal",
-    scope: "personal",
+    access: "personal",
     authorId: author.id,
   });
   const unassigned = await makeSkill(org.id, { name: "unassigned" });
@@ -363,57 +372,275 @@ test("Custom mode resolves the same set by key as it lists", async ({
   ]);
 });
 
-test("a name shared by a personal and an org skill resolves by scope", async ({
+test("an author URI names exactly that author's skill of the name", async ({
   makeOrganization,
   makeAgent,
   makeUser,
 }) => {
-  // Names are unique only within a visibility, which is why the URI carries a
-  // scope segment. The by-key lookup has to honour it, or a gateway would
-  // serve one skill's bytes under the other's URI.
+  // Names are unique per author, which is why the URI carries the author.
+  // The by-key lookup has to honour it, or a gateway would serve one skill's
+  // bytes under the other's URI.
   const org = await makeOrganization();
-  const author = await makeUser({ email: "author@test.com" });
+  const alice = await makeUser();
+  const bob = await makeUser();
   const agent = await makeAgent({ organizationId: org.id });
-
-  const shared = await makeSkill(org.id, { name: "refunds", scope: "org" });
-  const personal = await makeSkill(org.id, {
+  const alices = await makeSkill(org.id, {
     name: "refunds",
-    scope: "personal",
-    authorId: author.id,
+    authorId: alice.id,
   });
-  for (const skill of [shared, personal]) {
+  const bobs = await makeSkill(org.id, { name: "refunds", authorId: bob.id });
+  for (const skill of [alices, bobs]) {
     await assignSkill({ agentId: agent.id, skillId: skill.id });
   }
 
-  const bySharedUri = await resolveExposedSkill({
-    agentId: agent.id,
-    name: "refunds",
-    authorId: null,
-  });
-  const byPersonalUri = await resolveExposedSkill({
-    agentId: agent.id,
-    name: "refunds",
-    authorId: author.id,
-  });
-
-  expect(bySharedUri?.id).toBe(shared.id);
-  expect(byPersonalUri?.id).toBe(personal.id);
+  for (const [author, expected] of [
+    [alice, alices],
+    [bob, bobs],
+  ] as const) {
+    const resolution = await resolveExposedSkill({
+      agentId: agent.id,
+      name: "refunds",
+      authorId: author.id,
+      callerUserId: null,
+    });
+    expect(resolution && "skill" in resolution && resolution.skill.id).toBe(
+      expected.id,
+    );
+  }
 });
 
-test("a URI key can never name two skills at once", async ({
+test("a name is unique per author, not per organization", async ({
   makeOrganization,
+  makeUser,
 }) => {
-  // The by-key lookup takes one row and applies no tie-break, which is only
-  // safe because a name is unique within exactly the visibility a URI pins.
-  // If that ever stopped holding, this lookup would start choosing arbitrarily
-  // between candidates.
   const org = await makeOrganization();
-  await makeSkill(org.id, { name: "duplicated", scope: "org" });
+  const alice = await makeUser();
+  const bob = await makeUser();
+  await makeSkill(org.id, { name: "duplicated", authorId: alice.id });
 
-  // A team skill shares the shared-name index with org skills.
+  // Another author may reuse the name; the same author may not.
   await expect(
-    makeSkill(org.id, { name: "duplicated", scope: "team" }),
+    makeSkill(org.id, { name: "duplicated", authorId: bob.id }),
+  ).resolves.toBeTruthy();
+  await expect(
+    makeSkill(org.id, { name: "duplicated", authorId: alice.id }),
   ).rejects.toThrow();
+});
+
+describe("the bare skill://archestra/shared/<name> rule", () => {
+  async function readGrant(params: {
+    organizationId: string;
+    skillId: string;
+    userIds: string[];
+  }) {
+    await db
+      .update(schema.resourcePermissionPoliciesTable)
+      .set({
+        grants: params.userIds.map((id) => ({
+          subject: { type: "user" as const, id },
+          actions: ["read" as const, "use" as const],
+        })),
+      })
+      .where(
+        and(
+          eq(
+            schema.resourcePermissionPoliciesTable.organizationId,
+            params.organizationId,
+          ),
+          eq(schema.resourcePermissionPoliciesTable.resource, "skill"),
+          eq(schema.resourcePermissionPoliciesTable.scope, params.skillId),
+        ),
+      );
+  }
+
+  async function setup({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }: {
+    makeOrganization: () => Promise<{ id: string }>;
+    makeAgent: (o: { organizationId: string }) => Promise<{ id: string }>;
+    makeUser: () => Promise<{ id: string }>;
+    makeMember: (
+      userId: string,
+      organizationId: string,
+      o: { role: string },
+    ) => Promise<unknown>;
+  }) {
+    const org = await makeOrganization();
+    const [caller, alice, bob] = [
+      await makeUser(),
+      await makeUser(),
+      await makeUser(),
+    ];
+    for (const user of [caller, alice, bob]) {
+      await makeMember(user.id, org.id, { role: "member" });
+    }
+    const agent = await makeAgent({ organizationId: org.id });
+    return { org, caller, alice, bob, agent };
+  }
+
+  const bare = (agentId: string, callerUserId: string | null) =>
+    resolveExposedSkill({
+      agentId,
+      name: "refunds",
+      authorId: null,
+      callerUserId,
+    });
+
+  test("picks the caller's own skill first", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const { org, caller, alice, agent } = await setup({
+      makeOrganization,
+      makeAgent,
+      makeUser,
+      makeMember,
+    });
+    const own = await makeSkill(org.id, {
+      name: "refunds",
+      authorId: caller.id,
+    });
+    const other = await makeSkill(org.id, {
+      name: "refunds",
+      authorId: alice.id,
+    });
+    for (const skill of [own, other]) {
+      await assignSkill({ agentId: agent.id, skillId: skill.id });
+      await readGrant({
+        organizationId: org.id,
+        skillId: skill.id,
+        userIds: [caller.id],
+      });
+    }
+
+    const resolution = await bare(agent.id, caller.id);
+    expect(resolution && "skill" in resolution && resolution.skill.id).toBe(
+      own.id,
+    );
+  });
+
+  test("resolves the single match the caller can read, and never one the caller cannot", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const { org, caller, alice, bob, agent } = await setup({
+      makeOrganization,
+      makeAgent,
+      makeUser,
+      makeMember,
+    });
+    const readable = await makeSkill(org.id, {
+      name: "refunds",
+      authorId: alice.id,
+    });
+    const unreadable = await makeSkill(org.id, {
+      name: "refunds",
+      authorId: bob.id,
+    });
+    for (const skill of [readable, unreadable]) {
+      await assignSkill({ agentId: agent.id, skillId: skill.id });
+    }
+    await readGrant({
+      organizationId: org.id,
+      skillId: readable.id,
+      userIds: [caller.id, alice.id],
+    });
+    await readGrant({
+      organizationId: org.id,
+      skillId: unreadable.id,
+      userIds: [bob.id],
+    });
+
+    const resolution = await bare(agent.id, caller.id);
+    expect(resolution && "skill" in resolution && resolution.skill.id).toBe(
+      readable.id,
+    );
+
+    // Bob's skill is published on this gateway, but the caller cannot read
+    // it: the bare rule does not reach it even when it is the only match.
+    await readGrant({
+      organizationId: org.id,
+      skillId: readable.id,
+      userIds: [alice.id],
+    });
+    expect(await bare(agent.id, caller.id)).toBeNull();
+    // Its author form still reaches it: the gateway publishes it.
+    const byAuthor = await resolveExposedSkill({
+      agentId: agent.id,
+      name: "refunds",
+      authorId: bob.id,
+      callerUserId: caller.id,
+    });
+    expect(byAuthor && "skill" in byAuthor && byAuthor.skill.id).toBe(
+      unreadable.id,
+    );
+  });
+
+  test("reports every readable match when none is the caller's own", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const { org, caller, alice, bob, agent } = await setup({
+      makeOrganization,
+      makeAgent,
+      makeUser,
+      makeMember,
+    });
+    const skills = [
+      await makeSkill(org.id, { name: "refunds", authorId: alice.id }),
+      await makeSkill(org.id, { name: "refunds", authorId: bob.id }),
+    ];
+    for (const skill of skills) {
+      await assignSkill({ agentId: agent.id, skillId: skill.id });
+      await readGrant({
+        organizationId: org.id,
+        skillId: skill.id,
+        userIds: [caller.id],
+      });
+    }
+
+    const resolution = await bare(agent.id, caller.id);
+    expect(
+      resolution && "ambiguous" in resolution
+        ? resolution.ambiguous.map((skill) => skill.id).sort()
+        : null,
+    ).toEqual(skills.map((skill) => skill.id).sort());
+  });
+
+  test("a caller with no user reaches only skills published to the organization", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const { org, alice, agent } = await setup({
+      makeOrganization,
+      makeAgent,
+      makeUser,
+      makeMember,
+    });
+    const skill = await makeSkill(org.id, {
+      name: "refunds",
+      authorId: alice.id,
+    });
+    await assignSkill({ agentId: agent.id, skillId: skill.id });
+    await readGrant({
+      organizationId: org.id,
+      skillId: skill.id,
+      userIds: [alice.id],
+    });
+
+    expect(await bare(agent.id, null)).toBeNull();
+  });
 });
 
 test("a skill in another organization is unreachable by key", async ({
@@ -426,13 +653,14 @@ test("a skill in another organization is unreachable by key", async ({
     organizationId: org.id,
     accessAllSkills: true,
   });
-  await makeSkill(otherOrg.id, { name: "their-skill", scope: "org" });
+  await makeSkill(otherOrg.id, { name: "their-skill" });
 
   expect(
     await resolveExposedSkill({
       agentId: agent.id,
       name: "their-skill",
       authorId: null,
+      callerUserId: null,
     }),
   ).toBeNull();
 });
@@ -457,6 +685,7 @@ for (const agentType of ["agent", "llm_proxy"] as const) {
         agentId: agent.id,
         name: "stale-assignment",
         authorId: null,
+        callerUserId: null,
       }),
     ).toBeNull();
   });
@@ -475,7 +704,7 @@ test("a non-gateway agent publishes nothing in Auto mode either", async ({
     agentType: "agent",
     accessAllSkills: true,
   });
-  await makeSkill(org.id, { name: "org-wide", scope: "org" });
+  await makeSkill(org.id, { name: "org-wide" });
 
   expect(await exposedNames(agent.id)).toEqual([]);
   expect(
@@ -483,6 +712,7 @@ test("a non-gateway agent publishes nothing in Auto mode either", async ({
       agentId: agent.id,
       name: "org-wide",
       authorId: null,
+      callerUserId: null,
     }),
   ).toBeNull();
 });
@@ -490,11 +720,8 @@ test("a non-gateway agent publishes nothing in Auto mode either", async ({
 test("assignment rejection explains each unpublishable case", async ({
   makeOrganization,
   makeAgent,
-  makeUser,
 }) => {
   const org = await makeOrganization();
-  const caller = await makeUser({ email: "caller@test.com" });
-  const other = await makeUser({ email: "other@test.com" });
   const sharedGateway = await makeAgent({ organizationId: org.id });
 
   const templated = await makeSkill(org.id, {
@@ -504,19 +731,6 @@ test("assignment rejection explains each unpublishable case", async ({
   const delegated = await makeSkill(org.id, {
     name: "delegated-skill",
     agentName: "refund-processor",
-  });
-  // Reachable in practice only via `skill:admin` or a per-user grant — the
-  // access check upstream 404s everyone else — but publishability must still
-  // say no: reading someone's personal skill never implies publishing it.
-  const someoneElsesPersonal = await makeSkill(org.id, {
-    name: "personal-skill",
-    scope: "personal",
-    authorId: other.id,
-  });
-  const ownPersonal = await makeSkill(org.id, {
-    name: "own-personal-skill",
-    scope: "personal",
-    authorId: caller.id,
   });
   const badName = await makeSkill(org.id, { name: "Bad Name" });
   const longDescription = await makeSkill(org.id, {
@@ -538,18 +752,23 @@ test("assignment rejection explains each unpublishable case", async ({
     [elsewhere.id],
   );
 
-  const reject = (skill: Skill, skillEnvironmentIds: string[] = []) =>
+  const reject = (
+    skill: Skill,
+    skillEnvironmentIds: string[] = [],
+    canPublish = true,
+  ) =>
     explainAssignmentRejection({
       skill,
       agent: sharedGateway as Agent,
-      userId: caller.id,
+      canPublish,
       skillEnvironmentIds,
     });
 
   expect(reject(templated)).toMatch(/templated/i);
   expect(reject(delegated)).toMatch(/refund-processor/);
-  expect(reject(someoneElsesPersonal)).toMatch(/personal/i);
-  expect(reject(ownPersonal)).toBeNull();
+  // Publishing is decided by the caller's grant on the skill alone; the
+  // author-only rule for personal skills applied only before conversion.
+  expect(reject(ordinary, [], false)).toMatch(/manage permissions/i);
   expect(reject(badName)).toMatch(/Agent Skills/);
   expect(reject(longDescription)).toMatch(/description/i);
   expect(reject(longCompatibility)).toMatch(/compatibility/i);

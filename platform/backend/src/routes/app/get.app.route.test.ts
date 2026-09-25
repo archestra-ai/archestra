@@ -37,7 +37,6 @@ describe("GET /api/apps/:appId", () => {
   test("returns an org-scoped app the caller may view", async ({ makeApp }) => {
     const created = await makeApp({
       organizationId,
-      scope: "org",
       name: "Viewable",
     });
 
@@ -57,9 +56,10 @@ describe("GET /api/apps/:appId", () => {
     const team = await makeTeam(organizationId, user.id, { name: "Design" });
     const created = await makeApp({
       organizationId,
-      scope: "team",
+      access: { teams: [team.id] },
+      // The response's team list still reads the retired backing-catalog rows.
+      legacy: { scope: "team", teams: [team.id] },
       authorId: user.id,
-      teamIds: [team.id],
     });
 
     const response = await app.inject({
@@ -85,7 +85,6 @@ describe("GET /api/apps/:appId", () => {
     const otherOrg = await makeOrganization();
     const appInOther = await makeApp({
       organizationId: otherOrg.id,
-      scope: "org",
     });
 
     const response = await app.inject({
@@ -102,24 +101,29 @@ describe("GET /api/apps/:appId", () => {
   }) => {
     const personal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const other = await makeUser();
     await makeMember(other.id, organizationId, { role: "member" });
 
-    // Grant through the catalog backing the app — the single source of truth
-    // every access path reads.
-    const { default: McpCatalogUserModel } = await import(
-      "@/models/mcp-catalog-user"
+    const { default: ResourcePermissionPolicyModel } = await import(
+      "@/models/resource-permission-policy"
     );
-    const { McpServerModel } = await import("@/models");
-    const server = await McpServerModel.findById(
-      personal.mcpServerId as string,
-    );
-    await McpCatalogUserModel.syncCatalogUsers(server?.catalogId as string, [
-      other.id,
-    ]);
+    const key = {
+      organizationId,
+      resource: "app" as const,
+      scope: personal.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    const granted = await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: other.id }, actions: ["read", "use"] },
+      ],
+    });
+    expect(granted).not.toBeNull();
 
     user = other;
     const response = await app.inject({
@@ -128,6 +132,7 @@ describe("GET /api/apps/:appId", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ id: personal.id });
+    // The "shared with" list reads the app's grants.
     expect(response.json().users).toEqual([
       expect.objectContaining({ id: other.id }),
     ]);
@@ -140,7 +145,7 @@ describe("GET /api/apps/:appId", () => {
   }) => {
     const personal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const other = await makeUser();
@@ -172,7 +177,7 @@ describe("GET /api/apps/:appId", () => {
   }) => {
     const personal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const other = await makeUser();
@@ -219,7 +224,6 @@ describe("GET /api/apps/:appId — addressed by slug", () => {
   }) => {
     const created = await makeApp({
       organizationId,
-      scope: "org",
       name: "Sales Dashboard",
     });
     expect(created.slug).toBe("sales-dashboard");
@@ -250,7 +254,7 @@ describe("GET /api/apps/:appId — addressed by slug", () => {
     const author = await makeUser();
     const hidden = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: author.id,
       name: "Sales Dashboard",
     });

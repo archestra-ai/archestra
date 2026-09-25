@@ -36,13 +36,14 @@ describe("StatisticsModel", () => {
         users.slice(1).map((user) => makeTeamMember(teamBeta.id, user.id)),
       );
 
+      // Team statistics follow the teams the agents' grants reach.
       const alphaAgent = await makeAgent({
         organizationId: org.id,
-        teams: [teamAlpha.id],
+        access: { teams: [teamAlpha.id] },
       });
       const betaAgent = await makeAgent({
         organizationId: org.id,
-        teams: [teamBeta.id],
+        access: { teams: [teamBeta.id] },
       });
 
       await makeInteraction(alphaAgent.id, {

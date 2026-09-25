@@ -73,10 +73,7 @@ export function getAgentActionModel({
       id: "edit",
       label: ACTION_LABEL.edit,
       visible: true,
-      permissions: permission(
-        resource,
-        builtIn ? ["update", "admin"] : "update",
-      ),
+      permissions: permission(resource, "update"),
       href: agentConfigureHref(kind, agent.id),
     },
     {
@@ -121,12 +118,7 @@ export function agentActionHref(definition: AgentActionDefinition): string {
 
 function permission(
   resource: ReturnType<typeof getResourceForAgentType>,
-  action:
-    | "create"
-    | "read"
-    | "update"
-    | "delete"
-    | readonly ["update", "admin"],
+  action: "create" | "read" | "update" | "delete",
 ): Permissions {
   return {
     [resource]: Array.isArray(action) ? action : [action],

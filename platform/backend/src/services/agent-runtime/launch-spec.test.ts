@@ -20,7 +20,14 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { resolveModelRoute } from "@/routes/proxy/model-router-resolver";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import {
   type Agent,
   AgentRuntimeCredentialsRequiredError,
@@ -138,9 +145,9 @@ describe("buildAgentRunLaunchSpec", () => {
         content: "PRIVATE_INSTRUCTIONS_LOADED_ON_DEMAND",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [],
+      ...accessGrants("org"),
     });
     const systemPrompt = "Review the repository's release instructions.";
     await AgentModel.update(setup.agent.id, { systemPrompt });
@@ -949,7 +956,6 @@ describe("buildAgentRunLaunchSpec", () => {
         subscriptionSecret.id,
         {
           provider: "openai",
-          scope: "personal",
           userId: setup.user.id,
         },
       );

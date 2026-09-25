@@ -5,10 +5,12 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, PluginModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createGithubPat } from "@/services/github-pat";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { STUB_COMMIT_SHA, stubGithub } from "@/test/github-skills-stub";
 import { useRouteTestApp } from "@/test/route-test-app";
+import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin, User } from "@/types";
 import pluginRoutes from "./plugin.routes";
 
@@ -24,6 +26,7 @@ const mockUserHasPermission = vi.mocked(userHasPermission);
 beforeEach(() => {
   mockUserHasPermission.mockReset();
   mockUserHasPermission.mockResolvedValue(true);
+  grantEverywhere(["plugin"]);
 });
 
 afterEach(() => {
@@ -188,9 +191,6 @@ describe("plugin routes", () => {
           ref: "release",
           syncInterval: "1h",
         },
-        scope: "org",
-        teamIds: [],
-        userIds: [],
       },
     });
 
@@ -200,7 +200,6 @@ describe("plugin routes", () => {
       sourceRef: "release",
       githubSyncRef: "release",
       githubSyncInterval: "1h",
-      scope: "org",
       sourceSha: "old-commit",
       pendingSourceSha: null,
       pendingContentHash: null,
@@ -518,48 +517,44 @@ describe("plugin routes", () => {
     expect(detail.statusCode).toBe(404);
   });
 
-  test("persists team and named-user visibility", async ({
+  test("refuses the retired audience fields on create and edit", async ({
     makeTeam,
-    makeUser,
-    makeMember,
   }) => {
     const team = await makeTeam(ctx.organizationId, ctx.user.id, {
       name: "Plugin reviewers",
     });
-    const member = await makeUser();
-    await makeMember(member.id, ctx.organizationId);
 
+    const refused = await ctx.app.inject({
+      method: "POST",
+      url: "/api/plugins",
+      payload: { ...createPayload(), scope: "team", teamIds: [team.id] },
+    });
+    expect(refused.statusCode).toBe(400);
+
+    // Without initialGrants the creator alone holds the new plugin.
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/plugins",
-      payload: {
-        ...createPayload(),
-        scope: "team",
-        teamIds: [team.id],
-      },
+      payload: createPayload(),
     });
     expect(created.statusCode).toBe(200);
-    expect(created.json()).toMatchObject({
-      scope: "team",
-      teams: [{ id: team.id, name: "Plugin reviewers" }],
-      users: [],
+    const pluginId = created.json().id as string;
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: ctx.organizationId,
+      resource: "plugin",
+      scope: pluginId,
     });
+    expect(policy?.grants.map((grant) => grant.subject.type).sort()).toEqual([
+      "user",
+    ]);
 
+    // Edits do not touch access any more: the old fields are refused.
     const updated = await ctx.app.inject({
       method: "PUT",
-      url: `/api/plugins/${created.json().id}`,
-      payload: {
-        scope: "personal",
-        teamIds: [],
-        userIds: [member.id],
-      },
+      url: `/api/plugins/${pluginId}`,
+      payload: { scope: "org" },
     });
-    expect(updated.statusCode).toBe(200);
-    expect(updated.json()).toMatchObject({
-      scope: "personal",
-      teams: [],
-      users: [expect.objectContaining({ id: member.id })],
-    });
+    expect(updated.statusCode).toBe(400);
   });
 
   test("previews and imports a GitHub subtree by immutable commit", async () => {
@@ -617,7 +612,11 @@ describe("plugin routes", () => {
     });
   });
 
-  test("discovers and batch-imports selected marketplace plugins", async () => {
+  test("discovers and batch-imports selected marketplace plugins with explicit permissions", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    registerAuditLogHook(ctx.app);
     stubGithub([
       {
         owner: "plugin-marketplace",
@@ -690,9 +689,9 @@ describe("plugin routes", () => {
       approvedCommitSha: STUB_COMMIT_SHA,
       trackingRef: "main",
       selected,
-      scope: "org",
-      teamIds: [],
-      userIds: [],
+      initialGrants: [
+        { subject: { type: "role", id: "member" }, actions: ["read"] },
+      ],
       syncInterval: "1d",
     } as const;
     const imported = await ctx.app.inject({
@@ -720,6 +719,41 @@ describe("plugin routes", () => {
         ]),
       }),
     ]);
+
+    for (const plugin of imported.json().created) {
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId: ctx.organizationId,
+        resource: "plugin",
+        scope: plugin.id,
+      });
+      expect(policy?.grants).toEqual(
+        expect.arrayContaining([...importPayload.initialGrants]),
+      );
+      expect(
+        policy?.grants.find(
+          (grant) =>
+            grant.subject.type === "role" && grant.subject.id === "member",
+        )?.actions,
+      ).toEqual(["read"]);
+    }
+    await vi.waitFor(async () => {
+      const audit = await AuditLogModel.findPaginated({
+        organizationId: ctx.organizationId,
+        resourceType: "plugin",
+        limit: 20,
+        offset: 0,
+      });
+      expect(audit.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "plugin.created",
+            outcome: "success",
+            before: null,
+            after: expect.any(Object),
+          }),
+        ]),
+      );
+    });
 
     const duplicate = await ctx.app.inject({
       method: "POST",
@@ -765,9 +799,6 @@ describe("plugin routes", () => {
             exclude: [],
           }),
         ),
-        scope: "org",
-        teamIds: [],
-        userIds: [],
         syncInterval: null,
       },
     });

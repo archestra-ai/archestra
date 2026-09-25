@@ -14679,7 +14679,6 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 export type CreateAgentData = {
     body: {
         organizationId?: string;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         isDefault?: boolean;
         isPersonalProxy?: boolean;
@@ -14756,8 +14755,6 @@ export type CreateAgentData = {
             name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
-        teams?: Array<string>;
-        users?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -14851,6 +14848,28 @@ export type CreateAgentData = {
                 skillPath: string;
             }>;
         };
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
+        scope?: unknown;
+        teams?: unknown;
+        users?: unknown;
     };
     path?: never;
     query?: never;
@@ -16416,7 +16435,6 @@ export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 export type UpdateAgentData = {
     body: {
         organizationId?: string;
-        scope?: 'personal' | 'team' | 'org';
         name?: string;
         isDefault?: boolean;
         isPersonalProxy?: boolean;
@@ -16493,8 +16511,6 @@ export type UpdateAgentData = {
             name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
-        teams?: Array<string>;
-        users?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -16507,6 +16523,9 @@ export type UpdateAgentData = {
             summaryTitle: string;
             prompt: string;
         }>;
+        scope?: unknown;
+        teams?: unknown;
+        users?: unknown;
     };
     path: {
         id: string;
@@ -17216,14 +17235,28 @@ export type RestoreAgentVersionResponse = RestoreAgentVersionResponses[keyof Res
 
 export type CloneAgentData = {
     body: {
-        /**
-         * Visibility of the clone. Defaults to the source agent's scope.
-         */
-        scope?: 'personal' | 'team' | 'org';
-        /**
-         * Teams for a team-scoped clone. Defaults to the source agent's teams. Ignored unless the clone's scope resolves to 'team'.
-         */
-        teams?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
+        scope?: unknown;
+        teams?: unknown;
+        users?: unknown;
     } | null;
     path: {
         id: string;
@@ -19551,118 +19584,6 @@ export type BulkDeleteAgentsResponses = {
 };
 
 export type BulkDeleteAgentsResponse = BulkDeleteAgentsResponses[keyof BulkDeleteAgentsResponses];
-
-export type BulkUpdateAgentsData = {
-    /**
-     * Ids plus the fields to change. Shaped so further bulk-editable fields can be added here rather than as another endpoint.
-     */
-    body: {
-        /**
-         * Ids to act on. Duplicates are collapsed.
-         */
-        ids: Array<string>;
-        /**
-         * The visibility every agent in the batch moves to.
-         */
-        scope: 'personal' | 'team' | 'org';
-        /**
-         * Only meaningful for `scope = team`; required there.
-         */
-        teams?: Array<string>;
-        /**
-         * People to share with. Only meaningful for `scope = personal`; ignored otherwise. Unlike the single-agent update, omitting it revokes existing grants rather than keeping them: this sets one visibility across the whole selection, so a per-agent grant list would survive as a difference the request just asked to remove.
-         */
-        users?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/agents/bulk';
-};
-
-export type BulkUpdateAgentsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkUpdateAgentsError = BulkUpdateAgentsErrors[keyof BulkUpdateAgentsErrors];
-
-export type BulkUpdateAgentsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        affected?: number;
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkUpdateAgentsResponse = BulkUpdateAgentsResponses[keyof BulkUpdateAgentsResponses];
 
 export type RestoreAgentData = {
     body?: never;
@@ -22330,279 +22251,6 @@ export type CancelAgentRunResponses = {
 };
 
 export type CancelAgentRunResponse = CancelAgentRunResponses[keyof CancelAgentRunResponses];
-
-export type UnshareAgentRunData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/share';
-};
-
-export type UnshareAgentRunErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UnshareAgentRunError = UnshareAgentRunErrors[keyof UnshareAgentRunErrors];
-
-export type UnshareAgentRunResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type UnshareAgentRunResponse = UnshareAgentRunResponses[keyof UnshareAgentRunResponses];
-
-export type GetAgentRunShareData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/share';
-};
-
-export type GetAgentRunShareErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAgentRunShareError = GetAgentRunShareErrors[keyof GetAgentRunShareErrors];
-
-export type GetAgentRunShareResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        taskId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    } | null;
-};
-
-export type GetAgentRunShareResponse = GetAgentRunShareResponses[keyof GetAgentRunShareResponses];
-
-export type ShareAgentRunData = {
-    body: {
-        visibility: 'organization' | 'team' | 'user';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
-    };
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/share';
-};
-
-export type ShareAgentRunErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ShareAgentRunError = ShareAgentRunErrors[keyof ShareAgentRunErrors];
-
-export type ShareAgentRunResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        taskId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    };
-};
-
-export type ShareAgentRunResponse = ShareAgentRunResponses[keyof ShareAgentRunResponses];
 
 export type StartAgentWorkspaceTransferData = {
     body: {
@@ -25755,10 +25403,28 @@ export type GetAppsResponse = GetAppsResponses[keyof GetAppsResponses];
 
 export type CreateAppData = {
     body: {
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         name: string;
         slug?: string;
         description?: string;
-        scope?: 'personal' | 'team' | 'org';
         html?: string;
         uiPermissions?: {
             camera?: {
@@ -25782,7 +25448,6 @@ export type CreateAppData = {
             keyId?: string;
             valueId?: string;
         }>;
-        teamIds?: Array<string>;
         openInChat?: boolean;
     };
     path?: never;
@@ -27034,7 +26699,6 @@ export type UpdateAppData = {
         name?: string;
         slug?: string;
         description?: string | null;
-        scope?: 'personal' | 'team' | 'org';
         html?: string;
         uiPermissions?: {
             camera?: {
@@ -27059,8 +26723,6 @@ export type UpdateAppData = {
             valueId?: string;
         }>;
         openInFullscreen?: boolean;
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
     };
     path: {
         appId: string;
@@ -27294,115 +26956,6 @@ export type BulkDeleteAppsResponses = {
 };
 
 export type BulkDeleteAppsResponse = BulkDeleteAppsResponses[keyof BulkDeleteAppsResponses];
-
-export type BulkUpdateAppsData = {
-    body: {
-        /**
-         * Ids to act on. Duplicates are collapsed.
-         */
-        ids: Array<string>;
-        /**
-         * The visibility every app in the batch moves to.
-         */
-        scope: 'personal' | 'team' | 'org';
-        /**
-         * Only meaningful for `scope = team`; required there.
-         */
-        teamIds?: Array<string>;
-        /**
-         * People to share with. Only meaningful for `scope = personal`; omitting it revokes existing grants rather than keeping them, since this sets one visibility across the selection.
-         */
-        userIds?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/apps/bulk';
-};
-
-export type BulkUpdateAppsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkUpdateAppsError = BulkUpdateAppsErrors[keyof BulkUpdateAppsErrors];
-
-export type BulkUpdateAppsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        affected?: number;
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkUpdateAppsResponse = BulkUpdateAppsResponses[keyof BulkUpdateAppsResponses];
 
 export type EnableAppData = {
     body?: never;
@@ -29153,7 +28706,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -29257,7 +28810,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -29376,7 +28929,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -35660,7 +35213,6 @@ export type GetChatConversationsResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -35838,7 +35390,6 @@ export type CreateChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -36000,7 +35551,6 @@ export type GetDeletedChatConversationsResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -36249,7 +35799,6 @@ export type GetChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -36422,7 +35971,6 @@ export type UpdateChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -37026,7 +36574,6 @@ export type ForkChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -37279,7 +36826,6 @@ export type RestoreChatConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -37543,7 +37089,6 @@ export type CompactChatConversationResponses = {
                 llmApiKeyId: string | null;
             } | null;
             share: {
-                id: string;
                 visibility: 'organization' | 'team' | 'user';
             } | null;
             projectName?: string | null;
@@ -37593,610 +37138,6 @@ export type CompactChatConversationResponses = {
 };
 
 export type CompactChatConversationResponse = CompactChatConversationResponses[keyof CompactChatConversationResponses];
-
-export type UnshareConversationData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/share';
-};
-
-export type UnshareConversationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UnshareConversationError = UnshareConversationErrors[keyof UnshareConversationErrors];
-
-export type UnshareConversationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type UnshareConversationResponse = UnshareConversationResponses[keyof UnshareConversationResponses];
-
-export type GetConversationShareData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/share';
-};
-
-export type GetConversationShareErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetConversationShareError = GetConversationShareErrors[keyof GetConversationShareErrors];
-
-export type GetConversationShareResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        conversationId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    } | null;
-};
-
-export type GetConversationShareResponse = GetConversationShareResponses[keyof GetConversationShareResponses];
-
-export type ShareConversationData = {
-    body: {
-        visibility: 'organization' | 'team' | 'user';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/chat/conversations/{id}/share';
-};
-
-export type ShareConversationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ShareConversationError = ShareConversationErrors[keyof ShareConversationErrors];
-
-export type ShareConversationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        conversationId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    };
-};
-
-export type ShareConversationResponse = ShareConversationResponses[keyof ShareConversationResponses];
-
-export type GetSharedConversationData = {
-    body?: never;
-    path: {
-        shareId: string;
-    };
-    query?: never;
-    url: '/api/chat/shared/{shareId}';
-};
-
-export type GetSharedConversationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetSharedConversationError = GetSharedConversationErrors[keyof GetSharedConversationErrors];
-
-export type GetSharedConversationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        userId: string;
-        organizationId: string;
-        agentId: string | null;
-        chatApiKeyId: string | null;
-        title: string | null;
-        selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        modelId: string | null;
-        thinkingEffort: 'low' | 'medium' | 'high';
-        hasCustomToolSelection: boolean;
-        hooksDebugEnabled: boolean;
-        todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        artifact: string | null;
-        projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
-        titleIsPlaceholder: boolean;
-        lockedChat: boolean;
-        pinnedAt: string | null;
-        lastMessageAt: string;
-        createdAt: string;
-        updatedAt: string;
-        deletedAt: string | null;
-        contentLocked?: boolean;
-        agent: {
-            id: string;
-            name: string;
-            systemPrompt?: string | null;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            toolExposureMode: 'full' | 'search_and_run_only';
-            llmApiKeyId: string | null;
-        } | null;
-        share: {
-            id: string;
-            visibility: 'organization' | 'team' | 'user';
-        } | null;
-        projectName?: string | null;
-        projectIcon?: string | null;
-        unread?: boolean;
-        messages: Array<unknown>;
-        chatErrors: Array<{
-            id: string;
-            conversationId: string;
-            error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
-                message: string;
-                isRetryable: boolean;
-                sessionId?: string;
-                traceId?: string;
-                spanId?: string;
-                usageLimitExceeded?: boolean;
-                usageLimitEntityType?: string;
-                authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-                    providerLabel: string;
-                };
-                originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-                    status?: number;
-                    message?: string;
-                    type?: string;
-                    raw?: unknown;
-                };
-            };
-            createdAt: string;
-        }>;
-        compactions: Array<{
-            id: string;
-            conversationId: string;
-            summary: string;
-            compactedThroughMessageId: string | null;
-            trigger: 'auto' | 'manual';
-            provider: string;
-            model: string;
-            originalTokenEstimate: number;
-            compactedTokenEstimate: number;
-            createdAt: string;
-        }>;
-        sharedByUserId: string;
-    };
-};
-
-export type GetSharedConversationResponse = GetSharedConversationResponses[keyof GetSharedConversationResponses];
-
-export type ForkSharedConversationData = {
-    body: {
-        agentId: string;
-    };
-    path: {
-        shareId: string;
-    };
-    query?: never;
-    url: '/api/chat/shared/{shareId}/fork';
-};
-
-export type ForkSharedConversationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ForkSharedConversationError = ForkSharedConversationErrors[keyof ForkSharedConversationErrors];
-
-export type ForkSharedConversationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        userId: string;
-        organizationId: string;
-        agentId: string | null;
-        chatApiKeyId: string | null;
-        title: string | null;
-        selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        modelId: string | null;
-        thinkingEffort: 'low' | 'medium' | 'high';
-        hasCustomToolSelection: boolean;
-        hooksDebugEnabled: boolean;
-        todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        artifact: string | null;
-        projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
-        titleIsPlaceholder: boolean;
-        lockedChat: boolean;
-        pinnedAt: string | null;
-        lastMessageAt: string;
-        createdAt: string;
-        updatedAt: string;
-        deletedAt: string | null;
-        contentLocked?: boolean;
-        agent: {
-            id: string;
-            name: string;
-            systemPrompt?: string | null;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            toolExposureMode: 'full' | 'search_and_run_only';
-            llmApiKeyId: string | null;
-        } | null;
-        share: {
-            id: string;
-            visibility: 'organization' | 'team' | 'user';
-        } | null;
-        projectName?: string | null;
-        projectIcon?: string | null;
-        unread?: boolean;
-        messages: Array<unknown>;
-        chatErrors: Array<{
-            id: string;
-            conversationId: string;
-            error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
-                message: string;
-                isRetryable: boolean;
-                sessionId?: string;
-                traceId?: string;
-                spanId?: string;
-                usageLimitExceeded?: boolean;
-                usageLimitEntityType?: string;
-                authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-                    providerLabel: string;
-                };
-                originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-                    status?: number;
-                    message?: string;
-                    type?: string;
-                    raw?: unknown;
-                };
-            };
-            createdAt: string;
-        }>;
-        compactions: Array<{
-            id: string;
-            conversationId: string;
-            summary: string;
-            compactedThroughMessageId: string | null;
-            trigger: 'auto' | 'manual';
-            provider: string;
-            model: string;
-            originalTokenEstimate: number;
-            compactedTokenEstimate: number;
-            createdAt: string;
-        }>;
-    };
-};
-
-export type ForkSharedConversationResponse = ForkSharedConversationResponses[keyof ForkSharedConversationResponses];
 
 export type GenerateChatConversationTitleData = {
     body: {
@@ -38317,7 +37258,6 @@ export type GenerateChatConversationTitleResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -38486,7 +37426,6 @@ export type UpdateChatMessageResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -42465,7 +41404,6 @@ export type ListEnvironmentsResponses = {
             } | null;
             validationRegex: string | null;
             trustedImageRegistries: Array<string> | null;
-            restricted: boolean;
             sortOrder: number;
             createdAt: string;
             updatedAt: string;
@@ -42476,6 +41414,7 @@ export type ListEnvironmentsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            canDeploy: boolean;
         }>;
         defaultAssignedCatalogCount: number;
         resourceDefaults: {
@@ -42501,7 +41440,7 @@ export type CreateEnvironmentData = {
             allowedDomains?: Array<string>;
             allowedCidrs?: Array<string>;
         } | null;
-        restricted?: boolean;
+        restricted?: unknown;
         validationRegex?: string | null;
         trustedImageRegistries?: Array<string> | null;
         labels?: Array<{
@@ -42599,7 +41538,6 @@ export type CreateEnvironmentResponses = {
         } | null;
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
-        restricted: boolean;
         sortOrder: number;
         createdAt: string;
         updatedAt: string;
@@ -42797,7 +41735,7 @@ export type UpdateEnvironmentData = {
             allowedDomains?: Array<string>;
             allowedCidrs?: Array<string>;
         } | null;
-        restricted?: boolean;
+        restricted?: unknown;
         validationRegex?: string | null;
         trustedImageRegistries?: Array<string> | null;
         labels?: Array<{
@@ -42897,7 +41835,6 @@ export type UpdateEnvironmentResponses = {
         } | null;
         validationRegex: string | null;
         trustedImageRegistries: Array<string> | null;
-        restricted: boolean;
         sortOrder: number;
         createdAt: string;
         updatedAt: string;
@@ -62351,6 +61288,7 @@ export type GetInternalMcpCatalogResponses = {
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
     }>;
 };
 
@@ -62469,7 +61407,6 @@ export type CreateInternalMcpCatalogItemData = {
             cacheTtlSeconds?: number;
         } | null;
         icon?: string | null;
-        scope?: 'personal' | 'team' | 'org';
         clonedFrom?: string | null;
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
@@ -62477,9 +61414,26 @@ export type CreateInternalMcpCatalogItemData = {
             key: string;
             value: string;
         }>;
-        teams?: Array<string | {
-            id: string;
-            level?: 'use' | 'write';
+        scope?: unknown;
+        teams?: unknown;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
@@ -63312,7 +62266,6 @@ export type UpdateInternalMcpCatalogItemData = {
             cacheTtlSeconds?: number;
         } | null;
         icon?: string | null;
-        scope?: 'personal' | 'team' | 'org';
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
         hibernationMode?: 'inherit' | 'enabled' | 'disabled';
@@ -63320,10 +62273,8 @@ export type UpdateInternalMcpCatalogItemData = {
             key: string;
             value: string;
         }>;
-        teams?: Array<string | {
-            id: string;
-            level?: 'use' | 'write';
-        }>;
+        scope?: unknown;
+        teams?: unknown;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -66674,8 +65625,25 @@ export type CreateKnowledgeBaseData = {
             keyId?: string;
             valueId?: string;
         }>;
-        visibility?: 'private' | 'org-wide' | 'team-scoped';
-        teamIds?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -66970,8 +65938,8 @@ export type UpdateKnowledgeBaseData = {
             keyId?: string;
             valueId?: string;
         }>;
-        visibility?: 'private' | 'org-wide' | 'team-scoped';
-        teamIds?: Array<string>;
+        visibility?: unknown;
+        teamIds?: unknown;
     };
     path: {
         id: string;
@@ -67519,6 +66487,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
             teamIds: Array<string>;
+            syncPermissionsFromSource: boolean;
             connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
             config: {
                 type: 'jira';
@@ -67747,8 +66716,10 @@ export type CreateConnectorData = {
     body: {
         name: string;
         description?: string | null;
-        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds?: Array<string>;
+        /**
+         * Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync permission and a connector type that supports it.
+         */
+        syncPermissionsFromSource?: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         config: {
             type: 'jira';
@@ -67951,6 +66922,25 @@ export type CreateConnectorData = {
             keyId?: string;
             valueId?: string;
         }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -68033,6 +67023,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
+        syncPermissionsFromSource: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         config: {
             type: 'jira';
@@ -68411,6 +67402,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
+        syncPermissionsFromSource: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         config: {
             type: 'jira';
@@ -68912,6 +67904,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
+        syncPermissionsFromSource: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         config: {
             type: 'jira';
@@ -71647,8 +70640,6 @@ export type GetKnowledgeFilesResponse = GetKnowledgeFilesResponses[keyof GetKnow
 
 export type UploadKnowledgeFileData = {
     body: {
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
         filename: string;
         mimeType: string;
         content: string;
@@ -71658,6 +70649,25 @@ export type UploadKnowledgeFileData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -71886,9 +70896,26 @@ export type UpsertKnowledgeFileResponse = UpsertKnowledgeFileResponses[keyof Ups
 
 export type PromoteAttachmentToKnowledgeFileData = {
     body: {
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
         attachmentId: string;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         filename?: string;
         directoryId?: string | null;
         knowledgeBaseId?: string;
@@ -72089,8 +71116,6 @@ export type UpdateKnowledgeFileData = {
     body: {
         filename?: string;
         directoryId?: string | null;
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -72307,111 +71332,6 @@ export type BulkDeleteKnowledgeFilesResponses = {
 
 export type BulkDeleteKnowledgeFilesResponse = BulkDeleteKnowledgeFilesResponses[keyof BulkDeleteKnowledgeFilesResponses];
 
-export type BulkUpdateKnowledgeFilesData = {
-    body: {
-        /**
-         * Ids to act on. Duplicates are collapsed.
-         */
-        ids: Array<string>;
-        /**
-         * The audience every document in the batch moves to.
-         */
-        visibility: 'org-wide' | 'team-scoped' | 'private';
-        /**
-         * Only meaningful for `team-scoped`; required there.
-         */
-        teamIds?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/knowledge-files/bulk';
-};
-
-export type BulkUpdateKnowledgeFilesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkUpdateKnowledgeFilesError = BulkUpdateKnowledgeFilesErrors[keyof BulkUpdateKnowledgeFilesErrors];
-
-export type BulkUpdateKnowledgeFilesResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        affected?: number;
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkUpdateKnowledgeFilesResponse = BulkUpdateKnowledgeFilesResponses[keyof BulkUpdateKnowledgeFilesResponses];
-
 export type IndexKnowledgeFilesData = {
     body: {
         fileIds?: Array<string>;
@@ -72604,8 +71524,6 @@ export type GetKnowledgeDirectoriesResponse = GetKnowledgeDirectoriesResponses[k
 
 export type CreateKnowledgeDirectoryData = {
     body: {
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
         name: string;
     };
     path?: never;
@@ -72791,8 +71709,6 @@ export type DeleteKnowledgeDirectoryResponse = DeleteKnowledgeDirectoryResponses
 export type UpdateKnowledgeDirectoryData = {
     body: {
         name?: string;
-        visibility?: 'org-wide' | 'team-scoped' | 'private';
-        teamIds?: Array<string>;
     };
     path: {
         directoryId: string;
@@ -72987,111 +71903,6 @@ export type BulkDeleteKnowledgeDirectoriesResponses = {
 };
 
 export type BulkDeleteKnowledgeDirectoriesResponse = BulkDeleteKnowledgeDirectoriesResponses[keyof BulkDeleteKnowledgeDirectoriesResponses];
-
-export type BulkUpdateKnowledgeDirectoriesData = {
-    body: {
-        /**
-         * Ids to act on. Duplicates are collapsed.
-         */
-        ids: Array<string>;
-        /**
-         * The audience every directory in the batch moves to.
-         */
-        visibility: 'org-wide' | 'team-scoped' | 'private';
-        /**
-         * Only meaningful for `team-scoped`; required there.
-         */
-        teamIds?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/knowledge-directories/bulk';
-};
-
-export type BulkUpdateKnowledgeDirectoriesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkUpdateKnowledgeDirectoriesError = BulkUpdateKnowledgeDirectoriesErrors[keyof BulkUpdateKnowledgeDirectoriesErrors];
-
-export type BulkUpdateKnowledgeDirectoriesResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        affected?: number;
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkUpdateKnowledgeDirectoriesResponse = BulkUpdateKnowledgeDirectoriesResponses[keyof BulkUpdateKnowledgeDirectoriesResponses];
 
 export type LimitLabelKeysData = {
     body?: never;
@@ -74535,8 +73346,7 @@ export type UpdateModelData = {
             num_predict?: number;
             reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
         } | null;
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
+        teamIds?: unknown;
         labels?: Array<{
             key: string;
             value: string;
@@ -74937,7 +73747,6 @@ export type GetLlmOauthClientsResponses = {
             }>;
             redirectUris: Array<string>;
             disabled: boolean;
-            scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             authorName: string | null;
             createdBy: {
@@ -74946,10 +73755,6 @@ export type GetLlmOauthClientsResponses = {
                 name: string | null;
                 email: string | null;
             } | null;
-            teams: Array<{
-                id: string;
-                name: string;
-            }>;
             labels: Array<{
                 key: string;
                 value: string;
@@ -74981,8 +73786,6 @@ export type CreateLlmOauthClientData = {
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -74991,6 +73794,28 @@ export type CreateLlmOauthClientData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        /**
+         * Who else starts with access, beside the creator who always gets full access.
+         */
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -75080,7 +73905,6 @@ export type CreateLlmOauthClientResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -75089,10 +73913,6 @@ export type CreateLlmOauthClientResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -75201,8 +74021,6 @@ export type UpdateLlmOauthClientData = {
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -75302,7 +74120,6 @@ export type UpdateLlmOauthClientResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -75311,10 +74128,6 @@ export type UpdateLlmOauthClientResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -75419,7 +74232,6 @@ export type RotateLlmOauthClientSecretResponses = {
         }>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -75428,10 +74240,6 @@ export type RotateLlmOauthClientSecretResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -75848,8 +74656,10 @@ export type CreateLlmProviderApiKeyData = {
         extraHeaders?: {
             [key: string]: string;
         } | null;
-        scope?: 'personal' | 'team' | 'org';
-        teamId?: string;
+        /**
+         * Omitted or false: the key is yours alone (you own it and only you use it). True: a shared key with no owner, used by whoever its initialGrants reach.
+         */
+        shared?: boolean;
         isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
@@ -75864,6 +74674,25 @@ export type CreateLlmProviderApiKeyData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -76326,8 +75155,6 @@ export type UpdateLlmProviderApiKeyData = {
         extraHeaders?: {
             [key: string]: string;
         } | null;
-        scope?: 'personal' | 'team' | 'org';
-        teamId?: string | null;
         isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
@@ -77311,7 +76138,6 @@ export type GetMcpOauthClientsResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -77320,10 +76146,6 @@ export type GetMcpOauthClientsResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -77343,8 +76165,6 @@ export type CreateMcpOauthClientData = {
         grantType?: 'client_credentials' | 'authorization_code';
         allowedGatewayIds?: Array<string>;
         redirectUris?: Array<string>;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -77353,6 +76173,28 @@ export type CreateMcpOauthClientData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        /**
+         * Who else starts with access, beside the creator who always gets full access.
+         */
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -77438,7 +76280,6 @@ export type CreateMcpOauthClientResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -77447,10 +76288,6 @@ export type CreateMcpOauthClientResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -77556,8 +76393,6 @@ export type UpdateMcpOauthClientData = {
         grantType?: 'client_credentials' | 'authorization_code';
         allowedGatewayIds?: Array<string>;
         redirectUris?: Array<string>;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -77653,7 +76488,6 @@ export type UpdateMcpOauthClientResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -77662,10 +76496,6 @@ export type UpdateMcpOauthClientResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -77766,7 +76596,6 @@ export type RotateMcpOauthClientSecretResponses = {
         allowedGatewayIds: Array<string>;
         redirectUris: Array<string>;
         disabled: boolean;
-        scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
         createdBy: {
@@ -77775,10 +76604,6 @@ export type RotateMcpOauthClientSecretResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -87889,7 +86714,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -87913,7 +86738,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
     };
     path?: never;
@@ -87997,7 +86822,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -88183,7 +87008,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -88198,7 +87023,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
     };
     path: {
@@ -88287,7 +87112,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -88480,7 +87305,6 @@ export type GetOrganizationResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -88801,7 +87625,6 @@ export type UpdateAppearanceSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -89005,7 +87828,6 @@ export type UpdateSecuritySettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -89204,7 +88026,6 @@ export type UpdateMcpSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -89403,7 +88224,6 @@ export type UpdateSkillsSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -89603,7 +88423,6 @@ export type UpdateAgentSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -89818,7 +88637,6 @@ export type UpdateConnectionSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -90031,7 +88849,6 @@ export type UpdateIntegrationSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -90055,7 +88872,7 @@ export type UpdateDefaultEnvironmentData = {
             allowedDomains?: Array<string>;
             allowedCidrs?: Array<string>;
         } | null;
-        restricted?: boolean;
+        restricted?: unknown;
         validationRegex?: string | null;
         trustedImageRegistries?: Array<string> | null;
     };
@@ -90240,7 +89057,6 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -90444,7 +89260,6 @@ export type UpdateAuthSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -90650,7 +89465,6 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -90846,7 +89660,6 @@ export type DropEmbeddingConfigResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -91392,7 +90205,6 @@ export type CompleteOnboardingResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
-        defaultEnvironmentRestricted: boolean;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -92768,9 +91580,6 @@ export type CreatePluginData = {
         description?: string;
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         files: Array<{
             path: string;
             content: string;
@@ -92782,6 +91591,25 @@ export type CreatePluginData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -93063,9 +91891,25 @@ export type ImportGithubPluginMarketplaceData = {
             approvedSourceSha: string;
             exclude?: Array<string>;
         }>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         syncInterval?: '15m' | '1h' | '1d' | null;
     };
     path?: never;
@@ -93336,9 +92180,25 @@ export type ImportGithubPluginData = {
         description?: string;
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         approvedCommitSha: string;
         trackingRef?: string | null;
     };
@@ -94225,9 +93085,6 @@ export type UpdatePluginData = {
         description?: string;
         enabled?: boolean;
         supportedPlatforms?: Array<'posix' | 'windows'>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -95109,6 +93966,25 @@ export type CreateProjectData = {
             keyId?: string;
             valueId?: string;
         }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -95632,95 +94508,6 @@ export type UpdateProjectResponses = {
 
 export type UpdateProjectResponse = UpdateProjectResponses[keyof UpdateProjectResponses];
 
-export type SetProjectShareData = {
-    body: {
-        visibility: 'organization' | 'team' | 'user' | 'none';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/projects/{id}/share';
-};
-
-export type SetProjectShareErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type SetProjectShareError = SetProjectShareErrors[keyof SetProjectShareErrors];
-
-export type SetProjectShareResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        ok: true;
-    };
-};
-
-export type SetProjectShareResponse = SetProjectShareResponses[keyof SetProjectShareResponses];
-
 export type BulkDeleteProjectsData = {
     body: {
         /**
@@ -95817,106 +94604,6 @@ export type BulkDeleteProjectsResponses = {
 };
 
 export type BulkDeleteProjectsResponse = BulkDeleteProjectsResponses[keyof BulkDeleteProjectsResponses];
-
-export type BulkUpdateProjectsData = {
-    body: {
-        /**
-         * Ids to act on. Duplicates are collapsed.
-         */
-        ids: Array<string>;
-        visibility: 'organization' | 'team' | 'user' | 'none';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/projects/bulk';
-};
-
-export type BulkUpdateProjectsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkUpdateProjectsError = BulkUpdateProjectsErrors[keyof BulkUpdateProjectsErrors];
-
-export type BulkUpdateProjectsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        affected?: number;
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkUpdateProjectsResponse = BulkUpdateProjectsResponses[keyof BulkUpdateProjectsResponses];
 
 export type RestoreProjectData = {
     body: {
@@ -99067,7 +97754,6 @@ export type CreateScheduleTriggerRunConversationResponses = {
             llmApiKeyId: string | null;
         } | null;
         share: {
-            id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
@@ -99665,6 +98351,25 @@ export type CreateServiceAccountData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -101497,7 +100202,7 @@ export type GetSkillsData = {
          */
         excludeOtherPersonalSkills?: boolean;
         /**
-         * Which skills to list: active (default) or the soft-deleted trash. `deleted` is restricted to admins and team-admins.
+         * Which skills to list: active (default) or the soft-deleted trash. `deleted` is restricted to callers who manage every skill.
          */
         status?: 'active' | 'deleted';
         /**
@@ -101614,6 +100319,7 @@ export type GetSkillsResponses = {
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
+            canPublish?: boolean;
             createdBy: {
                 id: string;
                 type?: 'user' | 'service_account';
@@ -101673,9 +100379,6 @@ export type CreateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         /**
          * Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.
          */
@@ -101692,6 +100395,25 @@ export type CreateSkillData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -102096,9 +100818,6 @@ export type UpdateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
         /**
          * Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.
          */
@@ -102570,111 +101289,6 @@ export type GetSkillVersionResponses = {
 };
 
 export type GetSkillVersionResponse = GetSkillVersionResponses[keyof GetSkillVersionResponses];
-
-export type BulkUpdateSkillsVisibilityData = {
-    body: {
-        /**
-         * Skills to act on. Duplicates are collapsed.
-         */
-        skillIds: Array<string>;
-        scope: 'personal' | 'team' | 'org';
-        /**
-         * Only meaningful for `scope = team`; required there.
-         */
-        teamIds?: Array<string>;
-        /**
-         * People to share with by name. Only meaningful for `scope = personal`; ignored for team/org skills. Unlike the single-skill update, omitting it revokes existing grants rather than keeping them: this sets one visibility across the whole selection, so a per-skill grant list would survive as a difference the request just asked to remove.
-         */
-        userIds?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/skills/bulk-visibility';
-};
-
-export type BulkUpdateSkillsVisibilityErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BulkUpdateSkillsVisibilityError = BulkUpdateSkillsVisibilityErrors[keyof BulkUpdateSkillsVisibilityErrors];
-
-export type BulkUpdateSkillsVisibilityResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        succeeded: Array<{
-            id: string;
-            name: string;
-        }>;
-        failed: Array<{
-            id: string;
-            name: string | null;
-            error: string;
-        }>;
-    };
-};
-
-export type BulkUpdateSkillsVisibilityResponse = BulkUpdateSkillsVisibilityResponses[keyof BulkUpdateSkillsVisibilityResponses];
 
 export type GetSkillSourceReposData = {
     body?: never;
@@ -103807,9 +102421,25 @@ export type ImportGithubSkillsData = {
         githubAppConfigId?: string;
         githubPatId?: string;
         skillPaths: Array<string>;
-        scope?: 'personal' | 'team' | 'org';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         /**
          * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
          */
@@ -108272,7 +106902,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
         };
     }>;
 };
@@ -108356,7 +106986,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
     };
 };
 
@@ -109015,8 +107645,6 @@ export type CreateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
@@ -109028,6 +107656,25 @@ export type CreateVirtualApiKeyData = {
             valueId?: string;
         }>;
         ownerId?: string;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -109352,8 +107999,6 @@ export type UpdateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
@@ -112555,6 +111200,584 @@ export type UpdateIdentityProviderResponses = {
 };
 
 export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[keyof UpdateIdentityProviderResponses];
+
+export type SearchInitialPermissionSubjectsData = {
+    body?: never;
+    path: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+    };
+    query?: {
+        query?: string;
+    };
+    url: '/api/resource-permissions/{resource}/creation-subjects';
+};
+
+export type SearchInitialPermissionSubjectsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SearchInitialPermissionSubjectsError = SearchInitialPermissionSubjectsErrors[keyof SearchInitialPermissionSubjectsErrors];
+
+export type SearchInitialPermissionSubjectsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        subject: {
+            type: 'user';
+            id: string;
+        } | {
+            type: 'team';
+            id: string;
+        } | {
+            type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'role';
+            id: string;
+        } | {
+            type: 'organization';
+            id: '*';
+        };
+        name: string;
+        email?: string;
+    }>;
+};
+
+export type SearchInitialPermissionSubjectsResponse = SearchInitialPermissionSubjectsResponses[keyof SearchInitialPermissionSubjectsResponses];
+
+export type GetScopedCapabilitiesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/resource-permissions';
+};
+
+export type GetScopedCapabilitiesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetScopedCapabilitiesError = GetScopedCapabilitiesErrors[keyof GetScopedCapabilitiesErrors];
+
+export type GetScopedCapabilitiesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        organizationId: string;
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        scope: '*' | string;
+        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions';
+    }>;
+};
+
+export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof GetScopedCapabilitiesResponses];
+
+export type SearchResourcePermissionSubjectsData = {
+    body?: never;
+    path: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        scope: '*' | string;
+    };
+    query?: {
+        query?: string;
+    };
+    url: '/api/resource-permissions/{resource}/{scope}/subjects';
+};
+
+export type SearchResourcePermissionSubjectsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SearchResourcePermissionSubjectsError = SearchResourcePermissionSubjectsErrors[keyof SearchResourcePermissionSubjectsErrors];
+
+export type SearchResourcePermissionSubjectsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        subject: {
+            type: 'user';
+            id: string;
+        } | {
+            type: 'team';
+            id: string;
+        } | {
+            type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'role';
+            id: string;
+        } | {
+            type: 'organization';
+            id: '*';
+        };
+        name: string;
+        email?: string;
+    }>;
+};
+
+export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionSubjectsResponses[keyof SearchResourcePermissionSubjectsResponses];
+
+export type GetResourcePermissionsData = {
+    body?: never;
+    path: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        scope: '*' | string;
+    };
+    query?: never;
+    url: '/api/resource-permissions/{resource}/{scope}';
+};
+
+export type GetResourcePermissionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetResourcePermissionsError = GetResourcePermissionsErrors[keyof GetResourcePermissionsErrors];
+
+export type GetResourcePermissionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        scope: '*' | string;
+        name: string;
+        revision: number;
+        grants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+        }>;
+        inheritedGrants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+            sourceScope?: '*' | string;
+        }>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+    };
+};
+
+export type GetResourcePermissionsResponse = GetResourcePermissionsResponses[keyof GetResourcePermissionsResponses];
+
+export type UpdateResourcePermissionsData = {
+    body: {
+        revision: number;
+        grants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
+    };
+    path: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        scope: '*' | string;
+    };
+    query?: never;
+    url: '/api/resource-permissions/{resource}/{scope}';
+};
+
+export type UpdateResourcePermissionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateResourcePermissionsError = UpdateResourcePermissionsErrors[keyof UpdateResourcePermissionsErrors];
+
+export type UpdateResourcePermissionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        scope: '*' | string;
+        name: string;
+        revision: number;
+        grants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+        }>;
+        inheritedGrants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+            sourceScope?: '*' | string;
+        }>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+    };
+};
+
+export type UpdateResourcePermissionsResponse = UpdateResourcePermissionsResponses[keyof UpdateResourcePermissionsResponses];
 
 export type IngestRumEventsData = {
     body: {

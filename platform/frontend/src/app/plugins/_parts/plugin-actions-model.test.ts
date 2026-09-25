@@ -14,7 +14,8 @@ describe("Plugin action model", () => {
 
     expect(pluginAction(model, "install")).toMatchObject({
       label: "Install",
-      permissions: { plugin: ["read", "admin"] },
+      permissions: { plugin: ["read", "update"] },
+      permissionScope: "*",
     });
     expect(pluginAction(model, "updates").label).toBe("Review update");
     // Editing is the plugin's own page now, not a route beside it.
@@ -23,7 +24,8 @@ describe("Plugin action model", () => {
     );
     expect(pluginAction(model, "delete")).toMatchObject({
       label: "Delete",
-      permissions: { plugin: ["delete", "admin"] },
+      permissions: { plugin: ["delete", "update"] },
+      permissionScope: "*",
     });
   });
 });

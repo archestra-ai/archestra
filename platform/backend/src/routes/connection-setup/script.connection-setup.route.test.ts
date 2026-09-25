@@ -18,7 +18,14 @@ import {
   SkillShareLinkModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
@@ -31,6 +38,7 @@ vi.mock("@/cache-manager");
 
 import { userHasPermission } from "@/auth";
 import config from "@/config";
+import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -345,11 +353,10 @@ describe("GET /api/connection-setups/script/:token", () => {
   }) => {
     // The headline of the shared marketplace URL: reading skills is enough to
     // install them. Before, the script refused (410) for anyone without
-    // skill:admin, leaving members no path to shared skills at all.
-    mockUserHasPermission.mockImplementation(
-      async (_userId, _orgId, resource, action) =>
-        !(resource === "skill" && action === "admin"),
-    );
+    // skill:admin, leaving members no path to shared skills at all. That
+    // action is retired; the member holds every role action and no grant on
+    // every skill.
+    mockUserHasPermission.mockResolvedValue(true);
 
     const gateway = await makeAgent({
       organizationId,
@@ -742,6 +749,16 @@ describe("GET /api/connection-setups/script/:token", () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
 
+    grantEverywhere(["plugin"], async () =>
+      Boolean(
+        await mockUserHasPermission.getMockImplementation()?.(
+          "",
+          "",
+          "plugin",
+          "admin" as never,
+        ),
+      ),
+    );
     try {
       mockUserHasPermission.mockResolvedValue(false);
       expect((await fetchScript(rawToken)).statusCode).toBe(410);
@@ -816,9 +833,9 @@ async function seedSkill(params: { organizationId: string; name: string }) {
       content: `# ${params.name}`,
       metadata: {},
       sourceType: "manual",
-      scope: "org",
     },
     files: [],
+    ...accessGrants("org"),
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;

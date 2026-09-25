@@ -422,8 +422,12 @@ test.describe("MCP idle hibernation - deployment topologies", () => {
           data: {
             name: params.gatewayName,
             agentType: "mcp_gateway",
-            scope: "team",
-            teams: [params.teamId],
+            initialGrants: [
+              {
+                subject: { type: "team", id: params.teamId },
+                actions: ["read", "use"],
+              },
+            ],
           },
         });
         const gatewayId = (await gatewayResponse.json()).id;

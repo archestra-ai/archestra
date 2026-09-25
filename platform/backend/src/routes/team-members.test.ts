@@ -3,6 +3,7 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentToolModel, TeamModel } from "@/models";
+import AgentTeamModel from "@/models/agent-team";
 import AuditLogModel from "@/models/audit-log";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -627,7 +628,7 @@ describe("team routes", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    test("team admin member cannot update team details without team:update", async ({
+    test("team admin member can update their team details without team:update", async ({
       makeTeam,
       makeUser,
       makeMember,
@@ -667,12 +668,9 @@ describe("team routes", () => {
         payload: { name: "Edited By Member" },
       });
 
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error.message).toBe(
-        "You are not authorized to update this team",
-      );
+      expect(response.statusCode, response.body).toBe(200);
       await expect(TeamModel.findById(team.id)).resolves.toMatchObject({
-        name: "Editable",
+        name: "Edited By Member",
       });
 
       await memberApp.close();
@@ -1123,9 +1121,10 @@ describe("team routes", () => {
       const agent = await makeInternalAgent({
         organizationId,
         authorId: adminUser.id,
-        scope: "team",
-        teams: [parent.id],
+        access: { teams: [parent.id] },
       });
+      // The cleanup walks the team's agent assignments, not its grants.
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [parent.id]);
       await makeAgentTool(agent.id, tool.id, {
         mcpServerId: connection.id,
         credentialResolutionMode: "static",
@@ -1177,9 +1176,10 @@ describe("team routes", () => {
       const agent = await makeInternalAgent({
         organizationId,
         authorId: adminUser.id,
-        scope: "team",
-        teams: [parent.id],
+        access: { teams: [parent.id] },
       });
+      // The cleanup walks the team's agent assignments, not its grants.
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [parent.id]);
       await makeAgentTool(agent.id, tool.id, {
         mcpServerId: connection.id,
         credentialResolutionMode: "static",
@@ -1557,7 +1557,9 @@ describe("team routes", () => {
       const { default: teamRoutes } = await import("./team");
       await legacyRoleApp.register(teamRoutes);
       vi.mocked(hasPermission).mockImplementation(async (permissions) => ({
-        success: permissions?.team?.includes("admin") ?? false,
+        success:
+          (permissions?.team as string[] | undefined)?.includes("admin") ??
+          false,
         error: null,
       }));
 

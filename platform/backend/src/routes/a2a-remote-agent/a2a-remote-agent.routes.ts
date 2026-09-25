@@ -9,12 +9,7 @@ import {
   userHasPermission,
 } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
-import {
-  A2aOutboundRunModel,
-  A2aRemoteAgentModel,
-  AgentModel,
-  TeamModel,
-} from "@/models";
+import { A2aOutboundRunModel, A2aRemoteAgentModel, AgentModel } from "@/models";
 import {
   listA2aDelegations,
   syncA2aDelegations,
@@ -142,21 +137,18 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       try {
-        checker.require(agent.agentType, "update");
+        checker.require(agent.agentType, {
+          action: "update",
+          scope: agent.id,
+        });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
-      const userTeamIds = !checker.isAdmin(agent.agentType)
-        ? await TeamModel.getUserTeamIds(user.id)
-        : [];
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "update",
         checker,
         agentType: agent.agentType,
-        agentScope: agent.scope,
-        agentAuthorId: agent.authorId,
-        agentTeamIds: agent.teams.map((team) => team.id),
-        userTeamIds,
-        userId: user.id,
       });
       if (agent.agentType === "llm_proxy") {
         throw new ApiError(400, "LLM proxies cannot have subagents");

@@ -31,9 +31,6 @@ export function EnvironmentSelector(props: EnvironmentSelectorProps) {
   const environments = environmentList?.environments ?? [];
   const defaultEnvironment = useDefaultEnvironment();
   const resource = "resource" in props ? props.resource : undefined;
-  const { data: canDeployRestricted } = useHasPermissions(
-    resource ? { [resource]: ["deploy-to-restricted"] } : {},
-  );
   const { data: canManageEnvironments } = useHasPermissions({
     environment: ["update"],
   });
@@ -68,7 +65,8 @@ export function EnvironmentSelector(props: EnvironmentSelectorProps) {
             description: scope
               ? "Applies to every environment unless overridden"
               : (defaultEnvironment.description ?? ""),
-            restricted: false,
+            // The org Default is open to all.
+            deployable: true,
           },
         ];
   const options = [
@@ -77,18 +75,18 @@ export function EnvironmentSelector(props: EnvironmentSelectorProps) {
       value: environment.id,
       label: environment.name,
       description: environment.description ?? "",
-      restricted: environment.restricted,
+      // Answered per environment by the API, so one restricted environment can
+      // be offered while its neighbour stays disabled.
+      deployable: environment.canDeploy,
     })),
   ].map((option) => {
-    const requiresPermission =
-      !!resource && option.restricted && !canDeployRestricted;
+    const requiresPermission = !!resource && !option.deployable;
     const taken = scope && props.takenValues?.has(option.value);
     return {
       ...option,
       disabled: requiresPermission || !!taken,
       description: requiresPermission ? (
         <RestrictedEnvironmentDescription
-          permission={`${resource}:deploy-to-restricted`}
           selected={selectedValues.includes(option.value)}
         />
       ) : taken ? (
@@ -271,29 +269,13 @@ type EnvironmentSelectorProps = CommonProps &
       }
   );
 
-function RestrictedEnvironmentDescription({
-  permission,
-  selected,
-}: {
-  permission: string;
-  selected: boolean;
-}) {
+function RestrictedEnvironmentDescription({ selected }: { selected: boolean }) {
   return (
-    <>
-      <span>
-        {selected
-          ? "You can keep this assignment. New assignments require "
-          : "You need "}
-      </span>
-      <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs break-all">
-        {permission}
-      </code>
-      <span>
-        {selected
-          ? " permission."
-          : " permission to assign resources to this environment."}
-      </span>
-    </>
+    <span>
+      {selected
+        ? "This environment is restricted. You can keep this assignment, but you need access to it to make new ones."
+        : "This environment is restricted. Ask an administrator for access to it to deploy here."}
+    </span>
   );
 }
 

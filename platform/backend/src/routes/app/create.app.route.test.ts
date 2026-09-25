@@ -4,7 +4,6 @@ import { createFastifyInstance } from "@/fastify-instance";
 import {
   AgentModel,
   AppModel,
-  AppVersionModel,
   ConversationModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -13,6 +12,7 @@ import {
 } from "@/models";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   afterEach,
   beforeEach,
@@ -21,6 +21,10 @@ import {
   mustExist,
   test,
 } from "@/test";
+import {
+  createRestrictedEnvironment,
+  grantEnvironmentUse,
+} from "@/test/environments";
 import type { User } from "@/types";
 
 describe("POST /api/apps", () => {
@@ -61,7 +65,6 @@ describe("POST /api/apps", () => {
         name: "Dashboard",
         description: "A shared dashboard",
         html: "<html><head></head><body><h1>ok</h1></body></html>",
-        scope: "org",
       },
     });
 
@@ -69,7 +72,6 @@ describe("POST /api/apps", () => {
     expect(response.json()).toMatchObject({
       name: "Dashboard",
       description: "A shared dashboard",
-      scope: "org",
       latestVersion: 1,
     });
   });
@@ -78,7 +80,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Iconned", icon: "🚀", scope: "org" },
+      payload: { name: "Iconned", icon: "🚀" },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().icon).toBe("🚀");
@@ -147,7 +149,7 @@ describe("POST /api/apps", () => {
     expect(clean.json().warnings).toBeUndefined();
   });
 
-  test("a plain member may create a personal app but not an org-scoped one", async ({
+  test("a creator may grant organization access to a new app", async ({
     makeUser,
     makeMember,
   }) => {
@@ -166,14 +168,14 @@ describe("POST /api/apps", () => {
     const orgApp = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Shared", html: "<p/>", scope: "org" },
+      payload: { name: "Shared", html: "<p/>" },
     });
-    expect(orgApp.statusCode).toBe(403);
+    expect(orgApp.statusCode).toBe(200);
   });
 
-  test("ignores a stray uiCsp body key (apps carry no author CSP)", async () => {
-    // uiCsp is not an authoring field: the body schema strips it and the serve
-    // path pins the platform CSP.
+  test("refuses a stray uiCsp body key (apps carry no author CSP)", async () => {
+    // uiCsp is not an authoring field: the strict body schema refuses it, and
+    // the serve path pins the platform CSP.
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
@@ -183,23 +185,16 @@ describe("POST /api/apps", () => {
         uiCsp: { connectDomains: ["https://evil.example.com"] },
       },
     });
-    expect(response.statusCode).toBe(200);
-    const created = response.json() as { id: string; latestVersion: number };
-    const head = await AppVersionModel.findByAppAndVersion(
-      created.id,
-      created.latestVersion,
-    );
-    expect(head).not.toBeNull();
+    expect(response.statusCode).toBe(400);
   });
 
-  test("rejects a team-scoped app with no teamIds (400)", async () => {
+  test("refuses the retired scope and teamIds fields (400)", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Teamless", html: "<p/>", scope: "team" },
+      payload: { name: "Teamless", html: "<p/>", scope: "team", teamIds: [] },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("at least one teamId");
   });
 
   test("creates a team-scoped app with a valid team", async ({ makeTeam }) => {
@@ -211,12 +206,23 @@ describe("POST /api/apps", () => {
       payload: {
         name: "Team App",
         html: "<p/>",
-        scope: "team",
-        teamIds: [team.id],
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().scope).toBe("team");
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "app",
+      scope: response.json().id,
+    });
+    expect(
+      policy?.grants.some(
+        (grant) =>
+          grant.subject.type === "team" && grant.subject.id === team.id,
+      ),
+    ).toBe(true);
   });
 
   test("rejects a team id from another organization with 400", async ({
@@ -234,12 +240,18 @@ describe("POST /api/apps", () => {
       payload: {
         name: "Team App",
         html: "<p/>",
-        scope: "team",
-        teamIds: [foreignTeam.id],
+        initialGrants: [
+          {
+            subject: { type: "team", id: foreignTeam.id },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("Unknown team");
+    expect(response.json().error.message).toContain(
+      "permission recipient does not exist",
+    );
   });
 
   test("binds a new app to an environment", async () => {
@@ -250,7 +262,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Bound", scope: "org", environmentId: prod.id },
+      payload: { name: "Bound", environmentId: prod.id },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(prod.id);
@@ -260,7 +272,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Default Env", scope: "org" },
+      payload: { name: "Default Env" },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBeNull();
@@ -279,7 +291,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Configured Env", scope: "org" },
+      payload: { name: "Configured Env" },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(launch.id);
@@ -298,7 +310,7 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Explicit Default", scope: "org", environmentId: null },
+      payload: { name: "Explicit Default", environmentId: null },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBeNull();
@@ -315,34 +327,34 @@ describe("POST /api/apps", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "X", scope: "org", environmentId: foreignEnv.id },
+      payload: { name: "X", environmentId: foreignEnv.id },
     });
     expect(response.statusCode).toBe(404);
   });
 
   test("an admin may bind to a restricted environment", async () => {
-    const restricted = await EnvironmentModel.create({
+    // An admin's full access at `*` reaches an environment with no
+    // organization or role grant of its own.
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      name: "restricted-prod",
-      restricted: true,
+      data: { name: "restricted-prod" },
     });
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "R", scope: "org", environmentId: restricted.id },
+      payload: { name: "R", environmentId: restricted.id },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(restricted.id);
   });
 
-  test("a member without deploy-to-restricted cannot bind to a restricted environment (403)", async ({
+  test("a member without a use grant cannot bind to a restricted environment (403)", async ({
     makeUser,
     makeMember,
   }) => {
-    const restricted = await EnvironmentModel.create({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      name: "restricted-prod",
-      restricted: true,
+      data: { name: "restricted-prod" },
     });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
@@ -353,50 +365,40 @@ describe("POST /api/apps", () => {
     const baseline = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Baseline", scope: "personal" },
+      payload: { name: "Baseline" },
     });
     expect(baseline.statusCode).toBe(200);
 
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: {
-        name: "Restricted",
-        scope: "personal",
-        environmentId: restricted.id,
-      },
+      payload: { name: "Restricted", environmentId: restricted.id },
     });
     expect(response.statusCode).toBe(403);
   });
 
-  test("a custom role holding app:deploy-to-restricted may bind to a restricted environment", async ({
+  test("a member granted use on a restricted environment may bind to it", async ({
     makeUser,
     makeMember,
-    makeCustomRole,
   }) => {
-    const restricted = await EnvironmentModel.create({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      name: "restricted-prod",
-      restricted: true,
+      data: { name: "restricted-prod" },
     });
-    // The role holds the app-specific deploy permission and nothing else
-    // environment-related — pinning that the per-resource action alone
-    // unlocks the restricted bind for apps.
-    const role = await makeCustomRole(organizationId, {
-      permission: { app: ["read", "create", "deploy-to-restricted"] },
-    });
+    // A `use` grant on the one environment is what unlocks the bind.
     const deployer = await makeUser();
-    await makeMember(deployer.id, organizationId, { role: role.role });
+    await makeMember(deployer.id, organizationId, { role: "member" });
+    await grantEnvironmentUse({
+      organizationId,
+      environmentId: restricted.id,
+      userId: deployer.id,
+    });
     user = deployer;
 
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: {
-        name: "Restricted OK",
-        scope: "personal",
-        environmentId: restricted.id,
-      },
+      payload: { name: "Restricted OK", environmentId: restricted.id },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(restricted.id);
@@ -548,10 +550,9 @@ describe("POST /api/apps — the environment of the agent that builds it", () =>
     makeMember,
     makeAgent,
   }) => {
-    const restricted = await EnvironmentModel.create({
+    const restricted = await createRestrictedEnvironment({
       organizationId,
-      name: "restricted-launch",
-      restricted: true,
+      data: { name: "restricted-launch" },
     });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
@@ -566,11 +567,7 @@ describe("POST /api/apps — the environment of the agent that builds it", () =>
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: {
-        name: "Restricted Builder",
-        scope: "personal",
-        openInChat: true,
-      },
+      payload: { name: "Restricted Builder", openInChat: true },
     });
 
     expect(response.statusCode).toBe(200);
@@ -609,7 +606,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Sales Dashboard", scope: "org" },
+      payload: { name: "Sales Dashboard" },
     });
 
     expect(response.statusCode).toBe(200);
@@ -620,7 +617,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Sales Dashboard", scope: "org", slug: "revenue" },
+      payload: { name: "Sales Dashboard", slug: "revenue" },
     });
 
     expect(response.statusCode).toBe(200);
@@ -631,13 +628,13 @@ describe("POST /api/apps — slug", () => {
     await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "First", scope: "org", slug: "shared-url" },
+      payload: { name: "First", slug: "shared-url" },
     });
 
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Second", scope: "org", slug: "shared-url" },
+      payload: { name: "Second", slug: "shared-url" },
     });
 
     expect(response.statusCode).toBe(409);
@@ -650,13 +647,13 @@ describe("POST /api/apps — slug", () => {
     await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Twice", scope: "org", slug: "first-url" },
+      payload: { name: "Twice", slug: "first-url" },
     });
 
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Twice", scope: "org", slug: "second-url" },
+      payload: { name: "Twice", slug: "second-url" },
     });
 
     expect(response.statusCode).toBe(409);
@@ -669,7 +666,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Bad", scope: "org", slug: "Not A Slug" },
+      payload: { name: "Bad", slug: "Not A Slug" },
     });
 
     expect(response.statusCode).toBe(400);
@@ -684,7 +681,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Governed", scope: "org" },
+      payload: { name: "Governed" },
     });
 
     expect(response.statusCode).toBe(200);
@@ -695,7 +692,7 @@ describe("POST /api/apps — slug", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Ungoverned", scope: "org" },
+      payload: { name: "Ungoverned" },
     });
 
     expect(response.statusCode).toBe(200);

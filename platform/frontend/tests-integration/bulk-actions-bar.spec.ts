@@ -1,4 +1,5 @@
 import type { Locator } from "@playwright/test";
+import { makeAgentCatalog, makeExternalAgent } from "../src/mocks/data/agents";
 import { shareableSkillsSeed } from "../src/mocks/data/skill-share";
 import { expect, test } from "./fixtures";
 
@@ -47,16 +48,13 @@ test.describe("Bulk actions bar", () => {
     await secondRow.click();
     await expect(count).toHaveText("2 skills selected");
     await expect(
-      page.getByRole("button", { name: "Edit visibility" }),
-    ).toBeVisible();
-    await expect(
       page.getByRole("button", { name: "Delete", exact: true }),
     ).toBeVisible();
 
     await clear.click();
     await expect(count).toHaveText("0 skills selected");
     await expect(
-      page.getByRole("button", { name: "Edit visibility" }),
+      page.getByRole("button", { name: "Delete", exact: true }),
     ).toBeHidden();
   });
 
@@ -93,14 +91,22 @@ test.describe("Bulk actions bar", () => {
 
   test("scrolls crowded actions inside the fixed mobile rail", async ({
     page,
+    mswControl,
   }) => {
+    // Skills now offer a single bulk action, which fits a phone. A selected
+    // remote A2A agent still offers both Share and Delete, which
+    // crowd the rail.
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      body: makeAgentCatalog({ externalAgents: [makeExternalAgent()] }),
+    });
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/skills");
-    await page
-      .getByRole("checkbox", {
-        name: `Select ${shareableSkillsSeed.data[0].name}`,
-      })
-      .click();
+    await page.goto("/agents");
+    await page.getByRole("checkbox", { name: "Select Partner Agent" }).click();
+    await expect(
+      page.getByRole("button", { name: "Share", exact: true }),
+    ).toBeVisible();
 
     const metrics = await page
       .locator('[data-slot="bulk-actions-bar"]')

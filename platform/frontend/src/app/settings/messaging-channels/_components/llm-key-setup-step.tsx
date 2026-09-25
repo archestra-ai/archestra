@@ -13,7 +13,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   baseUrl: null,
   inferenceBaseUrl: null,
   extraHeaders: [],
-  scope: "org",
+  shared: true,
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,

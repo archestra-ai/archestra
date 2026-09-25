@@ -20,6 +20,10 @@ const { useIdentityProvidersMock, useK8sImagePullSecretsMock } = vi.hoisted(
   }),
 );
 
+vi.mock("@/components/initial-resource-permissions", () => ({
+  InitialResourcePermissions: () => null,
+}));
+
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/config/config", () => ({
@@ -83,10 +87,6 @@ vi.mock("@/components/environment-variables-form-field", () => ({
   ),
 }));
 
-vi.mock("@/components/visibility-selector", () => ({
-  VisibilitySelector: () => <div data-testid="visibility-selector" />,
-}));
-
 describe("McpCatalogForm enterprise gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -105,7 +105,6 @@ describe("McpCatalogForm enterprise gating", () => {
       namespace: null,
       description: null,
       networkPolicy: null,
-      restricted: false,
     } as ReturnType<typeof useDefaultEnvironment>);
     vi.mocked(useTeams).mockReturnValue({
       data: [],

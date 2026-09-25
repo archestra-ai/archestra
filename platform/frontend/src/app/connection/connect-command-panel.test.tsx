@@ -1531,11 +1531,12 @@ describe("ConnectCommandPanel", () => {
         expect(createKeyMock).toHaveBeenCalledWith(
           expect.objectContaining({
             provider: "github-copilot",
-            scope: "personal",
             apiKey: "gho_test",
           }),
         ),
       );
+      // A key is the caller's own unless they ask to share it.
+      expect(createKeyMock.mock.calls[0][0]).not.toHaveProperty("shared");
     });
 
     it("keeps provider selection available after picking GitHub Copilot", async () => {

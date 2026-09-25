@@ -97,7 +97,7 @@ export type SessionUnattributedReason = z.infer<
  * - **Who does this key attribute traffic to?** `ownerUserId` /
  *   `ownerUserName`, and only ever a *personal* key's author — that is the
  *   single place the proxy takes a user identity from a virtual key
- *   (`llm-proxy-handler.ts`: `virtualKeyScope === "personal"`). A shared key
+ *   (`llm-proxy-handler.ts`: `virtualKeyIsPersonal`). A shared key
  *   attributes to nobody, so both stay null on one.
  * - **Who is this key shared with?** `teams` for a team-scoped key,
  *   `createdByUserName` for whoever set it up. A shared key is not

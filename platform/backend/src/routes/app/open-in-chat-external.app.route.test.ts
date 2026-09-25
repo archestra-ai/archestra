@@ -46,7 +46,6 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const install = await makeMcpServer({
       catalogId: catalog.id,
@@ -115,7 +114,6 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       name: "Atlassian",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const install = await makeMcpServer({
       catalogId: catalog.id,
@@ -178,7 +176,6 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const install = await makeMcpServer({
       catalogId: catalog.id,
@@ -220,7 +217,6 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const install = await makeMcpServer({
       catalogId: catalog.id,
@@ -268,7 +264,6 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       name: "Archestra PM",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
-      scope: "org",
     });
     const install = await makeMcpServer({
       catalogId: catalog.id,

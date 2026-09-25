@@ -1,4 +1,5 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
+import { randomUUID } from "node:crypto";
 import {
   CreatedByNullableSchema,
   calculatePaginationMeta,
@@ -8,6 +9,7 @@ import {
   PaginationQuerySchema,
   PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
   parseLabelsParam,
+  ResourcePermissionGrantSchema,
   RouteId,
   TextSearchLanguageSchema,
 } from "@archestra/shared";
@@ -17,9 +19,8 @@ import { RuntimeCredentialDefinitionModel } from "@/models";
 import {
   canAccessKnowledgeBase,
   findAccessibleKnowledgeBase,
-  validateKnowledgeBaseAccess,
 } from "@/services/knowledge-base-access";
-import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
+import { ResourcePermissions } from "@/services/resource-permissions";
 
 // 0 = follow the documents sync schedule (no interval-scheduled passes);
 // anything else must clear the interval floor.
@@ -123,6 +124,7 @@ import {
   DeleteObjectResponseSchema,
   KnowledgeSourceVisibilitySchema,
   LabelWithDetailsSchema,
+  RetiredSharingUpdateFieldSchema,
   SelectConnectorRunDetailSchema,
   SelectConnectorRunListSchema,
   SelectKbDocumentSchema,
@@ -405,7 +407,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await Promise.all([
           KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
             canReadAll: access.canReadAll,
+            canManageAutoSync: access.canManageAutoSync,
             viewerTeamIds: access.teamIds,
+            viewerUserId: access.userId,
           }),
           KbDocumentModel.countByKnowledgeBaseIds(kbIds),
           AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(kbIds),
@@ -474,34 +478,57 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateKnowledgeBase,
         description: "Create a new knowledge base",
         tags: ["Knowledge Bases"],
-        body: z.object({
-          name: z.string().min(1),
-          description: z.string().optional(),
-          labels: z.array(LabelWithDetailsSchema).optional(),
-          visibility: KnowledgeBaseVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
-        }),
+        body: z
+          .object({
+            name: z.string().min(1),
+            description: z.string().optional(),
+            labels: z.array(LabelWithDetailsSchema).optional(),
+            initialGrants: z
+              .array(ResourcePermissionGrantSchema)
+              .max(200)
+              .optional(),
+          })
+          // Strict: the retired visibility/teamIds fields are refused, not
+          // silently dropped. Access is set with initialGrants.
+          .strict(),
         response: constructResponseSchema(KnowledgeBaseResponseSchema),
       },
     },
     async ({ body, organizationId, user }, reply) => {
-      const visibility = body.visibility ?? "org-wide";
-      const teamIds = body.teamIds ?? [];
-      await validateKnowledgeBaseAccess({
-        organizationId,
-        visibility,
-        teamIds,
-      });
-      const kg = await KnowledgeBaseModel.create({
-        visibility,
-        teamIds: visibility === "team-scoped" ? [...new Set(teamIds)] : [],
-        organizationId,
-        createdBy: user.id,
-        name: body.name,
-        ...(body.description !== undefined && {
-          description: body.description,
-        }),
-      });
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "knowledgeBase",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: null,
+          },
+        });
+        // SPDX-SnippetEnd
+      }
+      const kg = await KnowledgeBaseModel.create(
+        {
+          organizationId,
+          createdBy: user.id,
+          name: body.name,
+          ...(body.description !== undefined && {
+            description: body.description,
+          }),
+        },
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        {
+          initialPermissionGrants: body.initialGrants ?? [],
+        },
+        // SPDX-SnippetEnd
+      );
 
       if (body.labels?.length) {
         await KnowledgeBaseLabelModel.syncLabels(kg.id, body.labels);
@@ -554,29 +581,19 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
           labels: z.array(LabelWithDetailsSchema).optional(),
-          visibility: KnowledgeBaseVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
+          visibility: RetiredSharingUpdateFieldSchema,
+          teamIds: RetiredSharingUpdateFieldSchema,
         }),
         response: constructResponseSchema(KnowledgeBaseResponseSchema),
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
-      const current = await findKnowledgeBaseOrThrow({
+      await findKnowledgeBaseOrThrow({
         id,
         organizationId,
         userId: user.id,
       });
-      const visibility = body.visibility ?? current.visibility;
-      const teamIds = body.teamIds ?? current.teamIds;
-      await validateKnowledgeBaseAccess({
-        organizationId,
-        visibility,
-        teamIds,
-        current,
-      });
-      const { labels, ...columns } = body;
-      columns.teamIds =
-        visibility === "team-scoped" ? [...new Set(teamIds)] : [];
+      const { labels, visibility: _v, teamIds: _t, ...columns } = body;
       const updated = await KnowledgeBaseModel.update(id, columns);
       if (!updated) {
         throw new ApiError(404, "Knowledge base not found");
@@ -898,7 +915,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           knowledgeBaseId,
           {
             canReadAll: access.canReadAll,
+            canManageAutoSync: access.canManageAutoSync,
             viewerTeamIds: access.teamIds,
+            viewerUserId: access.userId,
           },
         );
         total = data.length;
@@ -917,7 +936,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // it. Managed at /knowledge/files instead.
             excludeConnectorTypes: ["file_upload"],
             canReadAll: access.canReadAll,
+            canManageAutoSync: access.canManageAutoSync,
             viewerTeamIds: access.teamIds,
+            viewerUserId: access.userId,
             status,
           });
         data = result.data;
@@ -1040,38 +1061,50 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateConnector,
         description: "Create a new connector",
         tags: ["Connectors"],
-        body: z.object({
-          name: z.string().min(1),
-          description: z.string().nullable().optional(),
-          visibility: KnowledgeSourceVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
-          connectorType: UserSelectableConnectorTypeSchema,
-          config: ConnectorConfigSchema,
-          // optional: GitHub App connectors authenticate via a referenced
-          // github_app_configs row instead of an inline secret
-          credentials: ConnectorCredentialsSchema.optional(),
-          schedule: z.string().optional(),
-          ftsLanguage: TextSearchLanguageSchema.optional(),
-          permissionSyncIntervalSeconds:
-            PermissionSyncIntervalSchema.optional(),
-          enabled: z.boolean().optional(),
-          knowledgeBaseIds: z.array(z.string()).optional(),
-          environmentId: z.string().uuid().nullable().optional(),
-          labels: z
-            .array(LabelWithDetailsSchema)
-            .optional()
-            .describe(
-              "Key/value labels. Omit to leave existing labels untouched; pass [] " +
-                "to clear them.",
-            ),
-        }),
+        body: z
+          .object({
+            name: z.string().min(1),
+            description: z.string().nullable().optional(),
+            syncPermissionsFromSource: z
+              .boolean()
+              .optional()
+              .describe(
+                "Mirror each document's access control from the source, so a " +
+                  "query only returns what the caller could open there. Needs " +
+                  "the auto-sync permission and a connector type that supports it.",
+              ),
+            connectorType: UserSelectableConnectorTypeSchema,
+            config: ConnectorConfigSchema,
+            // optional: GitHub App connectors authenticate via a referenced
+            // github_app_configs row instead of an inline secret
+            credentials: ConnectorCredentialsSchema.optional(),
+            schedule: z.string().optional(),
+            ftsLanguage: TextSearchLanguageSchema.optional(),
+            permissionSyncIntervalSeconds:
+              PermissionSyncIntervalSchema.optional(),
+            enabled: z.boolean().optional(),
+            knowledgeBaseIds: z.array(z.string()).optional(),
+            environmentId: z.string().uuid().nullable().optional(),
+            labels: z
+              .array(LabelWithDetailsSchema)
+              .optional()
+              .describe(
+                "Key/value labels. Omit to leave existing labels untouched; pass [] " +
+                  "to clear them.",
+              ),
+            initialGrants: z
+              .array(ResourcePermissionGrantSchema)
+              .max(200)
+              .optional(),
+          })
+          // Strict: the retired visibility/teamIds fields are refused, not
+          // silently dropped. Access is set with initialGrants, permission
+          // sync with syncPermissionsFromSource.
+          .strict(),
         response: constructResponseSchema(KnowledgeBaseConnectorResponseSchema),
       },
     },
     async ({ body, organizationId, user }, reply) => {
-      const teamIds = body.teamIds ?? [];
-      const visibility = body.visibility ?? "org-wide";
-
       const environmentId = await resolveNewConnectorEnvironmentId({
         userId: user.id,
         organizationId,
@@ -1083,25 +1116,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentId,
       });
 
-      if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
-        throw new ApiError(
-          400,
-          "At least one team must be selected for team-scoped connectors",
-        );
-      }
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      if (
-        visibility === "team-scoped" &&
-        !enterpriseTier.isKnowledgeBaseActive()
-      ) {
-        throw new ApiError(
-          403,
-          "Team-scoped connectors require an enterprise license",
-        );
-      }
-      if (visibility === "auto-sync-permissions") {
+      if (body.syncPermissionsFromSource) {
         // beta flag + enterprise license + connector-type support +
         // knowledgeSourceAutoSync:create (admin-only by default)
         const violation = await checkCanSetAutoSyncPermissionsVisibility({
@@ -1129,6 +1147,24 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (hiddenTypeViolation) {
         throw new ApiError(403, hiddenTypeViolation);
+      }
+
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "knowledgeConnector",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name,
+            authorId: null,
+          },
+        });
+        // SPDX-SnippetEnd
       }
 
       // Validate connector config
@@ -1219,22 +1255,30 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create the connector
-      const connector = await KnowledgeBaseConnectorModel.create({
-        organizationId,
-        createdBy: user.id,
-        name: body.name,
-        description: body.description ?? null,
-        visibility: body.visibility,
-        teamIds: body.teamIds,
-        connectorType: body.connectorType,
-        config: body.config,
-        secretId,
-        environmentId,
-        schedule: body.schedule,
-        ftsLanguage: body.ftsLanguage,
-        permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
-        enabled: body.enabled,
-      });
+      const connector = await KnowledgeBaseConnectorModel.create(
+        {
+          organizationId,
+          createdBy: user.id,
+          name: body.name,
+          description: body.description ?? null,
+          syncPermissionsFromSource: body.syncPermissionsFromSource ?? false,
+          connectorType: body.connectorType,
+          config: body.config,
+          secretId,
+          environmentId,
+          schedule: body.schedule,
+          ftsLanguage: body.ftsLanguage,
+          permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
+          enabled: body.enabled,
+        },
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        {
+          initialPermissionGrants: body.initialGrants ?? [],
+        },
+        // SPDX-SnippetEnd
+      );
 
       if (body.labels?.length) {
         await KnowledgeBaseConnectorLabelModel.syncLabels(
@@ -1645,6 +1689,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // connector column update below.
       const { credentials: _, labels: bodyLabels, ...updateData } = body;
       const nextVisibility = updateData.visibility ?? connector.visibility;
+      // The permission-sync switch after this update. The request still names it
+      // through the visibility input; the stored switch is the column.
+      const nextSync =
+        updateData.visibility !== undefined
+          ? updateData.visibility === "auto-sync-permissions"
+          : connector.syncPermissionsFromSource;
       const nextTeamIds = updateData.teamIds ?? connector.teamIds;
 
       // validate everything that can reject the request BEFORE touching any
@@ -1674,10 +1724,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Team-scoped connectors require an enterprise license",
         );
       }
-      if (
-        connector.visibility !== "auto-sync-permissions" &&
-        nextVisibility === "auto-sync-permissions"
-      ) {
+      if (!connector.syncPermissionsFromSource && nextSync) {
         // Transition INTO auto-sync: beta flag + enterprise license +
         // connector-type support + knowledgeSourceAutoSync:update. An
         // existing auto-sync connector is exempt from the transition-only
@@ -1692,7 +1739,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (violation) {
           throw violation;
         }
-      } else if (connector.visibility === "auto-sync-permissions") {
+      } else if (connector.syncPermissionsFromSource) {
         // Mutating a connector that already carries the auto-sync visibility
         // (settings, credentials, or switching AWAY from it): viewing rights
         // (findConnectorOrThrow above) are not enough — require the dedicated
@@ -1705,7 +1752,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (violation) {
           throw violation;
         }
-        if (nextVisibility === "auto-sync-permissions") {
+        if (nextSync) {
           const unsupported = checkAutoSyncPermissionSyncSupported(
             connector.connectorType,
           );
@@ -1829,10 +1876,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id,
         );
 
-        if (
-          nextVisibility === "auto-sync-permissions" &&
-          connector.visibility !== "auto-sync-permissions"
-        ) {
+        if (nextSync && !connector.syncPermissionsFromSource) {
           // Switching TO auto-sync fail-closes the whole corpus; run the first
           // pass now instead of leaving everything invisible until the next
           // content ingest or interval tick. De-duplicated like every other
@@ -1862,17 +1906,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // fenced out by the bump it raced.
       const nextEnabled = updateData.enabled ?? connector.enabled;
       if (
-        connector.visibility === "auto-sync-permissions" &&
+        connector.syncPermissionsFromSource &&
         (updateData.config !== undefined ||
           body.credentials !== undefined ||
-          nextVisibility !== "auto-sync-permissions" ||
+          !nextSync ||
           nextEnabled !== connector.enabled)
       ) {
         // A submitted config counts as changed without a field-by-field
         // comparison, matching the checkpoint reset above.
         await supersedePermissionSyncAfterSettingsChange({
           connectorId: id,
-          visibility: nextVisibility,
+          syncPermissionsFromSource: nextSync,
           enabled: nextEnabled,
         });
       }
@@ -1998,7 +2042,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Moving a connector AWAY from auto-sync is a mutation of an
           // auto-sync connector, so it needs the dedicated grant — viewing
           // rights are not enough, exactly as on the single update.
-          if (connector.visibility === "auto-sync-permissions") {
+          if (connector.syncPermissionsFromSource) {
             const violation = await checkHasAutoSyncConnectorPermission({
               userId: user.id,
               organizationId,
@@ -2106,7 +2150,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          if (connector.visibility === "auto-sync-permissions") {
+          if (connector.syncPermissionsFromSource) {
             const violation = await checkHasAutoSyncConnectorPermission({
               userId: user.id,
               organizationId,
@@ -2152,7 +2196,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      if (connector.visibility === "auto-sync-permissions") {
+      if (connector.syncPermissionsFromSource) {
         const violation = await checkHasAutoSyncConnectorPermission({
           userId: user.id,
           organizationId,
@@ -2334,7 +2378,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      if (connector.visibility !== "auto-sync-permissions") {
+      if (!connector.syncPermissionsFromSource) {
         throw new ApiError(
           400,
           "Permission sync only applies to auto-sync-permissions connectors",
@@ -2403,7 +2447,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      if (connector.visibility !== "auto-sync-permissions") {
+      if (!connector.syncPermissionsFromSource) {
         throw new ApiError(
           400,
           "Permission coverage only applies to auto-sync-permissions connectors",
@@ -2512,7 +2556,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      if (connector.visibility !== "auto-sync-permissions") {
+      if (!connector.syncPermissionsFromSource) {
         throw new ApiError(
           400,
           "User groups only apply to auto-sync-permissions connectors",
@@ -2659,7 +2703,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      if (connector.visibility !== "auto-sync-permissions") {
+      if (!connector.syncPermissionsFromSource) {
         throw new ApiError(
           400,
           "Member overrides only apply to auto-sync-permissions connectors",
@@ -2821,7 +2865,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const credentials = await resolveConnectorCredentials(connector, {
         uncached:
           connector.connectorType === "perforce" &&
-          connector.visibility === "auto-sync-permissions",
+          connector.syncPermissionsFromSource,
       });
 
       // Get the connector implementation and test
@@ -3404,17 +3448,7 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  const hasKnowledgeDeploy = await userHasPermission(
-    userId,
-    organizationId,
-    "knowledgeSource",
-    "deploy-to-restricted",
-  );
-  await assertCanAssignEnvironment({
-    environmentId,
-    organizationId,
-    canDeployToRestricted: hasKnowledgeDeploy,
-  });
+  await assertCanAssignEnvironment({ environmentId, organizationId, userId });
 }
 
 /**
@@ -3433,12 +3467,7 @@ async function resolveNewConnectorEnvironmentId(params: {
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource: "knowledgeSource",
-    canDeployToRestricted: await userHasPermission(
-      userId,
-      organizationId,
-      "knowledgeSource",
-      "deploy-to-restricted",
-    ),
+    userId,
   });
 }
 

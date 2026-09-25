@@ -55,7 +55,7 @@ describe("DELETE /api/chat/attachments/:id", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -97,7 +97,7 @@ describe("DELETE /api/chat/attachments/:id", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: owner.id,
@@ -131,7 +131,7 @@ describe("DELETE /api/chat/attachments/:id", () => {
     const agent = await makeAgent({
       organizationId: otherOrg,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
@@ -179,7 +179,7 @@ describe("conversationFilesService.list canManageFiles", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: owner.id,
-      scope: "personal",
+      access: "personal",
     });
     const conversation = await ConversationModel.create({
       userId: owner.id,

@@ -1,6 +1,11 @@
-import { archestraApiSdk, type Permissions } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type Permissions,
+  ResourcePermissionActionSchema,
+  ScopedResourceSchema,
+} from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
-import { hasPermissions } from "@/lib/auth/auth.utils";
+import { hasPagePermissions, hasPermissions } from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils";
@@ -59,7 +64,11 @@ export function useCurrentOrgMembers() {
  * Checks user permissions, resolving to true or false.
  * Under the hood, fetches all user permissions and re-uses this permission cache.
  */
-export function useHasPermissions(permissionsToCheck: Permissions) {
+export function useHasPermissions(
+  permissionsToCheck: Permissions,
+  permissionScope?: string,
+) {
+  const capabilities = useScopedCapabilities(permissionScope !== undefined);
   const {
     data: userPermissions,
     isPending,
@@ -70,20 +79,59 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
     status,
   } = useAllPermissions();
 
-  const hasPermissionResult = hasPermissions(
-    userPermissions,
-    permissionsToCheck,
+  const scopedCheck = permissionScope !== undefined;
+  const hasPermissionResult = Object.entries(permissionsToCheck).every(
+    ([resource, actions]) =>
+      actions.every((action) =>
+        scopedCheck &&
+        ScopedResourceSchema.safeParse(resource).success &&
+        ResourcePermissionActionSchema.safeParse(action).success
+          ? capabilities.data?.some(
+              (grant) =>
+                grant.resource === resource &&
+                grant.action === action &&
+                (grant.scope === "*" || grant.scope === permissionScope),
+            ) === true
+          : hasPermissions(userPermissions, { [resource]: [action] }),
+      ),
   );
 
   return {
     data: hasPermissionResult,
-    isPending,
-    isLoading,
+    isPending: isPending || (scopedCheck && capabilities.isPending),
+    isLoading: isLoading || (scopedCheck && capabilities.isLoading),
     isError,
     error,
     isSuccess,
     status,
   };
+}
+
+/** Page discovery accepts an object read grant; it does not imply global read. */
+export function useHasPagePermissions(required: Permissions) {
+  const permissions = useAllPermissions();
+  const capabilities = useScopedCapabilities();
+  return {
+    data: hasPagePermissions({
+      userPermissions: permissions.data,
+      required,
+      capabilities: capabilities.data ?? [],
+    }),
+    isPending: permissions.isPending || capabilities.isPending,
+  };
+}
+
+export function useScopedCapabilities(enabled = true) {
+  const { data: session } = useSession();
+  return useQuery({
+    queryKey: ["scoped-capabilities"],
+    enabled: enabled && !!session?.user,
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getScopedCapabilities();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
 }
 
 /**
@@ -153,8 +201,9 @@ export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
 ): Record<Key, boolean> | null {
   const { data: userPermissions, isLoading } = useAllPermissions();
+  const capabilities = useScopedCapabilities();
 
-  if (isLoading) {
+  if (isLoading || capabilities.isLoading) {
     return null;
   }
 
@@ -164,7 +213,11 @@ export function usePermissionMap<Key extends string>(
     Key,
     Permissions,
   ][]) {
-    result[key] = hasPermissions(userPermissions, requiredPermissions);
+    result[key] = hasPagePermissions({
+      userPermissions,
+      required: requiredPermissions,
+      capabilities: capabilities.data ?? [],
+    });
   }
 
   return result;

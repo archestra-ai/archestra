@@ -46,8 +46,6 @@ test("browses, compares, and restores an agent version from the row menu", async
     urlSuffix: "/api/agents",
     data: {
       name: AGENT_NAME,
-      teams: [],
-      scope: "personal",
       agentType: "agent",
       systemPrompt: FIRST_PROMPT,
     },
@@ -129,11 +127,7 @@ test("opens an MCP gateway's version history from its row button", async ({
   test.setTimeout(120_000);
 
   const GATEWAY_NAME = `Version History Gateway E2E ${Date.now()}`;
-  const gatewayResponse = await createMcpGateway(
-    request,
-    GATEWAY_NAME,
-    "personal",
-  );
+  const gatewayResponse = await createMcpGateway(request, GATEWAY_NAME);
   const gateway = await gatewayResponse.json();
 
   try {

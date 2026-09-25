@@ -35,7 +35,6 @@ describe("schedule trigger routes — project:admin has no schedule access", () 
         await makeAgent({
           organizationId,
           authorId: owner.id,
-          scope: "org",
         })
       ).id;
       projectId = (

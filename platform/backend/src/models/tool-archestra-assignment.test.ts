@@ -245,7 +245,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
       organizationId: org.id,
       name: "My Gateway",
       agentType: "mcp_gateway",
-      scope: "personal",
+      access: "personal",
     });
 
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -503,7 +503,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
       organizationId: org.id,
       name: "Gateway",
       agentType: "mcp_gateway",
-      scope: "personal",
+      access: "personal",
     });
     const [builtInAgent] = await db
       .insert(schema.agentsTable)

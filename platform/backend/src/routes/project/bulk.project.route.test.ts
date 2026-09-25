@@ -3,7 +3,7 @@ import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { ProjectModel, ProjectShareModel } from "@/models";
+import { ProjectModel } from "@/models";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -46,9 +46,6 @@ describe("projects bulk routes", () => {
       url: "/api/projects/bulk",
       payload: { ids },
     });
-
-  const bulkPatch = (payload: Record<string, unknown>) =>
-    app.inject({ method: "PATCH", url: "/api/projects/bulk", payload });
 
   describe("DELETE /api/projects/bulk", () => {
     test("soft-deletes every named project and leaves the rest alone", async () => {
@@ -142,76 +139,6 @@ describe("projects bulk routes", () => {
       expect(rows[0].after).toMatchObject({
         projects: [{ id: project.id, deleted: true }],
       });
-    });
-  });
-
-  describe("PATCH /api/projects/bulk", () => {
-    test("shares every project in the batch with the organization", async () => {
-      const first = await makeProject("share-a");
-      const second = await makeProject("share-b");
-
-      const response = await bulkPatch({
-        ids: [first.id, second.id],
-        visibility: "organization",
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().failed).toEqual([]);
-      for (const id of [first.id, second.id]) {
-        expect((await ProjectShareModel.findByProjectId(id))?.visibility).toBe(
-          "organization",
-        );
-      }
-    });
-
-    /**
-     * "none" is how a batch unshares — expressed as a value rather than null
-     * because the generated client cannot represent a nullable enum.
-     */
-    test("unshares every project in the batch when told none", async () => {
-      const project = await makeProject("to-unshare");
-      await projectService.setShare({
-        id: project.id,
-        organizationId,
-        userId: owner.id,
-        visibility: "organization",
-        teamIds: [],
-        userIds: [],
-      });
-
-      const response = await bulkPatch({
-        ids: [project.id],
-        visibility: "none",
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().failed).toEqual([]);
-      const share = await ProjectShareModel.findByProjectId(project.id);
-      expect(share?.visibility ?? null).toBeNull();
-    });
-
-    test("reports a foreign-organization id as not found", async ({
-      makeOrganization,
-      makeUser,
-    }) => {
-      const otherOrgId = (await makeOrganization()).id;
-      const stranger = await makeUser();
-      const foreign = await projectService.create({
-        organizationId: otherOrgId,
-        userId: stranger.id,
-        name: "theirs",
-        description: null,
-      });
-
-      const response = await bulkPatch({
-        ids: [foreign.id],
-        visibility: "organization",
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().failed).toEqual([
-        { id: foreign.id, name: null, error: "Project not found" },
-      ]);
     });
   });
 });

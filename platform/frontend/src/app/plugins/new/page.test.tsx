@@ -1,8 +1,21 @@
-import { PLUGIN_MARKETPLACE_IMPORT_LIMIT } from "@archestra/shared";
+import {
+  archestraApiClient,
+  PLUGIN_MARKETPLACE_IMPORT_LIMIT,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
@@ -12,9 +25,6 @@ vi.mock("@/lib/github-pat.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/components/editor");
-vi.mock("../_parts/plugin-scope-selector", () => ({
-  PluginScopeSelector: () => <div data-testid="plugin-scope-selector" />,
-}));
 vi.mock("../_parts/plugin-platforms", () => ({
   PluginPlatforms: ({ value }: { value: string[] }) => (
     <div data-testid="plugin-platforms">{value.join(",")}</div>
@@ -49,6 +59,28 @@ function renderPage() {
 
 const discoverMock = vi.fn();
 const importMock = vi.fn();
+
+const permissionServer = setupServer(
+  http.get(
+    "http://localhost:9000/api/resource-permissions/plugin/creation-subjects",
+    () =>
+      HttpResponse.json([
+        { subject: { type: "role", id: "member" }, name: "Member" },
+      ]),
+  ),
+);
+beforeAll(() => {
+  permissionServer.listen({ onUnhandledRequest: "error" });
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
+  Element.prototype.scrollIntoView = vi.fn();
+});
+afterAll(() => {
+  permissionServer.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -462,6 +494,46 @@ describe("NewPluginPage", () => {
     expect(screen.getByText(/5 of 101 selected/)).toBeVisible();
   });
 
+  it("submits selected permissions with a new plugin instead of legacy visibility", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "created-plugin" });
+    vi.mocked(useCreatePlugin).mockReturnValue({
+      mutateAsync: create,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreatePlugin>);
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /Blank template/ }));
+    await user.type(screen.getByLabelText("Display name"), "Shared plugin");
+    await user.click(screen.getByRole("button", { name: "Add access" }));
+    const dialog = screen.getByRole("dialog", { name: "Add access" });
+    await user.click(within(dialog).getByRole("button", { name: /^Roles/ }));
+    await user.click(
+      within(dialog).getByRole("combobox", { name: "Add roles" }),
+    );
+    await user.click(await screen.findByRole("option", { name: /Member/ }));
+    await user.click(
+      within(dialog).getByRole("combobox", { name: "Permission for Member" }),
+    );
+    await user.click(screen.getByRole("option", { name: "Can edit" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add access" }),
+    );
+    expect(create).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Create plugin" }));
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialGrants: [
+          {
+            subject: { type: "role", id: "member" },
+            actions: ["read", "use", "update"],
+          },
+        ],
+      }),
+    );
+    expect(create.mock.calls[0][0]).not.toHaveProperty("scope");
+    expect(create.mock.calls[0][0]).not.toHaveProperty("teamIds");
+  });
+
   it("fills one page — content and access together — from the blank template", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -482,7 +554,7 @@ describe("NewPluginPage", () => {
 
     // Access is the end of the same page, not a step after it — the same
     // shape the plugin's own page uses once it exists.
-    expect(screen.getByTestId("plugin-scope-selector")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add access" })).toBeVisible();
 
     const create = screen.getByRole("button", { name: /Create plugin/ });
     // An unnamed plugin is not creatable, whatever else is filled in.

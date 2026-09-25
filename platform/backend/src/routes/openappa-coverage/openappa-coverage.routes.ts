@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { getAgentTypePermissionChecker, hasPermission } from "@/auth";
+import { getAgentTypePermissionChecker } from "@/auth";
+import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import { openappaCoverageService } from "@/openappa/coverage";
 import { openappaEnabled } from "@/openappa/service";
@@ -35,7 +36,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       const visibility = await coverageVisibility(
         request.user.id,
         request.organizationId,
-        request.headers,
       );
       return openappaCoverageService.entities({
         organizationId: request.organizationId,
@@ -57,24 +57,18 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     async (request) =>
       openappaCoverageService.tools({
         organizationId: request.organizationId,
-        ...(await coverageVisibility(
-          request.user.id,
-          request.organizationId,
-          request.headers,
-        )),
+        ...(await coverageVisibility(request.user.id, request.organizationId)),
         ...request.query,
       }),
   );
 };
 
-async function coverageVisibility(
-  userId: string,
-  organizationId: string,
-  headers: Parameters<typeof hasPermission>[1],
-) {
-  const [checker, { success: isCatalogAdmin }] = await Promise.all([
+async function coverageVisibility(userId: string, organizationId: string) {
+  // Registry administration is `update` on every entry, the grant the
+  // retired `mcpServerInstallation:admin` role action converted into.
+  const [checker, isCatalogAdmin] = await Promise.all([
     getAgentTypePermissionChecker({ userId, organizationId }),
-    hasPermission({ mcpServerInstallation: ["admin"] }, headers),
+    isMcpInstallationAdmin({ userId, organizationId }),
   ]);
   const visibleCatalogIds = await InternalMcpCatalogModel.findAccessibleIds({
     userId,

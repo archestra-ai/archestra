@@ -6,7 +6,7 @@ import {
   MCP_GATEWAY_OAUTH_SCOPE,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Copy, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, RefreshCw, Shield, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -29,7 +29,8 @@ import {
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { ResourceListActions } from "@/components/resource-list-actions";
+import { ResourcePermissionDialog } from "@/components/resource-permission-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -113,7 +114,7 @@ function OauthClientsTable() {
   const providerApiKeyId = searchParams.get("providerApiKeyId") || undefined;
 
   const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
+  const _currentUserId = session?.user?.id;
   const providerCatalog = useModelProviderCatalog();
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   const { data: resources = [] } = useProfiles({
@@ -152,6 +153,11 @@ function OauthClientsTable() {
   const [editingMcp, setEditingMcp] = useState<McpClient | null>(null);
   const [rotating, setRotating] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
+  const [permissionTarget, setPermissionTarget] = useState<{
+    resource: "llmOauthClient" | "mcpOauthClient";
+    id: string;
+    name: string;
+  } | null>(null);
   const [revealed, setRevealed] = useState<{
     title: string;
     credentials: CreatedCredentials;
@@ -190,13 +196,22 @@ function OauthClientsTable() {
 
   useEffect(() => {
     setActionButton(
-      <PermissionButton
-        permissions={{ llmOauthClient: ["create"] }}
-        onClick={() => setCreateOpen(true)}
-      >
-        <Plus className="h-4 w-4" />
-        <span>Create OAuth Client</span>
-      </PermissionButton>,
+      <div className="flex items-center gap-2">
+        <PermissionButton
+          permissions={{ llmOauthClient: ["create"] }}
+          onClick={() => setCreateOpen(true)}
+        >
+          <Plus className="h-4 w-4" />
+          <span>Create OAuth Client</span>
+        </PermissionButton>
+        <ResourceListActions
+          resource="llmOauthClient"
+          label="LLM client permissions"
+          alsoResources={[
+            { resource: "mcpOauthClient", label: "MCP client permissions" },
+          ]}
+        />
+      </div>,
     );
     return () => setActionButton(null);
   }, [setActionButton]);
@@ -294,27 +309,13 @@ function OauthClientsTable() {
         </Badge>
       ),
     },
-    {
-      id: "accessibleTo",
-      header: "Accessible to",
-      size: 110,
-      cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.client.scope}
-          teams={row.original.client.teams}
-          authorId={row.original.client.authorId}
-          authorName={row.original.client.authorName}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
-      ),
-    },
+
     {
       id: "actions",
       header: "Actions",
-      // Three icon-sm buttons with the table's px-4 inset on both sides, so
+      // Four icon-sm buttons with the table's px-4 inset on both sides, so
       // the last icon sits 16px from the frame like every other cell edge.
-      size: 128,
+      size: 160,
       cell: ({ row }) => {
         const isLlm = row.original.kind === "llm";
         const resource = isLlm ? "llmOauthClient" : "mcpOauthClient";
@@ -336,6 +337,16 @@ function OauthClientsTable() {
                 label: "Rotate secret",
                 permissions: { [resource]: ["update"] },
                 onClick: () => setRotating(row.original),
+              },
+              {
+                icon: <Shield className="h-4 w-4" />,
+                label: "Permissions",
+                onClick: () =>
+                  setPermissionTarget({
+                    resource,
+                    id: row.original.client.id,
+                    name: row.original.client.name,
+                  }),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
@@ -491,6 +502,17 @@ function OauthClientsTable() {
         isSubmitting={mcpUpdate.isPending}
       />
 
+      {permissionTarget && (
+        <ResourcePermissionDialog
+          resource={permissionTarget.resource}
+          scope={permissionTarget.id}
+          title={`${permissionTarget.name} permissions`}
+          open
+          onOpenChange={(open) => {
+            if (!open) setPermissionTarget(null);
+          }}
+        />
+      )}
       <DeleteConfirmDialog
         open={!!rotating}
         onOpenChange={(open) => {

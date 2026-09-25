@@ -1961,7 +1961,17 @@ describe("McpClient", () => {
             serverUrl: "https://example.com/mcp",
             scope: "org",
           },
-          { organizationId: org.id },
+          {
+            organizationId: org.id,
+            // The retired `scope` column no longer decides access; opening
+            // the item to the organization is a grant.
+            initialPermissionGrants: [
+              {
+                subject: { type: "organization", id: "*" },
+                actions: ["read", "use"],
+              },
+            ],
+          },
         );
         const tool = await ToolModel.createToolIfNotExists({
           name: `${catalogItem.name}__do_thing`,
@@ -2061,7 +2071,6 @@ describe("McpClient", () => {
         const allAgent = await makeAgent({
           name: "All Tools Agent",
           organizationId: org.id,
-          scope: "org",
           accessAllTools: true,
         });
 

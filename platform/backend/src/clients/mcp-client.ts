@@ -4317,6 +4317,7 @@ class McpClient {
         );
         const app = await AppModel.findByIdForCaller({
           id: appId,
+          action: "use",
           organizationId: tokenAuth.organizationId,
           userId: tokenAuth.userId,
           isAppAdmin: await callerIsAppAdmin(

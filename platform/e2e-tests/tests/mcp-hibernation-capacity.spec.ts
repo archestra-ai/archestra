@@ -375,8 +375,12 @@ test.describe("MCP idle hibernation - capacity and registry failure modes", () =
         data: {
           name: `MCP Hibernation Capacity Gateway ${Date.now()}`,
           agentType: "mcp_gateway",
-          scope: "team",
-          teams: [defaultTeam.id],
+          initialGrants: [
+            {
+              subject: { type: "team", id: defaultTeam.id },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
       gatewayId = (await gatewayResponse.json()).id;

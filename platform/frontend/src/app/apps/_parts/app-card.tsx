@@ -19,7 +19,6 @@ import { CreatedByCell } from "@/components/created-by-cell";
 import { LabelTags } from "@/components/label-tags";
 import { AppVersionHistoryDialog } from "@/components/mcp-app/app-version-history-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ScopeBadge } from "@/components/scope-badge";
 import { TableCard } from "@/components/table-card-view";
 import {
   type TableRowAction,
@@ -293,12 +292,6 @@ function OwnedAppCard({
       >
         {isOpening ? <CardOpeningOverlay /> : null}
         <div className="flex flex-wrap items-center gap-2">
-          <ScopeBadge
-            scope={app.scope}
-            teamNames={app.teams?.map((team) => team.name)}
-            userNames={app.users?.map((user) => user.name)}
-            showLabel
-          />
           {!app.enabled ? <Badge variant="outline">Disabled</Badge> : null}
           {app.locked ? <Badge variant="outline">Locked</Badge> : null}
           {isForeignPersonalApp ? (
@@ -453,9 +446,6 @@ function ExternalAppCard({
       onNavigate={isOpening ? undefined : () => void handleOpen()}
     >
       {isOpening ? <CardOpeningOverlay /> : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <ScopeBadge scope={app.scope} showLabel />
-      </div>
     </TableCard>
   );
 }

@@ -11,6 +11,7 @@ import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import HookFileModel from "@/models/hook-file";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
 import KbFileModel from "@/models/kb-file";
@@ -29,6 +30,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
@@ -116,6 +118,10 @@ export const AUDIT_DECISIONS = {
   a2aOutboundRunsTable: {
     audited: false,
     reason: "A2A execution state recorded by the outbound run ledger",
+  },
+  resourcePermissionPoliciesTable: {
+    audited: true,
+    model: ResourcePermissionPolicyModel,
   },
   runtimeCredentialDefinitionsTable: {
     audited: true,
@@ -226,7 +232,8 @@ export const AUDIT_DECISIONS = {
   },
   conversationSharesTable: {
     audited: false,
-    reason: "chat share metadata; surfaced via /llm/logs",
+    reason:
+      "retired sharing, read only by the permission cutover; sharing is now the resource permission policy, audited as resourcePermissions.updated",
   },
   // Soft-deleted rather than removed, and restorable org-wide by a project
   // admin — so delete and restore are cross-user administrative actions on
@@ -238,7 +245,8 @@ export const AUDIT_DECISIONS = {
   },
   projectSharesTable: {
     audited: false,
-    reason: "project share metadata; parent (project) audited",
+    reason:
+      "retired sharing, read only by the permission cutover; sharing is now the resource permission policy, audited as resourcePermissions.updated",
   },
   projectShareTeamsTable: {
     audited: false,
@@ -594,10 +602,7 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // Children of audited parents
   // =========================================================================
-  hookFilesTable: {
-    audited: false,
-    reason: "agent-scoped hook script config; child of agent (audited)",
-  },
+  hookFilesTable: { audited: true, model: HookFileModel },
   skillTeamsTable: {
     audited: false,
     reason: "join: skill × team; parent (skill) audited",
@@ -717,7 +722,7 @@ export const AUDIT_DECISIONS = {
   agentRunSharesTable: {
     audited: false,
     reason:
-      "agent run share metadata; share and unshare are audited at the route level (agentRun.shared/unshared)",
+      "retired sharing, read only by the permission cutover; sharing is now the resource permission policy, audited as resourcePermissions.updated",
   },
   agentRunShareTeamsTable: {
     audited: false,

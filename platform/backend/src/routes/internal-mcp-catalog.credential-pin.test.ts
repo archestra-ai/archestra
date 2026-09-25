@@ -70,7 +70,7 @@ describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: member.id,
-      scope: "personal",
+      access: "personal",
     });
     const theirConnection = await makeMcpServer({
       catalogId: catalog.id,
@@ -111,7 +111,7 @@ describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: member.id,
-      scope: "personal",
+      access: "personal",
     });
     const myConnection = await makeMcpServer({
       catalogId: catalog.id,
@@ -146,7 +146,7 @@ describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: admin.id,
-      scope: "personal",
+      access: "personal",
     });
     const theirConnection = await makeMcpServer({
       catalogId: catalog.id,
@@ -178,7 +178,7 @@ describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: member.id,
-      scope: "personal",
+      access: "personal",
     });
     const serviceAccount = await makeMcpServer({
       catalogId: catalog.id,

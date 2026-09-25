@@ -41,7 +41,7 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
     // Default: K8s runtime not configured (the common CI/local-test state).
@@ -52,6 +52,7 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

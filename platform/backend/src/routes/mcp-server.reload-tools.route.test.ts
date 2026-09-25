@@ -89,8 +89,11 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
     });
   }
 
-  for (const canManageAllTeams of [true, false]) {
-    test(`after team deletion, reload ${canManageAllTeams ? "allows global team managers" : "denies former team admins"}`, async ({
+  // Deleting a team clears the connection's team link but keeps the
+  // connection. Managing it then belongs to installation admins: team
+  // membership is gone, so nothing team-shaped can answer for it.
+  for (const isInstallationAdmin of [true, false]) {
+    test(`after team deletion, reload ${isInstallationAdmin ? "allows installation admins" : "denies everyone else"}`, async ({
       makeTeam,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -112,10 +115,13 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
         scope: "team",
         teamId: null,
       });
-      hasPermissionMock.mockImplementation(async (permissions) => ({
-        success: permissions.team ? canManageAllTeams : true,
-        error: null,
-      }));
+      // An installation admin holds `update` on every registry entry, which a
+      // new organization grants the built-in admin role.
+      if (isInstallationAdmin)
+        await db
+          .update(schema.membersTable)
+          .set({ role: "admin" })
+          .where(eq(schema.membersTable.userId, user.id));
       const getTools = vi
         .spyOn(McpServerModel, "getToolsFromServer")
         .mockResolvedValue([
@@ -131,8 +137,8 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
         url: `/api/mcp_server/${server.id}/reload-tools`,
       });
 
-      expect(response.statusCode).toBe(canManageAllTeams ? 200 : 403);
-      if (canManageAllTeams) {
+      expect(response.statusCode).toBe(isInstallationAdmin ? 200 : 403);
+      if (isInstallationAdmin) {
         expect(response.json()).toEqual({
           created: 1,
           updated: 0,
@@ -189,6 +195,12 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
       teamId: team.id,
     });
     await TeamModel.delete(team.id);
+    // Managing a connection whose team is gone belongs to installation
+    // admins, which a new organization makes the built-in admin role.
+    await db
+      .update(schema.membersTable)
+      .set({ role: "admin" })
+      .where(eq(schema.membersTable.userId, user.id));
 
     const response = await app.inject({
       method: "DELETE",

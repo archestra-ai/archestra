@@ -1,4 +1,5 @@
 import {
+  CONTEXT_TEAM_IDS,
   getArchestraToolFullName,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
   TOOL_INVOCATION_NOT_DIRECTLY_CALLABLE_REASON,
@@ -692,6 +693,47 @@ describe("evaluatePolicies", () => {
 // evaluateSingleMcpToolInvocationPolicy (MCP Gateway / run_tool execution path)
 // ---------------------------------------------------------------------------
 describe("evaluateSingleMcpToolInvocationPolicy", () => {
+  // An agent shared with a team by grant alone (no retired team row) is that
+  // team's agent for a team-conditioned policy. Reading the retired rows made
+  // this block silently not match: fails open.
+  test("a team-conditioned block policy blocks an agent the team reaches by grant", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeToolPolicy,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const team = await makeTeam(org.id, author.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: author.id,
+      access: { teams: [team.id] },
+    });
+    const tool = await makeTool({ name: "team_guarded__delete" });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      conditions: [
+        { key: CONTEXT_TEAM_IDS, operator: "contains", value: team.id },
+      ],
+      action: "block_always",
+      reason: "Blocked for this team",
+    });
+
+    const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+      agentId: agent.id,
+      toolName: tool.name,
+      toolInput: {},
+      organizationId: org.id,
+      contextIsTrusted: true,
+    });
+
+    expect(policyBlock?.reason).toContain("Blocked for this team");
+  });
+
   test("enforces invocation policies for query_knowledge_sources on the gateway path", async ({
     makeAgent,
     makeToolPolicy,

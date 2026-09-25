@@ -315,8 +315,12 @@ describe("VirtualApiKeyModel", () => {
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const viewer = await makeUser();
+    await makeMember(viewer.id, org.id, { role: "admin" });
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "Parent Key",
@@ -338,6 +342,7 @@ describe("VirtualApiKeyModel", () => {
 
     const result = await VirtualApiKeyModel.findAllByOrganization({
       organizationId: org.id,
+      userId: viewer.id,
       pagination: { limit: 20, offset: 0 },
     });
     expect(result.data).toHaveLength(2);
@@ -369,8 +374,12 @@ describe("VirtualApiKeyModel", () => {
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const viewer = await makeUser();
+    await makeMember(viewer.id, org.id, { role: "admin" });
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const anthropicKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "Anthropic Parent",
@@ -396,6 +405,7 @@ describe("VirtualApiKeyModel", () => {
 
     const result = await VirtualApiKeyModel.findAllByOrganization({
       organizationId: org.id,
+      userId: viewer.id,
       pagination: { limit: 20, offset: 0 },
       search: "primary",
       providerApiKeyId: anthropicKey.id,
@@ -417,8 +427,12 @@ describe("VirtualApiKeyModel", () => {
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const viewer = await makeUser();
+    await makeMember(viewer.id, org.id, { role: "admin" });
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
       name: "Parent Key",
@@ -440,6 +454,7 @@ describe("VirtualApiKeyModel", () => {
 
     const result = await VirtualApiKeyModel.findAllByOrganization({
       organizationId: org.id,
+      userId: viewer.id,
       pagination: { limit: 20, offset: 0 },
       search: "%",
     });
@@ -455,11 +470,16 @@ describe("VirtualApiKeyModel", () => {
     makeLlmProviderApiKey,
     makeUser,
     makeTeam,
+    makeMember,
+    makeTeamMember,
   }) => {
     const org = await makeOrganization();
     const owner = await makeUser({ email: "owner@test.com" });
     const otherUser = await makeUser({ email: "other@test.com" });
     const team = await makeTeam(org.id, owner.id, { name: "Platform Team" });
+    await makeMember(owner.id, org.id);
+    await makeMember(otherUser.id, org.id);
+    await makeTeamMember(team.id, owner.id);
     const outsiderTeam = await makeTeam(org.id, owner.id, {
       name: "Other Team",
     });
@@ -472,6 +492,7 @@ describe("VirtualApiKeyModel", () => {
       ],
       name: "Org Key",
       scope: "org",
+      publishToOrganization: true,
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
@@ -497,6 +518,9 @@ describe("VirtualApiKeyModel", () => {
       scope: "team",
       authorId: owner.id,
       teamIds: [team.id],
+      initialPermissionGrants: [
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ],
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
@@ -504,8 +528,14 @@ describe("VirtualApiKeyModel", () => {
       ],
       name: "Other Team Key",
       scope: "team",
-      authorId: owner.id,
+      authorId: otherUser.id,
       teamIds: [outsiderTeam.id],
+      initialPermissionGrants: [
+        {
+          subject: { type: "team", id: outsiderTeam.id },
+          actions: ["read", "use"],
+        },
+      ],
     });
 
     const result = await VirtualApiKeyModel.findAllByOrganization({
@@ -532,9 +562,11 @@ describe("VirtualApiKeyModel", () => {
     makeSecret,
     makeLlmProviderApiKey,
     makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
     const otherUser = await makeUser({ email: "other-admin@test.com" });
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
@@ -545,6 +577,7 @@ describe("VirtualApiKeyModel", () => {
       ],
       name: "Org Key",
       scope: "org",
+      publishToOrganization: true,
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [

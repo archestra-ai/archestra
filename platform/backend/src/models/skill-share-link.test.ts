@@ -2,14 +2,14 @@ import { createHash } from "node:crypto";
 import { withDbTransaction } from "@/database";
 import { SkillModel, SkillShareLinkModel } from "@/models";
 import { SKILL_SHARE_LINK_TOKEN_PREFIX } from "@/models/skill-share-link";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, type TestAccess, test } from "@/test";
 import { deriveSkillShareLinkStatus, type SkillShareLink } from "@/types";
 
 async function seedSkill(params: {
   organizationId: string;
   name: string;
   authorId?: string | null;
-  scope?: "personal" | "org";
+  access?: TestAccess;
 }) {
   const skill = await SkillModel.createWithFiles({
     skill: {
@@ -20,9 +20,9 @@ async function seedSkill(params: {
       content: `# ${params.name}`,
       metadata: {},
       sourceType: "manual",
-      scope: params.scope ?? "org",
     },
     files: [],
+    ...accessGrants(params.access ?? "org"),
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;
@@ -169,13 +169,13 @@ describe("SkillShareLinkModel.validate", () => {
       organizationId: org.id,
       name: "Duplicate Name",
       authorId: authorA.id,
-      scope: "personal",
+      access: "personal",
     });
     const b = await seedSkill({
       organizationId: org.id,
       name: "Duplicate Name",
       authorId: authorB.id,
-      scope: "personal",
+      access: "personal",
     });
 
     const { rawToken } = await SkillShareLinkModel.create({

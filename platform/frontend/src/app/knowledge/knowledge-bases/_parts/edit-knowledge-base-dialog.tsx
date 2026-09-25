@@ -8,6 +8,7 @@ import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
 import { FormDialog } from "@/components/form-dialog";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { Button } from "@/components/ui/button";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import {
@@ -20,17 +21,18 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useUpdateKnowledgeBase } from "@/lib/knowledge/knowledge-base.query";
-import {
-  KnowledgeBaseAccessFields,
-  type KnowledgeBaseFormValues,
-} from "./knowledge-base-access-fields";
 
 type KnowledgeBaseItem = Pick<
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number],
-  "id" | "name" | "description" | "visibility" | "teamIds"
+  "id" | "name" | "description"
 > & {
   createdBy?: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number]["createdBy"];
   labels?: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number]["labels"];
+};
+
+type EditKnowledgeBaseFormValues = {
+  name: string;
+  description: string;
 };
 
 export function EditKnowledgeBaseDialog({
@@ -48,12 +50,10 @@ export function EditKnowledgeBaseDialog({
   );
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
-  const form = useForm<KnowledgeBaseFormValues>({
+  const form = useForm<EditKnowledgeBaseFormValues>({
     defaultValues: {
       name: knowledgeBase.name,
       description: knowledgeBase.description ?? "",
-      visibility: knowledgeBase.visibility,
-      teamIds: knowledgeBase.teamIds,
     },
   });
 
@@ -62,14 +62,12 @@ export function EditKnowledgeBaseDialog({
       form.reset({
         name: knowledgeBase.name,
         description: knowledgeBase.description ?? "",
-        visibility: knowledgeBase.visibility,
-        teamIds: knowledgeBase.teamIds,
       });
       setLabels(knowledgeBase.labels ?? []);
     }
   }, [open, knowledgeBase, form]);
 
-  const handleSubmit = async (values: KnowledgeBaseFormValues) => {
+  const handleSubmit = async (values: EditKnowledgeBaseFormValues) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const result = await updateKnowledgeBase.mutateAsync({
       id: knowledgeBase.id,
@@ -77,8 +75,6 @@ export function EditKnowledgeBaseDialog({
         name: values.name,
         description: values.description || null,
         labels: finalLabels,
-        visibility: values.visibility,
-        teamIds: values.visibility === "team-scoped" ? values.teamIds : [],
       },
     });
     if (result) {
@@ -134,7 +130,10 @@ export function EditKnowledgeBaseDialog({
               )}
             />
 
-            <KnowledgeBaseAccessFields form={form} />
+            <ResourceAccessSection
+              resource="knowledgeBase"
+              id={knowledgeBase.id}
+            />
 
             <AdvancedLabelsSection
               ref={labelsRef}

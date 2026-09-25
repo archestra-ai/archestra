@@ -1,6 +1,10 @@
 "use client";
 
-import type { AgentScope, archestraApiTypes } from "@archestra/shared";
+import type {
+  AgentScope,
+  archestraApiTypes,
+  ScopedPermission,
+} from "@archestra/shared";
 import {
   Bot,
   CheckIcon,
@@ -61,7 +65,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
-import { useSession } from "@/lib/auth/auth.query";
+import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
 import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import {
   useBulkUpdateChatOpsBindings,
@@ -1071,6 +1075,7 @@ function BulkAssignButton({
   onAssign: (agentId: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const { data: scopedGrants } = useScopedCapabilities();
 
   return (
     <div className="flex items-center gap-2">
@@ -1119,6 +1124,7 @@ function BulkAssignButton({
                 {agents.map((agent) => {
                   const disabledReason = agentDisabledReason({
                     agent,
+                    scopedGrants,
                     isDm: selectedDmsOnly,
                     currentUserId,
                     dmOwnedByCurrentUser: selectedDmsOwnedByCurrentUser,
@@ -1314,6 +1320,7 @@ function AgentPicker({
   dmOwnedByCurrentUser?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const { data: scopedGrants } = useScopedCapabilities();
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
@@ -1383,6 +1390,7 @@ function AgentPicker({
               {agents.map((agent) => {
                 const disabledReason = agentDisabledReason({
                   agent,
+                  scopedGrants,
                   isDm,
                   currentUserId,
                   dmOwnedByCurrentUser,
@@ -1497,23 +1505,25 @@ type PendingReassignment = AssignmentRequest & {
 function agentDisabledReason({
   agent,
   isDm,
-  currentUserId,
   dmOwnedByCurrentUser = true,
+  scopedGrants,
 }: {
   agent: Agent;
   isDm: boolean;
   currentUserId: string | undefined;
   dmOwnedByCurrentUser?: boolean;
+  scopedGrants: ScopedPermission[] | undefined;
 }) {
-  if (!isDm && agent.scope === "personal") {
-    return "Personal agents can only receive direct messages.";
-  }
-  if (isDm && agent.scope === "personal" && agent.authorId !== currentUserId) {
-    return "Only your personal agents can receive direct messages.";
-  }
-  if (isDm && agent.scope === "personal" && !dmOwnedByCurrentUser) {
-    return "Personal agents can only be assigned to your own direct messages.";
-  }
+  const allows = (action: "use" | "manage-permissions") =>
+    scopedGrants?.some(
+      (grant) =>
+        grant.resource === "agent" &&
+        grant.action === action &&
+        (grant.scope === "*" || grant.scope === agent.id),
+    );
+  if (!allows("use")) return "Requires permission to use this agent.";
+  if ((!isDm || !dmOwnedByCurrentUser) && !allows("manage-permissions"))
+    return "Requires permission to manage this agent’s permissions.";
   return null;
 }
 

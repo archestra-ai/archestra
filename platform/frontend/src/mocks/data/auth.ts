@@ -67,15 +67,15 @@ export const sessionSeed = makeSession();
 export function makeUserPermissions(
   overrides: Partial<archestraApiTypes.GetUserPermissionsResponses["200"]> = {},
 ): archestraApiTypes.GetUserPermissionsResponses["200"] {
-  const ALL = ["read", "create", "update", "delete", "admin"] as const;
+  const ALL = ["read", "create", "update", "delete"] as const;
   return {
-    mcpRegistry: [...ALL, "deploy-to-restricted"],
+    mcpRegistry: [...ALL],
     mcpServerInstallation: [...ALL],
-    mcpGateway: [...ALL, "deploy-to-restricted"],
+    mcpGateway: [...ALL],
     environment: ["read", "create", "update", "delete"],
-    agent: [...ALL, "team-admin", "deploy-to-restricted"],
+    agent: [...ALL],
     agentTrigger: [...ALL],
-    skill: [...ALL, "team-admin", "deploy-to-restricted"],
+    skill: [...ALL],
     plugin: [...ALL],
     chat: [...ALL],
     team: [...ALL],
@@ -92,7 +92,7 @@ export function makeUserPermissions(
     toolPolicy: [...ALL],
     organizationSettings: [...ALL],
     knowledgeSettings: [...ALL],
-    knowledgeSource: [...ALL, "deploy-to-restricted"],
+    knowledgeSource: [...ALL],
     agentSettings: [...ALL],
     llmSettings: [...ALL],
     log: [...ALL],
@@ -105,6 +105,43 @@ export function makeUserPermissions(
 }
 
 export const adminPermissionsSeed = makeUserPermissions();
+
+/**
+ * The admin role's grants at `*` — managing every object of each kind, which
+ * the retired `admin` role actions became. Listed by hand: the shared barrel
+ * cannot be imported into the MSW handlers. Keep it in step with
+ * `ScopedResourceSchema`; a missing entry hides admin-only UI, such as the
+ * logs User filter behind `log:read` at `*`.
+ */
+export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitiesResponses["200"] =
+  [
+    "agent",
+    "mcpGateway",
+    "mcpRegistry",
+    "skill",
+    "app",
+    "llmModel",
+    "project",
+    "conversation",
+    "agentRun",
+    "plugin",
+    "knowledgeBase",
+    "knowledgeConnector",
+    "knowledgeFile",
+    "llmVirtualKey",
+    "llmProviderApiKey",
+    "mcpOauthClient",
+    "llmOauthClient",
+    "environment",
+    "serviceAccount",
+    "scheduledTask",
+    "log",
+    "auditLog",
+  ].flatMap((resource) =>
+    (["read", "use", "update", "delete", "manage-permissions"] as const).map(
+      (action) => ({ resource, scope: "*", action }),
+    ),
+  ) as archestraApiTypes.GetScopedCapabilitiesResponses["200"];
 
 // Better-Auth's `/api/auth/organization/get-full-organization` response;
 // shape derived from the fields the Better-Auth client reads after parsing.

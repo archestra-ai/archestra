@@ -51,7 +51,7 @@ describe("locked chat attachments", () => {
       await makeAgent({
         organizationId,
         authorId: currentUser.id,
-        scope: "personal",
+        access: "personal",
       })
     ).id;
 

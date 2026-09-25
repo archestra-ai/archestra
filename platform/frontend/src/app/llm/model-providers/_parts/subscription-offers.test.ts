@@ -89,7 +89,7 @@ describe("buildSubscriptionOffers", () => {
     // which tab to open; GitHub Copilot has no tabs at all.
     expect(byKind.chatgpt).toMatchObject({
       provider: "openai",
-      scope: "personal",
+      shared: false,
       authMethod: "subscription",
     });
     expect(byKind["github-copilot"]).not.toHaveProperty("authMethod");

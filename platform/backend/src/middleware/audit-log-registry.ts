@@ -13,6 +13,7 @@ import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import HookFileModel from "@/models/hook-file";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
 import KbFileModel from "@/models/kb-file";
@@ -32,6 +33,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
@@ -185,9 +187,35 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  "/api/resource-permissions/:resource/:scope": {
+    resourceType: "resourcePermissions",
+    resourceIdParam: "scope",
+    action: "resourcePermissions.updated",
+    fetchById: (id, organizationId, routeParams) =>
+      ResourcePermissionPolicyModel.findByIdForAudit(
+        id,
+        organizationId,
+        routeParams,
+      ),
+    onlyWhenChanged: true,
+  },
+  // SPDX-SnippetEnd
   "/api/client-connections/:id/decision": {
     resourceType: "clientConnection",
     action: "clientConnection.updated",
+  },
+  "/api/hooks": {
+    resourceType: "hook",
+    fetchById: (id, organizationId) =>
+      HookFileModel.findByIdForAudit(id, organizationId),
+  },
+  "/api/hooks/:id": {
+    resourceType: "hook",
+    fetchById: (id, organizationId) =>
+      HookFileModel.findByIdForAudit(id, organizationId),
   },
   // Agents
   "/api/agents": {
@@ -274,16 +302,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/agent-runs/:taskId": {
     resourceType: "agentRun",
     resourceIdParam: "taskId",
-  },
-  // Registered explicitly so the DELETE (unshare) is not mislabeled as
-  // `agentRun.deleted` by the walk-up to `/api/agent-runs/:taskId`.
-  "/api/agent-runs/:taskId/share": {
-    resourceType: "agentRun",
-    resourceIdParam: "taskId",
-    actionByMethod: {
-      PUT: "agentRun.shared",
-      DELETE: "agentRun.unshared",
-    },
   },
   "/api/agents/:id/restore": {
     resourceType: "agent",
@@ -687,7 +705,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
   },
 
-  // Projects. Delete soft-deletes and restore is a project:admin action on
+  // Projects. Delete soft-deletes and restore is an oversight action on
   // another member's project, so both need a trail. The pin and instructions
   // children are denylisted in audit-log-hook.ts rather than registered: they
   // would inherit project.updated/project.deleted by walk-up while changing
@@ -719,12 +737,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "project.purged",
     fetchById: (id, orgId) => ProjectModel.findIdentityForAudit(id, orgId),
   },
-  // Visibility lives in `project_shares`, captured by the project snapshot.
-  "/api/projects/:id/share": {
-    resourceType: "project",
-    action: "project.updated",
-    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
-  },
 
   // Skills
   "/api/skills": {
@@ -735,16 +747,10 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
-  // Bulk visibility / delete act on a list of skills from the request body, so
-  // there is no single resourceId and `fetchById` (which sees route params
-  // only) cannot represent the batch. Both handlers set `auditBefore` and
-  // `auditAfter` themselves — see buildBulkSkillAuditSnapshot in
-  // routes/skill/skill.routes.ts.
-  "/api/skills/bulk-visibility": {
-    resourceType: "skill",
-    action: "skill.bulk_updated",
-    resourceIdSource: "organizationContext",
-  },
+  // Bulk delete acts on a list of skills from the request body, so there is
+  // no single resourceId and `fetchById` (which sees route params only) cannot
+  // represent the batch. The handler sets `auditBefore` and `auditAfter`
+  // itself — see buildBulkSkillAuditSnapshot in routes/skill/skill.routes.ts.
   "/api/skills/bulk-delete": {
     resourceType: "skill",
     action: "skill.bulk_deleted",
@@ -1315,23 +1321,17 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/agents/bulk": {
     resourceType: "agent",
     resourceIdSource: "organizationContext",
-    actionByMethod: {
-      PATCH: "agent.bulk_updated",
-      DELETE: "agent.bulk_deleted",
-    },
+    actionByMethod: { DELETE: "agent.bulk_deleted" },
   },
   "/api/apps/bulk": {
     resourceType: "app",
     resourceIdSource: "organizationContext",
-    actionByMethod: { PATCH: "app.bulk_updated", DELETE: "app.bulk_deleted" },
+    actionByMethod: { DELETE: "app.bulk_deleted" },
   },
   "/api/projects/bulk": {
     resourceType: "project",
     resourceIdSource: "organizationContext",
-    actionByMethod: {
-      PATCH: "project.bulk_updated",
-      DELETE: "project.bulk_deleted",
-    },
+    actionByMethod: { DELETE: "project.bulk_deleted" },
   },
   "/api/api-keys/bulk": {
     resourceType: "apiKey",
@@ -1413,18 +1413,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/knowledge-files/bulk": {
     resourceType: "knowledgeFile",
     resourceIdSource: "organizationContext",
-    actionByMethod: {
-      PATCH: "knowledgeFile.bulk_updated",
-      DELETE: "knowledgeFile.bulk_deleted",
-    },
+    actionByMethod: { DELETE: "knowledgeFile.bulk_deleted" },
   },
   "/api/knowledge-directories/bulk": {
     resourceType: "knowledgeDirectory",
     resourceIdSource: "organizationContext",
-    actionByMethod: {
-      PATCH: "knowledgeDirectory.bulk_updated",
-      DELETE: "knowledgeDirectory.bulk_deleted",
-    },
+    actionByMethod: { DELETE: "knowledgeDirectory.bulk_deleted" },
   },
   "/api/sessions/bulk": {
     resourceType: "auth",

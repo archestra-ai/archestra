@@ -30,7 +30,6 @@ vi.mock("@archestra/shared", async () => {
       pinProject: vi.fn(),
       restoreProject: vi.fn(),
       setProjectInstructions: vi.fn(),
-      setProjectShare: vi.fn(),
       unpinProject: vi.fn(),
       updateProject: vi.fn(),
       uploadProjectFiles: vi.fn(),

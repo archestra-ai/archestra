@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import {
-  ResourceVisibilityScopeSchema,
+  ResourcePermissionGrantSchema,
   TOOL_CREATE_PLUGIN_SHORT_NAME,
   TOOL_DELETE_PLUGIN_SHORT_NAME,
   TOOL_EDIT_PLUGIN_SHORT_NAME,
@@ -11,7 +12,7 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { PluginModel, PluginTeamModel } from "@/models";
-import { validatePluginVisibility } from "@/services/plugin-visibility";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   ClientTypeSchema,
@@ -69,6 +70,7 @@ const pluginFilesField = z
 
 const CreatePluginToolSchema = z
   .object({
+    initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
     displayName: z
       .string()
       .trim()
@@ -88,19 +90,6 @@ const CreatePluginToolSchema = z
       .min(1)
       .default(["posix"])
       .describe("Operating systems the payload supports."),
-    scope: ResourceVisibilityScopeSchema.default("personal").describe(
-      "Who can discover the plugin: personal (author plus named users), team, or org.",
-    ),
-    teamIds: z
-      .array(z.string().min(1))
-      .max(100)
-      .optional()
-      .describe("Teams a team-scoped plugin is shared with."),
-    userIds: z
-      .array(z.string().min(1))
-      .max(100)
-      .optional()
-      .describe("Organization members a personal plugin is shared with."),
     files: pluginFilesField.describe(
       "The plugin's files as { path, content, encoding?, mode? }. Hook " +
         "configuration bytes are stored verbatim — review them as code, " +
@@ -136,19 +125,6 @@ const UpdatePluginToolSchema = z
       .min(1)
       .optional()
       .describe("Operating systems the payload supports."),
-    scope: ResourceVisibilityScopeSchema.optional().describe(
-      "Who can discover the plugin: personal (author plus named users), team, or org.",
-    ),
-    teamIds: z
-      .array(z.string().min(1))
-      .max(100)
-      .optional()
-      .describe("Teams a team-scoped plugin is shared with."),
-    userIds: z
-      .array(z.string().min(1))
-      .max(100)
-      .optional()
-      .describe("Organization members a personal plugin is shared with."),
     baseContentHash: z
       .string()
       .min(1)
@@ -271,12 +247,13 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
-      const isAdmin = await userHasPermission(
-        ctx.userId,
-        ctx.organizationId,
-        "plugin",
-        "admin",
-      );
+      const isAdmin = await ResourcePermissions.allows({
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+        resource: "plugin",
+        scope: "*",
+        action: "update",
+      });
       const accessiblePluginIds = isAdmin
         ? undefined
         : await PluginTeamModel.getUserAccessiblePluginIds({
@@ -346,9 +323,8 @@ const registry = defineArchestraTools([
     description:
       "Create a plugin from an explicit file set. Files are stored verbatim " +
       "and execute on developer machines once installed, so author them with " +
-      "the user and review every byte before persisting. The visibility " +
-      "scope defaults to personal; team scopes need at least one team, and " +
-      "personal shares must name organization members.",
+      "the user and review every byte before persisting. Only the author " +
+      "has access unless initialGrants share it further.",
     schema: CreatePluginToolSchema,
     async handler({ args, context }) {
       const disabled = pluginsDisabledError();
@@ -360,13 +336,23 @@ const registry = defineArchestraTools([
       const permissionError = await pluginActionError(ctx, "create");
       if (permissionError) return permissionError;
 
-      const visibilityError = await checkVisibility({
-        organizationId: ctx.organizationId,
-        scope: args.scope,
-        teamIds: args.teamIds ?? [],
-        userIds: args.userIds ?? [],
-      });
-      if (visibilityError) return errorResult(visibilityError);
+      if (args.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId: ctx.organizationId,
+          userId: ctx.userId,
+          resource: "plugin",
+          grants: args.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: args.displayName,
+            authorId: ctx.userId,
+          },
+        });
+        // SPDX-SnippetEnd
+      }
 
       const plugin = await PluginModel.create({
         organizationId: ctx.organizationId,
@@ -376,11 +362,13 @@ const registry = defineArchestraTools([
           description: args.description,
           clientType: args.clientType,
           supportedPlatforms: args.supportedPlatforms,
-          scope: args.scope,
-          teamIds: args.teamIds,
-          userIds: args.userIds,
           files: args.files,
         },
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialPermissionGrants: args.initialGrants ?? [],
+        // SPDX-SnippetEnd
       });
       if (!plugin) {
         return errorResult(
@@ -421,14 +409,6 @@ const registry = defineArchestraTools([
       if (!existing) return unknownPluginError(args.id);
       const githubFilesError = checkManualFilesUpdate(existing, args.files);
       if (githubFilesError) return errorResult(githubFilesError);
-
-      const visibilityError = await checkVisibility({
-        organizationId: ctx.organizationId,
-        scope: args.scope ?? existing.scope,
-        teamIds: args.teamIds ?? existing.teams.map((team) => team.id),
-        userIds: args.userIds ?? existing.users.map((member) => member.id),
-      });
-      if (visibilityError) return errorResult(visibilityError);
 
       const { id, baseContentHash, ...input } = args;
       const plugin = await PluginModel.update({
@@ -639,23 +619,32 @@ function pluginsDisabledError() {
 }
 
 /**
- * TOOL_PERMISSIONS applies the plugin:admin floor. REST plugin routes also
- * require the action-specific permission, so handlers apply that second half
- * for custom roles that intentionally split approval from CRUD access.
+ * TOOL_PERMISSIONS applies the action-specific role permission. Plugins are
+ * executable bytes, so every tool beyond the metadata listing also needs
+ * `update` on every plugin — the grant at `*` the retired `plugin:admin` role
+ * action became — matching the REST routes (plugin.routes.ts).
  */
 async function pluginActionError(
   ctx: UserContext,
   action: "read" | "create" | "update" | "delete",
 ) {
-  const allowed = await userHasPermission(
-    ctx.userId,
-    ctx.organizationId,
-    "plugin",
-    action,
-  );
-  return allowed
+  const [allowed, isPluginAdmin] = await Promise.all([
+    userHasPermission(ctx.userId, ctx.organizationId, "plugin", action),
+    ResourcePermissions.allows({
+      userId: ctx.userId,
+      organizationId: ctx.organizationId,
+      resource: "plugin",
+      scope: "*",
+      action: "update",
+    }),
+  ]);
+  if (!allowed)
+    return errorResult(`This tool also requires plugin:${action} permission.`);
+  return isPluginAdmin
     ? null
-    : errorResult(`This tool also requires plugin:${action} permission.`);
+    : errorResult(
+        "This tool requires permission to manage every plugin in the organization.",
+      );
 }
 
 function unknownPluginError(id: string) {
@@ -682,19 +671,4 @@ function checkManualFilesUpdate(
     return githubReadOnlyMessage(plugin);
   }
   return null;
-}
-
-async function checkVisibility(params: {
-  organizationId: string;
-  scope: "personal" | "team" | "org";
-  teamIds: string[];
-  userIds: string[];
-}): Promise<string | null> {
-  try {
-    await validatePluginVisibility(params);
-    return null;
-  } catch (error) {
-    if (error instanceof ApiError) return error.message;
-    throw error;
-  }
 }

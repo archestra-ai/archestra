@@ -1,16 +1,18 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
-import { EnvironmentModel, SkillModel, SkillTeamModel } from "@/models";
+import { EnvironmentModel, SkillModel } from "@/models";
+import MemberModel from "@/models/member";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
-import { useRouteTestApp } from "@/test/route-test-app";
 import skillRoutes from "./skill.routes";
 import {
   MANIFEST,
   manifestNamed,
   seedImportedSkill,
+  useSkillRouteTestApp,
 } from "./skill.test-helpers";
 
 describe("PUT /api/skills/:id", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("replaces a skill's environment assignments", async () => {
     const skill = (
@@ -264,14 +266,15 @@ describe("PUT /api/skills/:id", () => {
   });
 
   test("a content-only edit does not 403 a team-admin who belongs to only one assigned team", async ({
-    makeMember,
     makeTeam,
     makeTeamMember,
   }) => {
     // editor holds skill:team-admin — may manage team-scoped skills
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: EDITOR_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      EDITOR_ROLE_NAME,
+    );
     const teamA = await makeTeam(ctx.organizationId, ctx.user.id);
     const teamB = await makeTeam(ctx.organizationId, ctx.user.id);
     await makeTeamMember(teamA.id, ctx.user.id);
@@ -280,9 +283,8 @@ describe("PUT /api/skills/:id", () => {
       organizationId: ctx.organizationId,
       name: "multi-team-skill",
       sourceRef: "x/y@main:SKILL.md",
-      scope: "team",
+      access: { teams: [teamA.id, teamB.id] },
       authorId: ctx.user.id,
-      teamIds: [teamA.id, teamB.id],
     });
 
     // a content-only edit that echoes the full team list back must not be
@@ -298,25 +300,25 @@ describe("PUT /api/skills/:id", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect((await SkillTeamModel.getTeamsForSkill(skill.id)).sort()).toEqual(
+    expect((await teamGrantIds(skill.id)).sort()).toEqual(
       [teamA.id, teamB.id].sort(),
     );
   });
 
-  test("rejects clearing all teams of a team-scoped skill", async ({
-    makeMember,
+  test("ignores an attempt to clear all teams of a team-shared skill", async ({
     makeTeam,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const team = await makeTeam(ctx.organizationId, ctx.user.id);
     const skill = await seedImportedSkill({
       organizationId: ctx.organizationId,
       name: "to-be-emptied",
       sourceRef: "x/y@main:SKILL.md",
-      scope: "team",
-      teamIds: [team.id],
+      access: { teams: [team.id] },
     });
 
     const response = await ctx.app.inject({
@@ -329,14 +331,15 @@ describe("PUT /api/skills/:id", () => {
       },
     });
 
-    expect(response.statusCode).toBe(400);
-    // the existing assignment is left intact
-    expect(await SkillTeamModel.getTeamsForSkill(skill.id)).toEqual([team.id]);
+    // `scope`/`teamIds` left the update body, so the retired fields are
+    // dropped and the team's grant is left intact.
+    expect(response.statusCode).toBe(200);
+    expect(await teamGrantIds(skill.id)).toEqual([team.id]);
   });
 });
 
 describe("PUT /api/skills/:id on a GitHub-synced skill", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   async function seedSynced() {
     const skill = await SkillModel.createWithFiles({
@@ -350,7 +353,6 @@ describe("PUT /api/skills/:id on a GitHub-synced skill", () => {
         sourceType: "github",
         sourceRef: "acme/skills@main:synced-locked",
         sourceCommit: "abc",
-        scope: "personal",
         githubSyncInterval: "1d",
       },
       files: [],
@@ -412,3 +414,17 @@ describe("PUT /api/skills/:id on a GitHub-synced skill", () => {
     expect(response.json().latestVersion).toBe(1);
   });
 });
+
+/** The teams a skill's permission policy grants. */
+async function teamGrantIds(skillId: string): Promise<string[]> {
+  const skill = await SkillModel.findById(skillId);
+  if (!skill) throw new Error("skill not found");
+  const policy = await ResourcePermissionPolicyModel.find({
+    organizationId: skill.organizationId,
+    resource: "skill",
+    scope: skillId,
+  });
+  return (policy?.grants ?? [])
+    .filter((grant) => grant.subject.type === "team")
+    .map((grant) => grant.subject.id);
+}

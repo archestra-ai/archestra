@@ -112,7 +112,8 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   baseUrl: null,
   inferenceBaseUrl: null,
   extraHeaders: [],
-  scope: "org",
+  // An organization embedding/reranking key belongs to no one.
+  shared: true,
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
@@ -190,7 +191,6 @@ function AddApiKeyDialog({
   const isValid =
     formValues.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
     formValues.name &&
-    (formValues.scope !== "team" || formValues.teamId) &&
     (byosEnabled
       ? formValues.vaultSecretPath && formValues.vaultSecretKey
       : isProviderApiKeyOptional({
@@ -209,9 +209,7 @@ function AddApiKeyDialog({
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
-        scope: values.scope,
-        teamId:
-          values.scope === "team" && values.teamId ? values.teamId : undefined,
+        shared: true,
         isPrimary: values.isPrimary,
         vaultSecretPath:
           !isBedrockSigV4 && byosEnabled && values.vaultSecretPath

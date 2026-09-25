@@ -2,17 +2,13 @@ import { describe, expect, it } from "vitest";
 import { isPermissionActionGranted } from "./permission-hierarchy";
 
 describe("isPermissionActionGranted", () => {
-  it("lets installation admin satisfy CRUD but not deleted-resource lifecycle", () => {
-    for (const requiredAction of [
-      "read",
-      "create",
-      "update",
-      "delete",
-    ] as const) {
+  it("grants exactly the actions a role holds, with no implied actions", () => {
+    const grantedActions = ["read", "create", "update", "delete"] as const;
+    for (const requiredAction of grantedActions) {
       expect(
         isPermissionActionGranted({
           resource: "mcpServerInstallation",
-          grantedActions: ["admin"],
+          grantedActions: [...grantedActions],
           requiredAction,
         }),
       ).toBe(true);
@@ -20,7 +16,7 @@ describe("isPermissionActionGranted", () => {
     expect(
       isPermissionActionGranted({
         resource: "mcpServerInstallation",
-        grantedActions: ["admin"],
+        grantedActions: [...grantedActions],
         requiredAction: "manage-deleted",
       }),
     ).toBe(false);

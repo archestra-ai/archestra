@@ -11,7 +11,7 @@
  *   GET decrypts with the key, returns the locked shape without it, and 409s
  *   on a wrong key
  * - the sidebar list carries no message content for locked-chat rows
- * - share/fork/compact/projects/title-generation are rejected or no-op
+ * - fork/compact/projects/title-generation are rejected or no-op
  * - the at-rest backfill sweep never rewrites locked-chat envelopes
  */
 import {
@@ -77,7 +77,7 @@ describe("locked chat routes", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: currentUser.id,
-      scope: "personal",
+      access: "personal",
     });
     agentId = agent.id;
 
@@ -397,16 +397,10 @@ describe("locked chat routes", () => {
   });
 
   describe("disabled features", () => {
-    test("share, fork, and compact are rejected; title generation is a no-op", async () => {
+    // Sharing goes through the chat's permission policy, which refuses a
+    // locked chat (see resource-permissions-cutover.sessions.test.ts).
+    test("fork and compact are rejected; title generation is a no-op", async () => {
       const id = await createLockedChatConversation();
-
-      const share = await app.inject({
-        method: "POST",
-        url: `/api/chat/conversations/${id}/share`,
-        payload: { visibility: "organization" },
-      });
-      expect(share.statusCode).toBe(400);
-      expect(share.json().error.message).toContain("shared");
 
       const fork = await app.inject({
         method: "POST",

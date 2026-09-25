@@ -35,7 +35,7 @@ describe("enqueuePermissionSyncAfterContentSync (documents-sync trigger)", () =>
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
     });
 
@@ -55,7 +55,7 @@ describe("enqueuePermissionSyncAfterContentSync (documents-sync trigger)", () =>
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
     });
 
@@ -77,7 +77,7 @@ describe("enqueuePermissionSyncAfterContentSync (documents-sync trigger)", () =>
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
     });
 
@@ -103,7 +103,7 @@ describe("enqueuePermissionSyncAfterContentSync (documents-sync trigger)", () =>
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "auto-sync-permissions",
+      syncPermissionsFromSource: true,
       connectorType: "github",
     });
 
@@ -123,7 +123,6 @@ describe("enqueuePermissionSyncAfterContentSync (documents-sync trigger)", () =>
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      visibility: "org-wide",
       connectorType: "github",
     });
 

@@ -11,7 +11,7 @@ import {
   SkillVersionModel,
 } from "@/models";
 import { fileStore } from "@/skills-sandbox/file-store";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
 
 async function seedSkill(
@@ -28,9 +28,9 @@ async function seedSkill(
       content: `# ${name}`,
       metadata: {},
       sourceType: "manual",
-      scope: "org",
     },
     files,
+    ...accessGrants("org"),
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;

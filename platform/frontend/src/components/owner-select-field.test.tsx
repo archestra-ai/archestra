@@ -80,7 +80,7 @@ describe("OwnerSelectField", () => {
     render(<OwnerSelectField value="" onChange={vi.fn()} />);
     expect(screen.getByText("Key owner")).toBeInTheDocument();
     expect(
-      screen.getByText(/on behalf of another member/i),
+      screen.getByText(/owner can reveal the key’s token/i),
     ).toBeInTheDocument();
   });
 

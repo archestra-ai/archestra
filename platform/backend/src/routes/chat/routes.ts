@@ -40,7 +40,7 @@ import {
   openAiReasoningSummaryCacheKey,
 } from "@/agents/openai-reasoning-summary";
 import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
-import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   fetchToolUiResource,
@@ -96,15 +96,13 @@ import {
   ConversationChatErrorModel,
   ConversationEnabledToolModel,
   ConversationModel,
-  ConversationShareModel,
   LlmProviderApiKeyModel,
   McpGatewayTaskModel,
-  MemberModel,
   MessageModel,
   ModelModel,
   OrganizationModel,
+  ProjectAccessModel,
   ProjectModel,
-  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   TeamModel,
@@ -127,6 +125,7 @@ import {
 import { conversationFilesService } from "@/services/conversation-files";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { projectService } from "@/services/project";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { generateConversationTitle } from "@/services/title-generation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -143,7 +142,6 @@ import {
   InsertConversationSchema,
   SelectConversationCompactionSchema,
   SelectConversationSchema,
-  SelectConversationShareWithTargetsSchema,
   ThinkingEffortSchema,
   type UpdateConversation,
   UpdateConversationSchema,
@@ -434,6 +432,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "The agent associated with this conversation has been deleted",
         );
+      }
+
+      if (conversation.agent.agentType !== "llm_proxy") {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId,
+          userId: user.id,
+          resource:
+            conversation.agent.agentType === "mcp_gateway"
+              ? "mcpGateway"
+              : "agent",
+          scope: conversation.agentId,
+          action: "use",
+        });
+        // SPDX-SnippetEnd
       }
 
       // A shared agent may be configured to refuse callers who cannot reach one
@@ -2244,7 +2259,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         canReadOthersViaProject: () =>
-          userHasPermission(user.id, organizationId, "project", "read-all"),
+          ResourcePermissions.allows({
+            userId: user.id,
+            organizationId: organizationId,
+            resource: "conversation",
+            scope: "*",
+            action: "read",
+          }),
       });
 
       if (!conversation) {
@@ -2874,7 +2895,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const project = await ProjectModel.findById(projectId);
         if (
           !project ||
-          !(await ProjectShareModel.userCanAccessProject({
+          !(await ProjectAccessModel.userCanAccessProject({
             project,
             userId: user.id,
             organizationId,
@@ -3024,7 +3045,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const project = await ProjectModel.findById(body.projectId);
         if (
           !project ||
-          !(await ProjectShareModel.userCanAccessProject({
+          !(await ProjectAccessModel.userCanAccessProject({
             project,
             userId: user.id,
             organizationId,
@@ -3249,10 +3270,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       );
 
-      // Both side effects below are gated on the deleted -> active transition,
+      // The side effect below is gated on the deleted -> active transition,
       // never on the idempotent no-op: a second restore must not reach into a
       // conversation that is already live (and a caller who does not own the
-      // row transitions nothing, so neither touches someone else's chat).
+      // row transitions nothing, so it never touches someone else's chat).
+      // Who can read the chat is its permission policy, which delete and
+      // restore both leave as it was.
       if (restored > 0) {
         // Delete only asked the run to stop. Finish it here so a row nothing is
         // streaming into can't wedge the restored chat behind the running-run
@@ -3266,20 +3289,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Failed to finalize the stopped chat run on conversation restore",
           );
         }
-
-        // Restore does NOT re-publish. Delete revokes read access for everyone
-        // holding the share link (the shares join filters on the soft-delete
-        // predicate), and deleting a chat is a plausible way to pull a share
-        // back — so silently re-granting org-wide access on the way out of
-        // trash would be a surprise with real disclosure consequences. The chat
-        // comes back private; the owner re-shares deliberately if they still
-        // want to. Not swallowed: a restore that reported success while leaving
-        // the chat shared is the exact failure this prevents.
-        await ConversationShareModel.delete({
-          conversationId: id,
-          organizationId,
-          userId: user.id,
-        });
       }
 
       // Full hydration, matching this route's declared conversation schema — a
@@ -3409,248 +3418,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         compaction: result.compaction,
         conversation: updatedConversation,
       });
-    },
-  );
-
-  fastify.get(
-    "/api/chat/conversations/:id/share",
-    {
-      schema: {
-        operationId: RouteId.GetConversationShare,
-        description: "Get share status for a conversation",
-        tags: ["Chat"],
-        params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(
-          SelectConversationShareWithTargetsSchema.nullable(),
-        ),
-      },
-    },
-    async ({ params: { id }, user, organizationId }) => {
-      const conversation = await ConversationModel.findById({
-        id,
-        userId: user.id,
-        organizationId,
-      });
-      if (!conversation) {
-        throw new ApiError(404, "Conversation not found");
-      }
-
-      return ConversationShareModel.findByConversationId({
-        conversationId: id,
-        organizationId,
-      });
-    },
-  );
-
-  fastify.post(
-    "/api/chat/conversations/:id/share",
-    {
-      schema: {
-        operationId: RouteId.ShareConversation,
-        description:
-          "Share a conversation with your organization, specific teams, or specific users",
-        tags: ["Chat"],
-        params: z.object({ id: UuidIdSchema }),
-        body: z
-          .object({
-            visibility: z.enum(["organization", "team", "user"]),
-            teamIds: z.array(z.string()).optional(),
-            userIds: z.array(z.string()).optional(),
-          })
-          .superRefine((value, ctx) => {
-            if (
-              value.visibility === "team" &&
-              (value.teamIds ?? []).length === 0
-            ) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Select at least one team",
-                path: ["teamIds"],
-              });
-            }
-
-            if (
-              value.visibility === "user" &&
-              (value.userIds ?? []).length === 0
-            ) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Select at least one user",
-                path: ["userIds"],
-              });
-            }
-          }),
-        response: constructResponseSchema(
-          SelectConversationShareWithTargetsSchema,
-        ),
-      },
-    },
-    async ({ params: { id }, body, user, organizationId }) => {
-      const conversation = await ConversationModel.findById({
-        id,
-        userId: user.id,
-        organizationId,
-      });
-      if (!conversation) {
-        throw new ApiError(404, "Conversation not found");
-      }
-      if (conversation.lockedChat) {
-        // A share grants read access the recipients could never use (they
-        // don't hold the key) and would leak the conversation's existence.
-        throw new ApiError(400, "Locked chats cannot be shared");
-      }
-      if (conversation.origin === "openappa") {
-        throw new ApiError(400, "Policy conversations cannot be shared");
-      }
-
-      const teamIds = Array.from(new Set(body.teamIds ?? []));
-      const userIds = Array.from(new Set(body.userIds ?? []));
-
-      if (body.visibility === "team") {
-        const teams = await TeamModel.findByIds(teamIds);
-        const validTeamIds = new Set(
-          teams
-            .filter((team) => team.organizationId === organizationId)
-            .map((team) => team.id),
-        );
-
-        if (validTeamIds.size !== teamIds.length) {
-          throw new ApiError(400, "One or more selected teams are invalid");
-        }
-      }
-
-      if (body.visibility === "user") {
-        const validUserIds = new Set(
-          await MemberModel.findUserIdsInOrganization({
-            organizationId,
-            userIds,
-          }),
-        );
-
-        if (validUserIds.size !== userIds.length) {
-          throw new ApiError(400, "One or more selected users are invalid");
-        }
-      }
-
-      return ConversationShareModel.upsert({
-        conversationId: id,
-        organizationId,
-        createdByUserId: user.id,
-        visibility: body.visibility,
-        teamIds: body.visibility === "team" ? teamIds : [],
-        userIds: body.visibility === "user" ? userIds : [],
-      });
-    },
-  );
-
-  fastify.delete(
-    "/api/chat/conversations/:id/share",
-    {
-      schema: {
-        operationId: RouteId.UnshareConversation,
-        description: "Revoke sharing of a conversation",
-        tags: ["Chat"],
-        params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
-      },
-    },
-    async ({ params: { id }, user, organizationId }) => {
-      const deleted = await ConversationShareModel.delete({
-        conversationId: id,
-        organizationId,
-        userId: user.id,
-      });
-
-      if (!deleted) {
-        throw new ApiError(404, "Share not found");
-      }
-
-      return { success: true };
-    },
-  );
-
-  fastify.get(
-    "/api/chat/shared/:shareId",
-    {
-      schema: {
-        operationId: RouteId.GetSharedConversation,
-        description: "Get a shared conversation by share ID",
-        tags: ["Chat"],
-        params: z.object({ shareId: UuidIdSchema }),
-        response: constructResponseSchema(
-          SelectConversationSchema.extend({
-            sharedByUserId: z.string(),
-          }),
-        ),
-      },
-    },
-    async ({ params: { shareId }, organizationId, user }) => {
-      const conversation = await ConversationShareModel.getSharedConversation({
-        shareId,
-        organizationId,
-        userId: user.id,
-      });
-
-      if (!conversation) {
-        throw new ApiError(404, "Shared conversation not found");
-      }
-
-      // Hook debug parts are an owner/admin-only surface — never expose them
-      // through a share link, regardless of the viewer or debug flag.
-      conversation.messages = stripHookRunParts(
-        conversation.messages as ChatMessage[],
-        { visible: false },
-      );
-
-      return conversation;
-    },
-  );
-
-  fastify.post(
-    "/api/chat/shared/:shareId/fork",
-    {
-      schema: {
-        operationId: RouteId.ForkSharedConversation,
-        description:
-          "Create a new conversation from a shared conversation's messages",
-        tags: ["Chat"],
-        params: z.object({ shareId: UuidIdSchema }),
-        body: z.object({
-          agentId: z.string().uuid(),
-        }),
-        response: constructResponseSchema(SelectConversationSchema),
-      },
-    },
-    async ({
-      params: { shareId },
-      body: { agentId },
-      user,
-      organizationId,
-    }) => {
-      const sharedConversation =
-        await ConversationShareModel.getSharedConversation({
-          shareId,
-          organizationId,
-          userId: user.id,
-        });
-
-      if (!sharedConversation) {
-        throw new ApiError(404, "Shared conversation not found");
-      }
-      if (sharedConversation.origin === "openappa") {
-        throw new ApiError(400, "Policy conversations cannot be forked");
-      }
-
-      const forked = await forkConversation({
-        sourceConversation: sharedConversation,
-        agentId,
-        userId: user.id,
-        organizationId,
-      });
-      forked.messages = stripHookRunParts(forked.messages as ChatMessage[], {
-        visible: false,
-      });
-      return forked;
     },
   );
 
@@ -4961,12 +4728,13 @@ async function findReadableConversationById(params: {
       userId: params.userId,
       organizationId: params.organizationId,
       canReadOthersViaProject: () =>
-        userHasPermission(
-          params.userId,
-          params.organizationId,
-          "project",
-          "read-all",
-        ),
+        ResourcePermissions.allows({
+          userId: params.userId,
+          organizationId: params.organizationId,
+          resource: "conversation",
+          scope: "*",
+          action: "read",
+        }),
     })) ??
     (await findScheduleRunConversationForAdmin({
       conversationId: params.conversationId,
@@ -4981,12 +4749,13 @@ async function findScheduleRunConversationForAdmin(params: {
   userId: string;
   organizationId: string;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
-  const isScheduledTaskAdmin = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "scheduledTask",
-    "admin",
-  );
+  const isScheduledTaskAdmin = await ResourcePermissions.allows({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "scheduledTask",
+    scope: "*",
+    action: "read",
+  });
   if (!isScheduledTaskAdmin) {
     return null;
   }
@@ -5043,7 +4812,7 @@ async function forkConversation(params: {
     );
     if (
       project &&
-      (await ProjectShareModel.userCanAccessProject({
+      (await ProjectAccessModel.userCanAccessProject({
         project,
         userId: params.userId,
         organizationId: params.organizationId,
@@ -5111,8 +4880,8 @@ function stripFeedbackMetadata(message: ChatMessage): ChatMessage {
 }
 
 /**
- * Validates that a chat API key exists, belongs to the organization,
- * and the user has access to it based on scope.
+ * Validates that a chat API key exists, belongs to the organization, and the
+ * user may use it (a use grant on the key).
  * Throws ApiError if validation fails.
  */
 async function validateChatApiKeyAccess(
@@ -5125,21 +4894,13 @@ async function validateChatApiKeyAccess(
     throw new ApiError(404, "Chat API key not found");
   }
 
-  // Verify user has access to the API key based on scope
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-  const canAccessKey =
-    apiKey.scope === "org" ||
-    (apiKey.scope === "personal" && apiKey.userId === userId) ||
-    (apiKey.scope === "team" &&
-      apiKey.teamId &&
-      userTeamIds.includes(apiKey.teamId));
-
-  if (!canAccessKey) {
+  if (!(await LlmProviderApiKeyModel.canUseKey(apiKey, userId, []))) {
     throw new ApiError(403, "You do not have access to this API key");
   }
 }
 
 export const __test = {
+  validateChatApiKeyAccess,
   getMessagesNotYetPersisted,
   getMessagesWithChangedContent,
   persistNewMessages,

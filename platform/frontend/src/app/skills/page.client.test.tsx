@@ -56,6 +56,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useHasPermissions,
   useMissingPermissions,
+  useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -148,6 +149,19 @@ function mockSkills(data: unknown[]) {
  * actually turns on.
  */
 function mockPermissions({ skillAdmin }: { skillAdmin: boolean }) {
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: skillAdmin
+      ? [
+          {
+            organizationId: "org-1",
+            resource: "skill",
+            scope: "*",
+            action: "update",
+          },
+        ]
+      : [],
+    isPending: false,
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions: Record<string, string[]>) => {
       const actions = permissions.skill ?? [];
@@ -442,7 +456,7 @@ describe("SkillsPage rows", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions: Record<string, string[]>) =>
         // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
-        ({ data: !permissions.plugin?.includes("admin") }) as any,
+        ({ data: !permissions.plugin?.includes("update") }) as any,
     );
     mockUseFeature.mockImplementation((name: string) => name === "plugins");
     vi.mocked(usePluginSkills).mockReturnValue({
@@ -657,9 +671,7 @@ describe("SkillsPage rows", () => {
     expect(screen.getAllByText(/Only this skill's author/)).toHaveLength(2);
   });
 
-  it("lets a skill admin edit a skill they do not own", () => {
-    // `skill:admin` is the oversight grant the backend honours, so the row
-    // must not refuse what the API would accept.
+  it("allows a wildcard update grant to edit another person’s skill", () => {
     mockPermissions({ skillAdmin: true });
     mockSkills([SOMEONE_ELSES]);
     render(<SkillsPage />);

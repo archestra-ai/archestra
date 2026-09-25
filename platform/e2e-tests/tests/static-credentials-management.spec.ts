@@ -78,7 +78,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         page: adminPage,
         cookieHeaders,
         catalogItemName,
-        scope: "org",
+        shareWithOrganization: true,
       });
 
       await goToMcpRegistry(page);
@@ -306,7 +306,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     page: adminPage,
     cookieHeaders,
     catalogItemName,
-    scope: "org",
+    shareWithOrganization: true,
   });
   const MATRIX = [
     { user: "Admin", page: adminPage, canCreateTeamCredential: true },
@@ -374,6 +374,7 @@ test("Verify tool calling using different static credentials", async ({
   const sharedGateway = await createSharedTestGatewayViaApi({
     cookieHeaders,
     gatewayName: makeRandomString(10, "shared-gw"),
+    withOrganizationUse: true,
   });
   // Create a team-scoped MCP gateway for editor (editor can't see org-scoped gateways)
   const teamGateway = await createTeamMcpGatewayViaApi({
@@ -387,7 +388,7 @@ test("Verify tool calling using different static credentials", async ({
     page: adminPage,
     cookieHeaders,
     catalogItemName: CATALOG_ITEM_NAME,
-    scope: "org",
+    shareWithOrganization: true,
     envVars: {
       key: "ARCHESTRA_TEST",
       promptOnInstallation: true,
@@ -460,7 +461,8 @@ test("Verify tool calling using different static credentials", async ({
   await verifyToolCallResultViaApi({
     request,
     expectedResult: "Engineering-team-credential",
-    tokenToUse: "org-token",
+    // The gateway belongs to the engineering team, so its token reaches it.
+    tokenToUse: "engineering-team",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
     profileId: teamGateway.id,
   });

@@ -4,6 +4,8 @@ import {
   isBuiltInCatalogId,
   isMetadataOnlyEdit,
   mcpRuntimeAlertSource,
+  ResourcePermissionActionSchema,
+  ResourcePermissionGrantSchema,
   RouteId,
   SERVER_NAME_PLACEHOLDER,
 } from "@archestra/shared";
@@ -13,15 +15,11 @@ import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import {
-  assertMcpCatalogTeams,
-  authorizeMcpCatalogScope,
-  type CatalogTeamAccess,
-  getCatalogWriteMembershipTeamIds,
   getMcpCatalogPermissionChecker,
-  requireMcpCatalogDeletePermission,
-  requireMcpCatalogModifyPermission,
+  isMcpInstallationAdmin,
   withCatalogTeamFkErrorMapped,
 } from "@/auth/mcp-catalog-permissions";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -49,6 +47,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
@@ -76,13 +75,13 @@ import {
   requiresNewUserInputForReinstall,
 } from "@/services/mcp-reinstall";
 import { transferResourceOwnership } from "@/services/resource-ownership";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
-  type CatalogTeamAssignment,
+  CreateInternalMcpCatalogBodySchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-  InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
@@ -92,8 +91,8 @@ import {
   type McpServerDismissibleAlertKind,
   McpServerDismissibleAlertKindSchema,
   MuteMcpServerAlertBodySchema,
-  normalizeCatalogTeamInput,
   PartialUpdateInternalMcpCatalogSchema,
+  RetiredSharingUpdateFieldSchema,
   SelectInternalMcpCatalogSchema,
   UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
@@ -178,7 +177,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ),
         }),
         response: constructResponseSchema(
-          z.array(ListInternalMcpCatalogSchema),
+          z.array(
+            ListInternalMcpCatalogSchema.extend({
+              effectiveActions: z
+                .array(ResourcePermissionActionSchema)
+                .optional(),
+            }),
+          ),
         ),
       },
     },
@@ -208,20 +213,29 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...item,
             alertMutes: [],
             imageApprovalRequired: false,
+            effectiveActions: [],
           })),
         );
       }
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       // Don't expand secrets for list view
       const opts = {
         expandSecrets: false,
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
+        readGrantContext: (await userHasPermission(
+          request.user.id,
+          request.organizationId,
+          "mcpRegistry",
+          "read",
+        ))
+          ? undefined
+          : { userId: request.user.id, organizationId: request.organizationId },
       };
       // App backings are gated by `app:read`, not this route's `mcpRegistry:read`,
       // so only surface them to callers who could see them on the Apps page.
@@ -230,18 +244,29 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (await hasPermission({ app: ["read"] }, request.headers)).success;
       if (!includeApps) {
         const list = await InternalMcpCatalogModel.findAll(opts);
-        const [approvalRequired, alertMutes] = await Promise.all([
-          flagImageApprovalRequired(list, request.organizationId),
-          config.mcpServer.alertingEnabled
-            ? McpServerAlertMuteModel.findForViewer({
-                userId: request.user.id,
-                catalogIds: list.map((item) => item.id),
-              })
-            : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
-        ]);
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const [effectiveActions, approvalRequired, alertMutes] =
+          await Promise.all([
+            ResourcePermissions.getCatalogActions({
+              organizationId: request.organizationId,
+              userId: request.user.id,
+              targets: list,
+            }),
+            flagImageApprovalRequired(list, request.organizationId),
+            config.mcpServer.alertingEnabled
+              ? McpServerAlertMuteModel.findForViewer({
+                  userId: request.user.id,
+                  catalogIds: list.map((item) => item.id),
+                })
+              : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
+          ]);
+        // SPDX-SnippetEnd
         return reply.send(
           list.map((item) => ({
             ...item,
+            effectiveActions: effectiveActions.get(item.id) ?? [],
             alertMutes: (alertMutes.get(item.id) ?? []).filter(
               (mute) => mute.mcpServerId === null,
             ),
@@ -256,17 +281,30 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const appCatalogIds = items
         .filter((item) => item.serverType === "app")
         .map((item) => item.id);
-      const [appIdByCatalog, appEnabledByCatalog, alertMutes] =
-        await Promise.all([
-          AppModel.getAppIdsByCatalogIds(appCatalogIds),
-          AppModel.getAppEnabledByCatalogIds(appCatalogIds),
-          config.mcpServer.alertingEnabled
-            ? McpServerAlertMuteModel.findForViewer({
-                userId: request.user.id,
-                catalogIds: items.map((item) => item.id),
-              })
-            : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
-        ]);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const [
+        appIdByCatalog,
+        appEnabledByCatalog,
+        alertMutes,
+        effectiveActions,
+      ] = await Promise.all([
+        AppModel.getAppIdsByCatalogIds(appCatalogIds),
+        AppModel.getAppEnabledByCatalogIds(appCatalogIds),
+        config.mcpServer.alertingEnabled
+          ? McpServerAlertMuteModel.findForViewer({
+              userId: request.user.id,
+              catalogIds: items.map((item) => item.id),
+            })
+          : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
+        ResourcePermissions.getCatalogActions({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          targets: items,
+        }),
+      ]);
+      // SPDX-SnippetEnd
       const approvalRequired = await flagImageApprovalRequired(
         items,
         request.organizationId,
@@ -274,6 +312,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         items.map((item) => ({
           ...item,
+          effectiveActions: effectiveActions.get(item.id) ?? [],
           alertMutes: (alertMutes.get(item.id) ?? []).filter(
             (mute) => mute.mcpServerId === null,
           ),
@@ -379,7 +418,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateInternalMcpCatalogItem,
         description: "Create a new Internal MCP catalog item",
         tags: ["MCP Catalog"],
-        body: InsertInternalMcpCatalogSchema.extend({
+        body: CreateInternalMcpCatalogBodySchema.extend({
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
           // BYOS: External Vault path for OAuth client secret
           oauthClientSecretVaultPath: z.string().optional(),
           // BYOS: External Vault key for OAuth client secret
@@ -395,6 +438,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { body } = request;
       const {
+        initialGrants,
         oauthClientSecretVaultPath,
         oauthClientSecretVaultKey,
         localConfigVaultPath,
@@ -404,6 +448,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Downstream secret extraction removes plaintext values from the payload
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
+      // Resource identities are server-owned; a client cannot revive old grants
+      // by choosing the UUID of a previously purged object.
+      restBody.id = crypto.randomUUID();
 
       // serverType:"app" catalogs are created and owned by the Apps flow
       // (their app row, version store, and connector identity live in `apps`).
@@ -422,49 +469,27 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       restBody.clientSecretId = undefined;
       restBody.localConfigSecretId = undefined;
 
-      // Enforce scope restrictions (3-tier model shared with agents/skills):
-      // org → admin only; team → admin of one of the assigned teams, and
-      // membership in all of them; personal → the author.
       const checker = await getMcpCatalogPermissionChecker({
         userId: request.user.id,
         organizationId: request.organizationId,
       });
-
-      restBody.scope = restBody.scope ?? "personal";
-      const requestedTeams =
-        restBody.scope === "team"
-          ? normalizeCatalogTeamInput(restBody.teams ?? [])
-          : [];
-      const requestedTeamIds = requestedTeams.map((team) => team.id);
-      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
-        ? [[], []]
-        : await Promise.all([
-            TeamModel.getUserTeamIds(request.user.id),
-            getCatalogWriteMembershipTeamIds(request.user.id),
-          ]);
-      authorizeMcpCatalogScope({
-        checker,
-        scope: restBody.scope,
-        authorId: request.user.id,
-        requestedTeamIds,
-        userTeamIds,
-        writeMembershipTeamIds,
-        userId: request.user.id,
-      });
-      if (restBody.scope !== "team") {
-        delete restBody.teams;
-      } else {
-        restBody.teams = requestedTeams;
+      if (initialGrants !== undefined) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          resource: "mcpRegistry",
+          grants: initialGrants,
+          target: {
+            id: crypto.randomUUID(),
+            name: restBody.name,
+            authorId: request.user.id,
+          },
+        });
+        // SPDX-SnippetEnd
       }
-      await assertMcpCatalogTeams({
-        scope: restBody.scope,
-        teamIds: requestedTeamIds,
-        organizationId: request.organizationId,
-      });
-
-      const canDeployToRestricted = await callerCanDeployToRestricted(
-        request.headers,
-      );
 
       // No environment chosen at all (as opposed to an explicit null, which
       // picks the default environment on purpose) hands the choice to the org's
@@ -473,17 +498,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.environmentId = await resolveDefaultEnvironmentForNewResource({
           organizationId: request.organizationId,
           resource: "mcpRegistry",
-          canDeployToRestricted,
+          userId: request.user.id,
         });
       }
 
-      // Gate assigning a restricted environment. Requires
-      // mcpRegistry:deploy-to-restricted. Unrestricted and default (null)
-      // environments are open.
+      // Gate assigning a restricted environment. Requires a `use` grant on
+      // that environment. Unrestricted and default (null) environments are
+      // open.
       await assertCanAssignEnvironment({
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
-        canDeployToRestricted,
+        userId: request.user.id,
       });
 
       let clientSecretId: string | undefined;
@@ -674,10 +699,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
       const catalogItem = await withCatalogTeamFkErrorMapped(() =>
-        InternalMcpCatalogModel.create(restBody, {
-          organizationId: request.organizationId,
-          authorId: request.user.id,
-        }),
+        InternalMcpCatalogModel.create(
+          // Who can reach the new item is its initial grants alone. The
+          // retired visibility column is NOT NULL; nothing reads it.
+          { ...restBody, scope: "personal" },
+          {
+            organizationId: request.organizationId,
+            authorId: request.user.id,
+            initialPermissionGrants: initialGrants ?? [],
+          },
+        ),
       );
       return reply.send(catalogItem);
     },
@@ -698,10 +729,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
         isAdmin,
@@ -712,6 +743,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
+      await requireCatalogRead({ request, id });
       return reply.send(catalogItem);
     },
   );
@@ -728,16 +760,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       // Scoped to exactly the catalogs GET /api/internal_mcp_catalog would
       // list for this caller — app backings included, which stay behind the
       // `app:read`-gated includeApps path there and are excluded here too.
       const catalogIds = await InternalMcpCatalogModel.findAccessibleIds({
         userId: request.user.id,
         isAdmin,
+        readGrantContext: (await userHasPermission(
+          request.user.id,
+          request.organizationId,
+          "mcpRegistry",
+          "read",
+        ))
+          ? undefined
+          : { userId: request.user.id, organizationId: request.organizationId },
         organizationId: request.organizationId,
       });
       return reply.send(await ToolModel.findListableByCatalogIds(catalogIds));
@@ -763,10 +803,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       // The built-in Archestra catalog is virtual; custom/private catalog IDs
       // still need an access-checked backing row.
       if (!isBuiltInCatalogId(id)) {
@@ -781,6 +821,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await requireCatalogRead({ request, id });
       const tools = await ToolModel.findByCatalogId(id);
       return reply.send(tools);
     },
@@ -797,6 +838,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: PartialUpdateInternalMcpCatalogSchema.extend({
+          // Who can reach the item changes through its permissions, so the
+          // retired sharing fields are refused rather than dropped.
+          scope: RetiredSharingUpdateFieldSchema,
+          teams: RetiredSharingUpdateFieldSchema,
           // BYOS: External Vault path for OAuth client secret
           oauthClientSecretVaultPath: z.string().optional(),
           // BYOS: External Vault key for OAuth client secret
@@ -860,6 +905,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Get the original catalog item to check if name or serverUrl changed
       const originalCatalogItem = await InternalMcpCatalogModel.findById(id, {
+        accessAction: "update",
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
@@ -877,6 +923,25 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // authorization below still applies; the change is propagated to the linked
       // app + server after the update.
       const isAppCatalog = originalCatalogItem.serverType === "app";
+      const linkedAppId = isAppCatalog
+        ? (await AppModel.getAppIdsByCatalogIds([id])).get(id)
+        : undefined;
+      if (isAppCatalog && !linkedAppId) {
+        throw new ApiError(404, "App not found");
+      }
+      if (linkedAppId) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          resource: "app",
+          scope: linkedAppId,
+          action: "update",
+        });
+        // SPDX-SnippetEnd
+      }
       // A non-app catalog cannot be converted into an app (the inverse of the
       // create guard): an "app" catalog only makes sense when an actual app row
       // and the `open` launch tool back it, which this path can't create.
@@ -912,6 +977,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const originalCatalogItemForGate = await InternalMcpCatalogModel.findById(
         id,
         {
+          accessAction: "update",
           userId: request.user.id,
           isAdmin,
           organizationId: request.organizationId,
@@ -922,25 +988,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
-        ? [[], []]
-        : await Promise.all([
-            TeamModel.getUserTeamIds(request.user.id),
-            getCatalogWriteMembershipTeamIds(request.user.id),
-          ]);
-      const existingTeams = originalCatalogItem.teams;
-
       // Gate the right to modify this item at its CURRENT scope. This lets an
       // admin of one of the item's `write` teams edit it, and still blocks
       // editing someone else's personal item or a `use`-only team's item.
-      requireMcpCatalogModifyPermission({
-        checker,
-        scope: originalCatalogItem.scope,
-        authorId: originalCatalogItem.authorId,
-        catalogTeams: existingTeams,
-        writeMembershipTeamIds,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
         userId: request.user.id,
+        resource: "mcpRegistry",
+        scope: originalCatalogItem.id,
+        action: "update",
       });
+      // SPDX-SnippetEnd
 
       if (restBody.dynamicConnectionMcpServerId) {
         const pinned = await McpServerModel.findByIdInOrg(
@@ -954,45 +1015,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       }
-
-      // Re-authorize and re-sync teams only when scope, team assignments, or
-      // their access levels actually change. A content-only edit that echoes
-      // the existing teams must not 403 a non-admin author/team-admin or
-      // needlessly rewrite rows.
-      const newScope = restBody.scope ?? originalCatalogItem.scope;
-      // Shared items are one-way: demoting team/org back to personal would yank
-      // the item from everyone it was shared with. Mirrors the agent route.
-      if (newScope === "personal" && originalCatalogItem.scope !== "personal") {
-        throw new ApiError(400, "Shared catalog items cannot be made personal");
-      }
-      const newTeams: CatalogTeamAssignment[] =
-        newScope === "team"
-          ? normalizeCatalogTeamInput(restBody.teams ?? existingTeams)
-          : [];
-      const newTeamIds = newTeams.map((team) => team.id);
-      const scopeChanged = newScope !== originalCatalogItem.scope;
-      const teamsChanged =
-        newScope === "team" && !sameTeamAssignments(newTeams, existingTeams);
-      if (scopeChanged || teamsChanged) {
-        authorizeMcpCatalogScope({
-          checker,
-          scope: newScope,
-          authorId: originalCatalogItem.authorId,
-          requestedTeamIds: newTeamIds,
-          userTeamIds,
-          writeMembershipTeamIds,
-          userId: request.user.id,
-        });
-        await assertMcpCatalogTeams({
-          scope: newScope,
-          teamIds: newTeamIds,
-          organizationId: request.organizationId,
-        });
-      }
-
-      // Only rewrite team assignments when scope/teams/levels actually change;
-      // undefined leaves the existing rows untouched.
-      restBody.teams = scopeChanged || teamsChanged ? newTeams : undefined;
 
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
@@ -1243,7 +1265,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // When the environment assignment changes, gate it the same way create
       // does — the target must belong to this org, and a restricted environment
-      // (or restricted default) requires mcpRegistry:deploy-to-restricted.
+      // (or restricted default) requires a `use` grant on that environment.
       const environmentChanged =
         "environmentId" in restBody &&
         restBody.environmentId !== originalCatalogItem.environmentId;
@@ -1251,9 +1273,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertCanAssignEnvironment({
           environmentId: restBody.environmentId ?? null,
           organizationId: request.organizationId,
-          canDeployToRestricted: await callerCanDeployToRestricted(
-            request.headers,
-          ),
+          userId: request.user.id,
         });
       }
 
@@ -1457,6 +1477,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        accessAction: "update",
         userId: request.user.id,
         isAdmin: checker.isAdmin,
         organizationId: request.organizationId,
@@ -1484,16 +1505,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Mirror the catalog-edit ownership check: only users who could have
       // edited the catalog (admins, the author, or an admin of one of the
       // item's `write` teams) can trigger the reinstall.
-      requireMcpCatalogModifyPermission({
-        checker,
-        scope: catalogItem.scope,
-        authorId: catalogItem.authorId,
-        catalogTeams: catalogItem.teams,
-        writeMembershipTeamIds: checker.isAdmin
-          ? []
-          : await getCatalogWriteMembershipTeamIds(request.user.id),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
         userId: request.user.id,
+        resource: "mcpRegistry",
+        scope: catalogItem.id,
+        action: "update",
       });
+      // SPDX-SnippetEnd
 
       try {
         await reinstallMultitenantCatalog(catalogItem);
@@ -1528,6 +1550,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        accessAction: "update",
         userId: request.user.id,
         isAdmin: checker.isAdmin,
         organizationId: request.organizationId,
@@ -1537,16 +1560,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      requireMcpCatalogModifyPermission({
-        checker,
-        scope: catalogItem.scope,
-        authorId: catalogItem.authorId,
-        catalogTeams: catalogItem.teams,
-        writeMembershipTeamIds: checker.isAdmin
-          ? []
-          : await getCatalogWriteMembershipTeamIds(request.user.id),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
         userId: request.user.id,
+        resource: "mcpRegistry",
+        scope: catalogItem.id,
+        action: "update",
       });
+      // SPDX-SnippetEnd
 
       const targetCatalogItems = [catalogItem].filter(
         (item) => item.serverType === "local",
@@ -1654,13 +1678,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
       }
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
 
       // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        accessAction: "delete",
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
@@ -1682,12 +1707,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Deletion cascades to every install and secret bag: reserved for admins
       // and a personal item's author, never conferred by a team `write` level.
-      requireMcpCatalogDeletePermission({
-        checker: { isAdmin },
-        scope: catalogItem.scope,
-        authorId: catalogItem.authorId,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
         userId: request.user.id,
+        resource: "mcpRegistry",
+        scope: catalogItem.id,
+        action: "delete",
       });
+      // SPDX-SnippetEnd
 
       const affectedSources =
         await InternalMcpCatalogModel.findDeleteCascadeSourceIds(id);
@@ -1744,18 +1774,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Deletion cascades to every install and secret bag: reserved for admins
-      // and a personal item's author, never conferred by a team `write` level.
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
-      requireMcpCatalogDeletePermission({
-        checker: { isAdmin },
-        scope: catalogItem.scope,
-        authorId: catalogItem.authorId,
+      // Deleting the definition also deletes its installs and secret bags.
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
         userId: request.user.id,
+        resource: "mcpRegistry",
+        scope: catalogItem.id,
+        action: "delete",
       });
+      // SPDX-SnippetEnd
 
       const affectedSources =
         await InternalMcpCatalogModel.findDeleteCascadeSourceIds(
@@ -1864,10 +1894,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
         isAdmin,
@@ -1954,11 +1984,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        accessAction: "update",
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
@@ -2034,11 +2065,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ user, headers }, reply) => {
-      const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        headers,
-      );
+    async ({ user, organizationId }, reply) => {
+      const isMcpServerAdmin = await isMcpInstallationAdmin({
+        userId: user.id,
+        organizationId,
+      });
 
       const secrets = isMcpServerAdmin
         ? await mcpServerRuntimeManager.listDockerRegistrySecrets({
@@ -2089,38 +2120,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
-
-/**
- * Whether the caller may deploy catalog items to restricted environments.
- * Gated by `mcpRegistry:deploy-to-restricted`.
- */
-async function callerCanDeployToRestricted(
-  headers: FastifyRequest["headers"],
-): Promise<boolean> {
-  const { success: hasDeploy } = await hasPermission(
-    { mcpRegistry: ["deploy-to-restricted"] },
-    headers,
-  );
-  return hasDeploy;
-}
-
-/**
- * Whether a requested team list leaves the stored assignments untouched. An
- * entry carrying no level cannot change one (the sync preserves what is
- * stored), so only an explicit, differing level counts as a change.
- */
-function sameTeamAssignments(
-  requested: CatalogTeamAssignment[],
-  current: CatalogTeamAccess[],
-): boolean {
-  if (requested.length !== current.length) return false;
-  const currentLevels = new Map(current.map((team) => [team.id, team.level]));
-  return requested.every((team) => {
-    const currentLevel = currentLevels.get(team.id);
-    if (currentLevel === undefined) return false;
-    return team.level === undefined || team.level === currentLevel;
-  });
-}
 
 /**
  * Collect the admin-set static config values an environment's validation regex
@@ -2577,10 +2576,10 @@ async function findVisibleCatalogItem(params: {
   catalogId: string;
   request: FastifyRequest;
 }): Promise<InternalMcpCatalog> {
-  const { success: isAdmin } = await hasPermission(
-    { mcpServerInstallation: ["admin"] },
-    params.request.headers,
-  );
+  const isAdmin = await isMcpInstallationAdmin({
+    userId: params.request.user.id,
+    organizationId: params.request.organizationId,
+  });
   const item = await InternalMcpCatalogModel.findById(params.catalogId, {
     userId: params.request.user.id,
     isAdmin,
@@ -2682,3 +2681,25 @@ function assertMcpServerAlertingEnabled(): void {
 }
 
 export default internalMcpCatalogRoutes;
+
+async function requireCatalogRead({
+  request,
+  id,
+}: {
+  request: FastifyRequest;
+  id: string;
+}): Promise<void> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // The registry list rule decides: built-ins reach every member, and an app
+  // backing catalog follows its app's grants. A built-in may have no row.
+  if (isBuiltInCatalogId(id)) return;
+  const readable = await McpCatalogTeamModel.userHasCatalogAccess({
+    userId: request.user.id,
+    catalogId: id,
+    organizationId: request.organizationId,
+  });
+  if (!readable) throw new ApiError(404, "Catalog item not found");
+  // SPDX-SnippetEnd
+}

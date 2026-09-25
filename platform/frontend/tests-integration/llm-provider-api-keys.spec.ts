@@ -1,3 +1,4 @@
+import { sessionSeed } from "../src/mocks/data/auth";
 import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 
@@ -167,16 +168,16 @@ test.describe("LLM Provider API Keys", () => {
   }) => {
     const PRIMARY = "Primary Key";
     const SECONDARY = "Secondary Key";
-    // Admin permission is granted in the test fixture, so the create-dialog
-    // defaults to scope=org. Match it on the mock so `hasAnyKeyForProvider`
-    // in LlmProviderApiKeyForm detects the existing primary.
+    // The create dialog defaults to "Just for me", and a primary key only
+    // competes with keys of the same owner. Own the mock key as the signed-in
+    // user so `hasAnyKeyForProvider` in LlmProviderApiKeyForm detects it.
     const primary = makeLlmProviderApiKey({
       id: "llm-key-primary",
       name: PRIMARY,
       provider: PROVIDER,
       isPrimary: true,
-      scope: "org",
-      userId: null,
+      scope: "personal",
+      userId: sessionSeed.user.id,
     });
 
     // Start with no keys so the primary toggle defaults on.
@@ -237,7 +238,7 @@ test.describe("LLM Provider API Keys", () => {
     await expect(secondarySwitch).not.toBeChecked();
     await expect(secondarySwitch).toBeDisabled();
     await expect(
-      page.getByText(new RegExp(`"${PRIMARY}" is already the primary key`)),
+      page.getByText(new RegExp(`"${PRIMARY}" is already your primary key`)),
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Cancel" }).click();

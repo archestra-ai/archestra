@@ -20,6 +20,7 @@ import {
 import type OpenAI from "openai";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { openaiAdapterFactory } from "../adapters/openai";
 import openAiProxyRoutes from "./openai";
@@ -83,7 +84,14 @@ async function recordedAppId(agentId: string): Promise<string | null> {
 describe("app-runtime interaction attribution (integration)", () => {
   let app: FastifyInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await ModelModel.create({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
     vi.restoreAllMocks();
   });
 

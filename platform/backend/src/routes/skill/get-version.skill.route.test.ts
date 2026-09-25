@@ -1,11 +1,11 @@
 import { SkillModel } from "@/models";
-import { describe, expect, test } from "@/test";
-import { useRouteTestApp } from "@/test/route-test-app";
+import { accessGrants, describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
 import skillRoutes from "./skill.routes";
+import { useSkillRouteTestApp } from "./skill.test-helpers";
 
 describe("GET /api/skills/:id/versions/:version", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   async function seedSkillWithTwoVersions(): Promise<Skill> {
     const skill = await SkillModel.createWithFiles({
@@ -17,7 +17,6 @@ describe("GET /api/skills/:id/versions/:version", () => {
         content: "# v1",
         metadata: {},
         sourceType: "manual",
-        scope: "org",
       },
       files: [
         {
@@ -27,7 +26,9 @@ describe("GET /api/skills/:id/versions/:version", () => {
           kind: "reference",
         },
       ],
+      ...accessGrants("org"),
     });
+
     if (!skill) throw new Error("seed failed");
 
     await SkillModel.updateWithFiles({
@@ -112,20 +113,16 @@ describe("GET /api/skills/:id/versions/:version", () => {
 
   test("a personal skill of another user is 404, not 403", async ({
     makeUser,
+    makeSkill,
   }) => {
     const author = await makeUser();
-    const skill = await SkillModel.createWithFiles({
-      skill: {
-        organizationId: ctx.organizationId,
-        authorId: author.id,
-        name: "private-skill",
-        description: "private",
-        content: "# private",
-        metadata: {},
-        sourceType: "manual",
-        scope: "personal",
-      },
-      files: [],
+    const skill = await makeSkill(ctx.organizationId, {
+      authorId: author.id,
+      name: "private-skill",
+      description: "private",
+      content: "# private",
+      metadata: {},
+      sourceType: "manual",
     });
     if (!skill) throw new Error("seed failed");
 

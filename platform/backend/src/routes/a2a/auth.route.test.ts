@@ -197,8 +197,7 @@ describe("a2a route-level authentication", () => {
     const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      teams: [team.id],
-      scope: "team",
+      access: { teams: [team.id] },
     });
     const { value } = await TeamTokenModel.create({
       organizationId: org.id,

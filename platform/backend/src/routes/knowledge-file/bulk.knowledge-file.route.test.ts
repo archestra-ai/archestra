@@ -47,8 +47,6 @@ describe("knowledge repository bulk routes", () => {
       sizeBytes: 5,
       contentHash: `hash-${filename}`,
       data: Buffer.from("hello"),
-      visibility: "org-wide",
-      teamIds: [],
       uploadedBy: user.id,
     });
 
@@ -56,8 +54,6 @@ describe("knowledge repository bulk routes", () => {
     KbDirectoryModel.create({
       organizationId: orgId,
       name,
-      visibility: "org-wide",
-      teamIds: [],
       createdBy: user.id,
     });
 
@@ -124,7 +120,12 @@ describe("knowledge repository bulk routes", () => {
       expect(response.json().failed).toEqual([
         { id: foreign.id, name: null, error: "File not found" },
       ]);
-      expect(await findFile(foreign.id, otherOrgId)).not.toBeNull();
+      // Read the row directly: this user cannot see the other organization.
+      const [kept] = await db
+        .select({ id: schema.kbFilesTable.id })
+        .from(schema.kbFilesTable)
+        .where(eq(schema.kbFilesTable.id, foreign.id));
+      expect(kept).toBeDefined();
     });
 
     test("rejects an empty batch", async () => {
@@ -146,78 +147,6 @@ describe("knowledge repository bulk routes", () => {
     });
   });
 
-  describe("PATCH /api/knowledge-files/bulk", () => {
-    const bulkPatch = (payload: Record<string, unknown>) =>
-      app.inject({
-        method: "PATCH",
-        url: "/api/knowledge-files/bulk",
-        payload,
-      });
-
-    test("moves every document in the batch to one audience", async ({
-      makeTeam,
-    }) => {
-      const team = await makeTeam(organizationId, user.id, { name: "Legal" });
-      const first = await makeFile("vis-a.txt");
-      const second = await makeFile("vis-b.txt");
-
-      const response = await bulkPatch({
-        ids: [first.id, second.id],
-        visibility: "team-scoped",
-        teamIds: [team.id],
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().failed).toEqual([]);
-      for (const id of [first.id, second.id]) {
-        expect(await KbFileModel.findTeamIds(id)).toEqual([team.id]);
-      }
-    });
-
-    /**
-     * The teams are validated once for the whole request, so an unusable
-     * target is a 400 that writes nothing rather than N identical failures.
-     */
-    test("rejects teams outside the organization, changing nothing", async ({
-      makeOrganization,
-      makeTeam,
-    }) => {
-      const otherOrgId = (await makeOrganization()).id;
-      const foreignTeam = await makeTeam(otherOrgId, user.id, {
-        name: "Outsiders",
-      });
-      const file = await makeFile("stays-org-wide.txt");
-
-      const response = await bulkPatch({
-        ids: [file.id],
-        visibility: "team-scoped",
-        teamIds: [foreignTeam.id],
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(await KbFileModel.findTeamIds(file.id)).toEqual([]);
-    });
-
-    test("writes one audit record whose diff shows the audience move", async () => {
-      const file = await makeFile("audited-vis.txt");
-
-      expect(
-        (
-          await bulkPatch({
-            ids: [file.id],
-            visibility: "org-wide",
-          })
-        ).statusCode,
-      ).toBe(200);
-
-      const rows = await auditRows("knowledgeFile.bulk_updated");
-      expect(rows).toHaveLength(1);
-      expect(rows[0].before).toMatchObject({
-        files: [{ id: file.id, visibility: "org-wide" }],
-      });
-    });
-  });
-
   describe("directories", () => {
     test("deletes every named directory", async () => {
       const first = await makeDirectory("bulk-dir-a");
@@ -232,31 +161,6 @@ describe("knowledge repository bulk routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json().failed).toEqual([]);
       expect(await KbDirectoryModel.findAll(organizationId)).toEqual([]);
-    });
-
-    test("moves every directory in the batch to one audience", async ({
-      makeTeam,
-    }) => {
-      const team = await makeTeam(organizationId, user.id, { name: "Ops" });
-      const directory = await makeDirectory("bulk-dir-vis");
-
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/knowledge-directories/bulk",
-        payload: {
-          ids: [directory.id],
-          visibility: "team-scoped",
-          teamIds: [team.id],
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().succeeded).toEqual([
-        { id: directory.id, name: "bulk-dir-vis" },
-      ]);
-      expect(await KbDirectoryModel.findTeamIds(directory.id)).toEqual([
-        team.id,
-      ]);
     });
 
     test("reports a directory from another organization as not found", async ({

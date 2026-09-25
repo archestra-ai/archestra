@@ -151,7 +151,6 @@ describe("GET /api/internal_mcp_catalog", () => {
     const ownedApp = await makeApp({
       organizationId,
       authorId: user.id,
-      scope: "org",
     });
 
     const response = await app.inject({
@@ -181,7 +180,6 @@ describe("GET /api/internal_mcp_catalog", () => {
     const disabled = await makeApp({
       organizationId,
       authorId: otherAuthor.id,
-      scope: "org",
       enabled: false,
     });
 
@@ -206,7 +204,6 @@ describe("GET /api/internal_mcp_catalog", () => {
     const ownDisabled = await makeApp({
       organizationId,
       authorId: user.id,
-      scope: "org",
       enabled: false,
     });
 

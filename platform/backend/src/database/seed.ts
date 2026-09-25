@@ -283,17 +283,18 @@ export async function syncBuiltInSkillsForOrganization(
       const created = await SkillModel.createWithFiles({
         skill: {
           organizationId: organization.id,
-          scope: "org",
           sourceType: "built_in",
           sourceRef,
           ...shipped.skill,
         },
+        // A built-in skill ships to every member of the organization.
+        publishToOrganization: true,
         files: shipped.files,
       });
-      // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
-      // index, so a null means a pre-existing non-built-in skill already
-      // holds this name. Surface it instead of reporting a phantom seed — that
-      // org has no built-in copy and thus no reset path until the clash clears.
+      // Skill names are unique per author, and a built-in has none, so a
+      // member's skill of the same name no longer blocks it. createWithFiles
+      // still returns null on a conflict, so report that instead of a phantom
+      // seed.
       if (!created) {
         logger.warn(
           {
@@ -301,7 +302,7 @@ export async function syncBuiltInSkillsForOrganization(
             organizationId: organization.id,
             name: builtInSkill.name,
           },
-          "Skipped seeding built-in skill: a skill with this name already exists",
+          "Skipped seeding built-in skill: the insert conflicted",
         );
         continue;
       }
@@ -685,10 +686,9 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     }
 
     // Check if API key already exists for this provider
-    const existing = await LlmProviderApiKeyModel.findByScope(
+    const existing = await LlmProviderApiKeyModel.findOrganizationWideKey(
       org.id,
       provider,
-      "org",
     );
 
     if (existing) {
@@ -709,17 +709,21 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     );
 
     // Create the API key
-    const apiKey = await LlmProviderApiKeyModel.create({
-      organizationId: org.id,
-      name: getProviderDisplayName(provider),
-      provider: provider,
-      secretId: secret.id,
-      scope: "org",
-      userId: null,
-      teamId: null,
-      baseUrl: decision.persistedBaseUrl,
-      isPrimary: true,
-    });
+    const apiKey = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        name: getProviderDisplayName(provider),
+        provider: provider,
+        secretId: secret.id,
+        scope: "org",
+        userId: null,
+        teamId: null,
+        baseUrl: decision.persistedBaseUrl,
+        isPrimary: true,
+      },
+      // The environment-seeded key serves the whole organization.
+      { publishToOrganization: true },
+    );
 
     logger.info(
       { provider, apiKeyId: apiKey.id },
@@ -1068,17 +1072,14 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
             },
           });
           try {
-            // Org scope so every member sees the demos, mirroring built-in
-            // skills. An app must never exist without its backing — on
-            // backing failure remove the app row (same invariant as the
-            // create route).
+            // An app must never exist without its backing — on backing
+            // failure remove the app row (same invariant as the create
+            // route).
             await createAppBacking({
               app,
-              scope: "org",
               environmentId: null,
               userId: admin.userId,
               organizationId: org.id,
-              teamIds: [],
             });
           } catch (backingError) {
             await AppModel.purge(app.id);

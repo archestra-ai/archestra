@@ -2,6 +2,7 @@
 
 import {
   isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
   SUBSCRIPTION_CREDENTIALS,
   subscriptionKindForProvider,
 } from "@archestra/shared";
@@ -24,7 +25,6 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
@@ -80,9 +80,6 @@ export function CreateLlmProviderApiKeyDialog({
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
-  const { data: canCreateOrgScopedKey } = useHasPermissions({
-    llmProviderApiKey: ["admin"],
-  });
   const providerCatalog = useModelProviderCatalog();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
@@ -116,11 +113,10 @@ export function CreateLlmProviderApiKeyDialog({
       availableProviders.length > 0
         ? getDefaultFormValues({
             defaultValues,
-            canCreateOrgScopedKey: canCreateOrgScopedKey === true,
             availableProviders,
           })
         : null,
-    [availableProviders, canCreateOrgScopedKey, defaultValues],
+    [availableProviders, defaultValues],
   );
   const resetKey = JSON.stringify(defaultFormValues);
 
@@ -165,7 +161,7 @@ export function CreateLlmProviderApiKeyDialog({
     // deferred until a sign-in completes (so switching tabs can't silently
     // privatize anything), and the sign-in callback reads form values in the
     // same tick the credential lands — before any effect has run.
-    const scope = subscriptionKind ? "personal" : values.scope;
+    const shared = subscriptionKind ? false : values.shared;
     try {
       const createdKey = await createMutation.mutateAsync({
         name:
@@ -178,8 +174,19 @@ export function CreateLlmProviderApiKeyDialog({
         baseUrl: values.baseUrl || undefined,
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
-        scope,
-        teamId: scope === "team" && values.teamId ? values.teamId : undefined,
+        shared,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        initialGrants:
+          !shared ||
+          subscriptionKind ||
+          providerRequiresPerUserCredential(values.provider)
+            ? []
+            : (values.initialGrants ?? []).map(
+                ({ name: _name, ...grant }) => grant,
+              ),
+        // SPDX-SnippetEnd
         isPrimary: values.isPrimary,
         vaultSecretPath:
           !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
@@ -321,11 +328,10 @@ export function CreateLlmProviderApiKeyDialog({
 
 function getDefaultFormValues(params: {
   defaultValues?: Partial<LlmProviderApiKeyFormValues>;
-  canCreateOrgScopedKey: boolean;
   /** Providers the organization still allows, in catalog order. */
   availableProviders: LlmProviderApiKeyFormValues["provider"][];
 }): LlmProviderApiKeyFormValues {
-  const { defaultValues, canCreateOrgScopedKey, availableProviders } = params;
+  const { defaultValues, availableProviders } = params;
   const provider =
     defaultValues?.provider &&
     availableProviders.includes(defaultValues.provider)
@@ -339,7 +345,8 @@ function getDefaultFormValues(params: {
     baseUrl: null,
     inferenceBaseUrl: null,
     extraHeaders: [],
-    scope: canCreateOrgScopedKey ? "org" : "personal",
+    shared: false,
+    initialGrants: [],
     teamId: null,
     vaultSecretPath: null,
     vaultSecretKey: null,
@@ -369,16 +376,11 @@ function getIsCreateFormValid(params: {
   } = params;
 
   if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
-    return Boolean(
-      values.awsAccessKeyId &&
-        values.awsSecretAccessKey &&
-        (values.scope !== "team" || values.teamId),
-    );
+    return Boolean(values.awsAccessKeyId && values.awsSecretAccessKey);
   }
 
   return Boolean(
     values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
-      (values.scope !== "team" || values.teamId) &&
       (byosEnabled
         ? values.vaultSecretPath && values.vaultSecretKey
         : isProviderApiKeyOptional({

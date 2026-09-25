@@ -32,6 +32,7 @@ import AgentModel from "@/models/agent";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import AgentToolModel from "@/models/agent-tool";
 import AgentVersionModel from "@/models/agent-version";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ToolModel from "@/models/tool";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
@@ -39,7 +40,7 @@ import {
   builtInSkillVersion,
   getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import {
   decideEnvSeed,
   seedDefaultAppsForPristineOrgs,
@@ -618,8 +619,15 @@ describe("syncBuiltInSkills", () => {
         sourceRef,
       });
       expect(skill).not.toBeNull();
-      expect(skill?.scope).toBe("org");
       expect(skill?.authorId).toBeNull();
+      // Published to the whole organization by its grants, not a column.
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId: org.id,
+        resource: "skill",
+        scope: skill?.id ?? "",
+      });
+      expect(policy?.legacyOrganizationAudience).toBe(true);
+      expect(policy?.grants.length).toBeGreaterThan(0);
       expect(skill?.content).toBe(BASE_SKILL.content);
 
       const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
@@ -639,36 +647,43 @@ describe("syncBuiltInSkills", () => {
     expect(await countBuiltInSkills(org.id)).toBe(expected);
   });
 
-  test("does not seed a phantom copy when the name is already taken", async ({
+  test("seeds the built-in beside a member's skill of the same name", async ({
     makeOrganization,
+    makeUser,
   }) => {
     const org = await makeOrganization();
+    const author = await makeUser();
 
-    // a pre-existing shared skill squats on the built-in's display name.
-    await SkillModel.createWithFiles({
+    // Names are unique per author, and a built-in has none, so a member's
+    // skill with the built-in's display name no longer blocks the seed.
+    const own = await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
-        scope: "org",
+        authorId: author.id,
         name: BASE_SKILL.name,
         description: "user's own skill",
         content: "# not the built-in",
         sourceType: "manual",
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     await syncBuiltInSkills();
 
-    // the squatted built-in is skipped (no phantom copy); the other built-ins
-    // still seed.
     expect(await countBuiltInSkills(org.id)).toBe(
-      getEnabledBuiltInSkills().length - 1,
+      getEnabledBuiltInSkills().length,
     );
     const built = await SkillModel.findBuiltIn({
       organizationId: org.id,
       sourceRef: builtInSkillSourceRef(BASE_SKILL.builtInSkillId),
     });
-    expect(built).toBeNull();
+    expect(built?.content).toBe(BASE_SKILL.content);
+    expect(built?.id).not.toBe(own?.id);
+    // The member's skill is left as it was.
+    const untouched = await SkillModel.findById(own?.id ?? "");
+    expect(untouched?.content).toBe("# not the built-in");
+    expect(untouched?.authorId).toBe(author.id);
   });
 
   test("auto-upgrades a pristine copy when the shipped revision changes", async ({
@@ -682,7 +697,6 @@ describe("syncBuiltInSkills", () => {
     await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
-        scope: "org",
         name: BASE_SKILL.name,
         description: "old description",
         content: "OLD",
@@ -691,6 +705,7 @@ describe("syncBuiltInSkills", () => {
         sourceCommit: staleVersion,
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     await syncBuiltInSkills();
@@ -713,7 +728,6 @@ describe("syncBuiltInSkills", () => {
     await SkillModel.createWithFiles({
       skill: {
         organizationId: org.id,
-        scope: "org",
         name: BASE_SKILL.name,
         description: "user description",
         content: "EDITED BY USER",
@@ -722,6 +736,7 @@ describe("syncBuiltInSkills", () => {
         sourceCommit: builtInSkillVersion({ content: "OLD", files: [] }),
       },
       files: [],
+      ...accessGrants("org"),
     });
 
     await syncBuiltInSkills();
@@ -948,12 +963,13 @@ describe("seedDefaultAppsForPristineOrgs", () => {
       expect(app.templateId).toMatch(/^default-app:/);
     }
 
-    // Version 1 carries the shipped HTML and the backing is org-scoped.
+    // Version 1 carries the shipped HTML. Who reaches a demo app is its
+    // grants; the backing catalog's retired visibility column is not set.
     const [taskTracker] = apps.filter(
       (app) => app.name === "Demo Task Tracker",
     );
     const loaded = await AppModel.findById(taskTracker.id);
-    expect(loaded?.scope).toBe("org");
+    expect(loaded).not.toBeNull();
     const version = await AppVersionModel.findByAppAndVersion(
       taskTracker.id,
       1,

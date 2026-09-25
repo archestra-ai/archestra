@@ -1,7 +1,7 @@
 "use client";
 
 import { XIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -66,6 +66,7 @@ export function TabbedDialogShell<TSection extends string>({
   wrapForm,
   getNavItemTestId,
 }: TabbedDialogShellProps<TSection>) {
+  const [footerSlot, setFooterSlot] = useState<HTMLDivElement | null>(null);
   const formContent = (
     <DialogForm className="contents" onSubmit={onSubmit}>
       <nav
@@ -141,10 +142,22 @@ export function TabbedDialogShell<TSection extends string>({
               contentClassName,
             )}
           >
-            {children}
+            <TabbedDialogFooterSlot.Provider value={footerSlot}>
+              {children}
+            </TabbedDialogFooterSlot.Provider>
           </div>
         </div>
-        <DialogStickyFooter className="mt-0">{footer}</DialogStickyFooter>
+        <DialogStickyFooter className="group/footer mt-0">
+          {/* Real boxes, not `display: contents`: the footer lifts its direct
+              children above its painted background, and a contents box has
+              nothing to lift, so its buttons were hidden under it. */}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end group-has-[[data-section-actions]]/footer:hidden">
+            {footer}
+          </div>
+          {/* A section that saves itself, such as permissions, puts its Save
+              here, beside the dialog's own buttons. */}
+          <div ref={setFooterSlot} className="flex-1 empty:hidden" />
+        </DialogStickyFooter>
       </div>
     </DialogForm>
   );
@@ -173,3 +186,11 @@ export function TabbedDialogShell<TSection extends string>({
     </Dialog>
   );
 }
+
+/**
+ * The shell's footer, for a section that saves itself. `undefined` outside a
+ * shell; `null` inside one until the footer mounts.
+ */
+export const TabbedDialogFooterSlot = createContext<
+  HTMLDivElement | null | undefined
+>(undefined);

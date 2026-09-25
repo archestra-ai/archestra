@@ -1,5 +1,6 @@
 import {
   CreatedByNullableSchema,
+  ResourcePermissionGrantSchema,
   ResourceVisibilityScopeSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -338,11 +339,11 @@ const htmlField = z
   });
 
 export const CreateAppSchema = z.object({
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH),
   // Omitted: derived from the name (AppModel.generateUniqueSlug).
   slug: AppSlugSchema.optional(),
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).optional(),
-  scope: AppScopeSchema.optional(),
   // html is optional: supply it to seed explicitly, otherwise the single
   // default template seeds the first version (resolveCreateAppHtml).
   html: htmlField.optional(),
@@ -354,7 +355,7 @@ export const CreateAppSchema = z.object({
   // assertCanAssignEnvironment.
   environmentId: z.string().uuid().nullable().optional(),
   // Display icon (emoji or base64 image data URL). Omitted/null = the generic
-  // app glyph. Stored on the app's backing catalog, like its scope.
+  // app glyph. Stored on the app's backing catalog.
   icon: AppIconSchema.optional(),
   // Key-value labels for organization/categorization. Omitted = none.
   labels: z.array(LabelWithDetailsSchema).optional(),
@@ -364,15 +365,13 @@ export const CreateAppSchema = z.object({
 // template (no html), so the staged authoring flow is scaffold → edit_app.
 // strictObject so apps.ts can extend it with the tool-assignment `tools` param.
 export const ScaffoldAppSchema = z.strictObject({
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH).describe("App name."),
   description: z
     .string()
     .max(APP_DESCRIPTION_MAX_LENGTH)
     .optional()
     .describe("Optional description."),
-  scope: AppScopeSchema.optional().describe(
-    "Visibility scope, personal (default, owned by the calling user) or org. Team scope is not available here — team-scoped apps must be created in the Apps UI so teams can be assigned.",
-  ),
   uiPermissions: AppUiPermissionsSchema.optional().describe(
     "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
   ),
@@ -435,7 +434,6 @@ export const UpdateAppSchema = z.object({
   // Changing this breaks links that used the old slug; /a/<id> keeps working.
   slug: AppSlugSchema.optional(),
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).nullable().optional(),
-  scope: AppScopeSchema.optional(),
   // Supplying html forks a new immutable version (no-op forks are suppressed).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),

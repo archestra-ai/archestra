@@ -38,7 +38,7 @@ describe("GET /api/apps/:appId/versions", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Versioned", html: "<h1>v1</h1>", scope: "org" },
+      payload: { name: "Versioned", html: "<h1>v1</h1>" },
     });
     const appId = created.json().id as string;
     await app.inject({
@@ -60,7 +60,7 @@ describe("GET /api/apps/:appId/versions", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Pinned", html: "<h1>only</h1>", scope: "org" },
+      payload: { name: "Pinned", html: "<h1>only</h1>" },
     });
     const appId = created.json().id as string;
 
@@ -79,7 +79,7 @@ describe("GET /api/apps/:appId/versions", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name: "Single", html: "<h1>v1</h1>", scope: "org" },
+      payload: { name: "Single", html: "<h1>v1</h1>" },
     });
     const appId = created.json().id as string;
 
@@ -97,7 +97,7 @@ describe("GET /api/apps/:appId/versions", () => {
   }) => {
     const personal = await makeApp({
       organizationId,
-      scope: "personal",
+      access: "personal",
       authorId: user.id,
     });
     const other = await makeUser();

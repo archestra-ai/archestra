@@ -390,7 +390,7 @@ describe("McpServerModel", () => {
         organizationId: org.id,
         name: "My Assistant",
         agentType: "agent",
-        scope: "personal",
+        access: "personal",
         accessAllTools: true,
         authorId: alice.id,
       });
@@ -398,7 +398,7 @@ describe("McpServerModel", () => {
         organizationId: org.id,
         name: "My Assistant",
         agentType: "agent",
-        scope: "personal",
+        access: "personal",
         accessAllTools: true,
         authorId: bob.id,
       });
@@ -931,6 +931,24 @@ describe("McpServerModel", () => {
   });
 
   describe("findUiCapableForCaller", () => {
+    // Registry visibility reads grants, and a grant reaches only a member of
+    // the organization, so every caller here is made one first.
+    const findAsMember = async (
+      params: Parameters<typeof McpServerModel.findUiCapableForCaller>[0],
+    ) => {
+      await db
+        .insert(schema.membersTable)
+        .values({
+          id: crypto.randomUUID(),
+          userId: params.userId,
+          organizationId: params.organizationId,
+          role: "member",
+          createdAt: new Date(),
+        })
+        .onConflictDoNothing();
+      return McpServerModel.findUiCapableForCaller(params);
+    };
+
     test("lists a catalog's ui:// tool once per accessible install, with its metadata, resource, and install scope", async ({
       makeUser,
       makeInternalMcpCatalog,
@@ -943,7 +961,6 @@ describe("McpServerModel", () => {
         description: "Draw diagrams",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       const install = await makeMcpServer({
         catalogId: catalog.id,
@@ -956,7 +973,7 @@ describe("McpServerModel", () => {
         meta: uiMeta("ui://excalidraw/app.html"),
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
       });
@@ -983,7 +1000,6 @@ describe("McpServerModel", () => {
         name: "Excalidraw Staging",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -992,7 +1008,7 @@ describe("McpServerModel", () => {
         meta: uiMeta("ui://excalidraw/view.html"),
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
       });
@@ -1012,7 +1028,6 @@ describe("McpServerModel", () => {
         name: "Multi-scope",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       // Insert the org install first so a naive (DB-order) result would put
       // "org" before "personal".
@@ -1029,7 +1044,7 @@ describe("McpServerModel", () => {
         meta: uiMeta("ui://ms/app.html"),
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
       });
@@ -1050,7 +1065,6 @@ describe("McpServerModel", () => {
         name: "Archestra PM",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
@@ -1061,7 +1075,7 @@ describe("McpServerModel", () => {
         meta: uiMeta("ui://pm/app.html"),
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
       });
@@ -1081,7 +1095,6 @@ describe("McpServerModel", () => {
         name: "Uninstalled",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeTool({
         catalogId: catalog.id,
@@ -1089,7 +1102,7 @@ describe("McpServerModel", () => {
         meta: uiMeta("ui://uninstalled/app.html"),
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
       });
@@ -1107,7 +1120,6 @@ describe("McpServerModel", () => {
         name: "Plain",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1116,7 +1128,7 @@ describe("McpServerModel", () => {
         meta: { _meta: {} },
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
       });
@@ -1137,7 +1149,6 @@ describe("McpServerModel", () => {
           id: ARCHESTRA_MCP_CATALOG_ID,
           name: "Archestra",
           serverType: "builtin",
-          scope: "org",
         });
       } catch {
         // The built-in catalog may already be seeded in this test database.
@@ -1152,7 +1163,7 @@ describe("McpServerModel", () => {
         meta: uiMeta("ui://archestra/panel.html"),
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: org.id,
       });
@@ -1173,7 +1184,7 @@ describe("McpServerModel", () => {
         name: "Private",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "personal",
+        access: "personal",
         authorId: owner.id,
       });
       // The author's own personal install (the only thing that makes it listable
@@ -1191,14 +1202,14 @@ describe("McpServerModel", () => {
       });
 
       // The caller (even as an org admin — there is no bypass) does not see it.
-      const asOther = await McpServerModel.findUiCapableForCaller({
+      const asOther = await findAsMember({
         userId: caller.id,
         organizationId: mustExist(catalog.organizationId),
       });
       expect(asOther.some((r) => r.catalogId === catalog.id)).toBe(false);
 
       // The author does — proving the filter isn't hiding everything.
-      const asAuthor = await McpServerModel.findUiCapableForCaller({
+      const asAuthor = await findAsMember({
         userId: owner.id,
         organizationId: mustExist(catalog.organizationId),
       });
@@ -1216,7 +1227,6 @@ describe("McpServerModel", () => {
         name: "Multi",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1230,7 +1240,7 @@ describe("McpServerModel", () => {
         meta: uiMeta("ui://multi/first.html"),
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
       });
@@ -1256,7 +1266,6 @@ describe("McpServerModel", () => {
         name: "Legacy",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1265,7 +1274,7 @@ describe("McpServerModel", () => {
         meta: { _meta: { "ui/resourceUri": "ui://legacy/app.html" } },
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
       });
@@ -1285,7 +1294,6 @@ describe("McpServerModel", () => {
         name: "Searchable Widget",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1294,14 +1302,14 @@ describe("McpServerModel", () => {
         meta: uiMeta("ui://sw/app.html"),
       });
 
-      const hit = await McpServerModel.findUiCapableForCaller({
+      const hit = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
         search: "widget",
       });
       expect(hit.some((r) => r.catalogId === catalog.id)).toBe(true);
 
-      const miss = await McpServerModel.findUiCapableForCaller({
+      const miss = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
         search: "no-such-server-xyz",
@@ -1320,7 +1328,6 @@ describe("McpServerModel", () => {
         name: "Plain Server",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1329,7 +1336,7 @@ describe("McpServerModel", () => {
         meta: uiMeta("ui://ps/app.html"),
       });
 
-      const hit = await McpServerModel.findUiCapableForCaller({
+      const hit = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
         search: "special_widget",
@@ -1348,7 +1355,6 @@ describe("McpServerModel", () => {
         name: "Sneaky",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
-        scope: "org",
       });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeTool({
@@ -1357,7 +1363,7 @@ describe("McpServerModel", () => {
         meta: uiMeta("https://evil.example/x.html"),
       });
 
-      const res = await McpServerModel.findUiCapableForCaller({
+      const res = await findAsMember({
         userId: user.id,
         organizationId: mustExist(catalog.organizationId),
       });

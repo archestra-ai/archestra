@@ -21,9 +21,12 @@ runs:
     - name: Compute native cache key
       id: key
       shell: bash
+      env:
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
       run: |
         digest=$(git rev-parse HEAD:platform/archestra-rs HEAD:platform/rust-toolchain.toml HEAD:platform/pnpm-lock.yaml HEAD:platform/turbo.json | sha256sum | cut -d ' ' -f 1)
-        echo "value=backend-napi-v1-${{ runner.os }}-${{ runner.arch }}-ubuntu2404-${digest}" >> "$GITHUB_OUTPUT"
+        echo "value=backend-napi-v1-${RUNNER_OS}-${RUNNER_ARCH}-ubuntu2404-${digest}" >> "$GITHUB_OUTPUT"
 
     - name: Restore and save native addons
       id: cache

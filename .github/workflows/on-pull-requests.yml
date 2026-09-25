@@ -745,18 +745,14 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace --locked
 
-  # Backend unit tests, sharded across parallel runners. Vitest's --shard
-  # slices the file list deterministically (SHA1 of each path), so the
-  # two jobs partition the suite exactly once. This trades about four minutes
-  # of test-gate latency for much lower runner usage than the eight-job layout.
+  # TEMPORARY: measure the full backend suite on one 16-vCPU runner. Restore
+  # the two-shard layout after the benchmark, before merge queue.
   backend-unit-tests:
-    name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/1)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    # The measured two-shard gate is about 7m30s. Allow for cold caches and
-    # normal variance, while bounding hung test workers.
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     defaults:
@@ -770,7 +766,7 @@ jobs:
       # failure picture in one pass.
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -845,7 +841,7 @@ jobs:
             pnpm exec turbo build --filter="@backend^..."
           }
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 2)
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 1)
         working-directory: ./platform/backend
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
@@ -862,7 +858,7 @@ jobs:
             done
           ) &
           sampler_pid=$!
-          if pnpm exec vitest run --shard="${SHARD}/2"; then
+          if pnpm exec vitest run --shard="${SHARD}/1"; then
             test_status=0
           else
             test_status=$?

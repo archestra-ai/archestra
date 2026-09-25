@@ -52,6 +52,7 @@ const canonicalize = (name: string) =>
  */
 const identity = {
   mode: "compat" as const,
+  gatewayConnected: true,
   canonicalize: (name: string, namespace?: string) =>
     canonicalize(namespace ? `${namespace}__${name}` : name),
   attestationOf: () => undefined,
@@ -1952,6 +1953,24 @@ describe("APPA request preflight", () => {
     expect(body.tools.map((tool: { name: string }) => tool.name)).toEqual([
       CONTROL,
       "Bash",
+    ]);
+  });
+
+  test("keeps local tools governable without inventing gateway tools", () => {
+    const body = {
+      tools: [{ type: "function", function: { name: "read", parameters: {} } }],
+      messages: [{ role: "user", content: "Read a file" }],
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "openai:chatCompletions",
+      identity: { ...identity, gatewayConnected: false },
+    });
+
+    expect(prepared.tools).toBeUndefined();
+    expect(prepared.declaredTools).toEqual([{ name: "read" }]);
+    expect(body.tools).toEqual([
+      { type: "function", function: { name: "read", parameters: {} } },
     ]);
   });
 

@@ -54,6 +54,8 @@ Rules can name one exact tool. A `*` rule covers tools without a more specific r
 
 OpenAPPA evaluates client-run tool calls before they run. A refused call returns a reason and available remedies to the agent. Calls that require human approval remain blocked until the required approval is given.
 
+An external client can use the LLM proxy without connecting an MCP gateway. Allowed tool calls still run. If a call is blocked, the proxy returns the refusal as text; connect the MCP gateway to use remedy plans and approvals.
+
 Provider-hosted tools run inside the model provider. OpenAPPA accepts known hosted declarations but cannot check each call before it runs. OpenAI Responses web search is an exception: the proxy checks its result before the client receives it. Azure Responses hosted web search is refused because its result cannot be checked. Unknown tool types and client-run tools the proxy cannot gate are also refused. Other hosted tool results are not governed as client-run calls. A policy rule cannot refuse all hosted tools with a signed offer to use a local tool instead.
 
 For policy fields and examples, see the OpenAPPA [policy configuration reference](https://www.openappa.com/contracts).

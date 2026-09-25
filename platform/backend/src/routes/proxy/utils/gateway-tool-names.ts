@@ -67,6 +67,8 @@ export type VerifiedToolDeclaration = DeclaredToolSpelling & ToolAttestation;
  */
 export type GatewayToolIdentity = ToolNameResolution & {
   mode: "attested" | "compat" | "chat";
+  /** A declared tool indicates a gateway connection; not proof of provenance in compat mode. */
+  gatewayConnected: boolean;
   /** Effective attestation, after demotion, of the exact (namespace, name). */
   attestationOf: (
     name: string,
@@ -123,6 +125,7 @@ export async function resolveGatewayToolIdentity(params: {
   if (internalChat) {
     return identityOf({
       mode: "chat",
+      gatewayConnected: true,
       canonicalize: spelledName,
       effective: new Map(),
       declarations,
@@ -230,6 +233,7 @@ async function attestedIdentity(params: {
 
   return identityOf({
     mode: "attested",
+    gatewayConnected: true,
     canonicalize,
     effective,
     declarations: params.declarations,
@@ -333,6 +337,19 @@ async function compatIdentity(params: {
     spelledName(name, namespace),
   );
   const learnedPrefixes = learnGatewayDecorationPrefixes(spelledDeclarations);
+  // Learned prefixes and gateway-label collisions can come from local tools.
+  // Require a built-in spelling under a configured label (or bare branding).
+  const gatewayConnected = spelledDeclarations.some((name) => {
+    const anchored = compatCanonicalize({
+      toolName: name,
+      serverNames,
+      learnedPrefixes: [],
+    });
+    return (
+      archestraMcpBranding.isToolName(name) ||
+      (anchored !== name && archestraMcpBranding.isToolName(anchored))
+    );
+  });
   // A namespaced name is always resolved as `<namespace>__<name>`, never by
   // its bare member name: any server's namespace can hold a member spelled
   // like one of ours.
@@ -372,6 +389,7 @@ async function compatIdentity(params: {
 
   return identityOf({
     mode: "compat",
+    gatewayConnected,
     canonicalize,
     effective: new Map(),
     declarations: params.declarations,
@@ -521,6 +539,7 @@ function stripLearnedDecoration(
 /** Assembles the identity object; `spellingOf` is precomputed over the declarations. */
 function identityOf(params: {
   mode: GatewayToolIdentity["mode"];
+  gatewayConnected: boolean;
   canonicalize: ToolNameCanonicalizer;
   effective: ReadonlyMap<string, VerifiedToolDeclaration>;
   declarations: readonly DeclaredToolSpelling[];
@@ -541,6 +560,7 @@ function identityOf(params: {
   }
   return {
     mode: params.mode,
+    gatewayConnected: params.gatewayConnected,
     canonicalize: params.canonicalize,
     looseRunToolDispatch: params.mode === "compat",
     attestationOf: (name, namespace) =>

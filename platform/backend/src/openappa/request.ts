@@ -56,7 +56,7 @@ export type AppaRequestTools = {
 };
 
 export type AppaPreparedRequest = {
-  /** Absent when the request declares no tools. */
+  /** Absent when the client has no usable gateway remedy tools. */
   tools: AppaRequestTools | undefined;
   /** Presentation name of historical control tool from previous turns. */
   historicalControlToolName?: string;
@@ -106,6 +106,7 @@ export function prepareAppaRequest(params: {
     | "attestationOf"
     | "verified"
     | "unverifiedMarkerCount"
+    | "gatewayConnected"
   >;
   /**
    * Markers the proxy already collected before it stripped them
@@ -260,25 +261,29 @@ export function prepareAppaRequest(params: {
     ];
   }
 
-  // A tool-free child can still return a value. Keep turn accounting available
-  // without introducing tool governance for a tool-free root.
+  // A tool-free child can still return a value. Proxy-only clients still need
+  // turn accounting and declared-tool checks, but cannot receive remedy calls.
+  const withoutRemedies = (
+    customTools: ReadonlySet<string>,
+    declaredTools: readonly DeclaredToolSpelling[],
+  ): AppaPreparedRequest => ({
+    tools: undefined,
+    ...(historicalControlToolName ? { historicalControlToolName } : {}),
+    session,
+    customTools,
+    declaredTools,
+    ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
+    ...(offerClaims ? { offerClaims } : {}),
+    ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
+    ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
+    ...(delegation ? { delegation } : {}),
+    ...(params.childReturns ? { childReturns: params.childReturns } : {}),
+    ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
+      ? { childTrajectoryReceipts }
+      : {}),
+  });
   if (declared.length === 0 || (clientEntries.length === 0 && !family)) {
-    return {
-      tools: undefined,
-      ...(historicalControlToolName ? { historicalControlToolName } : {}),
-      session,
-      customTools: new Set(),
-      declaredTools: [],
-      ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
-      ...(offerClaims ? { offerClaims } : {}),
-      ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
-      ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
-      ...(delegation ? { delegation } : {}),
-      ...(params.childReturns ? { childReturns: params.childReturns } : {}),
-      ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
-        ? { childTrajectoryReceipts }
-        : {}),
-    };
+    return withoutRemedies(new Set(), []);
   }
   if (family) refuseCodexCodeMode({ family, declared, body: params.body });
   const customTools = new Set<string>();
@@ -338,6 +343,14 @@ export function prepareAppaRequest(params: {
         400,
         `OpenAPPA cannot verify the ${archestraMcpBranding.serverName} tools this session declares. Reconnect the ${archestraMcpBranding.serverName} MCP server to this client, then start a new session.`,
       );
+    }
+    if (
+      !params.identity.gatewayConnected &&
+      params.identity.mode === "compat"
+    ) {
+      // Without an anchored built-in, no remedy tool could be resolved here;
+      // keep the client's own tools for policy checks but never invent ours.
+      return withoutRemedies(customTools, declaredTools);
     }
     // Clients that limit tool listings (such as Claude Code at 50) may omit
     // the remedy tools; injection keeps denials returning as notices during

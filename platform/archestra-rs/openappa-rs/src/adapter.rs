@@ -16,6 +16,7 @@
 //! | raw spelling | canonical |
 //! |---|---|
 //! | `archestra__execute_remedy_plan` | `appa/execute_remedy_plan`, the runtime's control tool |
+//! | `yell` | `mcp/appa/yell`, the runtime's own yell, which it vouches for |
 //! | `<catalog>__<tool>`, split at the last `__`, catalog without `__` | `mcp/<catalog>/<tool>` |
 //! | any other `[A-Za-z0-9_.-]+` | `host/archestra/<name>` |
 //!
@@ -58,6 +59,11 @@ pub(crate) fn harness() -> HarnessName {
 
 /// The control tool as Archestra advertises it to the model.
 pub(crate) const CONTROL_TOOL_RAW: &str = "archestra__execute_remedy_plan";
+pub(crate) const YELL_RAW: &str = "yell";
+
+fn runtime_yell() -> CanonicalTool {
+    CanonicalTool::of("mcp", "appa", "yell").expect("the runtime's yell is a canonical tool")
+}
 
 const SEPARATOR: &str = "__";
 const HOST_NAMESPACE: &str = "archestra";
@@ -76,6 +82,9 @@ fn identify_tool(raw: &str) -> Result<IdentifiedTool, ParseRefusal> {
 fn canonical(raw: &str) -> Result<CanonicalTool, ParseRefusal> {
     if raw == CONTROL_TOOL_RAW {
         return Ok(CanonicalTool::control());
+    }
+    if raw == YELL_RAW {
+        return Ok(runtime_yell());
     }
     if let Some((catalog, tool)) = raw.rsplit_once(SEPARATOR)
         && let Ok(identity) = CanonicalTool::of("mcp", catalog, tool)
@@ -97,6 +106,9 @@ fn canonical(raw: &str) -> Result<CanonicalTool, ParseRefusal> {
 fn spell(tool: &CanonicalTool) -> Option<String> {
     if tool.is_control() {
         return Some(CONTROL_TOOL_RAW.to_string());
+    }
+    if *tool == runtime_yell() {
+        return Some(YELL_RAW.to_string());
     }
     let mut segments = tool.as_str().split('/');
     let raw = match (segments.next()?, segments.next()?, segments.next()?) {
@@ -142,6 +154,7 @@ mod tests {
             ("trailing__", "host/archestra/trailing__"),
             ("__leading", "host/archestra/__leading"),
             (CONTROL_TOOL_RAW, appa_runtime_api::CONTROL_TOOL),
+            (YELL_RAW, "mcp/appa/yell"),
         ] {
             let derived = derived(raw).unwrap_or_else(|refusal| panic!("{raw} maps: {refusal:?}"));
             assert_eq!(derived.canonical.as_str(), expected, "{raw}");

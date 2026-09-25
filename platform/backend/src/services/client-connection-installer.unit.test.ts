@@ -25,10 +25,24 @@ let interval: number;
 let startedAt: number;
 let firstPollDelay: number;
 let starts: number;
+let clockPath: string;
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "connect-installer-test-"));
   await writeFile(join(directory, "connect.cjs"), CLIENT_CONNECTION_INSTALLER);
+  // Most cases verify installer behavior, not wall-clock pacing. Keep the one
+  // interval assertion below on real timers.
+  clockPath = join(directory, "fast-clock.cjs");
+  await writeFile(
+    clockPath,
+    `const schedule = globalThis.setTimeout;
+globalThis.setTimeout = (callback, timeout, ...args) => {
+  const installerCall = new Error().stack?.includes('connect.cjs:');
+  const pollOrRetry = timeout === 1000 || timeout === 7000;
+  return schedule(callback, installerCall && pollOrRetry ? 1 : timeout, ...args);
+};
+`,
+  );
   status = "approved";
   scriptBody = `#!/bin/bash\nprintf applied > '${join(directory, "applied")}'\n`;
   downloads = 0;
@@ -85,9 +99,26 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 function run(url = origin, clientId = "cursor") {
+  return runInstaller({
+    url,
+    clientId,
+    nodeArgs: ["--require", clockPath],
+  });
+}
+
+function runInstaller({
+  url,
+  clientId,
+  nodeArgs = [],
+}: {
+  url: string;
+  clientId: string;
+  nodeArgs?: string[];
+}) {
   return new Promise<{ code: number | null; output: string }>(
     (resolve, reject) => {
       const child = spawn(process.execPath, [
+        ...nodeArgs,
         join(directory, "connect.cjs"),
         "--url",
         url,
@@ -425,7 +456,7 @@ test("uses named localhost for browser approval and loopback IP for network requ
 
 test("waits for the server-provided polling interval before requesting approval status", async () => {
   interval = 4;
-  const result = await run();
+  const result = await runInstaller({ url: origin, clientId: "cursor" });
   expect(result.code).toBe(0);
   expect(firstPollDelay).toBeGreaterThanOrEqual(4_000);
   expect(downloads).toBe(1);

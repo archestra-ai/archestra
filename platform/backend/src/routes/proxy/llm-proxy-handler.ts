@@ -1780,8 +1780,8 @@ export async function handleLLMProxy<
         // Restores this request's denial notices and resolves its APPA tools,
         // in the request body the adapters read from, before the provider
         // request and the tool results are built from it.
-        // It refuses the request outright when the session cannot be governed,
-        // so reaching the line below means APPA really is enforcing this turn.
+        // Unsupported declarations are rejected; proxy-only clients without
+        // gateway remedies are still governed and receive text refusals.
         // The ordinary invocation policies still run: they are evaluated inside
         // the plugin pass, before APPA reserves a call.
         const appaRequest = prepareAppaRequest({

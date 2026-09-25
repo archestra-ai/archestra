@@ -211,8 +211,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         results,
       }),
     );
-    // Requests with results submit them to runtime even if current request declares no tools.
-    if (!binding.request.tools && context.toolResults.length === 0) return;
+    // Requests with results submit them to runtime even if current request
+    // declares no tools. Proxy-only sessions declared local tools, so their
+    // session still starts; a session that declared nothing has nothing to do.
+    if (
+      !binding.request.tools &&
+      context.toolResults.length === 0 &&
+      binding.request.declaredTools.length === 0
+    ) {
+      return;
+    }
     assertUniqueNativeQuestionResultIds({
       binding,
       results: context.toolResults,
@@ -309,11 +317,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding?.adapter?.stripCarrierMetadata(context.request);
     if (binding?.compaction) return;
     if (binding && binding.adapter?.id !== "archestra-chat") {
-      appendQuestionContinuation({
-        request: context.request,
-        interactionType: context.interactionType,
-        guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
-      });
+      if (binding.request.tools?.control) {
+        appendQuestionContinuation({
+          request: context.request,
+          interactionType: context.interactionType,
+          guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+        });
+      }
       const askUser = binding.request.tools?.askUser;
       const nativeQuestion =
         binding.adapter?.nativeQuestion &&
@@ -802,7 +812,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           ),
           policy,
         );
-        const contentMessage = `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`;
+        const contentMessage =
+          binding.request.declaredTools.length === 0
+            ? `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`
+            : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
         return {
           decision: "refuse",
           refusal: {

@@ -1111,6 +1111,7 @@ function delegated(params: {
         interactionType: params.interactionType,
         identity: {
           mode: "compat",
+          gatewayConnected: true,
           canonicalize: (name) => name,
           attestationOf: () => undefined,
           verified: [],

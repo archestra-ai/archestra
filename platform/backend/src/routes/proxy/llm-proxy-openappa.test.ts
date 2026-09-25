@@ -5562,6 +5562,60 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     "user-agent": "opencode/1.18.29",
   });
 
+  test.each([
+    ["allowed", false],
+    ["blocked", true],
+  ])("serves a proxy-only OpenCode client when a tool is %s", async (_label, blocked) => {
+    const dispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      if (blocked && JSON.parse(raw).event === "tool_call")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] This tool is blocked by policy",
+        });
+      return dispatch?.(raw);
+    });
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
+      const client = createOpenAiTestClient({
+        nonStreamingToolCalls: [
+          { id: "call_weather", name: "get_weather", arguments: "{}" },
+        ],
+      });
+      const create = client.chat.completions.create;
+      client.chat.completions.create = async (params) => {
+        providerBodies.push(structuredClone(params));
+        return create(params);
+      };
+      return client as never;
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-appa-session-id": `proxy-only-${blocked ? "blocked" : "allowed"}`,
+      },
+      payload: {
+        ...openCodePayload(),
+        stream: false,
+        tools: openCodePayload().tools.slice(0, 1),
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const message = response.json().choices[0].message;
+    if (blocked) {
+      expect(message.content).toContain("This tool is blocked by policy");
+      expect(message.content).toContain("MCP gateway");
+      expect(message.tool_calls ?? []).toHaveLength(0);
+    } else {
+      expect(message.tool_calls[0].function.name).toBe("get_weather");
+    }
+    expect(JSON.stringify(providerBodies)).not.toContain("archestra__");
+  });
+
   test("marks a fresh Codex root when its native session arrives in client metadata", async () => {
     config.openappa.offerSigningSecret =
       "test-context-secret-with-32-characters";
@@ -5611,7 +5665,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     expect(JSON.stringify(providerBodies)).not.toContain("protected session");
   });
 
-  test("prepares an OpenCode task fork through the Responses API", async () => {
+  test("gates an OpenCode task fork without inventing a gateway notice tool", async () => {
     vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
       () =>
         ({
@@ -5682,9 +5736,8 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     const unprepared = await send(OPENCODE_FORK_SESSION);
     expect(unprepared.statusCode, unprepared.body).toBe(200);
     expect(unprepared.body).toContain("context_control");
-    expect(unprepared.json().output[0].name).toBe(
-      "archestra__get_remedy_plans",
-    );
+    expect(unprepared.json().output[0].type).toBe("message");
+    expect(unprepared.body).toContain("Connect the MCP gateway");
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "cancel_call",

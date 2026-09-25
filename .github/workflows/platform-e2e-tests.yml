@@ -1,11 +1,8 @@
 name: Platform E2E Tests
 
-# Runs automatically in merge queue as the required E2E gate.
-# Trusted public-repo PR updates prebuild the Platform and MCP images so a
-# later merge-group run can retag them instead of compiling on the queue
-# critical path. Untrusted PRs and private mirrors keep the placeholder checks
-# because their event contexts cannot authenticate to the public image
-# registry. Add the "run-e2e" label to trigger the full E2E suite on demand,
+# Runs automatically in merge queue as the required E2E gate. Ordinary PR
+# updates report the required checks without building images or running E2E.
+# Add the "run-e2e" label to trigger the full E2E suite on demand,
 # hibernation included. Remove and re-add the label to re-trigger after new
 # commits.
 #
@@ -73,34 +70,31 @@ jobs:
   # expands, so it reports as the literal "Build ${{ matrix.name }} Image" —
   # the required "Build Platform Image" / "Build MCP Server Base Image"
   # contexts would wait forever on ordinary PR pushes. Its placeholder is safe
-  # precisely for the same reason: skipped on merge_group, it reports under
-  # the unexpanded name, which cannot mask a real matrix job's failure.
+  # because, skipped on merge_group, it reports under the unexpanded name and
+  # cannot mask a real matrix-job failure. Docker scan PR placeholders live in
+  # docker-image-scanning.yml; do not duplicate those check names here.
   platform-e2e-build-placeholder:
     name: Build ${{ matrix.name }} Image
     runs-on: ubuntu-latest
-    # Excludes EVERY e2e-triggering label: a label event that starts the real
-    # build must not also run this placeholder under the same check names (the
-    # duplicate-name masking hazard the NOTE above forbids re-adding). Every
-    # trusted public-repo PR event runs the real builder instead; this
-    # placeholder remains only for ordinary events that cannot access the
-    # registry, including private-mirror PRs.
-    if: ${{ github.event_name == 'pull_request' && (github.event.repository.private || github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]') && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    # The explicit run-e2e label runs the real builder; every other PR event
+    # gets the required check names without paying for an image build.
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
     strategy:
       fail-fast: false
       matrix:
         name: [Platform, MCP Server Base]
     steps:
       - name: Skip full image build on ordinary PR updates
-        run: echo "Full E2E image builds run on trusted same-repo PR updates, merge queue, or when the run-e2e label is added."
+        run: echo "Full E2E image builds run in merge queue, on the nightly/manual runs, or when the run-e2e label is added."
 
   # Build Docker images for e2e tests (platform and MCP server base).
-  # Trusted PRs and merge queue runs push the platform image to Artifact Registry so
+  # Trusted runs push the platform image to Artifact Registry so
   # the e2e jobs can pull layers directly instead of downloading a tarball artifact.
   # Untrusted PRs still fall back to artifacts because they do not receive OIDC-backed secrets.
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || (github.event_name == 'pull_request' && github.event.repository.private == false && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e') }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
@@ -174,8 +168,8 @@ jobs:
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       # Reuse a platform image already built for this exact image-input hash —
-      # by this PR's trusted prebuild, a labeled run-e2e build, a prior
-      # merge-queue entry, or the scheduled warm build — instead of rebuilding
+      # by a labeled run-e2e build, a prior merge-queue entry, or the scheduled
+      # warm build — instead of rebuilding
       # it on the merge-queue critical path. The hash covers the ./platform
       # context plus the workflow/action files that define the build command.
       # On a hit we do a registry-side manifest copy to the commit-SHA e2e

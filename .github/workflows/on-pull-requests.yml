@@ -189,6 +189,7 @@ jobs:
 
   migration-kit-checks:
     name: Migration Kit Checks
+    if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -247,30 +248,19 @@ jobs:
           # Revisit once dagger-sdk moves to reqwest 0.12 / rustls 0.23.
           allow-ghsas: GHSA-82j2-j2ch-gfr8
 
-  # Fast feedback on every PR push: lint + typecheck + unit tests.
-  # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
-  # or on-demand via the "run-e2e" PR label.
+  # Required checks retain their names on PRs, but expensive validation runs
+  # against the merge queue's combined SHA. PR-only policy checks above still
+  # run on every push. Full E2E lives in the separate workflow.
   #
-  # bot-pr-guard: the expensive jobs below skip on release-please PRs.
-  # release-please (archestra-ci[bot]) force-rewrites its PR branch on every
-  # merge to main — re-running the full suite dozens of times a day. It
-  # cannot surface real failures, and the merge queue re-runs all required
-  # checks for real on merge_group anyway. A job that skips under its own
-  # name still satisfies its required status check (see the required-check
-  # note in platform-e2e-tests.yml), so no placeholder twins are needed — a
-  # same-named twin would mask real failures on merge_group. The guard only
-  # bites on pull_request events: on merge_group, github.event.pull_request
-  # is null and the first clause short-circuits, so queue validation runs
-  # unchanged. Backport PRs from the same App run normal checks.
-  #
-  # EXCEPTION: platform-lint-and-unit-tests always runs. It auto-commits the
-  # regenerated docs/openapi.json version bump onto the release branch
-  # ("chore: update docs/openapi.json version for release"). Without that
-  # commit the merge_group codegen check fails and the release cannot merge.
+  # A skipped job satisfies its required PR check under its existing name;
+  # the same job runs for real on merge_group. Do not add same-named success
+  # placeholders: they could mask a failing merge-group job.
+  # Release-please is the sole exception below: it needs the full build before
+  # codegen can commit its docs/openapi.json version bump to the PR.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    # Back on a 16-vcpu Blacksmith runner: this job is the PR workflow's
-    # wall-clock and its work is embarrassingly parallel — turbo fans out six
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-ci[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
+    # On a 16-vcpu Blacksmith runner: turbo fans out six
     # check tasks and @frontend:check:ci itself runs tsc/vitest/knip/biome
     # concurrently — so it scales with cores: the same all-cache-miss
     # check:ci measured 1m51s on 16 vcpu vs 10m16s on 4-vcpu ubuntu-latest
@@ -280,12 +270,8 @@ jobs:
     # under 10m, but leaked test-runner processes (vitest fork workers /
     # esbuild) occasionally orphan and hold the step's log pipe open, leaving
     # a *finished* job hanging until GitHub's 6h default. Fail fast instead.
-    # Sized for the slowest path this runs on: fork PRs, which run without
-    # cache secrets and pay a full cold build. On these 16-vcpu Blacksmith
-    # runners the job ran with this same 20-minute budget for months before
-    # the runner migration, and the private mirror's task-env PRs now use
-    # the same Blacksmith installation — so the 45-minute sizing for its
-    # 2-vCPU private ubuntu-latest runners no longer applies.
+    # Queue entries and release-please PRs may pay a full cold build when
+    # caches are empty.
     timeout-minutes: 20
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
@@ -345,8 +331,7 @@ jobs:
       - name: Verify no immature dependencies
         run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
 
-      # Fork PRs run without turbo remote caching (secrets are withheld), so
-      # the Rust NAPI crate builds below actually invoke cargo. Sync the
+      # Cold Rust NAPI builds invoke cargo. Sync the
       # pinned toolchain (rust-toolchain.toml) serially first — otherwise
       # turbo's parallel crate builds each trigger a concurrent rustup
       # download of the same components, which races and fails with
@@ -440,9 +425,8 @@ jobs:
       - name: White-label copy check
         run: pnpm check:white-label
 
-      # Validates the production build (turbo build: next build + backend build +
-      # Rust NAPI) compiles on every push. This replaces the per-push Docker image
-      # build's only unique signal; turbo remote caching makes it seconds on hit.
+      # Validates the production build (Next, backend, and Rust NAPI) on the
+      # merge queue's combined SHA and on release-please PRs before codegen.
       - name: Production build
         run: pnpm build
 
@@ -547,8 +531,7 @@ jobs:
   # core tests after this job had already covered them.
   platform-rust-checks:
     name: Platform Rust Checks
-    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
+    if: github.event_name == 'merge_group'
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
@@ -617,8 +600,7 @@ jobs:
   # quietly passing again.
   openappa-native-tests:
     name: OpenAPPA Native Tests
-    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
+    if: github.event_name == 'merge_group'
     runs-on: blacksmith-8vcpu-ubuntu-2404
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
@@ -694,8 +676,7 @@ jobs:
   ai-labs-rust-checks:
     name: AI Labs Rust Checks
     needs: supply-chain-policy
-    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
+    if: github.event_name == 'merge_group'
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
@@ -751,8 +732,7 @@ jobs:
   # of test-gate latency for much lower runner usage than the eight-job layout.
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
-    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
+    if: github.event_name == 'merge_group'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # The measured two-shard gate is about 7m30s. Allow for cold caches and
     # normal variance, while bounding hung test workers.
@@ -857,12 +837,9 @@ jobs:
   backend-unit-tests-gate:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
-    # always() so the gate still runs (and turns red) when a shard fails,
-    # ANDed with the bot-pr-guard (see comment above
-    # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
-    # gate must skip too — with plain always() it would run and fail on the
-    # shards' "skipped" result.
-    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
+    # Skip under the required name on PRs. On merge_group, always() makes
+    # failed, cancelled, or skipped shards turn the gate red.
+    if: always() && github.event_name == 'merge_group'
     needs: [backend-unit-tests]
     permissions: {}
     steps:
@@ -878,8 +855,7 @@ jobs:
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW runner)
-    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/'))
+    if: github.event_name == 'merge_group'
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
     permissions:
@@ -1025,7 +1001,7 @@ jobs:
   frontend-integration-tests-gate:
     name: Frontend Integration Tests (MSW)
     runs-on: ubuntu-latest
-    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')))
+    if: always() && github.event_name == 'merge_group'
     needs: [frontend-integration-tests]
     permissions: {}
     steps:
@@ -1119,6 +1095,7 @@ jobs:
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
+    if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required to checkout the repository and lint/package the Helm chart.

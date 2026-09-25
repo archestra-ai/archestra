@@ -1,4 +1,4 @@
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared/chat-error";
 import { describe, expect, test } from "vitest";
 import { encodeOpenAiCodexCredential } from "./openai-codex-credentials";
 import { assertSubscriptionCredentialForProvider } from "./subscription-credential-guard";

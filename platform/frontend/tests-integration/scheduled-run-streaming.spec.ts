@@ -68,66 +68,68 @@ test("shows scheduled output while running and replays it after refresh", async 
     artifact: null,
     initiatedByUserId: "test-user-admin",
   };
-  await mswControl.use({
-    method: "get",
-    url: "/api/agents/all",
-    body: [makeAgent()],
-  });
-  await mswControl.use({
-    method: "get",
-    url: "/api/agents/credential-readiness",
-    body: [],
-  });
-  await mswControl.use({
-    method: "get",
-    url: "/api/llm-provider-api-keys",
-    body: [makeLlmProviderApiKey({ provider: "openai" })],
-  });
-  await mswControl.use({
-    method: "get",
-    url: "/api/llm-provider-api-keys/available",
-    body: [makeLlmProviderApiKey({ provider: "openai" })],
-  });
-  await mswControl.use({
-    method: "get",
-    url: "/api/members/default-model",
-    body: { modelId: null, chatApiKeyId: null },
-  });
-  await mswControl.use({
-    method: "get",
-    url: `/api/chat/conversations/${conversationId}/files`,
-    body: [],
-  });
-  await mswControl.use({
-    method: "get",
-    url: `/api/chat/conversations/${conversationId}/share`,
-    body: null,
-  });
-  await mswControl.use({
-    method: "get",
-    url: `/api/chat/conversations/${conversationId}`,
-    body: { ...conversation, messages: [] },
-  });
-  await mswControl.use({
-    method: "get",
-    url: `/api/schedule-triggers/${triggerId}/runs/${runId}`,
-    body: run,
-  });
-  await mswControl.use({
-    method: "get",
-    url: `/api/schedule-triggers/${triggerId}`,
-    body: {
-      id: triggerId,
-      name: "Weekly report",
-      agentId: "test-agent",
-      projectId: null,
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: "/api/agents/all",
+      body: [makeAgent()],
     },
-  });
-  await mswControl.use({
-    method: "get",
-    url: `/api/schedule-triggers/${triggerId}/runs`,
-    body: { data: [run], pagination: { total: 1, limit: 10, offset: 0 } },
-  });
+    {
+      method: "get",
+      url: "/api/agents/credential-readiness",
+      body: [],
+    },
+    {
+      method: "get",
+      url: "/api/llm-provider-api-keys",
+      body: [makeLlmProviderApiKey({ provider: "openai" })],
+    },
+    {
+      method: "get",
+      url: "/api/llm-provider-api-keys/available",
+      body: [makeLlmProviderApiKey({ provider: "openai" })],
+    },
+    {
+      method: "get",
+      url: "/api/members/default-model",
+      body: { modelId: null, chatApiKeyId: null },
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversationId}/files`,
+      body: [],
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversationId}/share`,
+      body: null,
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${conversationId}`,
+      body: { ...conversation, messages: [] },
+    },
+    {
+      method: "get",
+      url: `/api/schedule-triggers/${triggerId}/runs/${runId}`,
+      body: run,
+    },
+    {
+      method: "get",
+      url: `/api/schedule-triggers/${triggerId}`,
+      body: {
+        id: triggerId,
+        name: "Weekly report",
+        agentId: "test-agent",
+        projectId: null,
+      },
+    },
+    {
+      method: "get",
+      url: `/api/schedule-triggers/${triggerId}/runs`,
+      body: { data: [run], pagination: { total: 1, limit: 10, offset: 0 } },
+    },
+  ]);
 
   // Keep the SSE response open. Completion cannot explain text appearing here.
   await page.addInitScript(

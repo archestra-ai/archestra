@@ -241,6 +241,19 @@ what it covers:
 The question is never "is this duplicated" but "does the second copy have its
 own way to fail".
 
+## Reuse setup without hiding the behavior
+
+Before copying setup into a new test, check the existing fixtures and data
+factories. Backend database tests should use `@/test` fixtures rather than
+repeating table inserts; add a focused fixture when the same meaningful setup
+recurs. Keep database-free `*.unit.test.ts` files free of `@/test` and database
+imports. Frontend integration tests should reuse
+`frontend/tests-integration/fixtures.ts` and the factories in
+`frontend/src/mocks/data/` before adding page, MSW, or entity setup of their
+own. Batch independent MSW overrides with `mswControl.registerMany` when a
+scenario needs several of them. Keep each scenario's requests and assertions
+visible in its test so the behavior remains clear.
+
 ## Checklist before adding a test
 
 1. Name the bug it catches. Can't? Don't write it.

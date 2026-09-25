@@ -477,16 +477,30 @@ class KbFileModel {
     id: string;
     organizationId: string;
   }): Promise<boolean> {
-    const deleted = await db
-      .delete(schema.kbFilesTable)
-      .where(
-        and(
-          eq(schema.kbFilesTable.id, params.id),
-          eq(schema.kbFilesTable.organizationId, params.organizationId),
-        ),
-      )
-      .returning({ id: schema.kbFilesTable.id });
-    return deleted.length > 0;
+    return db.transaction(async (tx) => {
+      const documentIds = (
+        await tx
+          .select({ id: schema.kbFileDocumentsTable.kbDocumentId })
+          .from(schema.kbFileDocumentsTable)
+          .where(eq(schema.kbFileDocumentsTable.kbFileId, params.id))
+      ).map((row) => row.id);
+      const [deleted] = await tx
+        .delete(schema.kbFilesTable)
+        .where(
+          and(
+            eq(schema.kbFilesTable.id, params.id),
+            eq(schema.kbFilesTable.organizationId, params.organizationId),
+          ),
+        )
+        .returning({ id: schema.kbFilesTable.id });
+      if (!deleted) return false;
+      if (documentIds.length > 0) {
+        await tx
+          .delete(schema.kbDocumentsTable)
+          .where(inArray(schema.kbDocumentsTable.id, documentIds));
+      }
+      return true;
+    });
   }
 
   /**

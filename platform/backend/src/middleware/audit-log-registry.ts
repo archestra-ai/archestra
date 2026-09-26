@@ -798,6 +798,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
   },
+  "/api/openappa/github-sync/repository": {
+    resourceType: "organization",
+    action: "organization.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, orgId) =>
+      OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
+  },
   // A POST walk-up is discarded, so the accept action registers its own path.
   "/api/openappa/github-sync/accept-held": {
     resourceType: "organization",

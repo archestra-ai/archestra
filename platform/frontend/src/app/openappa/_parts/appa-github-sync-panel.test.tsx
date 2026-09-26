@@ -40,6 +40,7 @@ const source = {
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);
@@ -163,7 +164,10 @@ test("connects a public repository and renders the saved source", async () => {
   );
   show();
   fireEvent.click(
-    await screen.findByRole("button", { name: "Connect GitHub" }),
+    await screen.findByRole("button", { name: "Create GitHub repository" }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Connect existing repository" }),
   );
   fireEvent.change(screen.getByLabelText("Repository"), {
     target: { value: "example/policies" },
@@ -173,11 +177,62 @@ test("connects a public repository and renders the saved source", async () => {
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
+test("creates a repository with a connected App and shows the synced source", async () => {
+  state = { enabled: true, hasPolicy: true, source: null };
+  const appId = "11111111-1111-4111-8111-111111111111";
+  server.use(
+    http.get("http://localhost:9000/api/credentials", () =>
+      HttpResponse.json([
+        {
+          id: appId,
+          name: "Policy App",
+          kind: "github_app",
+          allowOrganization: true,
+          organizationConfigured: true,
+        },
+      ]),
+    ),
+    http.post(`${url}/repository`, async ({ request }) => {
+      expect(await request.json()).toEqual({
+        owner: "example",
+        name: "openappa-config",
+        githubAppConfigId: appId,
+        interval: "1h",
+      });
+      state = {
+        enabled: true,
+        hasPolicy: true,
+        source: { ...source, repo: "example/openappa-config" },
+      };
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Create GitHub repository" }),
+  );
+  fireEvent.change(screen.getByLabelText("GitHub owner"), {
+    target: { value: "example" },
+  });
+  expect(
+    screen.getByRole("button", { name: "Create and sync" }),
+  ).toBeDisabled();
+  fireEvent.click(screen.getByRole("combobox", { name: "GitHub App" }));
+  fireEvent.click(await screen.findByRole("option", { name: "Policy App" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create and sync" }));
+  expect(
+    await screen.findByRole("link", { name: /example\/openappa-config/ }),
+  ).toBeVisible();
+});
+
 test("asks before discarding a GitHub source draft", async () => {
   state = { enabled: true, hasPolicy: false, source: null };
   show();
   fireEvent.click(
-    await screen.findByRole("button", { name: "Connect GitHub" }),
+    await screen.findByRole("button", { name: "Create GitHub repository" }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Connect existing repository" }),
   );
   fireEvent.change(screen.getByLabelText("Repository"), {
     target: { value: "example/policies" },

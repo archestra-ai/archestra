@@ -333341,6 +333341,426 @@
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organization:update`: No description available"
       }
     },
+    "/api/openappa/github-sync/repository": {
+      "post": {
+        "operationId": "createAppaGithubRepository",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "owner": {
+                    "type": "string",
+                    "maxLength": 39,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]*$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "pattern": "^[a-zA-Z0-9_.-]+$"
+                  },
+                  "githubAppConfigId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "interval": {
+                    "type": "string",
+                    "enum": [
+                      "15m",
+                      "1h",
+                      "1d"
+                    ]
+                  }
+                },
+                "required": [
+                  "owner",
+                  "name",
+                  "githubAppConfigId",
+                  "interval"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "source": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "organizationId": {
+                          "type": "string"
+                        },
+                        "repo": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ref": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "path": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "interval": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "15m",
+                                "1h",
+                                "1d"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        "githubPatId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "githubAppConfigId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "sourceCommit": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "lastSyncedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "lastSyncError": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "declarationsPendingPublish": {
+                          "type": "boolean"
+                        },
+                        "heldContentHash": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "heldSourceCommit": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "heldReasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "drops_batteries",
+                              "changes_credentials"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "organizationId",
+                        "repo",
+                        "ref",
+                        "path",
+                        "interval",
+                        "githubPatId",
+                        "githubAppConfigId",
+                        "revision",
+                        "sourceCommit",
+                        "lastSyncedAt",
+                        "lastSyncError",
+                        "declarationsPendingPublish",
+                        "heldContentHash",
+                        "heldSourceCommit",
+                        "heldReasons"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "hasPolicy": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "source",
+                    "hasPolicy"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organization:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organization:update`: No description available"
+      }
+    },
     "/api/openappa/github-sync/accept-held": {
       "post": {
         "operationId": "acceptHeldAppaGithubPull",

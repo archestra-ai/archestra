@@ -40,6 +40,26 @@ export function useConfigureAppaGithubSync() {
     onSettled: () => invalidatePolicyViews(client),
   });
 }
+export function useCreateAppaGithubRepository() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CreateAppaGithubRepositoryData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.createAppaGithubRepository({
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: () =>
+      toast.success("Repository created with your current policy."),
+    onSettled: () => invalidatePolicyViews(client),
+  });
+}
 export function useUpdateAppaGithubSync() {
   const client = useQueryClient();
   return useMutation({

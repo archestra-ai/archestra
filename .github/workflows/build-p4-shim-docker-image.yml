@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: ""
+      reuse_from_version:
+        description: "Previous main SHA whose p4 image may be retagged if the Docker context is unchanged"
+        required: false
+        type: string
+        default: ""
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -39,12 +44,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  reuse-p4-shim-image:
+    name: Reuse unchanged p4 Shim Image
+    if: ${{ inputs.version != '' && inputs.push_to_gcr && inputs.reuse_from_version != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      reused: ${{ steps.reuse.outputs.reused }}
+    steps:
+      - name: Checkout image source and previous main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
+
+      - name: Authenticate to Google Artifact Registry
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Tag and verify existing image
+        id: reuse
+        shell: bash
+        env:
+          IMAGE: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim
+          PREVIOUS_VERSION: ${{ inputs.reuse_from_version }}
+          VERSION: ${{ inputs.version }}
+        run: bash .github/scripts/reuse-p4-shim-image.sh
+
   # workflow_call path (release-please / deploy-dev): callers always pass a
   # version, so gate on it — `github.event_name` is the CALLER's event here and
   # can itself be pull_request (deploy-dev's label trigger).
   build-p4-shim-image:
     name: Build p4 Shim Image
-    if: ${{ inputs.version != '' }}
+    needs: [reuse-p4-shim-image]
+    if: ${{ !cancelled() && inputs.version != '' && needs.reuse-p4-shim-image.outputs.reused != 'true' }}
     permissions:
       contents: read # Required to checkout the repository and build the image.
       id-token: write # Required for Workload Identity Federation when pushing images.

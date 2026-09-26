@@ -247,7 +247,9 @@ jobs:
 
   merge-manifests:
     name: Create multi-arch manifest
-    if: ${{ inputs.push_image }}
+    # The build can succeed after reuse-image is skipped. Override the implicit
+    # success() check so its skipped ancestor cannot suppress the image tag.
+    if: ${{ !cancelled() && inputs.push_image && needs.build-image.result == 'success' }}
     runs-on: ubuntu-latest
     needs:
       - build-image

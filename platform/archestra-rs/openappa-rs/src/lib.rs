@@ -9,12 +9,9 @@ mod deployments;
 mod policy;
 
 use appa_eventlog::{
-    Backend, LogStore,
-    postgres::{
-        OperationClaim, OperationKey, OperationRequest, PostgresError, PostgresStore,
-        ProcessedResultClaim, ProcessedResultKey, ProcessedResultRequest, ReceiptBinding,
-        ReceiptScope,
-    },
+    Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
+    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, SessionScope,
+    postgres::{LeasedPostgres, PostgresError},
 };
 use appa_runtime::{
     api::{
@@ -309,12 +306,24 @@ fn wire(decision: &HookDecision) -> napi::Result<Value> {
     serde_json::to_value(WireDecision::of(decision)).map_err(error)
 }
 
-fn receipt_scope(input: &Input, binding: ReceiptBinding) -> ReceiptScope {
-    ReceiptScope {
+fn session_scope(input: &Input) -> SessionScope {
+    SessionScope {
         organization_id: input.organization_id.clone(),
-        caller_id: input.caller_id.clone(),
         session_id: input.session_id.clone(),
-        binding,
+    }
+}
+
+fn session_binding(input: &Input) -> ReceiptBinding {
+    ReceiptBinding::Session {
+        caller_id: input.caller_id.clone(),
+    }
+}
+
+fn processed_result_key(input: &Input, tool_call_id: String) -> ProcessedResultKey {
+    ProcessedResultKey {
+        session: session_scope(input),
+        caller_id: input.caller_id.clone(),
+        tool_call_id,
     }
 }
 
@@ -354,7 +363,7 @@ fn native_presentation_options() -> EmbeddedPresentationOptions {
     }
 }
 
-fn postgres_store(store: &LogStore) -> napi::Result<&PostgresStore> {
+fn postgres_store(store: &LogStore) -> napi::Result<&LeasedPostgres> {
     store
         .postgres()
         .ok_or_else(|| error("OpenAPPA requires PostgreSQL storage"))
@@ -881,6 +890,7 @@ fn validate(input: &Input) -> napi::Result<()> {
                 serde_json::from_str(required_arguments(input)?).map_err(error)?;
         }
         HookEventKind::Remedy => {
+            required(&input.caller_id, "caller_id")?;
             let _: ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(input)?).map_err(error)?;
         }
@@ -1159,25 +1169,22 @@ pub async fn load_child_returns(
     .map_err(error)
 }
 
-struct SessionLock {
-    pg: PostgresStore,
+struct SessionLock<'a> {
+    pg: &'a LeasedPostgres,
     root: String,
 }
-impl SessionLock {
-    fn acquire(pg: &PostgresStore, root: String) -> napi::Result<Self> {
+impl<'a> SessionLock<'a> {
+    fn acquire(pg: &'a LeasedPostgres, root: String) -> napi::Result<Self> {
         let key = root.clone();
         pg.with_client(move |client| {
             client.query_one("SELECT pg_advisory_lock(hashtextextended($1, 0))", &[&key])?;
             Ok(())
         })
         .map_err(error)?;
-        Ok(Self {
-            pg: pg.clone(),
-            root,
-        })
+        Ok(Self { pg, root })
     }
 }
-impl Drop for SessionLock {
+impl Drop for SessionLock<'_> {
     fn drop(&mut self) {
         let key = self.root.clone();
         let _ = self.pg.with_client(move |client| {
@@ -1226,7 +1233,7 @@ impl State {
     /// denials into the new root. Returns the parent watermark bounding inherited results.
     fn open_fork(
         &self,
-        pg: &PostgresStore,
+        pg: &LeasedPostgres,
         input: &Input,
         fork_of: &str,
         root: &str,
@@ -1396,8 +1403,10 @@ impl State {
         let _lock = SessionLock::acquire(pg, root.clone())?;
         // Check every member of the family: continuing a parent while a child's
         // result is interrupted could otherwise bypass inherited restrictions.
-        let check_root = root.clone();
-        let interrupted = pg.has_pending_receipts(check_root).map_err(error)?;
+        let interrupted = self
+            .store
+            .has_pending_receipts(&appa_eventlog::TrajectoryId::new(root.as_str()))
+            .map_err(error)?;
         if interrupted {
             return Err(error(
                 "OpenAPPA session has interrupted processing; operator recovery is required",
@@ -1494,29 +1503,30 @@ impl State {
         if input.event == HookEventKind::Remedy {
             let operation = remedy_operation(&input)?;
             let request = remedy_request(&input)?;
+            let binding = ReceiptBinding::Caller {
+                caller_id: required(&input.caller_id, "caller_id")?.to_owned(),
+            };
             if let Some(decision) = claim_operation(
-                pg,
+                &self.store,
                 &input,
                 &root,
                 &operation,
                 &request,
-                ReceiptBinding::Caller,
+                binding.clone(),
                 None,
             )? {
                 return Ok(decision);
             }
             let result_key = input
                 .tool_call_id
-                .as_ref()
-                .map(|tool_call_id| ProcessedResultKey {
-                    scope: receipt_scope(&input, ReceiptBinding::Session),
-                    tool_call_id: tool_call_id.clone(),
-                });
+                .clone()
+                .map(|tool_call_id| processed_result_key(&input, tool_call_id));
             if let Some(result_key) = &result_key {
-                match pg
+                match self
+                    .store
                     .claim_processed_result(ProcessedResultRequest {
                         key: result_key.clone(),
-                        root: root.clone(),
+                        root: appa_eventlog::TrajectoryId::new(root.as_str()),
                     })
                     .map_err(error)?
                 {
@@ -1530,7 +1540,14 @@ impl State {
                 // offer is neither vouched nor spent, and a corrected call
                 // earns its own review.
                 let response = runtime_refusal(refusal.clone())?;
-                return finish_remedy(pg, &input, &operation, result_key, response);
+                return finish_remedy(
+                    &self.store,
+                    &input,
+                    &operation,
+                    binding,
+                    result_key,
+                    response,
+                );
             }
             let args: ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(&input)?).map_err(error)?;
@@ -1566,7 +1583,14 @@ impl State {
                     _ => return Err(error("unexpected remedy control decision")),
                 };
                 let response = runtime_refusal(text)?;
-                return finish_remedy(pg, &input, &operation, result_key, response);
+                return finish_remedy(
+                    &self.store,
+                    &input,
+                    &operation,
+                    binding,
+                    result_key,
+                    response,
+                );
             }
             let outcome = self
                 .runtime
@@ -1591,7 +1615,14 @@ impl State {
                     ruling: input.ruling,
                 },
             )?;
-            return finish_remedy(pg, &input, &operation, result_key, response);
+            return finish_remedy(
+                &self.store,
+                &input,
+                &operation,
+                binding,
+                result_key,
+                response,
+            );
         }
 
         let operation = input
@@ -1621,12 +1652,12 @@ impl State {
             request["call_id"] = json!(operation);
         }
         if let Some(decision) = claim_operation(
-            pg,
+            &self.store,
             &input,
             &root,
             &operation,
             &request,
-            ReceiptBinding::Session,
+            session_binding(&input),
             context,
         )? {
             return Ok(decision);
@@ -1693,25 +1724,29 @@ impl State {
             .await;
             wire(&outcome.decision)?
         };
-        finish_operation(pg, &input, &operation, &decision, ReceiptBinding::Session)?;
+        finish_operation(
+            &self.store,
+            &input,
+            &operation,
+            &decision,
+            session_binding(&input),
+        )?;
         Ok(decision)
     }
 
     async fn result(
         &self,
-        pg: &PostgresStore,
+        pg: &LeasedPostgres,
         input: &Input,
         actor: &Actor,
     ) -> napi::Result<Value> {
         let call_id = required(&input.tool_call_id, "tool_call_id")?.to_owned();
-        let key = ProcessedResultKey {
-            scope: receipt_scope(input, ReceiptBinding::Session),
-            tool_call_id: call_id.clone(),
-        };
-        match pg
+        let key = processed_result_key(input, call_id.clone());
+        match self
+            .store
             .claim_processed_result(ProcessedResultRequest {
                 key: key.clone(),
-                root: actor.root.0.clone(),
+                root: appa_eventlog::TrajectoryId::new(actor.root.0.as_str()),
             })
             .map_err(error)?
         {
@@ -1719,7 +1754,8 @@ impl State {
             ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
         }
         let operation = OperationKey {
-            scope: receipt_scope(input, ReceiptBinding::Session),
+            session: session_scope(input),
+            binding: session_binding(input),
             operation_id: format!("call:{call_id}"),
         };
         let Some(released) = read_completed_operation(pg, &operation)? else {
@@ -1728,7 +1764,8 @@ impl State {
             let response =
                 inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
             let approved = decision_text(&response)?;
-            pg.complete_processed_result(key, approved, response.clone())
+            self.store
+                .complete_processed_result(key, approved, response.clone())
                 .map_err(error)?;
             return Ok(response);
         };
@@ -1739,7 +1776,8 @@ impl State {
         if !allowed {
             let response = authoritative_unexecuted_response(released.decision)?;
             let approved = decision_text(&response)?;
-            pg.complete_processed_result(key, approved, response.clone())
+            self.store
+                .complete_processed_result(key, approved, response.clone())
                 .map_err(error)?;
             return Ok(response);
         }
@@ -1844,21 +1882,28 @@ impl State {
             let operation = cancellation_operation(&call_id);
             let request = json!({ "event": "cancel_call", "tool_call_id": call_id });
             if let Some(saved) = claim_operation(
-                pg,
+                &self.store,
                 input,
                 &actor.root.0,
                 &operation,
                 &request,
-                ReceiptBinding::Session,
+                session_binding(input),
                 None,
             )? {
                 response = saved;
             } else {
-                finish_operation(pg, input, &operation, &response, ReceiptBinding::Session)?;
+                finish_operation(
+                    &self.store,
+                    input,
+                    &operation,
+                    &response,
+                    session_binding(input),
+                )?;
             }
         }
         let approved = decision_text(&response)?;
-        pg.complete_processed_result(key, approved, response.clone())
+        self.store
+            .complete_processed_result(key, approved, response.clone())
             .map_err(error)?;
         Ok(response)
     }
@@ -2216,7 +2261,7 @@ const MAX_FORK_DEPTH: usize = 32;
 /// line. A child accepts only results claimed before its parent-lock-protected watermark, so it
 /// replays the history it started with rather than later parent activity.
 fn inherited_result(
-    pg: &PostgresStore,
+    pg: &LeasedPostgres,
     input: &Input,
     call_id: &str,
 ) -> napi::Result<Option<Value>> {
@@ -2325,12 +2370,12 @@ struct CompletedOperation {
 }
 
 fn read_completed_operation(
-    pg: &PostgresStore,
+    pg: &LeasedPostgres,
     key: &OperationKey,
 ) -> napi::Result<Option<CompletedOperation>> {
-    let session_id = key.scope.session_id.clone();
+    let session_id = key.session.session_id.clone();
     let operation_id = key.operation_id.clone();
-    let organization_id = key.scope.organization_id.clone();
+    let organization_id = key.session.organization_id.clone();
     pg.with_client(move |client| {
         let row = client.query_opt(
             "SELECT root, input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
@@ -2370,9 +2415,14 @@ fn read_completed_operation(
     .map_err(error)
 }
 
-fn cancelled_call(pg: &PostgresStore, input: &Input, call_id: &str) -> napi::Result<Option<Value>> {
+fn cancelled_call(
+    pg: &LeasedPostgres,
+    input: &Input,
+    call_id: &str,
+) -> napi::Result<Option<Value>> {
     let key = OperationKey {
-        scope: receipt_scope(input, ReceiptBinding::Session),
+        session: session_scope(input),
+        binding: session_binding(input),
         operation_id: cancellation_operation(call_id),
     };
     Ok(read_completed_operation(pg, &key)?.map(|record| record.decision))
@@ -2419,7 +2469,7 @@ fn spelled_tool(canonical: &str) -> String {
 }
 
 fn routing_owner(
-    pg: &PostgresStore,
+    pg: &LeasedPostgres,
     input: &OfferInput,
     spender: Option<&Principal>,
 ) -> napi::Result<Option<OfferOwner>> {
@@ -2466,7 +2516,7 @@ fn owner_can_be_spent_by(owner: Option<&str>, spender: Option<&Principal>) -> bo
 }
 
 fn claim_operation(
-    pg: &PostgresStore,
+    store: &LogStore,
     input: &Input,
     root: &str,
     operation: &str,
@@ -2474,13 +2524,14 @@ fn claim_operation(
     binding: ReceiptBinding,
     context: Option<Value>,
 ) -> napi::Result<Option<Value>> {
-    match pg
+    match store
         .claim_operation(OperationRequest {
             key: OperationKey {
-                scope: receipt_scope(input, binding),
+                session: session_scope(input),
+                binding,
                 operation_id: operation.to_owned(),
             },
-            root: root.to_owned(),
+            root: appa_eventlog::TrajectoryId::new(root),
             input: request.clone(),
             context,
         })
@@ -2494,36 +2545,40 @@ fn claim_operation(
 /// Completes a remedy's operation receipt and, for a tracked call, its
 /// processed result, so a retry of either replays this response.
 fn finish_remedy(
-    pg: &PostgresStore,
+    store: &LogStore,
     input: &Input,
     operation: &str,
+    binding: ReceiptBinding,
     result_key: Option<ProcessedResultKey>,
     response: Value,
 ) -> napi::Result<Value> {
-    finish_operation(pg, input, operation, &response, ReceiptBinding::Caller)?;
+    finish_operation(store, input, operation, &response, binding)?;
     if let Some(result_key) = result_key {
         let approved = decision_text(&response)?;
-        pg.complete_processed_result(result_key, approved, response.clone())
+        store
+            .complete_processed_result(result_key, approved, response.clone())
             .map_err(error)?;
     }
     Ok(response)
 }
 
 fn finish_operation(
-    pg: &PostgresStore,
+    store: &LogStore,
     input: &Input,
     operation: &str,
     decision: &Value,
     binding: ReceiptBinding,
 ) -> napi::Result<()> {
-    pg.complete_operation(
-        OperationKey {
-            scope: receipt_scope(input, binding),
-            operation_id: operation.to_owned(),
-        },
-        decision.clone(),
-    )
-    .map_err(error)
+    store
+        .complete_operation(
+            OperationKey {
+                session: session_scope(input),
+                binding,
+                operation_id: operation.to_owned(),
+            },
+            decision.clone(),
+        )
+        .map_err(error)
 }
 
 #[derive(Deserialize)]
@@ -3000,6 +3055,7 @@ mod remedy_tests {
         let mut input = json!({
             "organization_id": "organization",
             "session_id": "session",
+            "caller_id": "user:caller",
             "event": "remedy",
             "tool_call_id": "provider-call",
             "arguments": { "offer_id": QUOTED },
@@ -3038,5 +3094,11 @@ mod remedy_tests {
         assert!(validate(&remedy_input(json!({ "precheck_refusal": oversized }))).is_err());
         let largest = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES);
         assert!(validate(&remedy_input(json!({ "precheck_refusal": largest }))).is_ok());
+    }
+
+    #[test]
+    fn a_remedy_requires_a_caller() {
+        assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_err());
+        assert!(validate(&remedy_input(json!({}))).is_ok());
     }
 }

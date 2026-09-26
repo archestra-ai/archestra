@@ -3431,6 +3431,13 @@
       "when": 1790288193279,
       "tag": "0489_scoped_resource_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 490,
+      "version": "7",
+      "when": 1790433957125,
+      "tag": "0490_openappa_receipts_organization",
+      "breakpoints": true
     }
   ]
 }

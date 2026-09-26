@@ -44,6 +44,9 @@ pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, Stri
 /// send the host's own credential wherever the external points.
 pub(crate) const HOST_VARIABLE_PREFIX: &str = "APPA_ARCHESTRA_";
 
+/// What an organization key reads as while a composition is checked; never consulted.
+const UNRESOLVED_KEY: &str = "unresolved";
+
 /// Validate a root document that declares no battery: [`compose`] with nothing to
 /// resolve. A root whose `include` list names a battery does not validate this way —
 /// the entry resolves to nothing — so a caller holding declarations composes instead.
@@ -98,7 +101,9 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         })
         .collect();
     // No organization's values reach a composition: it is checked, stored and later
-    // compiled per dispatch with the values the host resolves then.
+    // compiled per dispatch with the values the host resolves then. Each organization
+    // key reads as set here, since the runtime refuses to open a model builtin whose key
+    // is unset, and whether an organization has set one is its dispatch's question.
     let unresolved = HostCredentials::default();
     let config = Config::hosted_included(
         root,
@@ -114,7 +119,11 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
                 })
                 .ok_or(IncludeResolution::Unknown)
         },
-        |var| unresolved.lookup(var),
+        |var| {
+            unresolved.lookup(var).or_else(|| {
+                (!var.starts_with(HOST_VARIABLE_PREFIX)).then(|| UNRESOLVED_KEY.to_owned())
+            })
+        },
     )
     .map_err(|error| error.to_string())?;
     let content = String::from_utf8(config.policy_file().bytes().to_vec())

@@ -319,6 +319,14 @@ fn session_binding(input: &Input) -> ReceiptBinding {
     }
 }
 
+fn operation_key(input: &Input, binding: ReceiptBinding, operation_id: String) -> OperationKey {
+    OperationKey {
+        session: session_scope(input),
+        binding,
+        operation_id,
+    }
+}
+
 fn processed_result_key(input: &Input, tool_call_id: String) -> ProcessedResultKey {
     ProcessedResultKey {
         session: session_scope(input),
@@ -1753,11 +1761,7 @@ impl State {
             ProcessedResultClaim::Claimed => {}
             ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
         }
-        let operation = OperationKey {
-            session: session_scope(input),
-            binding: session_binding(input),
-            operation_id: format!("call:{call_id}"),
-        };
+        let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
         let Some(released) = read_completed_operation(pg, &operation)? else {
             // A fork replays the history of the session it forks: a result from before the
             // fork comes back as that session processed it, never as an unknown call.
@@ -2420,11 +2424,11 @@ fn cancelled_call(
     input: &Input,
     call_id: &str,
 ) -> napi::Result<Option<Value>> {
-    let key = OperationKey {
-        session: session_scope(input),
-        binding: session_binding(input),
-        operation_id: cancellation_operation(call_id),
-    };
+    let key = operation_key(
+        input,
+        session_binding(input),
+        cancellation_operation(call_id),
+    );
     Ok(read_completed_operation(pg, &key)?.map(|record| record.decision))
 }
 
@@ -2526,11 +2530,7 @@ fn claim_operation(
 ) -> napi::Result<Option<Value>> {
     match store
         .claim_operation(OperationRequest {
-            key: OperationKey {
-                session: session_scope(input),
-                binding,
-                operation_id: operation.to_owned(),
-            },
+            key: operation_key(input, binding, operation.to_owned()),
             root: appa_eventlog::TrajectoryId::new(root),
             input: request.clone(),
             context,
@@ -2571,11 +2571,7 @@ fn finish_operation(
 ) -> napi::Result<()> {
     store
         .complete_operation(
-            OperationKey {
-                session: session_scope(input),
-                binding,
-                operation_id: operation.to_owned(),
-            },
+            operation_key(input, binding, operation.to_owned()),
             decision.clone(),
         )
         .map_err(error)

@@ -1413,7 +1413,7 @@ impl State {
         // result is interrupted could otherwise bypass inherited restrictions.
         let interrupted = self
             .store
-            .has_pending_receipts(&appa_eventlog::TrajectoryId::new(root.as_str()))
+            .has_pending_receipts(&TrajectoryId::new(root.as_str()))
             .map_err(error)?;
         if interrupted {
             return Err(error(
@@ -1534,7 +1534,7 @@ impl State {
                     .store
                     .claim_processed_result(ProcessedResultRequest {
                         key: result_key.clone(),
-                        root: appa_eventlog::TrajectoryId::new(root.as_str()),
+                        root: TrajectoryId::new(root.as_str()),
                     })
                     .map_err(error)?
                 {
@@ -1754,7 +1754,7 @@ impl State {
             .store
             .claim_processed_result(ProcessedResultRequest {
                 key: key.clone(),
-                root: appa_eventlog::TrajectoryId::new(actor.root.0.as_str()),
+                root: actor.root.clone(),
             })
             .map_err(error)?
         {
@@ -2531,7 +2531,7 @@ fn claim_operation(
     match store
         .claim_operation(OperationRequest {
             key: operation_key(input, binding, operation.to_owned()),
-            root: appa_eventlog::TrajectoryId::new(root),
+            root: TrajectoryId::new(root),
             input: request.clone(),
             context,
         })

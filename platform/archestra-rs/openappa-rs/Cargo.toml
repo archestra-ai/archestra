@@ -9,14 +9,15 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to OpenAPPA main after the merge of #473 (session-scoped receipt API), on
-# top of #464 (receipt keys lead with the organization; needs migration 0490).
+# Pinned to OpenAPPA main after the merge of #479 (hosted documents validate without
+# their keys), on top of #473 (session-scoped receipt API) and #464 (receipt keys
+# lead with the organization; needs migration 0490).
 # Re-pin to the first release that includes it. The embedded reporting helper
 # currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ec97360f4969896a2e75b413aa85861e095bd725" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ec97360f4969896a2e75b413aa85861e095bd725" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ec97360f4969896a2e75b413aa85861e095bd725", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ec97360f4969896a2e75b413aa85861e095bd725" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fcecb62a428bc15c63115c641053a74f592ca5f4" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fcecb62a428bc15c63115c641053a74f592ca5f4" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fcecb62a428bc15c63115c641053a74f592ca5f4", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fcecb62a428bc15c63115c641053a74f592ca5f4" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

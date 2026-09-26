@@ -4,8 +4,7 @@
 //! derives to a canonical identity (`<catalog>__<tool>` → `mcp/<catalog>/<tool>`), so a
 //! battery rule written canonically reaches an installed catalog through the
 //! `server_aliases` table the host composes into the document.
-use crate::deployments::HostCredentials;
-use appa_eventlog::{Backend, LogStore};
+use appa_eventlog::LogStore;
 use appa_package::PackageName;
 use appa_runtime::{
     api::Runtime,
@@ -44,9 +43,6 @@ pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, Stri
 /// send the host's own credential wherever the external points.
 pub(crate) const HOST_VARIABLE_PREFIX: &str = "APPA_ARCHESTRA_";
 
-/// What an organization key reads as while a composition is checked; never consulted.
-const UNRESOLVED_KEY: &str = "unresolved";
-
 /// Validate a root document that declares no battery: [`compose`] with nothing to
 /// resolve. A root whose `include` list names a battery does not validate this way —
 /// the entry resolves to nothing — so a caller holding declarations composes instead.
@@ -84,7 +80,7 @@ pub(crate) struct Composed {
 /// its `[server_aliases]` and its `[credentials]` — with every included battery under
 /// it by the runtime's include rules. An entry `batteries` does not answer is
 /// unresolved, which the runtime refuses naming the entry. The composed document is
-/// opened in a memory runtime, so a composition that returns is also a validation.
+/// checked as an open checks it, so a composition that returns is also a validation.
 pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Composed, String> {
     let document: toml::Table =
         toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
@@ -101,36 +97,24 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         })
         .collect();
     // No organization's values reach a composition: it is checked, stored and later
-    // compiled per dispatch with the values the host resolves then. Each organization
-    // key reads as set here, since the runtime refuses to open a model builtin whose key
-    // is unset, and whether an organization has set one is its dispatch's question.
-    let unresolved = HostCredentials::default();
-    let config = Config::hosted_included(
-        root,
-        defaults(),
-        |entry| {
-            hosted
-                .iter()
-                .find(|(battery, _, _)| battery.entry == entry)
-                .map(|(battery, policy, token_env)| HostedBattery {
-                    name: &battery.name,
-                    policy,
-                    token_env,
-                })
-                .ok_or(IncludeResolution::Unknown)
-        },
-        |var| {
-            unresolved.lookup(var).or_else(|| {
-                (!var.starts_with(HOST_VARIABLE_PREFIX)).then(|| UNRESOLVED_KEY.to_owned())
+    // compiled per dispatch with the values the host resolves then.
+    let config = Config::hosted_included_deferred(root, defaults(), |entry| {
+        hosted
+            .iter()
+            .find(|(battery, _, _)| battery.entry == entry)
+            .map(|(battery, policy, token_env)| HostedBattery {
+                name: &battery.name,
+                policy,
+                token_env,
             })
-        },
-    )
+            .ok_or(IncludeResolution::Unknown)
+    })
     .map_err(|error| error.to_string())?;
     let content = String::from_utf8(config.policy_file().bytes().to_vec())
         .map_err(|error| error.to_string())?;
     let credentials = config.credentials().clone();
-    let store = LogStore::open(Backend::Memory).map_err(|error| error.to_string())?;
-    open(config, Arc::new(store))?;
+    Runtime::check_hosted(config, None, crate::adapter::adapter())
+        .map_err(|error| error.to_string())?;
     Ok(Composed {
         content,
         credentials,
@@ -300,6 +284,8 @@ fn is_url_segment(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::deployments::HostCredentials;
+    use appa_eventlog::Backend;
     use appa_runtime::hooks;
     use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
 

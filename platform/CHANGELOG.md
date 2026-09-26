@@ -1,5 +1,55 @@
 # Changelog
 
+## [1.4.0-rc.22](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.21...platform-v1.4.0-rc.22) (2026-09-26)
+
+
+### Features
+
+* **openappa:** add a guided setup wizard ([#8191](https://github.com/archestra-ai/archestra/issues/8191)) ([1f2aee5](https://github.com/archestra-ai/archestra/commit/1f2aee59c9b16b4dbdc0067b2dfa0bf2589e0ad5))
+* **openappa:** add guardrail consults log page ([#8212](https://github.com/archestra-ai/archestra/issues/8212)) ([21e0a34](https://github.com/archestra-ai/archestra/commit/21e0a34ee4161fe52451f48d8fad921668021c25))
+* **openappa:** configure policy targets with scoped chat ([#8202](https://github.com/archestra-ai/archestra/issues/8202)) ([267b991](https://github.com/archestra-ai/archestra/commit/267b991069ccd80248a99e251b8de967bfc2d0b9))
+* **openappa:** pin a deployment per organization and ship the native jev annotator ([#8200](https://github.com/archestra-ai/archestra/issues/8200)) ([f031ea7](https://github.com/archestra-ai/archestra/commit/f031ea76a5ba99b2bb6cb6b61a01e4e9f78455e8))
+* **openappa:** redesign overview with setup cards and policy coverage ([#8214](https://github.com/archestra-ai/archestra/issues/8214)) ([6c279b1](https://github.com/archestra-ai/archestra/commit/6c279b1c8b98cb95b484d743c520115625a4d398))
+* **rbac:** replace resource visibility with scoped permission grants ([#7807](https://github.com/archestra-ai/archestra/issues/7807)) ([6f563a0](https://github.com/archestra-ai/archestra/commit/6f563a0dafdc407f12570963b03993729790859b))
+
+
+### Bug Fixes
+
+* **agent-runtime:** create Claude config directory before trust setup ([#8201](https://github.com/archestra-ai/archestra/issues/8201)) ([d431826](https://github.com/archestra-ai/archestra/commit/d4318268dba0213d3ec0596733d42eb113f3f3ec))
+* **agents:** remove duplicate heading and shorten create description ([#8197](https://github.com/archestra-ai/archestra/issues/8197)) ([ca89233](https://github.com/archestra-ai/archestra/commit/ca892337c85b26cae8374a419b6812404f75b92d))
+* **connection:** avoid guarded fetch during client bootstrap ([#8207](https://github.com/archestra-ai/archestra/issues/8207)) ([010060e](https://github.com/archestra-ai/archestra/commit/010060ee44a2287d41b5b1a0528faedd5aadaba4))
+* **connection:** hand Claude Code installation to user ([#8188](https://github.com/archestra-ai/archestra/issues/8188)) ([94ba546](https://github.com/archestra-ai/archestra/commit/94ba54692224a5c1b17e0dd9aff8f118eb677795))
+* **frontend:** contain project file panel overflow within page bounds ([#8204](https://github.com/archestra-ai/archestra/issues/8204)) ([a7e2920](https://github.com/archestra-ai/archestra/commit/a7e29202cfc41e0946cdedc29065c2e5d9d3670b))
+* **frontend:** polish permission dialogs and dividers ([#8227](https://github.com/archestra-ai/archestra/issues/8227)) ([8c76bf5](https://github.com/archestra-ai/archestra/commit/8c76bf5714b1d05773f78f8494ce9a26c5af9098))
+* **frontend:** simplify skills table and agent provider details ([#8196](https://github.com/archestra-ai/archestra/issues/8196)) ([992667d](https://github.com/archestra-ai/archestra/commit/992667d57439f8bb81e1228e09e7f77c1c374f7a))
+* **frontend:** truncate long tool names in guardrail consults table ([#8230](https://github.com/archestra-ai/archestra/issues/8230)) ([3bed5da](https://github.com/archestra-ai/archestra/commit/3bed5da5a072aa58c15ed0b2630bad25a347af12))
+* **openappa:** clarify and verify first-policy setup ([#8224](https://github.com/archestra-ai/archestra/issues/8224)) ([9ab16ec](https://github.com/archestra-ai/archestra/commit/9ab16ec77524824d44f6d403c705b2b4b43f3982))
+* **openappa:** degrade proxy-only clients without gateway remedies ([#8222](https://github.com/archestra-ai/archestra/issues/8222)) ([de43914](https://github.com/archestra-ai/archestra/commit/de43914f652077a121c62b0eb01b7dfdcb40a671))
+* **openappa:** deliver child transcript denials in-band ([#8219](https://github.com/archestra-ai/archestra/issues/8219)) ([785c8a5](https://github.com/archestra-ai/archestra/commit/785c8a5b546737a63f7e7054e29605e513de95b3))
+* **openappa:** derive the platform yell as the runtime's own tool ([#8220](https://github.com/archestra-ai/archestra/issues/8220)) ([18498bf](https://github.com/archestra-ai/archestra/commit/18498bf6e6241ac8997b826b07bd016df35b8f52))
+* **openappa:** key sessions by organization and actor ([#8205](https://github.com/archestra-ai/archestra/issues/8205)) ([b409d7e](https://github.com/archestra-ai/archestra/commit/b409d7e1252185852f26cc3c084f35e0188a4393))
+* **openappa:** report gateway yells under the proxy session ([#8216](https://github.com/archestra-ai/archestra/issues/8216)) ([67ab9d8](https://github.com/archestra-ai/archestra/commit/67ab9d8676f3780ad5a0de2fe52b811777c1e7d3))
+* **openappa:** verify child returns without visible receipts ([#8199](https://github.com/archestra-ai/archestra/issues/8199)) ([b9c4979](https://github.com/archestra-ai/archestra/commit/b9c4979571ac403695150548ea7539001ef8c380))
+* **plugins:** stop preinstalling OpenAPPA for Claude Code ([#8206](https://github.com/archestra-ai/archestra/issues/8206)) ([f3280a0](https://github.com/archestra-ai/archestra/commit/f3280a0ce273c27ecfacbf0367d5cc3378bd6611))
+* remove indexed documents when deleting knowledge files ([#8211](https://github.com/archestra-ai/archestra/issues/8211)) ([4980a9a](https://github.com/archestra-ai/archestra/commit/4980a9abfdf5f8d49f3f0eb9b15d3dd5b6f9f6c9))
+* **teams:** validate organization membership before adding users ([#8203](https://github.com/archestra-ai/archestra/issues/8203)) ([42182d2](https://github.com/archestra-ai/archestra/commit/42182d2539d486e281005189f09c766cfcd6b724))
+
+
+### Performance Improvements
+
+* **openappa:** limit coverage scans to requested targets ([#8213](https://github.com/archestra-ai/archestra/issues/8213)) ([b5e369e](https://github.com/archestra-ai/archestra/commit/b5e369eca9076f7f94ec2052f736602d07a518ad))
+
+
+### Reverts
+
+* **connection:** restore Claude Code agent-run setup ([#8208](https://github.com/archestra-ai/archestra/issues/8208)) ([fcedc7b](https://github.com/archestra-ai/archestra/commit/fcedc7b7d58f74650ec1e32640d8ca9246bd96a0))
+* **connection:** restore short prompts for every client ([#8210](https://github.com/archestra-ai/archestra/issues/8210)) ([42e350e](https://github.com/archestra-ai/archestra/commit/42e350e1af566e0da5c23bb47f076abaf648740c))
+
+
+### Miscellaneous Chores
+
+* **openappa:** pin OpenAPPA with jev labels settled on argmax ([#8209](https://github.com/archestra-ai/archestra/issues/8209)) ([1673ad7](https://github.com/archestra-ai/archestra/commit/1673ad77c70266a320c9cd625b39a4103a7b0fe2))
+
 ## [1.4.0-rc.21](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.20...platform-v1.4.0-rc.21) (2026-09-24)
 
 

@@ -95,6 +95,8 @@ it("creates a knowledge base with different permissions for selected teams", asy
     wrapper,
   });
   await user.type(screen.getByLabelText("Name"), "Shared handbook");
+  await user.click(screen.getByRole("button", { name: "Permissions" }));
+  expect(screen.getByText("Shared handbook")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Add access" }));
   await user.click(screen.getByRole("button", { name: /Teams/ }));
   await user.click(await screen.findByRole("combobox", { name: "Add teams" }));
@@ -160,12 +162,16 @@ it("edits access through the knowledge base's own policy, not its sharing column
     { wrapper },
   );
 
+  await user.click(screen.getByRole("button", { name: "Permissions" }));
+
   // Who can reach this knowledge base comes from the policy, so the reader
   // sees the real recipients rather than a stale visibility enum.
   expect(await screen.findByText("Engineering")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: /Teams Share/ }),
   ).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "General" }));
 
   // Saving the rest of the form must not send sharing columns nothing reads —
   // that is what made the old control look like it changed access.

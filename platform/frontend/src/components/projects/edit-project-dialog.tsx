@@ -320,7 +320,7 @@ function EditProjectDialogForm({
       </DialogSection>
 
       <DialogSection id="permissions" activeSection={activeSection}>
-        <ResourceAccessSection resource="project" id={project.id} />
+        <ResourceAccessSection resource="project" id={project.id} standalone />
       </DialogSection>
     </TabbedDialogShell>
   );

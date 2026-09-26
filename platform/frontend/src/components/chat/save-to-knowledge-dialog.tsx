@@ -3,13 +3,12 @@
 
 import { FileText } from "lucide-react";
 import { useEffect, useState } from "react";
-import { FormDialog } from "@/components/form-dialog";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
 } from "@/components/initial-resource-permissions";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import { DialogStickyFooter } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,6 +60,9 @@ export function SaveToKnowledgeDialog({
   const [knowledgeBaseId, setKnowledgeBaseId] = useState(NO_KNOWLEDGE_BASE);
   const [failures, setFailures] = useState<string[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number }>();
+  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
+    "general",
+  );
 
   const { data: directories = [] } = useKnowledgeDirectories();
   const { data: knowledgeBases } = useKnowledgeBases();
@@ -69,6 +71,7 @@ export function SaveToKnowledgeDialog({
   // Re-seed on open so saving a second file never shows the first one's name.
   useEffect(() => {
     if (!open) return;
+    setActiveSection("general");
     setFilename(single?.name ?? "");
     setDirectoryId(ROOT_VALUE);
     setInitialGrants([]);
@@ -118,14 +121,45 @@ export function SaveToKnowledgeDialog({
   };
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
       title={single ? "Save to knowledge" : `Save ${attachments.length} files`}
       description="Keeps a copy in the knowledge repository, where it outlives this conversation."
-      size="small"
+      sidebarLabel={
+        single ? filename || "Document" : `${attachments.length} documents`
+      }
+      sidebarDescription="Knowledge files"
+      sidebarIcon={<FileText className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={[
+        { id: "general", label: "General" },
+        { id: "permissions", label: "Permissions" },
+      ]}
+      onActiveSectionChange={setActiveSection}
+      onSubmit={() => void handleSubmit()}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!canSubmit}>
+            <span>
+              {progress
+                ? `Saving ${progress.done}/${progress.total}…`
+                : single
+                  ? "Save"
+                  : `Save ${attachments.length} files`}
+            </span>
+          </Button>
+        </>
+      }
     >
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+      <div hidden={activeSection !== "general"} className="space-y-4">
         {single ? (
           <div className="space-y-1.5">
             <Label htmlFor="save-filename">Name</Label>
@@ -168,12 +202,6 @@ export function SaveToKnowledgeDialog({
           </Select>
         </div>
 
-        <InitialResourcePermissions
-          resource="knowledgeFile"
-          grants={initialGrants}
-          onChange={setInitialGrants}
-        />
-
         <div className="space-y-1.5">
           <Label htmlFor="save-knowledge-base">Knowledge base</Label>
           {/* Optional, and empty by default: saving a document and making it
@@ -210,21 +238,14 @@ export function SaveToKnowledgeDialog({
           </InlineNotice>
         )}
       </div>
-
-      <DialogStickyFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          <span>Cancel</span>
-        </Button>
-        <Button disabled={!canSubmit} onClick={() => void handleSubmit()}>
-          <span>
-            {progress
-              ? `Saving ${progress.done}/${progress.total}…`
-              : single
-                ? "Save"
-                : `Save ${attachments.length} files`}
-          </span>
-        </Button>
-      </DialogStickyFooter>
-    </FormDialog>
+      <div hidden={activeSection !== "permissions"}>
+        <InitialResourcePermissions
+          resource="knowledgeFile"
+          grants={initialGrants}
+          onChange={setInitialGrants}
+          standalone
+        />
+      </div>
+    </TabbedDialogShell>
   );
 }

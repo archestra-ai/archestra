@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
-import { FolderPlus, Upload } from "lucide-react";
+import { FileText, FolderPlus, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
@@ -11,13 +11,12 @@ import {
   fileToBase64,
   StagedFileList,
 } from "@/components/files/file-drop-input";
-import { FormDialog } from "@/components/form-dialog";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
 } from "@/components/initial-resource-permissions";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import { DialogStickyFooter } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
@@ -65,6 +64,13 @@ export function UploadFileDialog({
   const [createDirectoryOpen, setCreateDirectoryOpen] = useState(false);
   const [createdDirectory, setCreatedDirectory] =
     useState<KnowledgeDirectory>();
+  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
+    "general",
+  );
+
+  useEffect(() => {
+    if (open) setActiveSection("general");
+  }, [open]);
 
   const upload = useUploadKnowledgeFile();
   const availableDirectories =
@@ -151,14 +157,48 @@ export function UploadFileDialog({
 
   return (
     <>
-      <FormDialog
+      <TabbedDialogShell
         open={open}
         onOpenChange={onOpenChange}
         title="Upload documents"
         description="PDF, Word, Markdown, CSV, JSON or plain text. Documents become searchable once you add them to a knowledge base."
-        size="medium"
+        sidebarLabel="New documents"
+        sidebarDescription="Knowledge files"
+        sidebarIcon={<FileText className="h-4 w-4 text-muted-foreground" />}
+        activeSection={activeSection}
+        navItems={[
+          { id: "general", label: "General" },
+          { id: "permissions", label: "Permissions" },
+        ]}
+        onActiveSectionChange={setActiveSection}
+        onSubmit={() => void handleUpload()}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!canSubmit}>
+              <Upload className="mr-1 h-4 w-4" />
+              <span>
+                {progress
+                  ? `Uploading ${progress.done}/${progress.total}…`
+                  : files.length > 1
+                    ? `Upload ${files.length} documents`
+                    : "Upload"}
+              </span>
+            </Button>
+          </>
+        }
       >
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <div
+          hidden={activeSection !== "general"}
+          className="space-y-4"
+          data-testid="upload-file-general"
+        >
           <FileDropInput
             accept={KNOWLEDGE_FILE_ACCEPT}
             typesLabel={KNOWLEDGE_FILE_TYPES_LABEL}
@@ -196,12 +236,6 @@ export function UploadFileDialog({
             </Select>
           </div>
 
-          <InitialResourcePermissions
-            resource="knowledgeFile"
-            grants={initialGrants}
-            onChange={setInitialGrants}
-          />
-
           <AdvancedLabelsSection
             ref={labelsRef}
             labels={labels}
@@ -221,23 +255,15 @@ export function UploadFileDialog({
             </InlineNotice>
           )}
         </div>
-
-        <DialogStickyFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            <span>Cancel</span>
-          </Button>
-          <Button disabled={!canSubmit} onClick={() => void handleUpload()}>
-            <Upload className="mr-1 h-4 w-4" />
-            <span>
-              {progress
-                ? `Uploading ${progress.done}/${progress.total}…`
-                : files.length > 1
-                  ? `Upload ${files.length} documents`
-                  : "Upload"}
-            </span>
-          </Button>
-        </DialogStickyFooter>
-      </FormDialog>
+        <div hidden={activeSection !== "permissions"}>
+          <InitialResourcePermissions
+            resource="knowledgeFile"
+            grants={initialGrants}
+            onChange={setInitialGrants}
+            standalone
+          />
+        </div>
+      </TabbedDialogShell>
       <DirectoryDialog
         open={createDirectoryOpen}
         onOpenChange={setCreateDirectoryOpen}

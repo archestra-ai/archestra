@@ -11,6 +11,11 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DialogDismissProvider,
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { cn } from "@/lib/utils/tailwind";
 
 export interface TabbedDialogNavItem<TSection extends string> {
@@ -24,7 +29,7 @@ interface TabbedDialogShellProps<TSection extends string> {
   /** Render inside a DialogContent already owned by the caller. */
   contentOnly?: boolean;
   title: string;
-  description: string;
+  description?: string;
   sidebarLabel: string;
   sidebarDescription: string;
   sidebarIcon: ReactNode;
@@ -41,6 +46,7 @@ interface TabbedDialogShellProps<TSection extends string> {
   sidebarClassName?: string;
   wrapForm?: (children: ReactNode) => ReactNode;
   getNavItemTestId?: (section: TSection) => string;
+  isDirty?: boolean;
 }
 
 export function TabbedDialogShell<TSection extends string>({
@@ -65,8 +71,10 @@ export function TabbedDialogShell<TSection extends string>({
   sidebarClassName,
   wrapForm,
   getNavItemTestId,
+  isDirty = false,
 }: TabbedDialogShellProps<TSection>) {
   const [footerSlot, setFooterSlot] = useState<HTMLDivElement | null>(null);
+  const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
   const formContent = (
     <DialogForm className="contents" onSubmit={onSubmit}>
       <nav
@@ -118,7 +126,7 @@ export function TabbedDialogShell<TSection extends string>({
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <div className="flex min-h-[72px] shrink-0 items-center justify-between gap-4 border-b px-4 py-4">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold truncate">{title}</h2>
+            <DialogTitle className="truncate">{title}</DialogTitle>
           </div>
           <div className="flex min-w-0 items-center justify-end gap-3">
             {headerExtra}
@@ -127,7 +135,7 @@ export function TabbedDialogShell<TSection extends string>({
               variant="ghost"
               size="icon"
               className="h-8 w-8 shrink-0 rounded-xs opacity-70 hover:opacity-100"
-              onClick={() => onOpenChange(false)}
+              onClick={guard.requestClose}
             >
               <XIcon className="h-4 w-4" />
               <span className="sr-only">Close</span>
@@ -164,26 +172,34 @@ export function TabbedDialogShell<TSection extends string>({
 
   const content = (
     <>
-      <DialogTitle className="sr-only">{title}</DialogTitle>
       <DialogDescription className="sr-only">{description}</DialogDescription>
-      {wrapForm ? wrapForm(formContent) : formContent}
+      <DialogDismissProvider requestClose={guard.requestClose}>
+        {wrapForm ? wrapForm(formContent) : formContent}
+      </DialogDismissProvider>
     </>
   );
 
   if (contentOnly) return content;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={cn(
-          "max-w-6xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden",
-          className,
-        )}
-        showCloseButton={false}
-      >
-        {content}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={guard.handleOpenChange}>
+        <DialogContent
+          className={cn(
+            "max-w-6xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden",
+            className,
+          )}
+          showCloseButton={false}
+        >
+          {content}
+        </DialogContent>
+      </Dialog>
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={guard.keepEditing}
+        onDiscard={guard.discardChanges}
+      />
+    </>
   );
 }
 

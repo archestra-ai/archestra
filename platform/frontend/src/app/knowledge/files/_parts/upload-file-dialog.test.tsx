@@ -131,7 +131,9 @@ describe("UploadFileDialog", () => {
       }),
     );
     expect(screen.queryByText("New directory")).not.toBeInTheDocument();
-    expect(screen.getByText("Upload documents")).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Upload documents" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("combobox")).toHaveTextContent(createdDirectory.id);
     expect(
       screen.getByRole("button", { name: createdDirectory.name }),

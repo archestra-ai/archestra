@@ -472,6 +472,8 @@ interface LlmProviderApiKeyFormProps {
   hideUnavailableProviders?: boolean;
   /** Hide the ownership and primary-key controls when the parent fixes them. */
   hideScopeAndPrimary?: boolean;
+  /** The host dialog renders permissions in its own tab. */
+  hidePermissions?: boolean;
   /** When true, providers without embedding support are disabled in the picker. */
   forEmbedding?: boolean;
   /** Whether personal subscription credential modes can be configured. */
@@ -502,6 +504,7 @@ export function LlmProviderApiKeyForm({
   allowedProviders,
   hideUnavailableProviders = false,
   hideScopeAndPrimary = false,
+  hidePermissions = false,
   forEmbedding = false,
   allowPersonalSubscriptions = true,
   credentialMode,
@@ -1466,12 +1469,15 @@ export function LlmProviderApiKeyForm({
 
         {/* A saved key answers "who can reach this" from its own grant
             policy, so editing one shows the policy. */}
-        {!hideScopeAndPrimary && !isSubscriptionFlow && existingKey?.id && (
-          <ResourceAccessSection
-            resource="llmProviderApiKey"
-            id={existingKey.id}
-          />
-        )}
+        {!hideScopeAndPrimary &&
+          !hidePermissions &&
+          !isSubscriptionFlow &&
+          existingKey?.id && (
+            <ResourceAccessSection
+              resource="llmProviderApiKey"
+              id={existingKey.id}
+            />
+          )}
 
         {/* SPDX-SnippetBegin
             SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1501,7 +1507,7 @@ export function LlmProviderApiKeyForm({
                 ? "No one owns a shared key."
                 : "Only you use this key. It is picked before any shared key."}
             </FieldDescription>
-            {shared && (
+            {shared && !hidePermissions && (
               <ResourceAccessSection
                 resource="llmProviderApiKey"
                 grants={form.watch("initialGrants") ?? []}

@@ -325,7 +325,13 @@ export function OpenAppaCreateRepositoryDialog({
               <span>Connect existing repository</span>
             </Button>
             <DialogCancelButton disabled={mutation.isPending} />
-            <Button type="submit" disabled={mutation.isPending || !apps.length}>
+            <Button
+              type="submit"
+              disabled={
+                mutation.isPending ||
+                !apps.some((app) => app.id === form.watch("githubAppConfigId"))
+              }
+            >
               <span>
                 {mutation.isPending ? "Creating…" : "Create and sync"}
               </span>

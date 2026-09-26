@@ -214,6 +214,9 @@ test("creates a repository with a connected App and shows the synced source", as
   fireEvent.change(screen.getByLabelText("GitHub owner"), {
     target: { value: "example" },
   });
+  expect(
+    screen.getByRole("button", { name: "Create and sync" }),
+  ).toBeDisabled();
   fireEvent.click(screen.getByRole("combobox", { name: "GitHub App" }));
   fireEvent.click(await screen.findByRole("option", { name: "Policy App" }));
   fireEvent.click(screen.getByRole("button", { name: "Create and sync" }));

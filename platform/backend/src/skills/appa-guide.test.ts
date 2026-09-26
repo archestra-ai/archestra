@@ -214,7 +214,7 @@ describe("APPA Guide feature availability", () => {
     }
   });
 
-  test("verifies full parity with openappa native claude code plugin integration (P01-P15)", () => {
+  test("preserves the cross-host policy workflow and safety instructions", () => {
     const content = APPA_GUIDE_SKILL.content;
 
     // Frontmatter and argument hint
@@ -228,24 +228,6 @@ describe("APPA Guide feature availability", () => {
     expect(content).toContain("diagnose");
     expect(content).toContain("inspect only");
     expect(content).toContain("show policy");
-
-    // Init 4-step text plan
-    expect(content).toContain(
-      "I am starting the initial OpenAPPA setup. Here is what I will do:",
-    );
-    expect(content).toContain(
-      "1. Scan your active agents, tool servers, and MCP tools.",
-    );
-    expect(content).toContain(
-      "2. Check the OpenAPPA runtime policy and available security batteries.",
-    );
-    expect(content).toContain(
-      "3. Match discovered tools against security rules.",
-    );
-    expect(content).toContain(
-      "4. Present a tailored policy proposal for your review and approval.",
-    );
-    expect(content).toContain("Starting inspection now...");
 
     // P01: Canonical router and host guidance
     expect(content).toContain("archestra__get_guardrails_policy");
@@ -304,15 +286,17 @@ describe("APPA Guide feature availability", () => {
     expect(content).toContain("preview the exact approved draft again");
     expect(content).toContain("the PR merges and repository sync succeeds");
 
-    // P09: No-change result performs no write or reload and uses no approval language
+    // P09: Saved no-ops stay unchanged; an unsaved starter still needs approval.
     expect(content).toContain(
-      "If the current config already provides the complete proposed behavior",
+      "If a saved policy already provides the complete proposed behavior",
     );
     expect(content).toContain("report that no change is needed");
+    expect(content).toContain(
+      "An unsaved local revision-0 starter still needs preview, approval, and publication even when its text is unchanged",
+    );
 
     // P10: User-facing replies report outcomes, not inspection mechanics
     expect(content).toContain("Talk about outcomes, not config machinery");
-    expect(content).toContain("OpenAPPA pieces: <primitives>");
 
     // P11: Sensitive inspection is least privilege
     expect(content).toContain("Keep secrets out of policy text");
@@ -328,7 +312,7 @@ describe("APPA Guide feature availability", () => {
 
     // P13: Multi-runtime / session isolation
     expect(content).toContain(
-      "Saved policies apply to new conversations. This conversation keeps",
+      "New conversations will use it; this conversation keeps the policy it started with",
     );
     expect(content).toContain("policy it started with.");
 

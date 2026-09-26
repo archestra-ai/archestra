@@ -19,7 +19,7 @@ import {
 const POLICY_LAUNCH_PROMPTS = {
   /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:
-    "Set up OpenAPPA for me. Look at the MCP servers and tools my organization uses, pick batteries that cover them, and draft a complete policy with sensible defaults. Show me the proposed policy and what it would block or send for approval, then ask me whether to apply it.",
+    "Create a useful starting OpenAPPA policy with what is already available. Keep ordinary work working; leave GitHub sync, credentials, and additional batteries for later. Explain which rules you recommend, with examples of what they allow or block and what remains unrestricted. Offer to show me the exact TOML, then ask for my approval to save the policy and turn it on.",
   /** Tool coverage card: how to bring more tools under a rule. */
   improveCoverage:
     "Help me improve my OpenAPPA tool coverage. Open with a one-line summary of how many of my MCP server tools a rule covers, how many have a rule that is not enforced, and how many only the catch-all decides. Then name the biggest gaps: the servers with the most tools no rule covers, and the riskiest of those tools: ones that send data out, change or delete data, or read private data. End with up to three numbered changes ranked by how many tools they would cover, such as fixing a broken battery, including a battery that fits, or adding rules, so I can reply with a number. Don't change anything until I pick one, then tell me what it would do and ask me whether to apply it.",

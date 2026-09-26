@@ -114,21 +114,30 @@ export async function createAppaGithubRepository(params: {
     !/^[^\p{Cc}\s~^:?*[\\]+$/u.test(created.default_branch)
   )
     throw new ApiError(502, "GitHub returned an unexpected repository");
-  const path = `https://api.github.com/repos/${repo}/contents/appa.toml`;
-  const existing = await githubJson<{ sha?: string }>({ url: path, token });
-  if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
-    throw new ApiError(502, "The template has no appa.toml file");
-  await githubJson({
-    url: path,
-    token,
-    method: "PUT",
-    body: {
-      message: "Seed current OpenAPPA policy",
-      content: Buffer.from(policy.content).toString("base64"),
-      sha: existing.sha,
-      branch: created.default_branch,
-    },
-  });
+  try {
+    const path = `https://api.github.com/repos/${repo}/contents/appa.toml`;
+    const existing = await githubJson<{ sha?: string }>({ url: path, token });
+    if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
+      throw new ApiError(502, "The template has no appa.toml file");
+    await githubJson({
+      url: path,
+      token,
+      method: "PUT",
+      body: {
+        message: "Seed current OpenAPPA policy",
+        content: Buffer.from(policy.content).toString("base64"),
+        sha: existing.sha,
+        branch: created.default_branch,
+      },
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      throw new ApiError(
+        error.statusCode,
+        `Repository ${repo} was created, but its policy was not seeded: ${error.message} Connect it manually after fixing access.`,
+      );
+    throw error;
+  }
   if (
     (await guardrailsPolicyService.get(params.organizationId)).revision !==
     policy.revision

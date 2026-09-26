@@ -219,6 +219,21 @@ vi.mock("@/components/ui/data-table", () => ({
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogTitle: ({ children }: { children: React.ReactNode }) => (
+    <h2>{children}</h2>
+  ),
+  DialogDescription: ({ children }: { children: React.ReactNode }) => (
+    <p>{children}</p>
+  ),
+  DialogHeader: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   DialogBody: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -228,6 +243,10 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogStickyFooter: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+}));
+
+vi.mock("@/components/resource-access-section", () => ({
+  ResourceAccessSection: () => null,
 }));
 
 vi.mock("@/components/ui/permission-button", () => ({

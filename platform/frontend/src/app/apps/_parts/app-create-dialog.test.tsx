@@ -71,4 +71,17 @@ describe("AppCreateDialog", () => {
 
     expect(createMutateMock).not.toHaveBeenCalled();
   });
+
+  it("asks before discarding an app name from the tabbed dialog", async () => {
+    const user = userEvent.setup();
+    render(<AppCreateDialog open onOpenChange={() => {}} />);
+
+    await user.type(screen.getByLabelText("Name"), "Draft app");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
+    ).toBeVisible();
+    expect(createMutateMock).not.toHaveBeenCalled();
+  });
 });

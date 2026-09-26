@@ -6,7 +6,7 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   subscriptionKindForProvider,
 } from "@archestra/shared";
-import { Loader2 } from "lucide-react";
+import { KeyRound, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -18,12 +18,10 @@ import {
   type LlmProviderApiKeyFormValues,
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
+import { ResourceAccessSection } from "@/components/resource-access-section";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useFeature } from "@/lib/config/config.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -82,6 +80,9 @@ export function CreateLlmProviderApiKeyDialog({
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
   const providerCatalog = useModelProviderCatalog();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
+    "general",
+  );
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const lastResetKeyRef = useRef<string | null>(null);
   const visibleProviderIdsKey = providerCatalog.visibleIds.join(",");
@@ -132,6 +133,7 @@ export function CreateLlmProviderApiKeyDialog({
     if (!defaultFormValues || lastResetKeyRef.current === resetKey) return;
 
     lastResetKeyRef.current = resetKey;
+    setActiveSection("general");
     setLabels([]);
     form.reset(defaultFormValues);
   }, [defaultFormValues, form, open, resetKey]);
@@ -277,6 +279,7 @@ export function CreateLlmProviderApiKeyDialog({
       labels={reconnectKeyId ? undefined : labels}
       onLabelsChange={reconnectKeyId ? undefined : setLabels}
       labelsRef={reconnectKeyId ? undefined : labelsRef}
+      hidePermissions
     />
   );
 
@@ -293,36 +296,56 @@ export function CreateLlmProviderApiKeyDialog({
   }
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
       title={dialogTitle}
       description={description}
-      size="small"
-      className="sm:max-w-xl"
+      sidebarLabel={form.watch("name") || "New provider key"}
+      sidebarDescription="Model provider"
+      sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={
+        form.watch("shared")
+          ? [
+              { id: "general", label: "General" },
+              { id: "permissions", label: "Permissions" },
+            ]
+          : [{ id: "general", label: "General" }]
+      }
+      onActiveSectionChange={setActiveSection}
+      onSubmit={handleCreate}
+      footer={
+        <>
+          <DialogCancelButton>Cancel</DialogCancelButton>
+          <Button type="submit" disabled={!isValid || createMutation.isPending}>
+            {createMutation.isPending && (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            )}
+            <span>Test & Create</span>
+          </Button>
+        </>
+      }
       isDirty={credentialMode === "api-key" && form.formState.isDirty}
     >
-      <DialogForm
-        onSubmit={handleCreate}
-        className="flex min-h-0 flex-1 flex-col"
-      >
-        <DialogBody>{keyForm}</DialogBody>
-        <DialogStickyFooter className="mt-0">
-          <DialogCancelButton>Cancel</DialogCancelButton>
-          {credentialMode === "api-key" && (
-            <Button
-              type="submit"
-              disabled={!isValid || createMutation.isPending}
-            >
-              {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              )}
-              <span>Test & Create</span>
-            </Button>
-          )}
-        </DialogStickyFooter>
-      </DialogForm>
-    </FormDialog>
+      <div hidden={activeSection !== "general"}>{keyForm}</div>
+      {form.watch("shared") && (
+        <div hidden={activeSection !== "permissions"}>
+          {/* SPDX-SnippetBegin
+            SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+          <ResourceAccessSection
+            resource="llmProviderApiKey"
+            grants={form.watch("initialGrants") ?? []}
+            onGrantsChange={(grants) =>
+              form.setValue("initialGrants", grants, { shouldDirty: true })
+            }
+            standalone
+          />
+          {/* SPDX-SnippetEnd */}
+        </div>
+      )}
+    </TabbedDialogShell>
   );
 }
 

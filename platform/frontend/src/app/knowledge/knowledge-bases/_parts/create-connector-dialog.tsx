@@ -114,9 +114,9 @@ export function CreateConnectorDialog({
   );
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] = useState<"general" | "advanced">(
-    "general",
-  );
+  const [activeSection, setActiveSection] = useState<
+    "general" | "permissions" | "advanced"
+  >("general");
   const [search, setSearch] = useState("");
 
   // M-Files is in beta: deployments that haven't opted in never see the type.
@@ -428,6 +428,7 @@ export function CreateConnectorDialog({
       activeSection={activeSection}
       navItems={[
         { id: "general", label: "General" },
+        { id: "permissions", label: "Permissions" },
         { id: "advanced", label: "Advanced" },
       ]}
       onActiveSectionChange={setActiveSection}
@@ -507,11 +508,6 @@ export function CreateConnectorDialog({
           )}
         />
 
-        <InitialResourcePermissions
-          resource="knowledgeConnector"
-          grants={initialGrants}
-          onChange={setInitialGrants}
-        />
         <AutoSyncPermissionsToggle
           enabled={syncPermissionsFromSource}
           onEnabledChange={(enabled) => setSyncPermissionsFromSource(enabled)}
@@ -619,6 +615,14 @@ export function CreateConnectorDialog({
             adminCredentialDescription={permissionSyncRequirement}
           />
         )}
+      </div>
+      <div hidden={activeSection !== "permissions"}>
+        <InitialResourcePermissions
+          resource="knowledgeConnector"
+          grants={initialGrants}
+          onChange={setInitialGrants}
+          standalone
+        />
       </div>
       <div hidden={activeSection !== "advanced"} className="space-y-4">
         <SchedulePicker

@@ -1,12 +1,12 @@
 "use client";
 
+import { FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { FormDialog } from "@/components/form-dialog";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,6 +39,9 @@ export function EditFileDialog({
   const [directoryId, setDirectoryId] = useState(ROOT_VALUE);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
+    "general",
+  );
 
   const updateFile = useUpdateKnowledgeFile();
 
@@ -46,6 +49,7 @@ export function EditFileDialog({
   // values.
   useEffect(() => {
     if (!open || !file) return;
+    setActiveSection("general");
     setFilename(file.filename);
     setDirectoryId(file.directoryId ?? ROOT_VALUE);
     setLabels(file.labels);
@@ -70,14 +74,37 @@ export function EditFileDialog({
   };
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
       title="Edit document"
       description="Renaming or moving a document does not re-index it; its content stays as uploaded."
-      size="small"
+      sidebarLabel={filename || "Document"}
+      sidebarDescription="Document"
+      sidebarIcon={<FileText className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={[
+        { id: "general", label: "General" },
+        { id: "permissions", label: "Permissions" },
+      ]}
+      onActiveSectionChange={setActiveSection}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!canSubmit}>
+            {updateFile.isPending ? "Saving…" : "Save"}
+          </Button>
+        </>
+      }
     >
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+      <div hidden={activeSection !== "general"} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="edit-filename">Name</Label>
           <Input
@@ -104,25 +131,21 @@ export function EditFileDialog({
           </Select>
         </div>
 
-        {file && (
-          <ResourceAccessSection resource="knowledgeFile" id={file.id} />
-        )}
-
         <AdvancedLabelsSection
           ref={labelsRef}
           labels={labels}
           onLabelsChange={setLabels}
         />
       </div>
-
-      <DialogStickyFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          <span>Cancel</span>
-        </Button>
-        <Button disabled={!canSubmit} onClick={handleSubmit}>
-          <span>{updateFile.isPending ? "Saving…" : "Save"}</span>
-        </Button>
-      </DialogStickyFooter>
-    </FormDialog>
+      <div hidden={activeSection !== "permissions"}>
+        {file && (
+          <ResourceAccessSection
+            resource="knowledgeFile"
+            id={file.id}
+            standalone
+          />
+        )}
+      </div>
+    </TabbedDialogShell>
   );
 }

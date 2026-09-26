@@ -151,4 +151,21 @@ jobs:
             )
           fi
 
+          # Helm's single wait spans a migration hook, rolling Deployments,
+          # and post-upgrade network-policy probes. Record only resource states
+          # and timestamps, so the next slow run shows which phase consumed it.
+          profile_log="$RUNNER_TEMP/helm-rollout-profile.log"
+          python3 -u .github/scripts/profile-helm-rollout.py \
+            --namespace "$namespace" --release "$release" \
+            > "$profile_log" 2>&1 &
+          profile_pid=$!
+          show_profile() {
+            kill "$profile_pid" 2>/dev/null || true
+            wait "$profile_pid" 2>/dev/null || true
+            echo "::group::Helm rollout timeline"
+            cat "$profile_log"
+            echo "::endgroup::"
+          }
+          trap show_profile EXIT
+
           helm "${helm_args[@]}"

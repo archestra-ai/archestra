@@ -49,8 +49,8 @@ jobs:
     if: ${{ inputs.version != '' && inputs.push_to_gcr && inputs.reuse_from_version != '' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to check out the image source and build recipe.
+      id-token: write # Required for Google Workload Identity Federation when retagging.
     outputs:
       reused: ${{ steps.reuse.outputs.reused }}
     steps:

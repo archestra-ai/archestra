@@ -4,6 +4,7 @@ import { userHasPermission } from "@/auth";
 import {
   acceptHeldAppaGithubPull,
   configureAppaGithubSync,
+  createAppaGithubRepository,
   getAppaGithubSync,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
@@ -13,6 +14,7 @@ import {
   AppaGithubSourceSchema,
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
+  CreateAppaGithubRepositorySchema,
 } from "@/types/openappa-github-sync";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -60,6 +62,25 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           organizationId: request.organizationId,
           userId: request.user.id,
           source: request.body,
+        }),
+      ),
+  );
+  app.post(
+    "/api/openappa/github-sync/repository",
+    {
+      schema: {
+        operationId: RouteId.CreateAppaGithubRepository,
+        tags: ["OpenAPPA"],
+        body: CreateAppaGithubRepositorySchema,
+        response: constructResponseSchema(AppaGithubSyncStatusSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await createAppaGithubRepository({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          ...request.body,
         }),
       ),
   );

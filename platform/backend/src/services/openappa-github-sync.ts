@@ -60,6 +60,94 @@ export async function configureAppaGithubSync(params: {
   await OpenAppaGithubSyncModel.enqueue(params.organizationId);
   return getAppaGithubSync(params.organizationId);
 }
+
+/** Create a private policy repository and make the current policy its first revision. */
+export async function createAppaGithubRepository(params: {
+  organizationId: string;
+  userId: string;
+  owner: string;
+  name: string;
+  githubAppConfigId: string;
+  interval: AppaGithubSource["interval"];
+}) {
+  assertEnabled();
+  if ((await OpenAppaGithubSyncModel.find(params.organizationId))?.interval)
+    throw new ApiError(
+      409,
+      "Stop the existing GitHub sync before creating a repository",
+    );
+  if (
+    !(await userHasPermission(
+      params.userId,
+      params.organizationId,
+      "credential",
+      "read",
+    ))
+  )
+    throw new ApiError(403, "You do not have access to GitHub credentials");
+  const token = await resolveGithubAppInstallationToken(params);
+  const policy = await guardrailsPolicyService.get(params.organizationId);
+  if (Buffer.byteLength(policy.content) > 1024 * 1024)
+    throw new ApiError(
+      400,
+      "The current policy exceeds the 1 MiB GitHub sync limit",
+    );
+
+  const created = await githubJson<{
+    full_name?: string;
+    default_branch?: string;
+  }>({
+    url: `https://api.github.com/repos/${TEMPLATE_REPO}/generate`,
+    token,
+    method: "POST",
+    body: {
+      owner: params.owner,
+      name: params.name,
+      private: true,
+      include_all_branches: false,
+    },
+  });
+  const repo = `${params.owner}/${params.name}`;
+  if (
+    created.full_name?.toLowerCase() !== repo.toLowerCase() ||
+    !created.default_branch ||
+    !/^[^\p{Cc}\s~^:?*[\\]+$/u.test(created.default_branch)
+  )
+    throw new ApiError(502, "GitHub returned an unexpected repository");
+  const path = `https://api.github.com/repos/${repo}/contents/appa.toml`;
+  const existing = await githubJson<{ sha?: string }>({ url: path, token });
+  if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
+    throw new ApiError(502, "The template has no appa.toml file");
+  await githubJson({
+    url: path,
+    token,
+    method: "PUT",
+    body: {
+      message: "Seed current OpenAPPA policy",
+      content: Buffer.from(policy.content).toString("base64"),
+      sha: existing.sha,
+      branch: created.default_branch,
+    },
+  });
+  if (
+    (await guardrailsPolicyService.get(params.organizationId)).revision !==
+    policy.revision
+  )
+    throw new ApiError(
+      409,
+      `The policy changed while creating ${repo}. Review the repository and connect it manually.`,
+    );
+  await OpenAppaGithubSyncModel.save(params.organizationId, {
+    repo,
+    ref: created.default_branch,
+    path: "appa.toml",
+    interval: params.interval,
+    githubPatId: null,
+    githubAppConfigId: params.githubAppConfigId,
+  });
+  await syncAppaGithubPolicy(params.organizationId);
+  return getAppaGithubSync(params.organizationId);
+}
 export async function updateAppaGithubSync(params: {
   organizationId: string;
   action: "sync" | "disconnect" | "schedule";
@@ -352,3 +440,41 @@ async function githubFetch(url: string, headers: Record<string, string>) {
     );
   return response;
 }
+
+async function githubJson<T = unknown>(params: {
+  url: string;
+  token: string;
+  method?: "GET" | "POST" | "PUT";
+  body?: object;
+}): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(params.url, {
+      method: params.method ?? "GET",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${params.token}`,
+        ...(params.body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(params.body ? { body: JSON.stringify(params.body) } : {}),
+      redirect: "error",
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    throw new ApiError(502, "Could not reach GitHub");
+  }
+  if (!response.ok)
+    throw new ApiError(
+      response.status === 422 ? 409 : 502,
+      `GitHub returned HTTP ${response.status}. Check repository creation and App permissions.`,
+    );
+  const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
+  if (!bytes) throw new ApiError(502, "GitHub response is too large");
+  try {
+    return JSON.parse(bytes.toString()) as T;
+  } catch {
+    throw new ApiError(502, "GitHub returned an invalid response");
+  }
+}
+
+const TEMPLATE_REPO = "archestra-ai/openappa-config";

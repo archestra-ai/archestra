@@ -8082,6 +8082,24 @@ export const configureAppaGithubSync = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
+ * `organization:update`: No description available
+ */
+export const createAppaGithubRepository = <ThrowOnError extends boolean = false>(options: Options<CreateAppaGithubRepositoryData, ThrowOnError>) => (options.client ?? client).post<CreateAppaGithubRepositoryResponses, CreateAppaGithubRepositoryErrors, ThrowOnError>({
+    url: '/api/openappa/github-sync/repository',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
  * `toolPolicy:update`: Modify tools, tool configuration, and security policies
  */
 export const acceptHeldAppaGithubPull = <ThrowOnError extends boolean = false>(options?: Options<AcceptHeldAppaGithubPullData, ThrowOnError>) => (options?.client ?? client).post<AcceptHeldAppaGithubPullResponses, AcceptHeldAppaGithubPullErrors, ThrowOnError>({ url: '/api/openappa/github-sync/accept-held', ...options });

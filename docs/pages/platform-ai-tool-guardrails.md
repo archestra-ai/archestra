@@ -40,7 +40,11 @@ From then on, administrators can turn enforcement off and on with a switch. The 
 
 A policy controls every agent, so changes to it should be reviewed like code. Connect a GitHub repository and the configuration agent opens pull requests instead of saving changes. A change applies once it's merged.
 
-You can also run policy tests as a [required CI check](https://www.openappa.com/validation#make-policy-tests-a-required-ci-check), so a bad change fails before it's merged. Changes that swap a battery's credential or drop a battery also need an administrator to accept them in Archestra.
+Administrators can create a private repository from the [OpenAPPA configuration template](https://github.com/archestra-ai/openappa-config). Start on **OpenAPPA → Overview** or **Settings → OpenAPPA**. Connect an organization GitHub App with repository creation, contents, pull requests, and workflow permissions. The App must have access to new repositories. Archestra copies the template and writes your current policy to `appa.toml`. This includes your battery declarations. Sync starts immediately. You can also connect an existing repository.
+
+The template checks policy structure on each pull request. Add [trajectory tests](https://www.openappa.com/validation) under `traces/` to check allowed and refused decisions. Require the validation check in GitHub branch protection. The agent creates pull requests for later changes. The new policy takes effect after the pull request merges and sync succeeds. Changes that swap a battery's credential or drop a battery also need an administrator to accept them in Archestra.
+
+Template updates apply to repositories created afterward. Existing repositories keep their own policy and CI files. To roll out a template fix, propose a separate pull request in each existing repository and review it there. Never replace a deployment policy with the template example.
 
 ## MCP Servers and Tool Coverage
 

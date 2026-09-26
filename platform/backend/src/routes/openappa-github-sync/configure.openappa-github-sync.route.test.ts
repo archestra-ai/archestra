@@ -1,3 +1,4 @@
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
@@ -9,9 +10,14 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { GithubAppConfigModel } from "@/models";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import { secretManager } from "@/secrets-manager";
+import {
+  guardrailsPolicyService,
+  initialPolicy,
+} from "@/services/guardrails-policy";
 import {
   checkDueAppaGithubSyncs,
   syncAppaGithubPolicy,
@@ -124,6 +130,122 @@ describe("APPA GitHub sync", () => {
       expect(records[0].after).toMatchObject({ repo: source.repo });
       expect(records[0].after).not.toEqual(records[0].before);
       expect(records[0].after).not.toHaveProperty("content");
+    });
+  });
+
+  test("creates a private template repository and seeds the current policy before syncing", async () => {
+    const current = `${initialPolicy()}\n# Existing battery choices stay in the repository\n`;
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: adminId,
+      content: current,
+      expectedRevision: 0,
+    });
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-template-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    let seeded = "";
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.post(
+        "https://api.github.com/repos/archestra-ai/openappa-config/generate",
+        async ({ request }) => {
+          expect(await request.json()).toMatchObject({
+            owner: "example",
+            name: "new-policy",
+            private: true,
+          });
+          return HttpResponse.json(
+            { full_name: "example/new-policy", default_branch: "main" },
+            { status: 201 },
+          );
+        },
+      ),
+      http.put(
+        "https://api.github.com/repos/example/new-policy/contents/appa.toml",
+        async ({ request }) => {
+          const body = (await request.json()) as {
+            content: string;
+            sha: string;
+          };
+          expect(body.sha).toBe("b".repeat(40));
+          seeded = Buffer.from(body.content, "base64").toString();
+          return HttpResponse.json({ content: { sha: "c".repeat(40) } });
+        },
+      ),
+      http.get(
+        "https://api.github.com/repos/example/new-policy/commits/main",
+        () => HttpResponse.json({ sha: commit }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/new-policy/contents/appa.toml",
+        ({ request }) =>
+          new URL(request.url).searchParams.has("ref")
+            ? HttpResponse.text(seeded)
+            : HttpResponse.json({ sha: "b".repeat(40) }),
+      ),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "new-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(seeded).toBe(current);
+    expect(response.json()).toMatchObject({
+      source: {
+        repo: "example/new-policy",
+        sourceCommit: commit,
+        lastSyncError: null,
+      },
+    });
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      current,
+    );
+    await vi.waitFor(async () => {
+      const records = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.organizationId, organizationId),
+            eq(schema.auditLogsTable.action, "organization.updated"),
+          ),
+        );
+      expect(
+        records.some(
+          (record) =>
+            (record.after as { repo?: string } | null)?.repo ===
+            "example/new-policy",
+        ),
+      ).toBe(true);
     });
   });
 

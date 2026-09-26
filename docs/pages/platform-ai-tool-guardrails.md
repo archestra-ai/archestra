@@ -3,7 +3,7 @@ title: OpenAPPA
 category: LLM Proxy
 order: 5
 description: Configure policy for agent tool calls and results
-lastUpdated: 2026-09-25
+lastUpdated: 2026-09-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,6 +19,8 @@ The lethal trifecta is the combination of private data access, untrusted content
 ## Enable OpenAPPA
 
 Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the workspace available. See the [deployment settings](./platform-deployment#openappa-tool-guardrails-experimental) for related requirements. **Create my policy** opens the policy chat to draft your first policy. When an administrator approves it, the policy is saved and enforcement turns on. Later saves leave enforcement unchanged. Administrators turn enforcement on or off with the switch on the **Policy** tab. The current policy must pass validation before enforcement turns on. Once enforcement is on, **Connect GitHub** keeps the policy in a repository for review through pull requests.
+
+The first policy uses the built-in protections without requiring GitHub setup or new credentials. You review examples of what it allows and blocks, along with its limits, before approving. Choose **Show TOML** to inspect the exact proposed policy without saving it. An unchanged starter still needs this first save. Add further batteries and detailed rules after setup.
 
 The feature makes the workspace available; the switch controls enforcement. Administrators can turn enforcement off at any time. The starting policy includes the `archestra` battery for built-in tools. Its catch-all rule adds no restrictions to other tools.
 

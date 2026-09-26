@@ -27,7 +27,11 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       409,
       "The policy changed. Read it again before proposing changes.",
     );
-  if (before.content === params.content)
+  // Revision 0 is an unsaved starter, even when its text needs no edits.
+  if (
+    before.content === params.content &&
+    (before.revision > 0 || source?.interval)
+  )
     throw new ApiError(400, "The proposed policy has no changes");
 
   if (!source?.interval) {

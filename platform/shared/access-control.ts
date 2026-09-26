@@ -1755,6 +1755,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateGuardrailsDeployment]: { organization: ["update"] },
   [RouteId.GetAppaGithubSync]: { toolPolicy: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organization: ["update"] },
+  [RouteId.CreateAppaGithubRepository]: { organization: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
   [RouteId.GetOpenappaBatteries]: { toolPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { toolPolicy: ["read"] },

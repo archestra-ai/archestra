@@ -830,6 +830,7 @@ export const RouteId = {
   UpdateGuardrailsDeployment: "updateGuardrailsDeployment",
   GetAppaGithubSync: "getAppaGithubSync",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
+  CreateAppaGithubRepository: "createAppaGithubRepository",
   UpdateAppaGithubSync: "updateAppaGithubSync",
   GetOpenappaBatteries: "getOpenappaBatteries",
   GetOpenappaBatteryPolicySource: "getOpenappaBatteryPolicySource",

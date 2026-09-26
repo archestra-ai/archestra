@@ -142,7 +142,7 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
   enabled = true;
   const { container } = show();
   const connect = await screen.findByRole("button", {
-    name: "Connect GitHub",
+    name: "Create GitHub repository",
   });
   expect(screen.getByText("Step 2 of 2")).toBeInTheDocument();
   expect(nextStep(container)).toHaveTextContent("GitHub sync");
@@ -163,7 +163,9 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
   ).toHaveAttribute("href", "https://www.openappa.com/how-it-works");
   fireEvent.click(connect);
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
-  expect(screen.getByText("Copy current policy")).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Create OpenAPPA repository" }),
+  ).toBeInTheDocument();
 });
 
 test("members who cannot manage sync are told who can connect it", async () => {

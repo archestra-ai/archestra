@@ -41,6 +41,7 @@ import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
 import {
   useAppaGithubSync,
   useConfigureAppaGithubSync,
+  useCreateAppaGithubRepository,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
@@ -60,6 +61,7 @@ export function AppaGithubSyncPanel() {
   const update = useUpdateAppaGithubSync();
   const { data: canManage } = useHasPermissions({ organization: ["update"] });
   const [editing, setEditing] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   if (query.isPending) return <Skeleton className="mb-6 h-32 w-full" />;
   if (query.isError || !query.data)
@@ -100,9 +102,9 @@ export function AppaGithubSyncPanel() {
         }
         control={
           enabled && !source?.repo && canManage ? (
-            <Button size="sm" onClick={() => setEditing(true)}>
+            <Button size="sm" onClick={() => setCreating(true)}>
               <Github className="size-4" />
-              <span>Connect GitHub</span>
+              <span>Create GitHub repository</span>
             </Button>
           ) : undefined
         }
@@ -245,6 +247,15 @@ export function AppaGithubSyncPanel() {
       {editing && (
         <OpenAppaSourceForm source={source} onOpenChange={setEditing} />
       )}
+      {creating && (
+        <OpenAppaCreateRepositoryDialog
+          onOpenChange={setCreating}
+          onConnectExisting={() => {
+            setCreating(false);
+            setEditing(true);
+          }}
+        />
+      )}
       <DeleteConfirmDialog
         open={disconnecting}
         onOpenChange={setDisconnecting}
@@ -259,6 +270,157 @@ export function AppaGithubSyncPanel() {
         }}
       />
     </SettingsSectionStack>
+  );
+}
+
+export function OpenAppaCreateRepositoryDialog({
+  onOpenChange,
+  onConnectExisting,
+}: {
+  onOpenChange: (open: boolean) => void;
+  onConnectExisting: () => void;
+}) {
+  const mutation = useCreateAppaGithubRepository();
+  const [credentialStep, setCredentialStep] = useState<
+    "repository" | "define" | "connect"
+  >("repository");
+  const [newCredentialId, setNewCredentialId] = useState<string | null>(null);
+  const { data: canReadCredentials } = useHasPermissions({
+    credential: ["read"],
+  });
+  const credentials = useRuntimeCredentials(!!canReadCredentials);
+  const apps =
+    credentials.data?.filter(
+      (credential) =>
+        credential.allowOrganization &&
+        credential.organizationConfigured &&
+        credential.kind === "github_app",
+    ) ?? [];
+  const newCredential = credentials.data?.find(
+    (credential) => credential.id === newCredentialId,
+  );
+  const form = useForm({
+    defaultValues: {
+      owner: "",
+      name: "openappa-config",
+      githubAppConfigId: "",
+      interval: "1h" as "15m" | "1h" | "1d",
+    },
+  });
+  return (
+    <>
+      <StandardFormDialog
+        open={credentialStep === "repository"}
+        onOpenChange={onOpenChange}
+        isDirty={form.formState.isDirty}
+        title="Create OpenAPPA repository"
+        description="Copy the OpenAPPA template into a private GitHub repository. Your current policy, including battery declarations, becomes its first policy."
+        size="medium"
+        onSubmit={form.handleSubmit((values) =>
+          mutation.mutate(values, { onSuccess: () => onOpenChange(false) }),
+        )}
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={onConnectExisting}>
+              <span>Connect existing repository</span>
+            </Button>
+            <DialogCancelButton disabled={mutation.isPending} />
+            <Button type="submit" disabled={mutation.isPending || !apps.length}>
+              <span>
+                {mutation.isPending ? "Creating…" : "Create and sync"}
+              </span>
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="new-appa-owner">GitHub owner</Label>
+            <Input
+              id="new-appa-owner"
+              placeholder="organization"
+              {...form.register("owner", {
+                required: true,
+                pattern: /^[a-zA-Z0-9][a-zA-Z0-9-]*$/,
+              })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-appa-name">Repository name</Label>
+            <Input
+              id="new-appa-name"
+              {...form.register("name", {
+                required: true,
+                pattern: /^[a-zA-Z0-9_.-]+$/,
+              })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-appa-app">GitHub App</Label>
+            <Select
+              value={form.watch("githubAppConfigId")}
+              onValueChange={(value) =>
+                form.setValue("githubAppConfigId", value, { shouldDirty: true })
+              }
+            >
+              <SelectTrigger id="new-appa-app" className="w-full">
+                <SelectValue placeholder="Select a connected GitHub App" />
+              </SelectTrigger>
+              <SelectContent>
+                {apps.map((app) => (
+                  <SelectItem key={app.id} value={app.id}>
+                    {app.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!apps.length && (
+              <InlineNotice variant="info">
+                <InlineNoticeText>
+                  Connect an organization GitHub App before creating a
+                  repository.
+                </InlineNoticeText>
+              </InlineNotice>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCredentialStep("define")}
+            >
+              <span>Set up GitHub App</span>
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The App needs repository creation, contents, pull requests, and
+            workflow permissions. Install it for all repositories so it can
+            access the new one.
+          </p>
+        </div>
+      </StandardFormDialog>
+      {credentialStep === "define" && (
+        <RuntimeCredentialDefinitionDialog
+          definition={null}
+          initialKind="github_app"
+          initialScope="organization"
+          backLabel="Back to repository"
+          size="medium"
+          onClose={() => setCredentialStep("repository")}
+          onCreated={(id) => {
+            setNewCredentialId(id);
+            form.setValue("githubAppConfigId", id, { shouldDirty: true });
+            setCredentialStep("connect");
+          }}
+        />
+      )}
+      {credentialStep === "connect" && newCredential && (
+        <RuntimeCredentialConnectionDialog
+          definition={newCredential}
+          scope="organization"
+          onClose={() => setCredentialStep("repository")}
+        />
+      )}
+    </>
   );
 }
 
@@ -325,7 +487,9 @@ export function OpenAppaSourceForm({
         open={credentialStep === "source"}
         onOpenChange={onOpenChange}
         isDirty={form.formState.isDirty}
-        title={source ? "Edit GitHub source" : "Connect OpenAPPA to GitHub"}
+        title={
+          source?.repo ? "Edit GitHub source" : "Connect OpenAPPA to GitHub"
+        }
         description="Pull the policy file from GitHub. The first valid pull replaces the policy saved here, so commit your current policy to the repository first."
         size="medium"
         className="w-[calc(100%-2rem)] sm:max-w-xl"
@@ -368,7 +532,7 @@ export function OpenAppaSourceForm({
               <li>
                 Add the policy tests to CI, so a pull request that breaks the
                 policy can&apos;t merge.{" "}
-                <ExternalDocsLink href="https://www.openappa.com/validation#make-policy-tests-a-required-ci-check">
+                <ExternalDocsLink href="https://www.openappa.com/validation">
                   Test changes in CI
                 </ExternalDocsLink>
               </li>

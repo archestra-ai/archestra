@@ -80,7 +80,11 @@ Each call OpenAPPA makes to a provider — an annotator, authority, or sanitizer
 
 ## GitHub Policy Review
 
-Administrators can connect a repository and GitHub App from the configuration chat or **Settings → OpenAPPA**. The agent then creates a pull request for a policy change. The new policy takes effect after the pull request is merged and the repository sync succeeds.
+Administrators can create a private repository from the [OpenAPPA configuration template](https://github.com/archestra-ai/openappa-config). Start on **OpenAPPA → Overview** or **Settings → OpenAPPA**. Connect an organization GitHub App with repository creation, contents, pull requests, and workflow permissions. The App must have access to new repositories. Archestra copies the template and writes your current policy to `appa.toml`. This includes your battery declarations. Sync starts immediately. You can also connect an existing repository.
+
+The template checks policy structure on each pull request. Add [trajectory tests](https://www.openappa.com/validation) under `traces/` to check allowed and refused decisions. Require the validation check in GitHub branch protection. The agent creates pull requests for later changes. The new policy takes effect after the pull request merges and sync succeeds.
+
+Template updates apply to repositories created afterward. Existing repositories keep their own policy and CI files. To roll out a template fix, propose a separate pull request in each existing repository and review it there. Never replace a deployment policy with the template example.
 
 The repository owns the policy text while sync is configured. Battery changes must be made through the agent's pull request or in the repository. A pull that changes credential bindings or drops deployed batteries can be held for administrator review. Use **Accept repository text** in the **Repository text held** notice on **OpenAPPA → Batteries** to release it.
 

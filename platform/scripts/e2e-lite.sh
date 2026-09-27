@@ -216,7 +216,8 @@ cmd_down() {
   docker rm -f \
     "${PLATFORM_CONTAINER}" "${WIREMOCK_CONTAINER}" "${KEYCLOAK_CONTAINER}" \
     "${EMBEDDED_KIND_CONTAINER}" > /dev/null 2>&1 || true
-  docker network rm "${NETWORK}" > /dev/null 2>&1 || true
+  # archestra-kind is the network the quickstart entrypoint puts KinD on.
+  docker network rm "${NETWORK}" archestra-kind > /dev/null 2>&1 || true
   if [[ "${1:-}" != "quiet" ]]; then
     echo "Lite e2e stack removed"
   fi

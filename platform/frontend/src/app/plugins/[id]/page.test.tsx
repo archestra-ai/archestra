@@ -190,11 +190,11 @@ describe("PluginDetailPage", () => {
     expect(file).toHaveValue("{}");
     expect(file).not.toHaveAttribute("readonly");
 
-    // A saved plugin edits access on its own tab without hiding configuration.
+    // The canonical page-header links select configuration and permissions.
     expect(screen.queryByTestId("plugin-permissions")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Permissions" }));
-    expect(screen.getByTestId("plugin-permissions")).toBeVisible();
-    await user.click(screen.getByRole("tab", { name: "General" }));
+    expect(
+      screen.getAllByRole("link", { name: "Permissions" })[0],
+    ).toHaveAttribute("href", "/plugins/plugin-1?tab=permissions");
     expect(screen.getByLabelText("Display name")).toBeVisible();
     expect(
       screen.queryByText("Who can discover this plugin"),
@@ -222,6 +222,20 @@ describe("PluginDetailPage", () => {
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: "Session sentry" }),
     );
+  });
+
+  it("shows permissions from the page-header URL", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    renderPage(BASE_PLUGIN);
+    expect(screen.getByTestId("plugin-permissions")).toBeVisible();
+    expect(screen.queryByLabelText("Display name")).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Permissions" })[0],
+    ).toHaveAttribute("aria-current", "page");
   });
 
   it("locks a repository-owned plugin and says where to change it instead", async () => {

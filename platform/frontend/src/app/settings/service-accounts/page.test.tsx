@@ -52,6 +52,9 @@ const server = setupServer(
   http.get(`${origin}/api/service-accounts`, () =>
     HttpResponse.json([account]),
   ),
+  http.get(`${origin}/api/service-accounts/:id`, () =>
+    HttpResponse.json({ ...account, tokens: [] }),
+  ),
   http.get(`${origin}/api/service-accounts/labels/keys`, () =>
     HttpResponse.json([]),
   ),
@@ -125,4 +128,39 @@ test("edits a service account from its table action", async () => {
       { name: "Automation runner", role: "member", labels: [] },
     ]),
   );
+});
+
+test("shows key guidance in the header and the request example after the table", async () => {
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ServiceAccountsSettingsPage />
+    </QueryClientProvider>,
+  );
+
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Edit service account Automation worker",
+    }),
+  );
+  const dialog = screen.getByRole("dialog", { name: "Edit service account" });
+  await user.click(within(dialog).getByRole("button", { name: "API keys" }));
+
+  const guidance = within(dialog).getByText(
+    /Keys that let scripts and integrations call the/,
+  );
+  const example = within(dialog).getByText(
+    /Authenticate a request as this service account/,
+  );
+  const table = within(dialog).getByRole("table");
+  expect(
+    guidance.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    table.compareDocumentPosition(example) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 });

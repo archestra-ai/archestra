@@ -10,8 +10,6 @@ import {
   PowerOff,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
@@ -64,7 +62,6 @@ import {
   useCreateServiceAccount,
   useDeleteServiceAccount,
   useServiceAccounts,
-  useUpdateServiceAccount,
 } from "@/lib/service-account.query";
 import {
   ACCOUNT_HEALTH_LABELS,
@@ -74,6 +71,7 @@ import {
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction } from "../layout";
+import { ServiceAccountDialog } from "./_parts/service-account-dialog";
 
 type ServiceAccountFormValues = {
   name: string;
@@ -102,7 +100,6 @@ const STATUS_FILTERS: AccountHealth[] = [
 
 export default function ServiceAccountsSettingsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
-  const router = useRouter();
   const setActionButton = useSetSettingsAction();
   const { data: canReadServiceAccounts, isPending: isCheckingPermissions } =
     useHasPermissions({ serviceAccount: ["read"] });
@@ -123,7 +120,6 @@ export default function ServiceAccountsSettingsPage() {
     refetch: refetchServiceAccounts,
   } = useServiceAccounts({ labels: labelsFilter });
   const createMutation = useCreateServiceAccount();
-  const updateMutation = useUpdateServiceAccount();
   const deleteMutation = useDeleteServiceAccount();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteServiceAccounts();
@@ -133,8 +129,6 @@ export default function ServiceAccountsSettingsPage() {
   const [accountToEdit, setAccountToEdit] = useState<ServiceAccount | null>(
     null,
   );
-  const [editLabels, setEditLabels] = useState<ProfileLabel[]>([]);
-  const editLabelsRef = useRef<ProfileLabelsRef>(null);
   const [newLabels, setNewLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [accountToDelete, setAccountToDelete] = useState<ServiceAccount | null>(
@@ -150,9 +144,6 @@ export default function ServiceAccountsSettingsPage() {
     Boolean(labelsFilter);
 
   const form = useForm<ServiceAccountFormValues>({
-    defaultValues: DEFAULT_FORM_VALUES,
-  });
-  const editForm = useForm<ServiceAccountFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
   });
 
@@ -231,11 +222,7 @@ export default function ServiceAccountsSettingsPage() {
                 {
                   icon: <Pencil className="h-4 w-4" />,
                   label: "Edit service account",
-                  onClick: () => {
-                    editForm.reset({ name: account.name, role: account.role });
-                    setEditLabels(account.labels);
-                    setAccountToEdit(account);
-                  },
+                  onClick: () => setAccountToEdit(account),
                 },
                 {
                   icon: account.disabled ? (
@@ -267,7 +254,7 @@ export default function ServiceAccountsSettingsPage() {
         ]}
       />
     ),
-    [canDeleteServiceAccounts, canUpdateServiceAccounts, editForm, setDisabled],
+    [canDeleteServiceAccounts, canUpdateServiceAccounts, setDisabled],
   );
 
   // `DataTable` sets the table's `minWidth` to the sum of these sizes, so the
@@ -284,16 +271,17 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "name",
         header: "Account",
-        size: 160,
+        size: 128,
         cell: ({ row }) => (
           <div className="flex min-w-0 items-center gap-1.5">
-            <Link
+            <button
+              type="button"
               className="truncate font-medium hover:underline"
-              href={`/settings/service-accounts/${row.original.id}`}
+              onClick={() => setAccountToEdit(row.original)}
               title={row.original.name}
             >
               {row.original.name}
-            </Link>
+            </button>
             <LabelTags labels={row.original.labels} />
           </div>
         ),
@@ -330,7 +318,7 @@ export default function ServiceAccountsSettingsPage() {
       // narrower column than a top-level page, and an eighth column pushed
       // Actions off-screen. For a machine identity "last used" is the
       // operational question; the creation date is archival and still shown on
-      // the account's own page.
+      // the account dialog.
     ];
 
     if (!canUpdateServiceAccounts && !canDeleteServiceAccounts) {
@@ -342,9 +330,8 @@ export default function ServiceAccountsSettingsPage() {
       {
         id: "actions",
         header: "Actions",
-        // Two icon-sm buttons with the table's px-4 inset on both sides, so
-        // the last icon sits 16px from the frame like every other cell edge.
-        size: 96,
+        // Three actions need their own width; the name column can give up space.
+        size: 128,
         cell: ({ row }) => renderRowActions(row.original),
       },
     ];
@@ -366,17 +353,7 @@ export default function ServiceAccountsSettingsPage() {
     if (!account) return;
 
     closeDialog();
-    router.push(`/settings/service-accounts/${account.id}`);
-  });
-
-  const handleEdit = editForm.handleSubmit(async (values) => {
-    if (!accountToEdit) return;
-    const labels = editLabelsRef.current?.saveUnsavedLabel() ?? editLabels;
-    await updateMutation.mutateAsync({
-      id: accountToEdit.id,
-      body: { name: values.name.trim(), role: values.role, labels },
-    });
-    setAccountToEdit(null);
+    setAccountToEdit(account);
   });
 
   const handleDelete = async () => {
@@ -538,8 +515,8 @@ export default function ServiceAccountsSettingsPage() {
                   hideSelectedCount
                   onRowClick={(account, event) => {
                     const target = event.target as HTMLElement;
-                    if (target.closest("a,button")) return;
-                    router.push(`/settings/service-accounts/${account.id}`);
+                    if (target.closest("button")) return;
+                    setAccountToEdit(account);
                   }}
                   emptyIcon={Bot}
                   emptyMessage="No service accounts yet"
@@ -649,68 +626,15 @@ export default function ServiceAccountsSettingsPage() {
         </DialogForm>
       </FormDialog>
 
-      <FormDialog
-        open={!!accountToEdit}
-        onOpenChange={(open) => {
-          if (!open) setAccountToEdit(null);
-        }}
-        title="Edit service account"
-        size="medium"
-      >
-        <DialogForm
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={handleEdit}
-        >
-          <DialogBody className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-service-account-name">Display name</Label>
-              <Input
-                id="edit-service-account-name"
-                {...editForm.register("name", { required: true })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-service-account-role">Roles</Label>
-              <RoleSelect
-                multiple
-                id="edit-service-account-role"
-                value={editForm.watch("role")}
-                onValueChange={(role) =>
-                  editForm.setValue("role", role, { shouldDirty: true })
-                }
-                placeholder="Select a role"
-                className="w-full"
-              />
-              <FieldDescription>
-                Roles set allowed actions for requests made with this account's
-                keys.
-              </FieldDescription>
-            </div>
-            <AdvancedLabelsSection
-              ref={editLabelsRef}
-              labels={editLabels}
-              onLabelsChange={setEditLabels}
-            />
-          </DialogBody>
-          <DialogStickyFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setAccountToEdit(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                updateMutation.isPending || !editForm.watch("name").trim()
-              }
-            >
-              Save
-            </Button>
-          </DialogStickyFooter>
-        </DialogForm>
-      </FormDialog>
+      {accountToEdit && (
+        <ServiceAccountDialog
+          key={accountToEdit.id}
+          account={accountToEdit}
+          onOpenChange={(open) => {
+            if (!open) setAccountToEdit(null);
+          }}
+        />
+      )}
 
       <DeleteConfirmDialog
         open={!!accountToDelete}

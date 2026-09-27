@@ -27,6 +27,7 @@ import {
   useState,
 } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -1618,6 +1619,13 @@ export function LlmProviderApiKeyForm({
             )}
 
           {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
+          {activeSection === "general" && hasLabelsEditor && (
+            <AdvancedLabelsSection
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={onLabelsChange}
+            />
+          )}
         </div>
         <div hidden={activeSection === "general"} className="space-y-4">
           {progressive && hasAdvancedSettings && !activeSection && (
@@ -1745,7 +1753,7 @@ export function LlmProviderApiKeyForm({
             </div>
           )}
 
-          {showAdvancedSettings && hasLabelsEditor && (
+          {!activeSection && showAdvancedSettings && hasLabelsEditor && (
             <ProfileLabels
               ref={labelsRef}
               labels={labels}

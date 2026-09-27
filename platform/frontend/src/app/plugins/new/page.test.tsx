@@ -50,11 +50,20 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <NewPluginPage />
     </QueryClientProvider>,
   );
+  return {
+    ...view,
+    rerenderPage: () =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <NewPluginPage />
+        </QueryClientProvider>,
+      ),
+  };
 }
 
 const discoverMock = vi.fn();
@@ -501,10 +510,15 @@ describe("NewPluginPage", () => {
       isPending: false,
     } as unknown as ReturnType<typeof useCreatePlugin>);
     const user = userEvent.setup();
-    renderPage();
+    const view = renderPage();
     await user.click(screen.getByRole("button", { name: /Blank template/ }));
     await user.type(screen.getByLabelText("Display name"), "Shared plugin");
-    await user.click(screen.getByRole("tab", { name: "Permissions" }));
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank&tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    view.rerenderPage();
     await user.click(screen.getByRole("button", { name: "Add access" }));
     const dialog = screen.getByRole("dialog", { name: "Add access" });
     await user.click(within(dialog).getByRole("button", { name: /^Roles/ }));
@@ -537,7 +551,7 @@ describe("NewPluginPage", () => {
 
   it("fills one page — content and access together — from the blank template", async () => {
     const user = userEvent.setup();
-    renderPage();
+    const view = renderPage();
 
     await user.click(screen.getByRole("button", { name: /Blank template/ }));
 
@@ -557,9 +571,20 @@ describe("NewPluginPage", () => {
     expect(
       screen.queryByRole("button", { name: "Add access" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Permissions" }));
+    expect(
+      screen.getAllByRole("link", { name: "Permissions" })[0],
+    ).toHaveAttribute("href", "/plugins/new?source=blank&tab=permissions");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank&tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    view.rerenderPage();
     expect(screen.getByRole("button", { name: "Add access" })).toBeVisible();
-    await user.click(screen.getByRole("tab", { name: "General" }));
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    view.rerenderPage();
 
     const create = screen.getByRole("button", { name: /Create plugin/ });
     // An unnamed plugin is not creatable, whatever else is filled in.

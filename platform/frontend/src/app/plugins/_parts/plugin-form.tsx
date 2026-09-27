@@ -22,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PluginContentFields } from "./plugin-content-fields";
 import type { PluginDraft } from "./plugin-draft";
 
@@ -37,9 +36,7 @@ const GITHUB_SYNC_OPTIONS = [
 ] as const;
 
 /**
- * Everything a plugin is, on one page: what it installs — its own files, or
- * the GitHub source they are pulled from — and, at the end, who can discover
- * it and how it is labelled.
+ * A plugin's configuration and permissions share one draft and save action.
  *
  * One component so a plugin is filled in the same order and the same shape
  * wherever it is filled in: the create page's blank template and the plugin's
@@ -55,6 +52,7 @@ export function PluginForm({
   githubAppConfigs,
   isCreate = false,
   pluginId,
+  activeSection,
 }: {
   draft: PluginDraft;
   onChange: (patch: Partial<PluginDraft>) => void;
@@ -79,14 +77,11 @@ export function PluginForm({
    * visibility fields, which nothing reads once the plugin has converted.
    */
   pluginId?: string;
+  activeSection: "general" | "permissions";
 }) {
   return (
-    <Tabs defaultValue="general">
-      <TabsList>
-        <TabsTrigger value="general">General</TabsTrigger>
-        <TabsTrigger value="permissions">Permissions</TabsTrigger>
-      </TabsList>
-      <TabsContent value="general">
+    <>
+      {activeSection === "general" ? (
         <SettingsSectionGroup>
           {/* No heading: the page header already names the plugin, and the fields
           — Display name, Description, the payload — say what they are. */}
@@ -138,8 +133,7 @@ export function PluginForm({
             </fieldset>
           </SettingsSection>
         </SettingsSectionGroup>
-      </TabsContent>
-      <TabsContent value="permissions">
+      ) : (
         <fieldset disabled={readOnly}>
           <ResourceAccessSection
             resource="plugin"
@@ -149,8 +143,8 @@ export function PluginForm({
             standalone
           />
         </fieldset>
-      </TabsContent>
-    </Tabs>
+      )}
+    </>
   );
 }
 

@@ -9,7 +9,7 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -164,6 +164,10 @@ function PluginDetailView({
   onDeleted: () => void;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeSection =
+    searchParams.get("tab") === "permissions" ? "permissions" : "general";
+  const pluginHref = `/plugins/${plugin.id}`;
   const { data: canDelete } = useHasPermissions(
     { plugin: ["delete", "update"] },
     "*",
@@ -315,10 +319,14 @@ function PluginDetailView({
   });
   const requestNavigate = useCallback(
     (href: string) => {
+      if (href === pluginHref || href === `${pluginHref}?tab=permissions`) {
+        router.replace(href, { scroll: false });
+        return;
+      }
       pendingHrefRef.current = href;
       guard.requestClose();
     },
-    [guard],
+    [guard, pluginHref, router],
   );
   useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
 
@@ -381,6 +389,19 @@ function PluginDetailView({
       maxWidth="wizard"
       minWidth="phone"
       contentOverflowX="clip"
+      tabs={[
+        {
+          label: "General",
+          href: pluginHref,
+          selected: activeSection === "general",
+        },
+        {
+          label: "Permissions",
+          href: `${pluginHref}?tab=permissions`,
+          selected: activeSection === "permissions",
+        },
+      ]}
+      mobileVisibleCount={2}
       actionButton={
         // Editing is the page itself now, so the header carries only what the
         // page cannot: installing the plugin, and the actions that act on it
@@ -514,6 +535,7 @@ function PluginDetailView({
           pluginId={plugin.id}
           isGithubPlugin={isGithubPlugin}
           githubAppConfigs={githubAppConfigOptions}
+          activeSection={activeSection}
         />
 
         {!isReadOnly && (

@@ -164,8 +164,15 @@ mod imp {
     /// log verbosity for fmt/Loki output, from the standard `RUST_LOG`, defaulting
     /// to `info`, under a fixed ceiling for the Dagger SDK. kept separate from
     /// the span layer so it can be tuned without disabling traces.
+    ///
+    /// the default silences the OTel SDK's own diagnostics: with no collector at
+    /// the default endpoint (the quickstart image, most self-hosted installs) it
+    /// logs an export ERROR on every batch. the node SDK drops the same failures
+    /// silently; `RUST_LOG` can still turn them back on.
     fn log_filter<S>() -> impl tracing_subscriber::layer::Filter<S> {
-        let env = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+        let env = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            EnvFilter::new("info,opentelemetry=off,opentelemetry_sdk=off,opentelemetry_otlp=off")
+        });
         // the Dagger SDK logs every GraphQL query verbatim at TRACE, and a
         // `setSecret` query carries the secret plaintext. an `EnvFilter`
         // directive could be outranked by a more specific `RUST_LOG` entry, so

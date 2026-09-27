@@ -160,4 +160,28 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
     await user.click(screen.getByRole("button", { name: "General" }));
     expect(screen.getByText("Who uses this key")).toBeVisible();
   });
+
+  it("keeps key selection in General and endpoint settings in Connectivity", async () => {
+    const user = userEvent.setup();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <CreateLlmProviderApiKeyDialog
+          open
+          onOpenChange={vi.fn()}
+          title="Add API Key"
+          description="Create a provider key"
+          allowedProviders={["anthropic"]}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Primary key")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Connectivity" }));
+    expect(screen.getByLabelText(/Base URL/)).toBeVisible();
+    expect(screen.getByText("Extra HTTP headers")).toBeVisible();
+    expect(screen.getByText("Primary key")).not.toBeVisible();
+  });
 });

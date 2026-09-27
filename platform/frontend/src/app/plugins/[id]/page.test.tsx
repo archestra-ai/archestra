@@ -190,11 +190,12 @@ describe("PluginDetailPage", () => {
     expect(file).toHaveValue("{}");
     expect(file).not.toHaveAttribute("readonly");
 
-    // Who can reach it is the end of the same page, not a second route. A
-    // saved plugin answers that from its own grants, so the page shows the
-    // permission editor rather than the retired visibility selector, whose
-    // columns no read path consults once the plugin has converted.
+    // A saved plugin edits access on its own tab without hiding configuration.
+    expect(screen.queryByTestId("plugin-permissions")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Permissions" }));
     expect(screen.getByTestId("plugin-permissions")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "General" }));
+    expect(screen.getByLabelText("Display name")).toBeVisible();
     expect(
       screen.queryByText("Who can discover this plugin"),
     ).not.toBeInTheDocument();

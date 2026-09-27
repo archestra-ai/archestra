@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PluginContentFields } from "./plugin-content-fields";
 import type { PluginDraft } from "./plugin-draft";
 
@@ -80,50 +81,66 @@ export function PluginForm({
   pluginId?: string;
 }) {
   return (
-    <SettingsSectionGroup>
-      {/* No heading: the page header already names the plugin, and the fields
+    <Tabs defaultValue="general">
+      <TabsList>
+        <TabsTrigger value="general">General</TabsTrigger>
+        <TabsTrigger value="permissions">Permissions</TabsTrigger>
+      </TabsList>
+      <TabsContent value="general">
+        <SettingsSectionGroup>
+          {/* No heading: the page header already names the plugin, and the fields
           — Display name, Description, the payload — say what they are. */}
-      <SettingsSection>
-        <PluginContentFields
-          displayName={draft.displayName}
-          onDisplayNameChange={(displayName) => onChange({ displayName })}
-          description={draft.description}
-          onDescriptionChange={(description) => onChange({ description })}
-          clientType={isCreate ? draft.clientType : undefined}
-          onClientTypeChange={
-            isCreate ? (clientType) => onChange({ clientType }) : undefined
-          }
-          pluginSlug={pluginSlug}
-          platforms={draft.supportedPlatforms}
-          onPlatformsChange={(supportedPlatforms) =>
-            onChange({ supportedPlatforms })
-          }
-          files={draft.files}
-          onFilesChange={(files) => onChange({ files })}
-          readOnly={readOnly || isGithubPlugin}
-          readOnlyReason={isGithubPlugin ? SYNCED_FROM_GITHUB : undefined}
-        />
-      </SettingsSection>
+          <SettingsSection>
+            <PluginContentFields
+              displayName={draft.displayName}
+              onDisplayNameChange={(displayName) => onChange({ displayName })}
+              description={draft.description}
+              onDescriptionChange={(description) => onChange({ description })}
+              clientType={isCreate ? draft.clientType : undefined}
+              onClientTypeChange={
+                isCreate ? (clientType) => onChange({ clientType }) : undefined
+              }
+              pluginSlug={pluginSlug}
+              platforms={draft.supportedPlatforms}
+              onPlatformsChange={(supportedPlatforms) =>
+                onChange({ supportedPlatforms })
+              }
+              files={draft.files}
+              onFilesChange={(files) => onChange({ files })}
+              readOnly={readOnly || isGithubPlugin}
+              readOnlyReason={isGithubPlugin ? SYNCED_FROM_GITHUB : undefined}
+            />
+          </SettingsSection>
 
-      {/* Under the payload it governs, not above it: the fields on this panel
+          {/* Under the payload it governs, not above it: the fields on this panel
           are the answer to "these are read-only — where do I change them?",
           so they read best straight after the question. */}
-      {isGithubPlugin && (
-        <SettingsSection
-          title="GitHub source"
-          description="Where these files are pulled from, and how they stay up to date."
-        >
-          <GithubSourceFields
-            draft={draft}
-            onChange={onChange}
-            githubAppConfigs={githubAppConfigs ?? []}
-          />
-        </SettingsSection>
-      )}
+          {isGithubPlugin && (
+            <SettingsSection
+              title="GitHub source"
+              description="Where these files are pulled from, and how they stay up to date."
+            >
+              <GithubSourceFields
+                draft={draft}
+                onChange={onChange}
+                githubAppConfigs={githubAppConfigs ?? []}
+              />
+            </SettingsSection>
+          )}
 
-      {/* No heading: the visibility control names the section itself. */}
-      <SettingsSection>
-        <fieldset disabled={readOnly} className="space-y-4">
+          <SettingsSection>
+            <fieldset disabled={readOnly}>
+              <ProfileLabels
+                ref={labelsRef}
+                labels={draft.labels}
+                onLabelsChange={(labels) => onChange({ labels })}
+              />
+            </fieldset>
+          </SettingsSection>
+        </SettingsSectionGroup>
+      </TabsContent>
+      <TabsContent value="permissions">
+        <fieldset disabled={readOnly}>
           <ResourceAccessSection
             resource="plugin"
             id={pluginId}
@@ -131,14 +148,9 @@ export function PluginForm({
             onGrantsChange={(initialGrants) => onChange({ initialGrants })}
             standalone
           />
-          <ProfileLabels
-            ref={labelsRef}
-            labels={draft.labels}
-            onLabelsChange={(labels) => onChange({ labels })}
-          />
         </fieldset>
-      </SettingsSection>
-    </SettingsSectionGroup>
+      </TabsContent>
+    </Tabs>
   );
 }
 

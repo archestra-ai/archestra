@@ -80,9 +80,9 @@ export function CreateLlmProviderApiKeyDialog({
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
   const providerCatalog = useModelProviderCatalog();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
-    "general",
-  );
+  const [activeSection, setActiveSection] = useState<
+    "general" | "connectivity" | "permissions"
+  >("general");
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const lastResetKeyRef = useRef<string | null>(null);
   const visibleProviderIdsKey = providerCatalog.visibleIds.join(",");
@@ -272,6 +272,9 @@ export function CreateLlmProviderApiKeyDialog({
       credentialMode={credentialMode}
       requiresExactSubscriptionCredential={requiresExactSubscriptionCredential}
       progressive
+      activeSection={
+        activeSection === "connectivity" ? "connectivity" : "general"
+      }
       allowPersonalSubscriptions={credentialMode === "subscription"}
       onSubscriptionCredential={handleSubscriptionCredential}
       bedrockIamAuthEnabled={bedrockIamAuthEnabled}
@@ -309,9 +312,13 @@ export function CreateLlmProviderApiKeyDialog({
         form.watch("shared")
           ? [
               { id: "general", label: "General" },
+              { id: "connectivity", label: "Connectivity" },
               { id: "permissions", label: "Permissions" },
             ]
-          : [{ id: "general", label: "General" }]
+          : [
+              { id: "general", label: "General" },
+              { id: "connectivity", label: "Connectivity" },
+            ]
       }
       onActiveSectionChange={setActiveSection}
       onSubmit={handleCreate}
@@ -328,7 +335,7 @@ export function CreateLlmProviderApiKeyDialog({
       }
       isDirty={credentialMode === "api-key" && form.formState.isDirty}
     >
-      <div hidden={activeSection !== "general"}>{keyForm}</div>
+      <div hidden={activeSection === "permissions"}>{keyForm}</div>
       {form.watch("shared") && (
         <div hidden={activeSection !== "permissions"}>
           {/* SPDX-SnippetBegin

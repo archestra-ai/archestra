@@ -728,17 +728,40 @@ class OrganizationRoleModel {
       { roleId: id, organizationId },
       "OrganizationRoleModel.delete: deleting",
     );
-    const deleted = await db
-      .delete(schema.organizationRolesTable)
-      .where(
-        and(
-          eq(schema.organizationRolesTable.id, id),
-          eq(schema.organizationRolesTable.organizationId, organizationId),
-        ),
-      )
-      .returning({ id: schema.organizationRolesTable.id });
+    return db.transaction(async (tx) => {
+      const deleted = await tx
+        .delete(schema.organizationRolesTable)
+        .where(
+          and(
+            eq(schema.organizationRolesTable.id, id),
+            eq(schema.organizationRolesTable.organizationId, organizationId),
+          ),
+        )
+        .returning({ id: schema.organizationRolesTable.id });
+      if (deleted.length === 0) return false;
 
-    return deleted.length > 0;
+      const policies = schema.resourcePermissionPoliciesTable;
+      const roleGrant = JSON.stringify([{ subject: { type: "role", id } }]);
+      await tx
+        .update(policies)
+        .set({
+          grants: sql`coalesce((
+            select jsonb_agg(grant_entry)
+            from jsonb_array_elements(${policies.grants}) grant_entry
+            where grant_entry->'subject'->>'type' <> 'role'
+              or grant_entry->'subject'->>'id' <> ${id}
+          ), '[]'::jsonb)`,
+          revision: sql`${policies.revision} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(policies.organizationId, organizationId),
+            sql`${policies.grants} @> ${roleGrant}::jsonb`,
+          ),
+        );
+      return true;
+    });
   }
 
   static async findByIdForAudit(

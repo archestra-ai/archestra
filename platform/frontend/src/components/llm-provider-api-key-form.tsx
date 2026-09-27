@@ -484,6 +484,8 @@ interface LlmProviderApiKeyFormProps {
   requiresExactSubscriptionCredential?: boolean;
   /** Hide optional API-key fields behind an Advanced settings disclosure. */
   progressive?: boolean;
+  /** Dialog section shown when advanced fields have their own tab. */
+  activeSection?: "general" | "connectivity";
   /** Called when a subscription sign-in returns a credential. */
   onSubscriptionCredential?: (credential: string) => void | Promise<void>;
   labels?: ProfileLabel[];
@@ -510,6 +512,7 @@ export function LlmProviderApiKeyForm({
   credentialMode,
   requiresExactSubscriptionCredential = false,
   progressive = false,
+  activeSection,
   onSubscriptionCredential,
   labels,
   onLabelsChange,
@@ -815,7 +818,8 @@ export function LlmProviderApiKeyForm({
   const isPerUserCredential = isPerUserProvider || isCredentialSubscriptionMode;
   const hasAdvancedSettings = !isSubscriptionFlow && !isPerUserCredential;
   const showAdvancedSettings =
-    hasAdvancedSettings && (!progressive || advancedSettingsOpen);
+    hasAdvancedSettings &&
+    (!progressive || advancedSettingsOpen || !!activeSection);
   // The subscription this form is currently connecting, if any: implied by the
   // provider when it is per-user outright, chosen by the auth-method tabs when
   // the provider also accepts API keys. Drives every piece of vendor copy below.
@@ -1038,699 +1042,717 @@ export function LlmProviderApiKeyForm({
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
-        <DetailFacts facts={[createdByFact(existingKey?.createdBy)]} />
-        {!isSubscriptionFlow && (
-          <div
-            className={
-              mode === "full" && showProviderField
-                ? "grid grid-cols-2 gap-4"
-                : ""
-            }
-          >
-            {showProviderField && (
-              <div className="space-y-2">
-                <Label htmlFor="llm-provider-api-key-provider">Provider</Label>
-                <SearchableSelect
-                  id="llm-provider-api-key-provider"
-                  ariaLabel="Provider"
-                  className="w-full"
-                  searchPlaceholder="Search providers..."
-                  emptyMessage="No matching providers found."
-                  value={
-                    isOllamaProvider(provider)
-                      ? ollamaListedTransport
-                      : provider
-                  }
-                  onValueChange={(value) =>
-                    form.setValue(
-                      "provider",
-                      value as CreateLlmProviderApiKeyBody["provider"],
-                    )
-                  }
-                  disabled={isEditMode || isPending || disableProvider}
-                  items={providerOptions}
-                />
-              </div>
-            )}
+        <div hidden={activeSection === "connectivity"} className="space-y-4">
+          <DetailFacts facts={[createdByFact(existingKey?.createdBy)]} />
+          {!isSubscriptionFlow && (
+            <div
+              className={
+                mode === "full" && showProviderField
+                  ? "grid grid-cols-2 gap-4"
+                  : ""
+              }
+            >
+              {showProviderField && (
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-api-key-provider">
+                    Provider
+                  </Label>
+                  <SearchableSelect
+                    id="llm-provider-api-key-provider"
+                    ariaLabel="Provider"
+                    className="w-full"
+                    searchPlaceholder="Search providers..."
+                    emptyMessage="No matching providers found."
+                    value={
+                      isOllamaProvider(provider)
+                        ? ollamaListedTransport
+                        : provider
+                    }
+                    onValueChange={(value) =>
+                      form.setValue(
+                        "provider",
+                        value as CreateLlmProviderApiKeyBody["provider"],
+                      )
+                    }
+                    disabled={isEditMode || isPending || disableProvider}
+                    items={providerOptions}
+                  />
+                </div>
+              )}
 
-            {mode === "full" && (
-              <div className="space-y-2">
-                <Label htmlFor="llm-provider-api-key-name">
-                  Name{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  id="llm-provider-api-key-name"
-                  placeholder={defaultKeyName}
-                  disabled={isPending}
-                  autoComplete="off"
-                  data-1p-ignore
-                  data-lpignore="true"
-                  {...form.register("name")}
-                />
-              </div>
-            )}
-          </div>
-        )}
+              {mode === "full" && (
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-api-key-name">
+                    Name{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    id="llm-provider-api-key-name"
+                    placeholder={defaultKeyName}
+                    disabled={isPending}
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    {...form.register("name")}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
-        {/*
+          {/*
           Sits outside the `byosEnabled` branch below on purpose: the transport
           is part of the provider, not a way of supplying credentials, so it
           must stay visible when keys come from the vault.
         */}
-        {showOllamaTransport && (
-          <div className="space-y-2">
-            {/*
+          {showOllamaTransport && (
+            <div className="space-y-2">
+              {/*
               A radiogroup rather than Tabs: this picks a value, it does not
               switch between panels. Radix Tabs sets `aria-controls` on every
               trigger unconditionally, so with no TabsContent both triggers
               pointed at an element id that is never rendered.
             */}
-            <span
-              id="llm-provider-api-key-ollama-transport"
-              className="text-sm font-medium leading-none"
-            >
-              Transport
-            </span>
-            <fieldset
-              className="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1"
-              aria-labelledby="llm-provider-api-key-ollama-transport"
-              disabled={isEditMode || isPending || disableProvider}
-            >
-              {/*
+              <span
+                id="llm-provider-api-key-ollama-transport"
+                className="text-sm font-medium leading-none"
+              >
+                Transport
+              </span>
+              <fieldset
+                className="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+                aria-labelledby="llm-provider-api-key-ollama-transport"
+                disabled={isEditMode || isPending || disableProvider}
+              >
+                {/*
                 The transport is baked into the stored provider, so an
                 existing key cannot switch without being recreated.
               */}
-              {OLLAMA_TRANSPORT_OPTIONS.map((option) => {
-                const selected = provider === option.value;
-                return (
-                  <label
-                    key={option.value}
-                    className={cn(
-                      "cursor-pointer rounded-md px-3 py-1.5 text-center text-sm font-medium transition-colors",
-                      "has-disabled:cursor-not-allowed has-disabled:opacity-50",
-                      selected
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="llm-provider-api-key-ollama-transport-option"
-                      value={option.value}
-                      checked={selected}
-                      onChange={() => form.setValue("provider", option.value)}
-                      className="sr-only"
-                    />
-                    {option.label}
-                  </label>
-                );
-              })}
-            </fieldset>
-            <p className="text-xs text-muted-foreground">
-              {provider === "ollama-native"
-                ? `${providerLabel}'s own /api/chat. Supports per-model parameters such as num_ctx and thinking.`
-                : `${providerLabel}'s OpenAI-compatible /v1 endpoint. Supports embeddings; per-model parameters are ignored.`}
-            </p>
-          </div>
-        )}
+                {OLLAMA_TRANSPORT_OPTIONS.map((option) => {
+                  const selected = provider === option.value;
+                  return (
+                    <label
+                      key={option.value}
+                      className={cn(
+                        "cursor-pointer rounded-md px-3 py-1.5 text-center text-sm font-medium transition-colors",
+                        "has-disabled:cursor-not-allowed has-disabled:opacity-50",
+                        selected
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="llm-provider-api-key-ollama-transport-option"
+                        value={option.value}
+                        checked={selected}
+                        onChange={() => form.setValue("provider", option.value)}
+                        className="sr-only"
+                      />
+                      {option.label}
+                    </label>
+                  );
+                })}
+              </fieldset>
+              <p className="text-xs text-muted-foreground">
+                {provider === "ollama-native"
+                  ? `${providerLabel}'s own /api/chat. Supports per-model parameters such as num_ctx and thinking.`
+                  : `${providerLabel}'s OpenAI-compatible /v1 endpoint. Supports embeddings; per-model parameters are ignored.`}
+              </p>
+            </div>
+          )}
 
-        {byosEnabled && !isSubscriptionFlow ? (
-          <Suspense
-            fallback={
-              <div className="text-sm text-muted-foreground">Loading...</div>
-            }
-          >
-            {vaultSecretSelector}
-          </Suspense>
-        ) : (
-          <div className="space-y-2">
-            {provider === "bedrock" && (
-              <Tabs
-                value={bedrockAuthMethod}
-                onValueChange={(value) =>
-                  form.setValue(
-                    "bedrockAuthMethod",
-                    value as "api-key" | "sigv4" | "iam",
-                    { shouldDirty: true },
-                  )
-                }
-              >
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="api-key" disabled={isPending}>
-                    API Key
-                  </TabsTrigger>
-                  <TabsTrigger value="sigv4" disabled={isPending}>
-                    AWS SigV4
-                  </TabsTrigger>
-                  <TabsTrigger value="iam" disabled={isPending}>
-                    Service Account
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            )}
-
-            {provider === "bedrock" && bedrockAuthMethod === "iam" && (
-              <div className="space-y-3 text-sm">
-                <p className="text-muted-foreground">
-                  Authenticate {providerLabel} requests using IAM credentials
-                  picked up from the server's environment. Uses the AWS SDK
-                  credential chain — IRSA (IAM Roles for Service Accounts),
-                  EC2/ECS instance profiles, or environment variables — so no
-                  static keys are stored in {appName}.
-                </p>
-                {bedrockIamAuthEnabled ? (
-                  <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
-                    <p className="font-medium text-green-600 dark:text-green-400">
-                      Enabled on this server
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {providerLabel} requests will be signed automatically; you
-                      don't need to create an API key.
-                    </p>
-                  </div>
-                ) : (
-                  <InlineNotice className="flex-col items-start gap-y-2">
-                    <span className="font-medium">
-                      Not enabled on this server
-                    </span>
-                    <InlineNoticeText>
-                      An admin must enable IAM auth on the backend before this
-                      option can be used:
-                    </InlineNoticeText>
-                    <ol className="list-decimal space-y-1 pl-5">
-                      <li>
-                        Set the env var{" "}
-                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
-                          ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED=true
-                        </code>{" "}
-                        on the {appName} backend.
-                      </li>
-                      <li>
-                        Grant the pod's service account (IRSA) or instance
-                        profile permission to call {providerLabel} (e.g.{" "}
-                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
-                          bedrock:InvokeModel
-                        </code>
-                        ).
-                      </li>
-                      <li>Restart the backend to pick up the change.</li>
-                    </ol>
-                  </InlineNotice>
-                )}
-              </div>
-            )}
-
-            {isCredentialLevelSubscriptionProvider(provider) &&
-              providerSubscriptionKind &&
-              allowPersonalSubscriptions &&
-              credentialMode === undefined && (
+          {byosEnabled && !isSubscriptionFlow ? (
+            <Suspense
+              fallback={
+                <div className="text-sm text-muted-foreground">Loading...</div>
+              }
+            >
+              {vaultSecretSelector}
+            </Suspense>
+          ) : (
+            <div className="space-y-2">
+              {provider === "bedrock" && (
                 <Tabs
-                  value={authMethod}
-                  onValueChange={(value) => {
+                  value={bedrockAuthMethod}
+                  onValueChange={(value) =>
                     form.setValue(
-                      "authMethod",
-                      value as "api-key" | "subscription",
+                      "bedrockAuthMethod",
+                      value as "api-key" | "sigv4" | "iam",
                       { shouldDirty: true },
-                    );
-                    // Clear any credential carried over from the other auth mode:
-                    // a typed API key must not leak into subscription mode
-                    // (false "connected" card / submit-before-sign-in), and an
-                    // OAuth credential must not surface in the visible API Key
-                    // field when switching back. Fires only on user interaction,
-                    // so it never wipes prefilled defaults.
-                    form.setValue("apiKey", null, { shouldDirty: true });
-                  }}
+                    )
+                  }
                 >
-                  <TabsList className="grid w-full grid-cols-2">
+                  <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="api-key" disabled={isPending}>
                       API Key
                     </TabsTrigger>
-                    <TabsTrigger
-                      value="subscription"
-                      disabled={isPending || Boolean(byosEnabled)}
-                    >
-                      {SUBSCRIPTION_CREDENTIALS[providerSubscriptionKind].label}
+                    <TabsTrigger value="sigv4" disabled={isPending}>
+                      AWS SigV4
+                    </TabsTrigger>
+                    <TabsTrigger value="iam" disabled={isPending}>
+                      Service Account
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
               )}
 
-            {!isBedrockSigV4 &&
-              bedrockAuthMethod !== "iam" &&
-              (activeSubscriptionKind && connectCopy ? (
-                <>
-                  {!isSubscriptionFlow && (
-                    <>
-                      <Label>{connectCopy.accountLabel}</Label>
-                      {connectCopy.signInHint ? (
-                        <p className="text-xs text-muted-foreground">
-                          {connectCopy.signInHint}
-                        </p>
-                      ) : (
-                        providerBlurb && (
-                          <p className="text-xs text-muted-foreground">
-                            {providerBlurb}
-                          </p>
-                        )
-                      )}
-                    </>
-                  )}
-                  {subscriptionUnavailableWithByos ? (
-                    <InlineNotice>
+              {provider === "bedrock" && bedrockAuthMethod === "iam" && (
+                <div className="space-y-3 text-sm">
+                  <p className="text-muted-foreground">
+                    Authenticate {providerLabel} requests using IAM credentials
+                    picked up from the server's environment. Uses the AWS SDK
+                    credential chain — IRSA (IAM Roles for Service Accounts),
+                    EC2/ECS instance profiles, or environment variables — so no
+                    static keys are stored in {appName}.
+                  </p>
+                  {bedrockIamAuthEnabled ? (
+                    <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+                      <p className="font-medium text-green-600 dark:text-green-400">
+                        Enabled on this server
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {providerLabel} requests will be signed automatically;
+                        you don't need to create an API key.
+                      </p>
+                    </div>
+                  ) : (
+                    <InlineNotice className="flex-col items-start gap-y-2">
                       <span className="font-medium">
-                        Subscription sign-in is unavailable with Bring Your Own
-                        Secrets
+                        Not enabled on this server
                       </span>
                       <InlineNoticeText>
-                        {appName} has read-only access to your external Vault,
-                        so it cannot save or rotate OAuth credentials there.
-                        {requiresExactSubscriptionCredential
-                          ? " This agent requires the same personal subscription, so a provider API key from Vault will not work. Ask an administrator to use managed secret storage, or choose a different agent or model."
-                          : subscriptionHasApiKeyAlternative
-                            ? " Store a provider API key in Vault instead, or ask an administrator to use managed secret storage."
-                            : " This provider has no API-key alternative, so an administrator must use managed secret storage to enable subscription sign-in."}
+                        An admin must enable IAM auth on the backend before this
+                        option can be used:
                       </InlineNoticeText>
+                      <ol className="list-decimal space-y-1 pl-5">
+                        <li>
+                          Set the env var{" "}
+                          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                            ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED=true
+                          </code>{" "}
+                          on the {appName} backend.
+                        </li>
+                        <li>
+                          Grant the pod's service account (IRSA) or instance
+                          profile permission to call {providerLabel} (e.g.{" "}
+                          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                            bedrock:InvokeModel
+                          </code>
+                          ).
+                        </li>
+                        <li>Restart the backend to pick up the change.</li>
+                      </ol>
                     </InlineNotice>
-                  ) : (
-                    <>
-                      {perUserCredentialConnected && (
-                        <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
-                          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
-                          <div>
-                            <p className="font-medium text-green-600 dark:text-green-400">
-                              {connectCopy.connectedTitle}
-                            </p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              {connectCopy.connectedDescription}
-                              {isEditMode && !isCredentialSubscriptionMode ? (
-                                <span>
-                                  {" Sign in again below to refresh the token."}
-                                </span>
-                              ) : null}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      <SubscriptionSignIn
-                        kind={activeSubscriptionKind}
-                        disabled={isPending}
-                        onSecret={async (secret) => {
-                          if (onSubscriptionCredential) {
-                            await onSubscriptionCredential(secret);
-                            return;
-                          }
-                          form.setValue("apiKey", secret, {
-                            shouldDirty: true,
-                          });
-                        }}
-                      />
-                    </>
                   )}
-                </>
-              ) : (
-                <>
-                  <Label htmlFor="llm-provider-api-key-value">
-                    API Key{" "}
-                    {isProviderApiKeyOptional({
-                      provider,
-                      azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-                      anthropicKeylessAuthEnabled:
-                        anthropicKeylessAuthEnabled === true,
-                    }) ? (
+                </div>
+              )}
+
+              {isCredentialLevelSubscriptionProvider(provider) &&
+                providerSubscriptionKind &&
+                allowPersonalSubscriptions &&
+                credentialMode === undefined && (
+                  <Tabs
+                    value={authMethod}
+                    onValueChange={(value) => {
+                      form.setValue(
+                        "authMethod",
+                        value as "api-key" | "subscription",
+                        { shouldDirty: true },
+                      );
+                      // Clear any credential carried over from the other auth mode:
+                      // a typed API key must not leak into subscription mode
+                      // (false "connected" card / submit-before-sign-in), and an
+                      // OAuth credential must not surface in the visible API Key
+                      // field when switching back. Fires only on user interaction,
+                      // so it never wipes prefilled defaults.
+                      form.setValue("apiKey", null, { shouldDirty: true });
+                    }}
+                  >
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="api-key" disabled={isPending}>
+                        API Key
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="subscription"
+                        disabled={isPending || Boolean(byosEnabled)}
+                      >
+                        {
+                          SUBSCRIPTION_CREDENTIALS[providerSubscriptionKind]
+                            .label
+                        }
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                )}
+
+              {!isBedrockSigV4 &&
+                bedrockAuthMethod !== "iam" &&
+                (activeSubscriptionKind && connectCopy ? (
+                  <>
+                    {!isSubscriptionFlow && (
+                      <>
+                        <Label>{connectCopy.accountLabel}</Label>
+                        {connectCopy.signInHint ? (
+                          <p className="text-xs text-muted-foreground">
+                            {connectCopy.signInHint}
+                          </p>
+                        ) : (
+                          providerBlurb && (
+                            <p className="text-xs text-muted-foreground">
+                              {providerBlurb}
+                            </p>
+                          )
+                        )}
+                      </>
+                    )}
+                    {subscriptionUnavailableWithByos ? (
+                      <InlineNotice>
+                        <span className="font-medium">
+                          Subscription sign-in is unavailable with Bring Your
+                          Own Secrets
+                        </span>
+                        <InlineNoticeText>
+                          {appName} has read-only access to your external Vault,
+                          so it cannot save or rotate OAuth credentials there.
+                          {requiresExactSubscriptionCredential
+                            ? " This agent requires the same personal subscription, so a provider API key from Vault will not work. Ask an administrator to use managed secret storage, or choose a different agent or model."
+                            : subscriptionHasApiKeyAlternative
+                              ? " Store a provider API key in Vault instead, or ask an administrator to use managed secret storage."
+                              : " This provider has no API-key alternative, so an administrator must use managed secret storage to enable subscription sign-in."}
+                        </InlineNoticeText>
+                      </InlineNotice>
+                    ) : (
+                      <>
+                        {perUserCredentialConnected && (
+                          <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+                            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
+                            <div>
+                              <p className="font-medium text-green-600 dark:text-green-400">
+                                {connectCopy.connectedTitle}
+                              </p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                {connectCopy.connectedDescription}
+                                {isEditMode && !isCredentialSubscriptionMode ? (
+                                  <span>
+                                    {
+                                      " Sign in again below to refresh the token."
+                                    }
+                                  </span>
+                                ) : null}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        <SubscriptionSignIn
+                          kind={activeSubscriptionKind}
+                          disabled={isPending}
+                          onSecret={async (secret) => {
+                            if (onSubscriptionCredential) {
+                              await onSubscriptionCredential(secret);
+                              return;
+                            }
+                            form.setValue("apiKey", secret, {
+                              shouldDirty: true,
+                            });
+                          }}
+                        />
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Label htmlFor="llm-provider-api-key-value">
+                      API Key{" "}
+                      {isProviderApiKeyOptional({
+                        provider,
+                        azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                        anthropicKeylessAuthEnabled:
+                          anthropicKeylessAuthEnabled === true,
+                      }) ? (
+                        <span className="font-normal text-muted-foreground">
+                          (optional)
+                        </span>
+                      ) : (
+                        isEditMode && (
+                          <span className="font-normal text-muted-foreground">
+                            (leave blank to keep current)
+                          </span>
+                        )
+                      )}
+                    </Label>
+                    {providerBlurb && (
+                      <FieldDescription>{providerBlurb}</FieldDescription>
+                    )}
+                    <div className="relative">
+                      <SecretInput
+                        id="llm-provider-api-key-value"
+                        placeholder={providerConfig.placeholder}
+                        disabled={isPending}
+                        // Offer the reveal toggle when adding a key so the user
+                        // can verify what they typed or pasted. Editing keeps the
+                        // "configured" check in that same corner instead, and
+                        // gating on the (constant) edit mode avoids remounting the
+                        // input mid-edit when the check would otherwise toggle.
+                        revealable={!isEditMode}
+                        className={
+                          showConfiguredStyling ? "border-green-500 pr-10" : ""
+                        }
+                        {...form.register("apiKey")}
+                      />
+                      {showConfiguredStyling && (
+                        <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
+                      )}
+                    </div>
+                    {showConsoleLink && (
+                      <FieldDescription>
+                        Get your API key from{" "}
+                        <Link
+                          href={providerConfig.consoleUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-foreground"
+                        >
+                          {providerConfig.consoleName}
+                        </Link>
+                      </FieldDescription>
+                    )}
+                  </>
+                ))}
+
+              {isBedrockSigV4 && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="llm-provider-aws-access-key-id">
+                      Access Key ID
+                    </Label>
+                    <SecretInput
+                      id="llm-provider-aws-access-key-id"
+                      placeholder="AKIA..."
+                      disabled={isPending}
+                      {...form.register("awsAccessKeyId")}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="llm-provider-aws-secret-access-key">
+                      Secret Access Key
+                    </Label>
+                    <SecretInput
+                      id="llm-provider-aws-secret-access-key"
+                      placeholder="••••••••"
+                      disabled={isPending}
+                      {...form.register("awsSecretAccessKey")}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="llm-provider-aws-session-token">
+                      Session Token{" "}
                       <span className="font-normal text-muted-foreground">
                         (optional)
                       </span>
-                    ) : (
-                      isEditMode && (
-                        <span className="font-normal text-muted-foreground">
-                          (leave blank to keep current)
-                        </span>
-                      )
-                    )}
-                  </Label>
-                  {providerBlurb && (
-                    <FieldDescription>{providerBlurb}</FieldDescription>
-                  )}
-                  <div className="relative">
+                    </Label>
                     <SecretInput
-                      id="llm-provider-api-key-value"
-                      placeholder={providerConfig.placeholder}
+                      id="llm-provider-aws-session-token"
+                      placeholder="Required for temporary credentials (STS / AssumeRole)"
                       disabled={isPending}
-                      // Offer the reveal toggle when adding a key so the user
-                      // can verify what they typed or pasted. Editing keeps the
-                      // "configured" check in that same corner instead, and
-                      // gating on the (constant) edit mode avoids remounting the
-                      // input mid-edit when the check would otherwise toggle.
-                      revealable={!isEditMode}
-                      className={
-                        showConfiguredStyling ? "border-green-500 pr-10" : ""
-                      }
-                      {...form.register("apiKey")}
+                      {...form.register("awsSessionToken")}
                     />
-                    {showConfiguredStyling && (
-                      <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
-                    )}
                   </div>
                   {showConsoleLink && (
-                    <FieldDescription>
-                      Get your API key from{" "}
+                    <p className="text-xs text-muted-foreground">
+                      Manage IAM credentials in the{" "}
                       <Link
-                        href={providerConfig.consoleUrl}
+                        href="https://console.aws.amazon.com/iam/home#/users"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="underline hover:text-foreground"
                       >
-                        {providerConfig.consoleName}
+                        AWS IAM Console
                       </Link>
-                    </FieldDescription>
+                      .
+                    </p>
                   )}
-                </>
-              ))}
-
-            {isBedrockSigV4 && (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="llm-provider-aws-access-key-id">
-                    Access Key ID
-                  </Label>
-                  <SecretInput
-                    id="llm-provider-aws-access-key-id"
-                    placeholder="AKIA..."
-                    disabled={isPending}
-                    {...form.register("awsAccessKeyId")}
-                  />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="llm-provider-aws-secret-access-key">
-                    Secret Access Key
-                  </Label>
-                  <SecretInput
-                    id="llm-provider-aws-secret-access-key"
-                    placeholder="••••••••"
-                    disabled={isPending}
-                    {...form.register("awsSecretAccessKey")}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="llm-provider-aws-session-token">
-                    Session Token{" "}
-                    <span className="font-normal text-muted-foreground">
-                      (optional)
-                    </span>
-                  </Label>
-                  <SecretInput
-                    id="llm-provider-aws-session-token"
-                    placeholder="Required for temporary credentials (STS / AssumeRole)"
-                    disabled={isPending}
-                    {...form.register("awsSessionToken")}
-                  />
-                </div>
-                {showConsoleLink && (
-                  <p className="text-xs text-muted-foreground">
-                    Manage IAM credentials in the{" "}
-                    <Link
-                      href="https://console.aws.amazon.com/iam/home#/users"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-foreground"
-                    >
-                      AWS IAM Console
-                    </Link>
-                    .
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* A saved key answers "who can reach this" from its own grant
-            policy, so editing one shows the policy. */}
-        {!hideScopeAndPrimary &&
-          !hidePermissions &&
-          !isSubscriptionFlow &&
-          existingKey?.id && (
-            <ResourceAccessSection
-              resource="llmProviderApiKey"
-              id={existingKey.id}
-            />
-          )}
-
-        {/* SPDX-SnippetBegin
-            SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-            SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-        {!hideScopeAndPrimary && !isPerUserCredential && !existingKey?.id && (
-          <div className="space-y-2">
-            <Label>Who uses this key</Label>
-            <Tabs
-              value={shared ? "shared" : "just-me"}
-              onValueChange={(value) =>
-                form.setValue("shared", value === "shared", {
-                  shouldDirty: true,
-                })
-              }
-            >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="just-me" disabled={isPending}>
-                  Just for me
-                </TabsTrigger>
-                <TabsTrigger value="shared" disabled={isPending}>
-                  Shared
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <FieldDescription>
-              {shared
-                ? "No one owns a shared key."
-                : "Only you use this key. It is picked before any shared key."}
-            </FieldDescription>
-            {shared && !hidePermissions && (
-              <ResourceAccessSection
-                resource="llmProviderApiKey"
-                grants={form.watch("initialGrants") ?? []}
-                onGrantsChange={(grants) =>
-                  form.setValue("initialGrants", grants, { shouldDirty: true })
-                }
-              />
-            )}
-          </div>
-        )}
-        {/* SPDX-SnippetEnd */}
-
-        {/* Region is a primary Bedrock field, not an advanced one: AWS enables
-            models per region, so a key is unusable until it points at the right
-            one. The endpoint it writes lives under Advanced settings below. */}
-        {!isSubscriptionFlow && isBedrock && (
-          <div className="space-y-2">
-            <Label htmlFor="llm-provider-api-key-bedrock-region">Region</Label>
-            <FieldDescription>
-              The AWS region to send {providerLabel} requests to. Models are
-              enabled per region, so pick the one where your models are
-              available.
-            </FieldDescription>
-            <Select
-              value={bedrockRegion}
-              onValueChange={(region) =>
-                form.setValue("baseUrl", bedrockRuntimeBaseUrl(region), {
-                  shouldDirty: true,
-                })
-              }
-              disabled={isPending}
-            >
-              <SelectTrigger id="llm-provider-api-key-bedrock-region">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {BEDROCK_REGIONS.map(({ id, label }) => (
-                  <SelectItem key={id} value={id}>
-                    {label} — {id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {hasUnresolvedBedrockRegion && (
-              <p className="text-xs text-amber-600 dark:text-amber-500">
-                The custom endpoint in Advanced settings carries no recognizable
-                region, so requests will run against{" "}
-                <code>{DEFAULT_BEDROCK_REGION}</code>. Use a{" "}
-                <code>bedrock-runtime.&lt;region&gt;.amazonaws.com</code>{" "}
-                endpoint to pin a different one.
-              </p>
-            )}
-          </div>
-        )}
-
-        {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
-
-        {progressive && hasAdvancedSettings && (
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-auto w-full justify-between px-0 py-2 text-sm"
-            aria-expanded={advancedSettingsOpen}
-            onClick={() => setAdvancedSettingsOpen((open) => !open)}
-          >
-            Advanced settings
-            <ChevronDown
-              className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
-            />
-          </Button>
-        )}
-
-        {showAdvancedSettings &&
-          !isSubscriptionFlow &&
-          !hideScopeAndPrimary && (
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="llm-provider-api-key-is-primary">
-                  Primary key
-                </Label>
-                <FieldDescription>
-                  <span>
-                    {existingPrimaryKey
-                      ? `"${existingPrimaryKey.name}" is already ${shared ? "the primary shared key" : "your primary key"} for this provider.`
-                      : shared
-                        ? "When there are several shared keys for one provider, the primary key is preferred."
-                        : "When you have several keys for one provider, your primary key is preferred."}
-                  </span>{" "}
-                  {/* The mechanism, which the sentence above only implies: key
-                      resolution takes the conversation's pinned key, then the
-                      agent's configured one, and only then falls through a
-                      owner's or the shared keys — primary first, oldest
-                      after. */}
-                  <span>
-                    Chats and agents without a key of their own fall back to it;
-                    with no primary set, the oldest key is used.
-                  </span>
-                </FieldDescription>
-              </div>
-              <Switch
-                id="llm-provider-api-key-is-primary"
-                checked={form.watch("isPrimary")}
-                onCheckedChange={(checked) =>
-                  form.setValue("isPrimary", checked, { shouldDirty: true })
-                }
-                disabled={isPending || Boolean(existingPrimaryKey)}
-              />
+              )}
             </div>
           )}
 
-        {!isSubscriptionFlow &&
-          !showBaseUrlUpFront &&
-          showAdvancedSettings &&
-          baseUrlField}
+          {/* A saved key answers "who can reach this" from its own grant
+            policy, so editing one shows the policy. */}
+          {!hideScopeAndPrimary &&
+            !hidePermissions &&
+            !isSubscriptionFlow &&
+            existingKey?.id && (
+              <ResourceAccessSection
+                resource="llmProviderApiKey"
+                id={existingKey.id}
+              />
+            )}
 
-        {!isSubscriptionFlow &&
-          showAdvancedSettings &&
-          provider === "azure" && (
+          {/* SPDX-SnippetBegin
+            SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+          {!hideScopeAndPrimary && !isPerUserCredential && !existingKey?.id && (
             <div className="space-y-2">
-              <Label htmlFor="llm-provider-api-key-inference-base-url">
-                Inference URL{" "}
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
+              <Label>Who uses this key</Label>
+              <Tabs
+                value={shared ? "shared" : "just-me"}
+                onValueChange={(value) =>
+                  form.setValue("shared", value === "shared", {
+                    shouldDirty: true,
+                  })
+                }
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="just-me" disabled={isPending}>
+                    Just for me
+                  </TabsTrigger>
+                  <TabsTrigger value="shared" disabled={isPending}>
+                    Shared
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <FieldDescription>
+                {shared
+                  ? "No one owns a shared key."
+                  : "Only you use this key. It is picked before any shared key."}
+              </FieldDescription>
+              {shared && !hidePermissions && (
+                <ResourceAccessSection
+                  resource="llmProviderApiKey"
+                  grants={form.watch("initialGrants") ?? []}
+                  onGrantsChange={(grants) =>
+                    form.setValue("initialGrants", grants, {
+                      shouldDirty: true,
+                    })
+                  }
+                />
+              )}
+            </div>
+          )}
+          {/* SPDX-SnippetEnd */}
+
+          {/* Region is a primary Bedrock field, not an advanced one: AWS enables
+            models per region, so a key is unusable until it points at the right
+            one. The endpoint it writes lives under Advanced settings below. */}
+          {!isSubscriptionFlow && isBedrock && (
+            <div className="space-y-2">
+              <Label htmlFor="llm-provider-api-key-bedrock-region">
+                Region
               </Label>
               <FieldDescription>
-                Runtime endpoint for chat and embeddings when it differs from
-                the Base URL used for Azure deployment discovery.
+                The AWS region to send {providerLabel} requests to. Models are
+                enabled per region, so pick the one where your models are
+                available.
               </FieldDescription>
-              <Input
-                id="llm-provider-api-key-inference-base-url"
-                type="url"
-                placeholder="https://<resource>.openai.azure.com/openai"
+              <Select
+                value={bedrockRegion}
+                onValueChange={(region) =>
+                  form.setValue("baseUrl", bedrockRuntimeBaseUrl(region), {
+                    shouldDirty: true,
+                  })
+                }
                 disabled={isPending}
-                {...form.register("inferenceBaseUrl", {
-                  validate: (value) => {
-                    if (!value) return true;
-
-                    try {
-                      const url = new URL(value);
-                      if (!["http:", "https:"].includes(url.protocol)) {
-                        return "URL must use http or https protocol";
-                      }
-                      return true;
-                    } catch {
-                      return "Please enter a valid URL (e.g. https://api.example.com)";
-                    }
-                  },
-                })}
-              />
-              {form.formState.errors.inferenceBaseUrl && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.inferenceBaseUrl.message}
+              >
+                <SelectTrigger id="llm-provider-api-key-bedrock-region">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BEDROCK_REGIONS.map(({ id, label }) => (
+                    <SelectItem key={id} value={id}>
+                      {label} — {id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasUnresolvedBedrockRegion && (
+                <p className="text-xs text-amber-600 dark:text-amber-500">
+                  The custom endpoint in Advanced settings carries no
+                  recognizable region, so requests will run against{" "}
+                  <code>{DEFAULT_BEDROCK_REGION}</code>. Use a{" "}
+                  <code>bedrock-runtime.&lt;region&gt;.amazonaws.com</code>{" "}
+                  endpoint to pin a different one.
                 </p>
               )}
             </div>
           )}
 
-        {!isSubscriptionFlow && showAdvancedSettings && (
-          <div className="space-y-2">
-            <Label>
-              Extra HTTP headers{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            </Label>
-            <FieldDescription>
-              Sent on every request to the provider. Useful for gateways that
-              require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
-            </FieldDescription>
-            {extraHeadersFieldArray.fields.length > 0 && (
-              <div className="space-y-2">
-                {extraHeadersFieldArray.fields.map((field, index) => (
-                  <div key={field.id} className="flex items-start gap-2">
-                    <Input
-                      aria-label="Header name"
-                      placeholder="Header name"
-                      disabled={isPending}
-                      className="flex-1"
-                      {...form.register(`extraHeaders.${index}.name` as const)}
-                    />
-                    <Input
-                      aria-label="Header value"
-                      placeholder="Header value"
-                      disabled={isPending}
-                      className="flex-1"
-                      {...form.register(`extraHeaders.${index}.value` as const)}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      disabled={isPending}
-                      onClick={() => extraHeadersFieldArray.remove(index)}
-                      aria-label={`Remove header ${index + 1}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+          {showAdvancedSettings &&
+            !isSubscriptionFlow &&
+            !hideScopeAndPrimary && (
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="llm-provider-api-key-is-primary">
+                    Primary key
+                  </Label>
+                  <FieldDescription>
+                    <span>
+                      {existingPrimaryKey
+                        ? `"${existingPrimaryKey.name}" is already ${shared ? "the primary shared key" : "your primary key"} for this provider.`
+                        : shared
+                          ? "When there are several shared keys for one provider, the primary key is preferred."
+                          : "When you have several keys for one provider, your primary key is preferred."}
+                    </span>{" "}
+                    {/* The mechanism, which the sentence above only implies: key
+                      resolution takes the conversation's pinned key, then the
+                      agent's configured one, and only then falls through a
+                      owner's or the shared keys — primary first, oldest
+                      after. */}
+                    <span>
+                      Chats and agents without a key of their own fall back to
+                      it; with no primary set, the oldest key is used.
+                    </span>
+                  </FieldDescription>
+                </div>
+                <Switch
+                  id="llm-provider-api-key-is-primary"
+                  checked={form.watch("isPrimary")}
+                  onCheckedChange={(checked) =>
+                    form.setValue("isPrimary", checked, { shouldDirty: true })
+                  }
+                  disabled={isPending || Boolean(existingPrimaryKey)}
+                />
               </div>
             )}
+
+          {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
+        </div>
+        <div hidden={activeSection === "general"} className="space-y-4">
+          {progressive && hasAdvancedSettings && !activeSection && (
             <Button
               type="button"
-              variant="outline"
-              size="sm"
-              disabled={isPending}
-              onClick={() =>
-                extraHeadersFieldArray.append({ name: "", value: "" })
-              }
+              variant="ghost"
+              className="h-auto w-full justify-between rounded-none border-t px-0 pt-4 pb-2 text-sm"
+              aria-expanded={advancedSettingsOpen}
+              onClick={() => setAdvancedSettingsOpen((open) => !open)}
             >
-              Add header
+              Advanced settings
+              <ChevronDown
+                className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
+              />
             </Button>
-          </div>
-        )}
+          )}
 
-        {showAdvancedSettings && hasLabelsEditor && (
-          <ProfileLabels
-            ref={labelsRef}
-            labels={labels}
-            onLabelsChange={onLabelsChange}
-          />
-        )}
+          {!isSubscriptionFlow &&
+            !showBaseUrlUpFront &&
+            showAdvancedSettings &&
+            baseUrlField}
+
+          {!isSubscriptionFlow &&
+            showAdvancedSettings &&
+            provider === "azure" && (
+              <div className="space-y-2">
+                <Label htmlFor="llm-provider-api-key-inference-base-url">
+                  Inference URL{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
+                </Label>
+                <FieldDescription>
+                  Runtime endpoint for chat and embeddings when it differs from
+                  the Base URL used for Azure deployment discovery.
+                </FieldDescription>
+                <Input
+                  id="llm-provider-api-key-inference-base-url"
+                  type="url"
+                  placeholder="https://<resource>.openai.azure.com/openai"
+                  disabled={isPending}
+                  {...form.register("inferenceBaseUrl", {
+                    validate: (value) => {
+                      if (!value) return true;
+
+                      try {
+                        const url = new URL(value);
+                        if (!["http:", "https:"].includes(url.protocol)) {
+                          return "URL must use http or https protocol";
+                        }
+                        return true;
+                      } catch {
+                        return "Please enter a valid URL (e.g. https://api.example.com)";
+                      }
+                    },
+                  })}
+                />
+                {form.formState.errors.inferenceBaseUrl && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.inferenceBaseUrl.message}
+                  </p>
+                )}
+              </div>
+            )}
+
+          {!isSubscriptionFlow && showAdvancedSettings && (
+            <div className="space-y-2">
+              <Label>
+                Extra HTTP headers{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <FieldDescription>
+                Sent on every request to the provider. Useful for gateways that
+                require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
+              </FieldDescription>
+              {extraHeadersFieldArray.fields.length > 0 && (
+                <div className="space-y-2">
+                  {extraHeadersFieldArray.fields.map((field, index) => (
+                    <div key={field.id} className="flex items-start gap-2">
+                      <Input
+                        aria-label="Header name"
+                        placeholder="Header name"
+                        disabled={isPending}
+                        className="flex-1"
+                        {...form.register(
+                          `extraHeaders.${index}.name` as const,
+                        )}
+                      />
+                      <Input
+                        aria-label="Header value"
+                        placeholder="Header value"
+                        disabled={isPending}
+                        className="flex-1"
+                        {...form.register(
+                          `extraHeaders.${index}.value` as const,
+                        )}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={isPending}
+                        onClick={() => extraHeadersFieldArray.remove(index)}
+                        aria-label={`Remove header ${index + 1}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isPending}
+                onClick={() =>
+                  extraHeadersFieldArray.append({ name: "", value: "" })
+                }
+              >
+                Add header
+              </Button>
+            </div>
+          )}
+
+          {showAdvancedSettings && hasLabelsEditor && (
+            <ProfileLabels
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={onLabelsChange}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

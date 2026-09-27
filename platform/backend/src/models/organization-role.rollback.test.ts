@@ -8,6 +8,7 @@ import {
 import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { describe, expect, test, vi } from "@/test";
 import OrganizationRoleModel from "./organization-role";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 describe("OrganizationRoleModel", () => {
   describe("isPredefinedRole", () => {
@@ -442,6 +443,48 @@ describe("OrganizationRoleModel", () => {
         reason: "Cannot delete role that is currently assigned to members",
       });
     });
+  });
+
+  test("deleting a role removes its resource grants and preserves other recipients", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeCustomRole,
+  }) => {
+    const organization = await makeOrganization();
+    const author = await makeUser();
+    const role = await makeCustomRole(organization.id, { permission: {} });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      agentType: "agent",
+      access: "personal",
+    });
+    const policyKey = {
+      organizationId: organization.id,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const before = await ResourcePermissionPolicyModel.find(policyKey);
+    const remainingGrant = {
+      subject: { type: "user" as const, id: author.id },
+      actions: ["read" as const],
+    };
+    await ResourcePermissionPolicyModel.replace({
+      ...policyKey,
+      revision: before?.revision ?? 0,
+      grants: [
+        remainingGrant,
+        { subject: { type: "role", id: role.id }, actions: ["read"] },
+      ],
+    });
+
+    expect(await OrganizationRoleModel.delete(role.id, organization.id)).toBe(
+      true,
+    );
+    const after = await ResourcePermissionPolicyModel.find(policyKey);
+    expect(after?.grants).toEqual([remainingGrant]);
+    expect(after?.revision).toBe((before?.revision ?? 0) + 2);
   });
 
   describe("getAllPaginated", () => {

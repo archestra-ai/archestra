@@ -11,14 +11,10 @@ import {
   PowerOff,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CopyableCode } from "@/components/copyable-code";
-import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { DetailFacts, presentFacts } from "@/components/detail-facts";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -37,14 +33,9 @@ import {
   AccountHealthBadge,
   KeyStatusBadge,
 } from "@/components/service-account-status-badge";
-import {
-  SettingsBlock,
-  SettingsSaveBar,
-  SettingsSectionStack,
-} from "@/components/settings/settings-block";
+import { SettingsSectionStack } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -60,7 +51,6 @@ import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { RoleSelect } from "@/components/ui/role-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -88,7 +78,6 @@ import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
-import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction, useSetSettingsPageHeader } from "../../layout";
 
 type TokenFormValues = {
@@ -110,18 +99,16 @@ const DEFAULT_TOKEN_FORM_VALUES: TokenFormValues = {
 const EXAMPLE_KEY = "<YOUR_KEY>";
 
 /**
- * The record's facets, in bar order. Overview is first and so is the tab an
+ * The record's facets, in bar order. API keys is first and is the tab an
  * unrecognised `?tab=` falls back to.
  *
- * A third facet, Permissions, belongs here once scoped grants reach service
- * accounts: add the id, its label, and a branch in the content switch.
  */
-const TAB_IDS = ["overview", "keys"] as const;
+const TAB_IDS = ["keys", "permissions"] as const;
 type DetailTab = (typeof TAB_IDS)[number];
 
 const TAB_LABELS: Record<DetailTab, string> = {
-  overview: "Overview",
   keys: "API keys",
+  permissions: "Permissions",
 };
 
 /** Sentinel for "no filter", matching the service accounts list beside it. */
@@ -162,9 +149,6 @@ export default function ServiceAccountDetailPage({
   const deleteTokenMutation = useDeleteServiceAccountToken();
   const bulkTokenAction = useBulkServiceAccountTokenAction();
 
-  const [selectedRole, setSelectedRole] = useState("member");
-  const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [isTokenDialogOpen, setIsTokenDialogOpen] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [keyToDelete, setKeyToDelete] = useState<ServiceAccountToken | null>(
@@ -172,7 +156,6 @@ export default function ServiceAccountDetailPage({
   );
   const [bulkRevokeOpen, setBulkRevokeOpen] = useState(false);
 
-  const form = useForm<{ name: string }>({ defaultValues: { name: "" } });
   const apiDocsUrl = getFrontendDocsUrl("platform-api-reference");
   const tokenForm = useForm<TokenFormValues>({
     defaultValues: DEFAULT_TOKEN_FORM_VALUES,
@@ -187,7 +170,7 @@ export default function ServiceAccountDetailPage({
   const tabParam = searchParams.get("tab");
   const activeTab: DetailTab = TAB_IDS.includes(tabParam as DetailTab)
     ? (tabParam as DetailTab)
-    : "overview";
+    : "keys";
 
   const search = searchParams.get("search") || "";
   const statusFilter = searchParams.get("status") || ALL;
@@ -217,7 +200,7 @@ export default function ServiceAccountDetailPage({
   const tabHref = useCallback(
     (tab: DetailTab) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (tab === "overview") {
+      if (tab === "keys") {
         params.delete("tab");
       } else {
         params.set("tab", tab);
@@ -323,21 +306,6 @@ export default function ServiceAccountDetailPage({
 
     return () => setPageHeader(null);
   }, [health, serviceAccount, setPageHeader, tabs]);
-
-  useEffect(() => {
-    if (!serviceAccount) return;
-
-    form.reset({ name: serviceAccount.name });
-    setSelectedRole(serviceAccount.role);
-    setLabels(serviceAccount.labels);
-  }, [form, serviceAccount]);
-
-  const watchedName = form.watch("name");
-  const hasChanges =
-    !!serviceAccount &&
-    (watchedName !== serviceAccount.name ||
-      selectedRole !== serviceAccount.role ||
-      JSON.stringify(labels) !== JSON.stringify(serviceAccount.labels));
 
   const {
     rowSelection,
@@ -489,28 +457,6 @@ export default function ServiceAccountDetailPage({
         },
       },
     );
-
-  const handleSave = async () => {
-    if (!serviceAccount || !watchedName.trim()) return;
-    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
-
-    await updateMutation.mutateAsync({
-      id: serviceAccountId,
-      body: {
-        name: watchedName.trim(),
-        role: selectedRole,
-        labels: finalLabels,
-      },
-    });
-  };
-
-  const handleCancel = () => {
-    if (!serviceAccount) return;
-
-    form.reset({ name: serviceAccount.name });
-    setSelectedRole(serviceAccount.role);
-    setLabels(serviceAccount.labels);
-  };
 
   const handleCreateToken = tokenForm.handleSubmit(async (values) => {
     const expiresIn = values.expiresAt
@@ -742,99 +688,14 @@ export default function ServiceAccountDetailPage({
               </div>
             </BulkActionsScope>
           ) : (
-            <>
-              <DetailFacts
-                facts={presentFacts([
-                  {
-                    label: "Role",
-                    value: (
-                      <Badge variant="secondary">
-                        {formatRoleName(serviceAccount.role)}
-                      </Badge>
-                    ),
-                  },
-                  {
-                    label: "API keys",
-                    value:
-                      serviceAccount.tokenCount === 0
-                        ? "None"
-                        : serviceAccount.activeTokenCount ===
-                            serviceAccount.tokenCount
-                          ? `${serviceAccount.tokenCount} usable`
-                          : `${serviceAccount.activeTokenCount} of ${serviceAccount.tokenCount} usable`,
-                  },
-                  {
-                    label: "Last used",
-                    value: serviceAccount.lastUsedAt
-                      ? formatRelativeTimeFromNow(serviceAccount.lastUsedAt)
-                      : "Never used",
-                  },
-                  {
-                    label: "Created",
-                    value: formatRelativeTimeFromNow(serviceAccount.createdAt),
-                  },
-                  createdByFact(serviceAccount.createdBy),
-                ])}
-                // No heading over it: the tab it sits on is the heading, and
-                // "Overview" twice on one screen is the duplication this page
-                // was reported for.
-                className="rounded-lg border bg-card p-4"
-              />
-
-              <SettingsBlock
-                title="Account settings"
-                description="Roles set allowed actions for requests made with this account's keys. Permissions determine which resources it can reach; the Permissions section below controls access to this service account."
-              >
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="service-account-name">Display name</Label>
-                    <Input
-                      id="service-account-name"
-                      disabled={!canUpdateServiceAccounts}
-                      {...form.register("name", { required: true })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="service-account-role">Roles</Label>
-                    <RoleSelect
-                      multiple
-                      id="service-account-role"
-                      value={selectedRole}
-                      onValueChange={setSelectedRole}
-                      disabled={!canUpdateServiceAccounts}
-                      placeholder="Select a role"
-                      className="w-full"
-                    />
-                  </div>
-                </div>
-              </SettingsBlock>
-
-              {/* SPDX-SnippetBegin */}
-              {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
-              {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-              <ResourceAccessSection
-                resource="serviceAccount"
-                id={serviceAccountId}
-              />
-              {/* SPDX-SnippetEnd */}
-
-              {/* Labels are rarely edited, so they sit collapsed below the
-                  permissions. */}
-              <AdvancedLabelsSection
-                ref={labelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
-              />
-
-              <SettingsSaveBar
-                hasChanges={hasChanges}
-                isSaving={updateMutation.isPending}
-                permissions={{ serviceAccount: ["update"] }}
-                onSave={handleSave}
-                onCancel={handleCancel}
-                disabledSave={!watchedName.trim()}
-              />
-            </>
+            /* SPDX-SnippetBegin
+               SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+               SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+            <ResourceAccessSection
+              resource="serviceAccount"
+              id={serviceAccountId}
+            />
+            /* SPDX-SnippetEnd */
           )}
 
           <CreateTokenDialog

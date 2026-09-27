@@ -436,8 +436,13 @@ export function CreateConnectorDialog({
         setActiveSection("general"),
       )}
       wrapForm={(children) => <Form {...form}>{children}</Form>}
-      sidebarFooter={
-        <ExternalDocsLink href={connectorDocsUrl}>Learn more</ExternalDocsLink>
+      headerExtra={
+        <ExternalDocsLink
+          href={connectorDocsUrl}
+          className="shrink-0 text-sm text-muted-foreground"
+        >
+          Learn more
+        </ExternalDocsLink>
       }
       footer={
         <>

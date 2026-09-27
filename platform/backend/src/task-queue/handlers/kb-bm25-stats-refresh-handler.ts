@@ -19,7 +19,7 @@ export async function handleKbBm25StatsRefresh(): Promise<void> {
   const startedAt = Date.now();
   const { languages, terms } = await KbChunkModel.refreshBm25Stats();
 
-  logger.info(
+  logger.debug(
     { languages, terms, durationMs: Date.now() - startedAt },
     "[KbBm25StatsRefresh] Rebuilt knowledge-base BM25 corpus statistics",
   );

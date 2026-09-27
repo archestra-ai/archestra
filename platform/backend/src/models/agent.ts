@@ -3849,7 +3849,7 @@ class AgentModel {
     // query_knowledge_sources) are assigned inside AgentModel.create along
     // with the rest of the creation-default set.
 
-    logger.info(
+    logger.debug(
       { userId, organizationId, agentId: agent.id },
       "Created personal chat agent",
     );
@@ -3981,7 +3981,7 @@ class AgentModel {
         userId,
       );
 
-      logger.info(
+      logger.debug(
         { userId, organizationId, agentId: gateway.id },
         "Created personal MCP gateway",
       );

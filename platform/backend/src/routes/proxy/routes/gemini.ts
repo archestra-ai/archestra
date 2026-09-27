@@ -29,7 +29,7 @@ import { removeForwardedAttestationMarkers } from "./proxy-prehandler";
 const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/gemini`;
 
-  logger.info("[UnifiedProxy] Registering unified Gemini routes");
+  logger.debug("[UnifiedProxy] Registering unified Gemini routes");
 
   /**
    * Register HTTP proxy for all Gemini routes EXCEPT generateContent and streamGenerateContent

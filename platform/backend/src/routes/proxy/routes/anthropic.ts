@@ -35,7 +35,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const ANTHROPIC_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
 
-  logger.info("[UnifiedProxy] Registering unified Anthropic routes");
+  logger.debug("[UnifiedProxy] Registering unified Anthropic routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.anthropic.baseUrl,

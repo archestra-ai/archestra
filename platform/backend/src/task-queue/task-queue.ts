@@ -26,7 +26,7 @@ export class TaskQueueService {
 
   registerHandler(taskType: string, handler: TaskHandler): void {
     this.handlers.set(taskType, handler);
-    logger.info({ taskType }, "[TaskQueue] Handler registered");
+    logger.debug({ taskType }, "[TaskQueue] Handler registered");
   }
 
   async enqueue(params: {
@@ -92,7 +92,7 @@ export class TaskQueueService {
           maxAttempts: 1,
           periodic: true,
         });
-        logger.info(
+        logger.debug(
           { taskType: def.taskType },
           "[TaskQueue] Seeded periodic task",
         );

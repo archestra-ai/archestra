@@ -67,7 +67,7 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const EMBEDDINGS_SUFFIX = "/embeddings";
 
-  logger.info("[UnifiedProxy] Registering unified Ollama routes");
+  logger.debug("[UnifiedProxy] Registering unified Ollama routes");
 
   // Only register HTTP proxy if Ollama is configured (has baseUrl)
   // Routes are always registered for OpenAPI schema generation
@@ -125,7 +125,7 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     });
   } else {
-    logger.info(
+    logger.debug(
       "[UnifiedProxy] Ollama base URL not configured, HTTP proxy disabled",
     );
   }

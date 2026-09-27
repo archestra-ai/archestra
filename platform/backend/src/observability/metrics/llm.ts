@@ -335,7 +335,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     enableExemplars: true,
   });
 
-  logger.info(
+  logger.debug(
     `Metrics initialized with ${
       nextLabelKeys.length
     } agent label keys: ${nextLabelKeys.join(", ")}`,

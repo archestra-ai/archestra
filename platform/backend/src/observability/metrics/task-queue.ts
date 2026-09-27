@@ -67,7 +67,7 @@ export function initializeTaskQueueMetrics(): void {
     help: "Total stuck tasks reset back to pending",
   });
 
-  logger.info("Task queue metrics initialized");
+  logger.debug("Task queue metrics initialized");
 }
 
 export function reportTaskEnqueued(taskType: string): void {

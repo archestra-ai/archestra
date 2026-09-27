@@ -141,7 +141,24 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
-        if ! kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s; then
+        # Drop KinD's lines that do not apply inside this container: the
+        # "Here be dragons" warning KIND_EXPERIMENTAL_DOCKER_NETWORK triggers
+        # (the override is intentional, see above), host kubectl hints, and
+        # sign-off tips. pipefail keeps a failed create visible to the `if`.
+        if ! (
+            set -o pipefail
+            kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s 2>&1 \
+                | grep -v \
+                    -e "Overriding docker network due to KIND_EXPERIMENTAL_DOCKER_NETWORK" \
+                    -e "Here be dragons" \
+                    -e "You can now use your cluster with" \
+                    -e "kubectl cluster-info --context" \
+                    -e "Not sure what to do next" \
+                    -e "Have a question, bug, or feature request" \
+                    -e "Have a nice day" \
+                    -e "Thanks for using kind" \
+                    -e "^$"
+        ); then
             echo ""
             echo "=== KinD cluster creation failed ==="
             echo ""
@@ -335,44 +352,75 @@ if [ "$USE_EXTERNAL_DB" = "false" ]; then
     # Append postgres program to supervisord config
     cat /etc/supervisord.postgres.conf >> /etc/supervisord.conf
 
+    # The setup below prints several screens of initdb and server output on a
+    # healthy start. Keep it out of `docker logs` unless a step fails, and send
+    # the temporary server's own log to a file that is shown on failure.
+    # Both root (this script) and postgres (the temporary server) append to the
+    # log. It lives in a private directory rather than straight in /tmp: with
+    # fs.protected_regular, root may not open a postgres-owned file in a sticky
+    # directory.
+    PG_SETUP_DIR=$(mktemp -d)
+    PG_SETUP_LOG="$PG_SETUP_DIR/postgres-setup.log"
+    : > "$PG_SETUP_LOG"
+    chown -R postgres "$PG_SETUP_DIR"
+    pg_setup() {
+        if ! "$@" >> "$PG_SETUP_LOG" 2>&1; then
+            echo "ERROR: PostgreSQL setup failed running: $*"
+            cat "$PG_SETUP_LOG"
+            exit 1
+        fi
+    }
+    pg_temp_start() {
+        pg_setup su-exec postgres pg_ctl -D /var/lib/postgresql/data \
+            -o "-c listen_addresses='' -c log_checkpoints=off" \
+            -l "$PG_SETUP_LOG" -s -w start
+    }
+    pg_temp_stop() {
+        pg_setup su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -s -w stop
+    }
+    # CREATE EXTENSION IF NOT EXISTS reports "already exists" as a NOTICE.
+    export PGOPTIONS="-c client_min_messages=warning"
+
     # Initialize PostgreSQL if data directory is empty
     if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
         echo "Initializing PostgreSQL database..."
-        su-exec postgres initdb -D /var/lib/postgresql/data
+        pg_setup su-exec postgres initdb -D /var/lib/postgresql/data
 
         # Configure PostgreSQL
         echo "host all all all md5" >> /var/lib/postgresql/data/pg_hba.conf
         echo "listen_addresses='*'" >> /var/lib/postgresql/data/postgresql.conf
 
         # Start PostgreSQL temporarily to create user and database
-        su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
+        pg_temp_start
 
         # Create user and database
-        psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
+        pg_setup psql -q -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
             CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
             CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
             GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
 EOSQL
 
         # Create pgvector extension as superuser (required for knowledge base feature)
-        psql -v ON_ERROR_STOP=1 --username postgres --dbname ${POSTGRES_DB} <<-EOSQL
+        pg_setup psql -q -v ON_ERROR_STOP=1 --username postgres --dbname ${POSTGRES_DB} <<-EOSQL
             CREATE EXTENSION IF NOT EXISTS vector;
 EOSQL
 
         # Stop PostgreSQL
-        su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
+        pg_temp_stop
 
         echo "PostgreSQL initialized successfully"
     else
         # Existing database — ensure pgvector extension exists (idempotent).
         # On first init the extension is created above, but upgrades from older
         # images need it created retroactively before Drizzle migrations run.
-        su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
-        psql -v ON_ERROR_STOP=1 --username postgres --dbname ${POSTGRES_DB} <<-EOSQL
+        pg_temp_start
+        pg_setup psql -q -v ON_ERROR_STOP=1 --username postgres --dbname ${POSTGRES_DB} <<-EOSQL
             CREATE EXTENSION IF NOT EXISTS vector;
 EOSQL
-        su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
+        pg_temp_stop
     fi
+    unset PGOPTIONS
+    rm -rf "$PG_SETUP_DIR"
 else
     echo "Using external PostgreSQL database"
     # Note: POSTGRES_USER/PASSWORD/DB extraction removed - not needed for external databases

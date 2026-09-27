@@ -60,7 +60,7 @@ const CodexModelsSchema = z.object({
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
 
-  logger.info("[UnifiedProxy] Registering unified OpenAI routes");
+  logger.debug("[UnifiedProxy] Registering unified OpenAI routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.openai.baseUrl,

@@ -129,7 +129,7 @@ class SystemKeyManager {
    */
   async syncSystemKeys(organizationId: string): Promise<SupportedProvider[]> {
     const failedProviders: SupportedProvider[] = [];
-    logger.info({ organizationId }, "Starting system API keys sync");
+    logger.debug({ organizationId }, "Starting system API keys sync");
 
     for (const providerConfig of this.keylessProviders) {
       try {
@@ -148,7 +148,7 @@ class SystemKeyManager {
       }
     }
 
-    logger.info({ organizationId }, "Completed system API keys sync");
+    logger.debug({ organizationId }, "Completed system API keys sync");
     return failedProviders;
   }
 

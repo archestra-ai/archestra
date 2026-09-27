@@ -49,7 +49,7 @@ export function initializeSkillMetrics(): void {
     labelNames: ["activation_type"],
   });
 
-  logger.info("Skill metrics initialized");
+  logger.debug("Skill metrics initialized");
 }
 
 /**

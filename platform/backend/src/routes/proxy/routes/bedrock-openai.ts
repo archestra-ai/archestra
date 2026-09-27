@@ -41,7 +41,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const BEDROCK_OPENAI_PREFIX = `${PROXY_API_PREFIX}/bedrock/openai`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info(
+  logger.debug(
     "[UnifiedProxy] Registering Bedrock OpenAI-compatible chat completion routes",
   );
 

@@ -1742,7 +1742,7 @@ class ToolModel {
           staleTools.map((t) => t.id),
         ),
       );
-      logger.info(
+      logger.debug(
         { staleToolNames: staleTools.map((t) => t.name) },
         "Removed stale Archestra tools",
       );
@@ -1798,7 +1798,7 @@ class ToolModel {
         [toolId],
         "allow_when_context_is_untrusted",
       );
-      logger.info(
+      logger.debug(
         { toolId },
         "Seeded default tool invocation policy for query_knowledge_sources",
       );
@@ -1809,7 +1809,7 @@ class ToolModel {
         [toolId],
         "mark_as_untrusted",
       );
-      logger.info(
+      logger.debug(
         { toolId },
         "Seeded default trusted data policy for query_knowledge_sources",
       );
@@ -1839,7 +1839,7 @@ class ToolModel {
       await AgentToolModel.createManyIfNotExists(agentId, toolIds);
     }
 
-    logger.info(
+    logger.debug(
       { organizationId, agentCount: agentIds.length },
       "Backfilled Agent Skill tools to org agents",
     );
@@ -1913,7 +1913,7 @@ class ToolModel {
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }
-      logger.info(
+      logger.debug(
         {
           organizationId,
           agentCount: agentIds.length,
@@ -1969,7 +1969,7 @@ class ToolModel {
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }
-      logger.info(
+      logger.debug(
         {
           organizationId,
           agentCount: agentIds.length,

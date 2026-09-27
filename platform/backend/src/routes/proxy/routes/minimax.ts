@@ -14,7 +14,7 @@ const minimaxProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/minimax`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified MiniMax routes");
+  logger.debug("[UnifiedProxy] Registering unified MiniMax routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.minimax.baseUrl as string,

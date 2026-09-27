@@ -197,7 +197,7 @@ class CacheManager {
       }
     });
 
-    logger.info("CacheManager: Started with Keyv PostgreSQL storage");
+    logger.debug("CacheManager: Started with Keyv PostgreSQL storage");
   }
 
   /**

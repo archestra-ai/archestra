@@ -106,7 +106,7 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
     enableExemplars: true,
   });
 
-  logger.info(
+  logger.debug(
     `MCP metrics initialized with ${nextLabelKeys.length} agent label keys: ${nextLabelKeys.join(", ")}`,
   );
 }

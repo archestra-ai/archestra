@@ -289,7 +289,7 @@ class WebSocketService {
       this.browserStreamContext = null;
     }
 
-    logger.info(`WebSocket server started on path ${path}`);
+    logger.debug(`WebSocket server started on path ${path}`);
 
     this.startDeploymentMetricsPolling();
 

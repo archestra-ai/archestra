@@ -197,7 +197,7 @@ const sdk = new NodeSDK({
 sdk.start();
 
 // Log telemetry configuration details
-logger.info(
+logger.debug(
   {
     sentryEnabled,
     tracesSampleRate: sentryEnabled ? "managed by Sentry" : tracesSampleRate,

@@ -26,7 +26,7 @@ export function initializeAuditMetrics(): void {
     labelNames: ["source", "resource_type"],
   });
 
-  logger.info("Audit metrics initialized");
+  logger.debug("Audit metrics initialized");
 }
 
 export function reportAuditWriteFailure(params: {

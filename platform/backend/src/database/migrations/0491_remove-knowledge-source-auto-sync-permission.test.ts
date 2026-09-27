@@ -5,7 +5,7 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0490_remove-knowledge-source-auto-sync-permission.sql"),
+  path.join(__dirname, "0491_remove-knowledge-source-auto-sync-permission.sql"),
   "utf-8",
 );
 
@@ -37,7 +37,7 @@ async function getRolePermission(
   return JSON.parse(role.permission as unknown as string);
 }
 
-describe("0490 remove knowledge source auto-sync permission", () => {
+describe("0491 remove knowledge source auto-sync permission", () => {
   test("removes the old resource while preserving connector and other permissions", async ({
     makeOrganization,
   }) => {

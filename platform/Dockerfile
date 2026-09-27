@@ -638,9 +638,11 @@ RUN chmod +x /app/docker-banner.sh
 # Expose ports
 EXPOSE 5432 9000 9050 3000
 
-# Health check
+# Health check. Probes a static public file rather than `/`: `/` redirects to
+# /chat, and rendering a page fetches appearance settings from the backend,
+# which put two request log lines into `docker logs` every 30 seconds.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/default-favicon.ico || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 

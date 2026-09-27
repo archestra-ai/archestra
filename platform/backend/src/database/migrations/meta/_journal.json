@@ -3435,8 +3435,15 @@
     {
       "idx": 490,
       "version": "7",
-      "when": 1790512777964,
-      "tag": "0490_remove-knowledge-source-auto-sync-permission",
+      "when": 1790433957125,
+      "tag": "0490_openappa_receipts_organization",
+      "breakpoints": true
+    },
+    {
+      "idx": 491,
+      "version": "7",
+      "when": 1790519899310,
+      "tag": "0491_remove-knowledge-source-auto-sync-permission",
       "breakpoints": true
     }
   ]

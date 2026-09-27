@@ -29,6 +29,24 @@ if [ -n "$ARCHESTRA_NGROK_DOMAIN" ]; then
     TUNNEL_URL="https://${ARCHESTRA_NGROK_DOMAIN}"
 fi
 
+# Print once both servers answer, so the banner lands after the startup logs
+# instead of in the middle of them. Give up waiting after BANNER_WAIT_SECONDS
+# and print anyway: the banner is informational and must not depend on a
+# healthy boot.
+BANNER_WAIT_SECONDS=180
+waited=0
+while [ "$waited" -lt "$BANNER_WAIT_SECONDS" ]; do
+    if wget -q --spider "${BACKEND_URL}/ready" 2>/dev/null \
+        && wget -q --spider "http://127.0.0.1:3000/default-favicon.ico" 2>/dev/null; then
+        break
+    fi
+    sleep 2
+    waited=$((waited + 2))
+done
+# The backend keeps logging one-off startup work for a few seconds after it
+# starts answering; let that settle so it doesn't push the banner off screen.
+sleep 5
+
 echo ""
 printf "${CYAN}%s${NC}\n" "$BANNER_BAR"
 echo ""

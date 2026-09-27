@@ -1,4 +1,4 @@
-import { type Span, type TracerProvider, trace } from "@opentelemetry/api";
+import type { Span } from "@opentelemetry/api";
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -10,24 +10,20 @@ import { type SpanTeamInfo, setTeamAttributes } from "./attributes";
 
 let exporter: InMemorySpanExporter;
 let provider: BasicTracerProvider;
-let originalProvider: TracerProvider;
 
 beforeAll(() => {
   exporter = new InMemorySpanExporter();
   provider = new BasicTracerProvider({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
-  originalProvider = trace.getTracerProvider();
-  trace.setGlobalTracerProvider(provider);
 });
 
 afterEach(() => {
   exporter.reset();
 });
 
-afterAll(() => {
-  provider.shutdown();
-  trace.setGlobalTracerProvider(originalProvider);
+afterAll(async () => {
+  await provider.shutdown();
 });
 
 /**
@@ -35,7 +31,7 @@ afterAll(() => {
  * attributes can be asserted.
  */
 function captureSpan(fn: (span: Span) => void): ReadableSpan {
-  const tracer = trace.getTracer("test");
+  const tracer = provider.getTracer("test");
   const span = tracer.startSpan("test-span");
   fn(span);
   span.end();

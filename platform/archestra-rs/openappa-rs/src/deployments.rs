@@ -206,33 +206,46 @@ mod tests {
         policy: &HostedPolicy,
     ) -> bool {
         let before = deployments.held(organization);
-        tokio::runtime::Builder::new_current_thread()
-            .build()
-            .unwrap()
-            .block_on(deployments.deployment(runtime, organization, policy, false))
-            .expect("the policy compiles");
+        serve(deployments, runtime, organization, policy).expect("the policy compiles");
         let after = deployments
             .held(organization)
             .expect("a deployment is held");
         before.is_none_or(|before| !Arc::ptr_eq(&before.content, &after.content))
     }
 
+    fn serve(
+        deployments: &Deployments,
+        runtime: &Runtime,
+        organization: &str,
+        policy: &HostedPolicy,
+    ) -> Result<PreparedDeployment, String> {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(deployments.deployment(runtime, organization, policy, false))
+    }
+
     #[test]
     fn a_deployment_is_reused_until_its_policy_or_a_looked_up_credential_changes() {
         let runtime = runtime();
         let deployments = Deployments::default();
-        let serve =
+        let prepares_for =
             |content: &str, key| prepares(&deployments, &runtime, "org-a", &policy(content, key));
-        assert!(serve(JEV, Some("one")));
+        assert!(prepares_for(JEV, Some("one")));
         assert!(
-            !serve(JEV, Some("one")),
+            !prepares_for(JEV, Some("one")),
             "the same inputs reuse the deployment"
         );
-        assert!(serve(JEV, Some("two")), "a rotated key prepares anew");
-        assert!(serve(JEV, None), "a removed key prepares anew");
-        assert!(!serve(JEV, None));
         assert!(
-            serve(&format!("{JEV}# edited\n"), None),
+            prepares_for(JEV, Some("two")),
+            "a rotated key prepares anew"
+        );
+        assert!(
+            serve(&deployments, &runtime, "org-a", &policy(JEV, None)).is_err(),
+            "a removed key refuses rather than serving the deployment its old key opened"
+        );
+        assert!(
+            prepares_for(&format!("{JEV}# edited\n"), Some("two")),
             "an edited policy prepares anew"
         );
     }

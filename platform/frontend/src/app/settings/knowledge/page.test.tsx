@@ -576,6 +576,9 @@ describe("KnowledgeSettingsPage", () => {
         },
       ];
       renderPage();
+      await user.click(
+        screen.getByRole("button", { name: "Advanced options" }),
+      );
 
       await user.click(getRerankerModelTrigger());
 
@@ -736,7 +739,7 @@ describe("KnowledgeSettingsPage", () => {
 
       expect(screen.getByText("Embedding index locked")).toBeInTheDocument();
       expect(
-        screen.getByText(/Drop the index to change models/),
+        screen.getByText(/Changing models re-embeds documents/),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Drop index" }),
@@ -937,7 +940,7 @@ describe("KnowledgeSettingsPage", () => {
   });
 
   describe("reranking section", () => {
-    it("keeps unconfigured optional models collapsed until requested", async () => {
+    it("shows OCR while keeping search controls in one closed accordion", async () => {
       const user = userEvent.setup();
       mockOrganization = {
         embeddingChatApiKeyId: null,
@@ -949,28 +952,19 @@ describe("KnowledgeSettingsPage", () => {
       };
       renderPage();
 
-      expect(
-        screen.getByRole("button", { name: "Configure reranking" }),
-      ).toBeVisible();
-      expect(
-        screen.getByRole("button", { name: "Configure OCR" }),
-      ).toBeVisible();
+      expect(screen.getByText("Document OCR")).toBeVisible();
+      expect(screen.getByText("Select an OCR API key first...")).toBeVisible();
       expect(
         screen.queryByText("Select a reranker API key first..."),
       ).not.toBeInTheDocument();
-      expect(
-        screen.queryByText("Select an OCR API key first..."),
-      ).not.toBeInTheDocument();
 
       await user.click(
-        screen.getByRole("button", { name: "Configure reranking" }),
+        screen.getByRole("button", { name: "Advanced options" }),
       );
-      await user.click(screen.getByRole("button", { name: "Configure OCR" }));
 
       expect(
         screen.getByText("Select a reranker API key first..."),
       ).toBeVisible();
-      expect(screen.getByText("Select an OCR API key first...")).toBeVisible();
     });
 
     it("keeps tuning controls out of the initial view until expanded", async () => {
@@ -991,7 +985,7 @@ describe("KnowledgeSettingsPage", () => {
       ).not.toBeInTheDocument();
 
       await user.click(
-        screen.getByRole("button", { name: /Advanced search options/ }),
+        screen.getByRole("button", { name: /Advanced options/ }),
       );
 
       expect(
@@ -1011,7 +1005,7 @@ describe("KnowledgeSettingsPage", () => {
       };
       renderPage();
 
-      expect(screen.getByText("Search quality")).toBeInTheDocument();
+      expect(screen.getByText("Search ranking")).toBeInTheDocument();
     });
 
     it("saves per-passage context generation independently", async () => {
@@ -1025,7 +1019,7 @@ describe("KnowledgeSettingsPage", () => {
       };
       renderPage();
       await user.click(
-        screen.getByRole("button", { name: /Advanced search options/ }),
+        screen.getByRole("button", { name: /Advanced options/ }),
       );
 
       const mode = screen.getByRole("combobox", {
@@ -1058,12 +1052,7 @@ describe("KnowledgeSettingsPage", () => {
           ? "document"
           : false) as unknown as typeof useFeature);
       renderPage();
-      expect(
-        screen.getByRole("button", { name: /Advanced search options/ }),
-      ).toHaveTextContent("Context: per document");
-      fireEvent.click(
-        screen.getByRole("button", { name: /Advanced search options/ }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
 
       expect(
         screen.getByRole("combobox", { name: "Context generation" }),
@@ -1090,9 +1079,7 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      fireEvent.click(
-        screen.getByRole("button", { name: "Configure reranking" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Advanced options" }));
       expect(
         screen.getByText("Select a reranker API key first..."),
       ).toBeInTheDocument();
@@ -1116,6 +1103,9 @@ describe("KnowledgeSettingsPage", () => {
         },
       ];
       renderPage();
+      await user.click(
+        screen.getByRole("button", { name: "Advanced options" }),
+      );
 
       await user.click(
         screen.getByRole("button", {
@@ -1195,8 +1185,11 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
+      await user.click(
+        screen.getByRole("button", { name: "Advanced options" }),
+      );
       const rerankingSection = screen
-        .getByText("Search quality")
+        .getByText("Search ranking")
         .closest("section");
       expect(rerankingSection).not.toBeNull();
       await user.click(
@@ -1235,8 +1228,11 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
+      await user.click(
+        screen.getByRole("button", { name: "Advanced options" }),
+      );
       const rerankingSection = screen
-        .getByText("Search quality")
+        .getByText("Search ranking")
         .closest("section");
       expect(rerankingSection).not.toBeNull();
       await user.click(
@@ -1254,29 +1250,6 @@ describe("KnowledgeSettingsPage", () => {
     });
   });
 
-  it("summarizes connector availability until the list is opened", async () => {
-    const user = userEvent.setup();
-    mockOrganization = {
-      embeddingChatApiKeyId: null,
-      embeddingModel: null,
-      rerankerChatApiKeyId: null,
-      rerankerModel: null,
-      knowledgeConnectorOverrides: null,
-    };
-    renderPage();
-
-    expect(screen.getByRole("button", { name: /types enabled/ })).toBeVisible();
-    expect(
-      screen.queryByRole("textbox", { name: "Search options" }),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /types enabled/ }));
-
-    expect(
-      screen.getByRole("textbox", { name: "Search options" }),
-    ).toBeVisible();
-  });
-
   describe("loading state", () => {
     it("shows loading spinner while organization is loading", () => {
       mockOrgPending = true;
@@ -1290,9 +1263,7 @@ describe("KnowledgeSettingsPage", () => {
   describe("keyword ranking section", () => {
     const renderAdvancedPage = () => {
       renderPage();
-      fireEvent.click(
-        screen.getByRole("button", { name: /Advanced search options/ }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
     };
     const baseOrg = {
       embeddingChatApiKeyId: null,
@@ -1318,7 +1289,7 @@ describe("KnowledgeSettingsPage", () => {
       mockFeatures();
       renderAdvancedPage();
 
-      expect(screen.getByText("Search quality")).toBeInTheDocument();
+      expect(screen.getByText("Search ranking")).toBeInTheDocument();
       expect(screen.getByText("Keyword ranking")).toBeInTheDocument();
       const k1 = screen.getByLabelText("Term Saturation") as HTMLInputElement;
       const b = screen.getByLabelText(
@@ -1352,13 +1323,10 @@ describe("KnowledgeSettingsPage", () => {
         lastRefreshedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
       });
       const { unmount: unmountReady } = renderPage();
-      // The ranking status stays visible while the advanced controls are closed.
-      const advanced = screen.getByRole("button", {
-        name: /Advanced search options/,
-      });
-      expect(advanced).toHaveTextContent(
-        /Ready · statistics refreshed 5 minutes ago/,
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Advanced options" }));
+      expect(
+        screen.getByText("Keyword ranking").parentElement,
+      ).toHaveTextContent(/Ready · statistics refreshed 5 minutes ago/);
       unmountReady();
 
       mockStatus({
@@ -1366,6 +1334,7 @@ describe("KnowledgeSettingsPage", () => {
         nextRefreshAt: new Date(Date.now() + 40 * 60_000).toISOString(),
       });
       const { unmount: unmountPending } = renderPage();
+      fireEvent.click(screen.getByRole("button", { name: "Advanced options" }));
       expect(screen.getByText("Building statistics")).toBeInTheDocument();
       expect(screen.getByText(/ready in 40 minutes/)).toBeInTheDocument();
       // The consequence moved to the hover detail to keep the line glanceable.
@@ -1379,6 +1348,7 @@ describe("KnowledgeSettingsPage", () => {
         refreshing: true,
       });
       const { unmount: unmountRefreshing } = renderPage();
+      fireEvent.click(screen.getByRole("button", { name: "Advanced options" }));
       expect(screen.getByText("Updating statistics…")).toBeInTheDocument();
       unmountRefreshing();
 

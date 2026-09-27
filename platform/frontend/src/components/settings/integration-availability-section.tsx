@@ -4,7 +4,6 @@ import {
   allowedIntegrationIds,
   withAllowedIntegrationIds,
 } from "@archestra/shared";
-import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -12,12 +11,6 @@ import {
   SettingsBlock,
   SettingsSaveBar,
 } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   MultiSelectCombobox,
   type MultiSelectOption,
@@ -26,7 +19,6 @@ import {
   useOrganization,
   useUpdateIntegrationSettings,
 } from "@/lib/organization.query";
-import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Which entries of a built-in catalog this deployment offers, as one chip per
@@ -48,7 +40,6 @@ export function IntegrationAvailabilitySection({
   emptyMessage,
   savedMessage,
   id,
-  collapsible = false,
 }: {
   catalogKey:
     | "modelProviderOverrides"
@@ -62,7 +53,6 @@ export function IntegrationAvailabilitySection({
   emptyMessage: string;
   savedMessage: string;
   id?: string;
-  collapsible?: boolean;
 }) {
   const { data: organization } = useOrganization();
   const updateMutation = useUpdateIntegrationSettings(
@@ -74,7 +64,6 @@ export function IntegrationAvailabilitySection({
   const savedAllowed = allowedIntegrationIds(overrides, catalog);
 
   const [allowed, setAllowed] = useState<string[]>(savedAllowed);
-  const [isOpen, setIsOpen] = useState(false);
   // The organization arrives after first paint, and a save replaces it. Both
   // are the same event as far as this section is concerned: adopt what the
   // server now holds, unless the admin has unsaved edits in front of them.
@@ -94,24 +83,6 @@ export function IntegrationAvailabilitySection({
     });
   };
 
-  const selector = (
-    <WithPermissions
-      permissions={{ organizationSettings: ["update"] }}
-      noPermissionHandle="tooltip"
-    >
-      {({ hasPermission }) => (
-        <MultiSelectCombobox
-          options={options}
-          value={allowed}
-          onChange={setAllowed}
-          placeholder={placeholder}
-          emptyMessage={emptyMessage}
-          disabled={updateMutation.isPending || !hasPermission}
-        />
-      )}
-    </WithPermissions>
-  );
-
   return (
     <>
       <SettingsBlock
@@ -120,30 +91,21 @@ export function IntegrationAvailabilitySection({
         description={description}
         control={null}
       >
-        {collapsible ? (
-          <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-auto min-h-10 w-full justify-between py-2 font-normal"
-              >
-                <span>
-                  {allowed.length} of {catalog.length} types enabled
-                </span>
-                <ChevronDown
-                  className={cn(
-                    "size-4 text-muted-foreground transition-transform",
-                    isOpen && "rotate-180",
-                  )}
-                />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-3">{selector}</CollapsibleContent>
-          </Collapsible>
-        ) : (
-          selector
-        )}
+        <WithPermissions
+          permissions={{ organizationSettings: ["update"] }}
+          noPermissionHandle="tooltip"
+        >
+          {({ hasPermission }) => (
+            <MultiSelectCombobox
+              options={options}
+              value={allowed}
+              onChange={setAllowed}
+              placeholder={placeholder}
+              emptyMessage={emptyMessage}
+              disabled={updateMutation.isPending || !hasPermission}
+            />
+          )}
+        </WithPermissions>
       </SettingsBlock>
       <SettingsSaveBar
         hasChanges={hasChanges}

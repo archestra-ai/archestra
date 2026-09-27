@@ -23,7 +23,6 @@ import {
   AlertCircle,
   ArrowUpRight,
   CheckCircle2,
-  ChevronDown,
   Clock,
   Info,
   Loader2,
@@ -62,12 +61,13 @@ import {
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
-import { Button } from "@/components/ui/button";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Button } from "@/components/ui/button";
 import {
   DialogBody,
   DialogForm,
@@ -156,7 +156,7 @@ function CardRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_20rem] sm:items-center sm:gap-8">
+    <div className="grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-center sm:gap-4">
       <Label className="text-sm text-muted-foreground">{label}</Label>
       <div className="min-w-0">{children}</div>
     </div>
@@ -735,9 +735,6 @@ function KnowledgeSettingsContent() {
   const testRerankerConnection = useTestRerankerConnection();
   const testOcrConnection = useTestOcrConnection();
   const [showDropDialog, setShowDropDialog] = useState(false);
-  const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false);
-  const [rerankerOpen, setRerankerOpen] = useState(false);
-  const [ocrOpen, setOcrOpen] = useState(false);
 
   // Per-section connection status (the pill + inline reason on each card).
   const [embeddingStatus, setEmbeddingStatus] = useState<SectionStatus>({
@@ -874,12 +871,6 @@ function KnowledgeSettingsContent() {
         organization.kbContextualRetrievalMode ??
           contextualRetrievalDefaultMode,
       );
-      if (organization.rerankerChatApiKeyId || organization.rerankerModel) {
-        setRerankerOpen(true);
-      }
-      if (organization.ocrChatApiKeyId || organization.ocrModel) {
-        setOcrOpen(true);
-      }
     }
   }, [organization, contextualRetrievalDefaultMode]);
 
@@ -1176,7 +1167,7 @@ function KnowledgeSettingsContent() {
 
   return (
     <LoadingWrapper isPending={isInitialLoading} loadingFallback={null}>
-      <SettingsSectionStack className="mx-auto max-w-4xl space-y-0 [&>section]:border-b [&>section]:py-8 [&>section:first-child]:pt-0 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-6">
+      <SettingsSectionStack>
         <SettingsBlock
           id="embedding-configuration"
           title="Embedding model"
@@ -1240,7 +1231,7 @@ function KnowledgeSettingsContent() {
                     }
                   />
                 </CardRow>
-                <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
+                <p className="text-sm text-muted-foreground sm:pl-40">
                   Don't see your model?{" "}
                   <Link
                     href="/llm/models"
@@ -1269,7 +1260,7 @@ function KnowledgeSettingsContent() {
                   )}
                 {selectedEmbeddingProvider === "gemini" &&
                   selectedEmbeddingModel?.embeddingDimensions === 1536 && (
-                    <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
+                    <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-40">
                       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       <span>
                         Gemini will truncate from its native 3072 dimensions via
@@ -1279,7 +1270,7 @@ function KnowledgeSettingsContent() {
                   )}
                 {embeddingStatus.status === "failed" &&
                   embeddingStatus.error && (
-                    <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
+                    <p className="flex items-start gap-2 text-sm text-destructive sm:pl-40">
                       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                       <span>{embeddingStatus.error}</span>
                     </p>
@@ -1292,35 +1283,24 @@ function KnowledgeSettingsContent() {
             )}
           </WithPermissions>
           {showEmbeddingFooter && (
-            <div
-              className={cn(
-                "mt-5 flex flex-col gap-4 border-t pt-4 sm:flex-row sm:items-center sm:justify-between",
-              )}
-            >
-              {isEmbeddingModelLocked ? (
-                <div className="flex min-w-0 items-start gap-3 sm:max-w-md">
-                  <div className="pt-0.5 text-muted-foreground">
-                    <Lock className="size-4" />
-                  </div>
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="text-sm font-medium">
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-3">
+              {isEmbeddingModelLocked && (
+                <p className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                  <Lock className="size-3.5 shrink-0" />
+                  <span>
+                    <span className="font-medium text-foreground">
                       Embedding index locked
-                    </p>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      Drop the index to change models. All documents will need
-                      to be re-embedded afterward.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <span />
+                    </span>
+                    <span> · Changing models re-embeds documents.</span>
+                  </span>
+                </p>
               )}
               <WithPermissions
                 permissions={{ knowledgeSettings: ["update"] }}
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
-                  <div className="flex shrink-0 items-center justify-end gap-2 self-end sm:self-auto">
+                  <div className="ml-auto flex shrink-0 items-center justify-end gap-2">
                     {embeddingConfigured && (
                       <Button
                         type="button"
@@ -1338,12 +1318,13 @@ function KnowledgeSettingsContent() {
                     {isEmbeddingModelLocked && (
                       <Button
                         type="button"
-                        variant="destructive"
+                        variant="ghost"
                         size="sm"
+                        className="text-destructive hover:text-destructive"
                         disabled={!hasPermission}
                         onClick={() => setShowDropDialog(true)}
                       >
-                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                        <Trash2 className="size-3.5" />
                         Drop index
                       </Button>
                     )}
@@ -1356,413 +1337,380 @@ function KnowledgeSettingsContent() {
 
         <SettingsBlock
           id="search-ranking-configuration"
-          title="Search quality"
-          description="Improve how search results are ordered and enriched."
+          title="Search ranking"
+          description="Control how search results are ordered and enriched."
         >
-          <div className="flex flex-col gap-6">
-            <section
-              id="reranking-configuration"
-              className="flex flex-col gap-3"
-            >
-              <div className="space-y-1">
-                <h4 className="text-sm font-medium">Reranking</h4>
-                <p className="text-sm text-muted-foreground">
-                  Use a model to put the most relevant passages first. Optional.{" "}
-                  <ExternalDocsLink
-                    href={getDocsUrl(DocsPage.PlatformKnowledge, "reranking")}
-                    className="text-primary hover:underline"
-                    showIcon={false}
+          <Accordion type="single" collapsible>
+            <AccordionItem value="advanced" className="border-b-0">
+              <AccordionTrigger className="py-2 hover:no-underline">
+                Advanced options
+              </AccordionTrigger>
+              <AccordionContent className="pt-4 pb-0">
+                <div className="flex flex-col gap-6">
+                  <section
+                    id="reranking-configuration"
+                    className="flex flex-col gap-3"
                   >
-                    Learn more.
-                  </ExternalDocsLink>
-                </p>
-              </div>
-              <Collapsible open={rerankerOpen} onOpenChange={setRerankerOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-fit"
-                  >
-                    <span>
-                      {rerankerOpen
-                        ? "Hide reranking settings"
-                        : rerankerConfigured
-                          ? "Edit reranking"
-                          : "Configure reranking"}
-                    </span>
-                    <ChevronDown
-                      className={cn(
-                        "size-4 transition-transform",
-                        rerankerOpen && "rotate-180",
-                      )}
-                    />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-4">
-                  <WithPermissions
-                    permissions={{ knowledgeSettings: ["update"] }}
-                    noPermissionHandle="tooltip"
-                  >
-                    {({ hasPermission }) => (
-                      <div className="flex flex-col gap-4">
-                        <CardRow label="Key">
-                          <ApiKeySelector
-                            value={rerankerChatApiKeyId}
-                            onChange={handleRerankerKeyChange}
-                            disabled={!hasPermission}
-                            label="reranker API key"
-                            pulse={
-                              !embeddingSetupStep &&
-                              (rerankerSetupStep === "add-key" ||
-                                rerankerSetupStep === "select-key")
-                            }
-                          />
-                        </CardRow>
-                        <CardRow label="Model">
-                          <RerankerModelSelector
-                            value={rerankerModel}
-                            onChange={setRerankerModel}
-                            disabled={!hasPermission}
-                            selectedKeyId={rerankerChatApiKeyId}
-                            pulse={
-                              !embeddingSetupStep &&
-                              rerankerSetupStep === "select-model"
-                            }
-                          />
-                        </CardRow>
-                        {rerankerStatus.status === "failed" &&
-                          rerankerStatus.error && (
-                            <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
-                              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                              <span>{rerankerStatus.error}</span>
-                            </p>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-medium">Reranking</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Reads the shortlisted passages with a model and puts the
+                        ones that answer the question first. Works with any chat
+                        model, or a Cohere Rerank model on Cohere and Azure AI
+                        Foundry keys. Optional.{" "}
+                        <ExternalDocsLink
+                          href={getDocsUrl(
+                            DocsPage.PlatformKnowledge,
+                            "reranking",
                           )}
-                      </div>
-                    )}
-                  </WithPermissions>
-                </CollapsibleContent>
-              </Collapsible>
-            </section>
-            <Collapsible
-              open={advancedSearchOpen}
-              onOpenChange={setAdvancedSearchOpen}
-              className="border-t pt-5"
-            >
-              <CollapsibleTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="-ml-3 flex h-auto w-[calc(100%+1.5rem)] items-center justify-between px-3 py-2 text-left"
-                >
-                  <span className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">
-                      Advanced search options
-                    </span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {effectiveContextualRetrievalMode === "disabled"
-                        ? "Keyword ranking and contextual retrieval"
-                        : `Keyword ranking · Context: ${effectiveContextualRetrievalMode === "document" ? "per document" : "per passage"}`}
-                    </span>
-                    {keywordRankingStatus && (
-                      <KeywordRankingStatusLine status={keywordRankingStatus} />
-                    )}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "size-4 shrink-0 text-muted-foreground transition-transform",
-                      advancedSearchOpen && "rotate-180",
-                    )}
-                  />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-6 pt-5">
-                <section id="keyword-ranking" className="flex flex-col gap-3">
-                  <div className="space-y-1">
-                    <h4 className="text-sm font-medium">Keyword ranking</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Match specific words in the question. Always on.{" "}
-                      <ExternalDocsLink
-                        href={getDocsUrl(
-                          DocsPage.PlatformKnowledge,
-                          "keyword-ranking",
-                        )}
-                        className="text-primary hover:underline"
-                        showIcon={false}
-                      >
-                        Learn more.
-                      </ExternalDocsLink>
-                    </p>
-                  </div>
-                  <WithPermissions
-                    permissions={{ knowledgeSettings: ["update"] }}
-                    noPermissionHandle="tooltip"
-                  >
-                    {({ hasPermission }) => (
-                      <div className="flex flex-col gap-4">
-                        <CardRow label="Term Saturation">
-                          <Input
-                            type="number"
-                            inputMode="decimal"
-                            step="0.1"
-                            min={BM25_K1_MIN}
-                            max={BM25_K1_MAX}
-                            value={bm25K1Value}
-                            disabled={!hasPermission}
-                            aria-invalid={bm25K1Invalid}
-                            aria-label="Term Saturation"
-                            aria-describedby={
-                              bm25K1Invalid ? "bm25-k1-error" : undefined
-                            }
-                            onChange={(e) => setBm25K1Text(e.target.value)}
-                            onBlur={() => {
-                              if (bm25K1Text?.trim() === "") {
-                                setBm25K1Text(null);
-                              }
-                            }}
-                            className="max-w-xs"
-                          />
-                          {bm25K1Invalid && (
-                            <p
-                              id="bm25-k1-error"
-                              className="mt-1 text-xs text-destructive"
-                            >
-                              Enter a value between {BM25_K1_MIN} and{" "}
-                              {BM25_K1_MAX}.
-                            </p>
-                          )}
-                        </CardRow>
-                        <CardRow label="Length Normalization">
-                          <Input
-                            type="number"
-                            inputMode="decimal"
-                            step="0.05"
-                            min={BM25_B_MIN}
-                            max={BM25_B_MAX}
-                            value={bm25BValue}
-                            disabled={!hasPermission}
-                            aria-invalid={bm25BInvalid}
-                            aria-label="Length Normalization"
-                            aria-describedby={
-                              bm25BInvalid ? "bm25-b-error" : undefined
-                            }
-                            onChange={(e) => setBm25BText(e.target.value)}
-                            onBlur={() => {
-                              if (bm25BText?.trim() === "") {
-                                setBm25BText(null);
-                              }
-                            }}
-                            className="max-w-xs"
-                          />
-                          {bm25BInvalid && (
-                            <p
-                              id="bm25-b-error"
-                              className="mt-1 text-xs text-destructive"
-                            >
-                              Enter a value between {BM25_B_MIN} and{" "}
-                              {BM25_B_MAX}.
-                            </p>
-                          )}
-                        </CardRow>
-                      </div>
-                    )}
-                  </WithPermissions>
-                </section>
-                <Separator />
-                <section
-                  id="contextual-retrieval"
-                  className="flex flex-col gap-3"
-                >
-                  <div className="space-y-1">
-                    <h4 className="text-sm font-medium">
-                      Contextual retrieval
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Add context to indexed passages for better recall.
-                      Requires a chat reranking model.{" "}
-                      <ExternalDocsLink
-                        href={getDocsUrl(
-                          DocsPage.PlatformKnowledge,
-                          "contextual-retrieval",
-                        )}
-                        className="text-primary hover:underline"
-                        showIcon={false}
-                      >
-                        Learn more.
-                      </ExternalDocsLink>
-                    </p>
-                  </div>
-                  <WithPermissions
-                    permissions={{ knowledgeSettings: ["update"] }}
-                    noPermissionHandle="tooltip"
-                  >
-                    {({ hasPermission }) => (
-                      <CardRow label="Context generation">
-                        <Select
-                          value={effectiveContextualRetrievalMode}
-                          onValueChange={(value) =>
-                            setContextualRetrievalMode(
-                              value as ContextualRetrievalMode,
-                            )
-                          }
-                          disabled={!hasPermission}
+                          className="text-primary hover:underline"
+                          showIcon={false}
                         >
-                          <SelectTrigger
-                            className="w-full max-w-xs"
-                            aria-label="Context generation"
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="disabled">Disabled</SelectItem>
-                            <SelectItem value="document">
-                              Per document — lower cost
-                            </SelectItem>
-                            <SelectItem value="chunk">
-                              Per passage — higher recall
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </CardRow>
-                    )}
-                  </WithPermissions>
-                  {effectiveContextualRetrievalMode !== "disabled" &&
-                    !rerankerConfigured && (
-                      <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-44">
-                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>
-                          Configure a chat reranking model before ingestion can
-                          add context.
-                        </span>
+                          Learn more.
+                        </ExternalDocsLink>
                       </p>
-                    )}
-                </section>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-          {(rerankerChatApiKeyId || rerankerModel) && (
-            <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <span />
-              <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => (
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {rerankerConfigured && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                          !hasPermission || rerankerStatus.status === "testing"
-                        }
-                        onClick={handleTestReranker}
-                      >
-                        <TestConnectionIcon status={rerankerStatus.status} />
-                        Test connection
-                      </Button>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={!hasPermission}
-                      onClick={() => {
-                        setRerankerChatApiKeyId(null);
-                        setRerankerModel(null);
-                      }}
+                    </div>
+                    <WithPermissions
+                      permissions={{ knowledgeSettings: ["update"] }}
+                      noPermissionHandle="tooltip"
                     >
-                      <Trash2 className="mr-1 h-3.5 w-3.5" />
-                      Clear reranking configuration
-                    </Button>
-                  </div>
-                )}
-              </WithPermissions>
-            </div>
-          )}
+                      {({ hasPermission }) => (
+                        <div className="flex flex-col gap-4">
+                          <CardRow label="Key">
+                            <ApiKeySelector
+                              value={rerankerChatApiKeyId}
+                              onChange={handleRerankerKeyChange}
+                              disabled={!hasPermission}
+                              label="reranker API key"
+                              pulse={
+                                !embeddingSetupStep &&
+                                (rerankerSetupStep === "add-key" ||
+                                  rerankerSetupStep === "select-key")
+                              }
+                            />
+                          </CardRow>
+                          <CardRow label="Model">
+                            <RerankerModelSelector
+                              value={rerankerModel}
+                              onChange={setRerankerModel}
+                              disabled={!hasPermission}
+                              selectedKeyId={rerankerChatApiKeyId}
+                              pulse={
+                                !embeddingSetupStep &&
+                                rerankerSetupStep === "select-model"
+                              }
+                            />
+                          </CardRow>
+                          {rerankerStatus.status === "failed" &&
+                            rerankerStatus.error && (
+                              <p className="flex items-start gap-2 text-sm text-destructive sm:pl-40">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>{rerankerStatus.error}</span>
+                              </p>
+                            )}
+                        </div>
+                      )}
+                    </WithPermissions>
+                    {(rerankerChatApiKeyId || rerankerModel) && (
+                      <div className="flex justify-end">
+                        <WithPermissions
+                          permissions={{ knowledgeSettings: ["update"] }}
+                          noPermissionHandle="tooltip"
+                        >
+                          {({ hasPermission }) => (
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {rerankerConfigured && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={
+                                    !hasPermission ||
+                                    rerankerStatus.status === "testing"
+                                  }
+                                  onClick={handleTestReranker}
+                                >
+                                  <TestConnectionIcon
+                                    status={rerankerStatus.status}
+                                  />
+                                  Test connection
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={!hasPermission}
+                                onClick={() => {
+                                  setRerankerChatApiKeyId(null);
+                                  setRerankerModel(null);
+                                }}
+                              >
+                                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                Clear reranking configuration
+                              </Button>
+                            </div>
+                          )}
+                        </WithPermissions>
+                      </div>
+                    )}
+                  </section>
+                  <Separator />
+                  <section id="keyword-ranking" className="flex flex-col gap-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                        <h4 className="text-sm font-medium">Keyword ranking</h4>
+                        {keywordRankingStatus && (
+                          <KeywordRankingStatusLine
+                            status={keywordRankingStatus}
+                          />
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Scores each passage by the words it shares with the
+                        question, using BM25 — rare, specific words count most.
+                        Always on.{" "}
+                        <ExternalDocsLink
+                          href={getDocsUrl(
+                            DocsPage.PlatformKnowledge,
+                            "keyword-ranking",
+                          )}
+                          className="text-primary hover:underline"
+                          showIcon={false}
+                        >
+                          Learn more.
+                        </ExternalDocsLink>
+                      </p>
+                    </div>
+                    <WithPermissions
+                      permissions={{ knowledgeSettings: ["update"] }}
+                      noPermissionHandle="tooltip"
+                    >
+                      {({ hasPermission }) => (
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label
+                              htmlFor="bm25-k1"
+                              className="text-sm text-muted-foreground"
+                            >
+                              Term Saturation
+                            </Label>
+                            <Input
+                              id="bm25-k1"
+                              type="number"
+                              inputMode="decimal"
+                              step="0.1"
+                              min={BM25_K1_MIN}
+                              max={BM25_K1_MAX}
+                              value={bm25K1Value}
+                              disabled={!hasPermission}
+                              aria-invalid={bm25K1Invalid}
+                              aria-label="Term Saturation"
+                              aria-describedby={
+                                bm25K1Invalid ? "bm25-k1-error" : undefined
+                              }
+                              onChange={(e) => setBm25K1Text(e.target.value)}
+                              onBlur={() => {
+                                if (bm25K1Text?.trim() === "") {
+                                  setBm25K1Text(null);
+                                }
+                              }}
+                            />
+                            {bm25K1Invalid && (
+                              <p
+                                id="bm25-k1-error"
+                                className="mt-1 text-xs text-destructive"
+                              >
+                                Enter a value between {BM25_K1_MIN} and{" "}
+                                {BM25_K1_MAX}.
+                              </p>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <Label
+                              htmlFor="bm25-b"
+                              className="text-sm text-muted-foreground"
+                            >
+                              Length Normalization
+                            </Label>
+                            <Input
+                              id="bm25-b"
+                              type="number"
+                              inputMode="decimal"
+                              step="0.05"
+                              min={BM25_B_MIN}
+                              max={BM25_B_MAX}
+                              value={bm25BValue}
+                              disabled={!hasPermission}
+                              aria-invalid={bm25BInvalid}
+                              aria-label="Length Normalization"
+                              aria-describedby={
+                                bm25BInvalid ? "bm25-b-error" : undefined
+                              }
+                              onChange={(e) => setBm25BText(e.target.value)}
+                              onBlur={() => {
+                                if (bm25BText?.trim() === "") {
+                                  setBm25BText(null);
+                                }
+                              }}
+                            />
+                            {bm25BInvalid && (
+                              <p
+                                id="bm25-b-error"
+                                className="mt-1 text-xs text-destructive"
+                              >
+                                Enter a value between {BM25_B_MIN} and{" "}
+                                {BM25_B_MAX}.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </WithPermissions>
+                  </section>
+                  <Separator />
+                  <section
+                    id="contextual-retrieval"
+                    className="flex flex-col gap-3"
+                  >
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-medium">
+                        Contextual retrieval
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        Adds search-only context to passages during ingestion.
+                        The document option makes one model call per document.
+                        The passage option generates specific context in batches
+                        for longer documents and uses the document option for
+                        short ones. Requires a chat reranking model.{" "}
+                        <ExternalDocsLink
+                          href={getDocsUrl(
+                            DocsPage.PlatformKnowledge,
+                            "contextual-retrieval",
+                          )}
+                          className="text-primary hover:underline"
+                          showIcon={false}
+                        >
+                          Learn more.
+                        </ExternalDocsLink>
+                      </p>
+                    </div>
+                    <WithPermissions
+                      permissions={{ knowledgeSettings: ["update"] }}
+                      noPermissionHandle="tooltip"
+                    >
+                      {({ hasPermission }) => (
+                        <CardRow label="Context generation">
+                          <Select
+                            value={effectiveContextualRetrievalMode}
+                            onValueChange={(value) =>
+                              setContextualRetrievalMode(
+                                value as ContextualRetrievalMode,
+                              )
+                            }
+                            disabled={!hasPermission}
+                          >
+                            <SelectTrigger
+                              className="w-full max-w-xs"
+                              aria-label="Context generation"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="disabled">Disabled</SelectItem>
+                              <SelectItem value="document">
+                                Per document — lower cost
+                              </SelectItem>
+                              <SelectItem value="chunk">
+                                Per passage — higher recall
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </CardRow>
+                      )}
+                    </WithPermissions>
+                    {effectiveContextualRetrievalMode !== "disabled" &&
+                      !rerankerConfigured && (
+                        <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-40">
+                          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            Configure a chat reranking model before ingestion
+                            can add context.
+                          </span>
+                        </p>
+                      )}
+                  </section>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </SettingsBlock>
 
         <SettingsBlock
           id="document-ocr"
           title="Document OCR"
-          description="Make scanned PDFs searchable. Each page uses one metered model call. Optional."
+          description={
+            <>
+              Reads the text in scanned or image-only PDF pages — a signed
+              contract that was scanned, for example — so those documents show
+              up in search like any other. Without it, such pages are skipped.
+              Each transcribed page is one metered model call, visible in LLM
+              cost statistics. Optional.
+            </>
+          }
         >
-          <Collapsible open={ocrOpen} onOpenChange={setOcrOpen}>
-            <CollapsibleTrigger asChild>
-              <Button type="button" variant="outline" size="sm">
-                <span>
-                  {ocrOpen
-                    ? "Hide OCR settings"
-                    : ocrConfigured
-                      ? "Edit OCR"
-                      : "Configure OCR"}
-                </span>
-                <ChevronDown
-                  className={cn(
-                    "size-4 transition-transform",
-                    ocrOpen && "rotate-180",
-                  )}
-                />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4">
-              <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => (
-                  <div className="flex flex-col gap-4">
-                    <CardRow label="Key">
-                      <ApiKeySelector
-                        value={ocrChatApiKeyId}
-                        onChange={handleOcrKeyChange}
-                        disabled={!hasPermission}
-                        label="OCR API key"
-                        allowedKeyIds={ocrCapableKeyIds}
-                        autoSelectFirstKey={false}
-                      />
-                    </CardRow>
-                    <CardRow label="Model">
-                      <OcrModelSelector
-                        value={ocrModel}
-                        onChange={setOcrModel}
-                        disabled={!hasPermission}
-                        selectedKeyId={ocrChatApiKeyId}
-                      />
-                    </CardRow>
-                    <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
-                      Don't see your model?{" "}
-                      <Link
-                        href="/llm/models"
-                        className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
-                      >
-                        Mark its image or PDF input modality
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </p>
-                    {ocrConfigured && !ocrWasEnabled && (
-                      <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
-                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>
-                          Saving triggers a full re-sync of every connector so
-                          documents previously skipped as unreadable are picked
-                          up.
-                        </span>
-                      </p>
-                    )}
-                    {ocrStatus.status === "failed" && ocrStatus.error && (
-                      <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
-                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                        <span>{ocrStatus.error}</span>
-                      </p>
-                    )}
-                  </div>
+          <WithPermissions
+            permissions={{ knowledgeSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="flex flex-col gap-4">
+                <CardRow label="Key">
+                  <ApiKeySelector
+                    value={ocrChatApiKeyId}
+                    onChange={handleOcrKeyChange}
+                    disabled={!hasPermission}
+                    label="OCR API key"
+                    allowedKeyIds={ocrCapableKeyIds}
+                    autoSelectFirstKey={false}
+                  />
+                </CardRow>
+                <CardRow label="Model">
+                  <OcrModelSelector
+                    value={ocrModel}
+                    onChange={setOcrModel}
+                    disabled={!hasPermission}
+                    selectedKeyId={ocrChatApiKeyId}
+                  />
+                </CardRow>
+                <p className="text-sm text-muted-foreground sm:pl-40">
+                  Don't see your model?{" "}
+                  <Link
+                    href="/llm/models"
+                    className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
+                  >
+                    Mark its image or PDF input modality
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Link>
+                </p>
+                {ocrConfigured && !ocrWasEnabled && (
+                  <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-40">
+                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Saving triggers a full re-sync of every connector so
+                      documents previously skipped as unreadable are picked up.
+                    </span>
+                  </p>
                 )}
-              </WithPermissions>
-            </CollapsibleContent>
-          </Collapsible>
+                {ocrStatus.status === "failed" && ocrStatus.error && (
+                  <p className="flex items-start gap-2 text-sm text-destructive sm:pl-40">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{ocrStatus.error}</span>
+                  </p>
+                )}
+              </div>
+            )}
+          </WithPermissions>
           {(ocrChatApiKeyId || ocrModel) && (
             <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
               <span />
@@ -1820,7 +1768,7 @@ function KnowledgeSettingsContent() {
           catalogKey="knowledgeConnectorOverrides"
           catalog={CONNECTOR_TYPES}
           title="Available connectors"
-          description="Choose which connector types can be added. Existing connectors keep syncing."
+          description="Which connector types this deployment offers. A type you remove leaves the pickers, and the API refuses to configure it. Connectors that already exist keep syncing until you delete them."
           options={CONNECTOR_TYPES.map((type) => ({
             value: type,
             label: CONNECTOR_TYPE_LABELS[type],
@@ -1831,7 +1779,6 @@ function KnowledgeSettingsContent() {
           placeholder="Select connector types…"
           emptyMessage="No connector types found."
           savedMessage="Available connectors updated"
-          collapsible
         />
       </SettingsSectionStack>
     </LoadingWrapper>

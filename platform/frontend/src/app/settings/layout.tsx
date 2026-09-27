@@ -62,7 +62,8 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   },
   "/settings/knowledge": {
     title: "Knowledge",
-    description: "Set up how documents are indexed and searched.",
+    description:
+      "Configure embedding, reranking, and knowledge system defaults.",
   },
   "/settings/connection": {
     title: "Connect Page",

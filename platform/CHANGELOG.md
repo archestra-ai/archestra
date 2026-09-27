@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0-rc.23](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.22...platform-v1.4.0-rc.23) (2026-09-27)
+
+
+### Bug Fixes
+
+* resolve reported settings, grants, and runtime issues ([#8234](https://github.com/archestra-ai/archestra/issues/8234)) ([eb2049d](https://github.com/archestra-ai/archestra/commit/eb2049db2d955c291ef11125de6f72a1681efa0d))
+
 ## [1.4.0-rc.22](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.21...platform-v1.4.0-rc.22) (2026-09-27)
 
 

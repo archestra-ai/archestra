@@ -37,6 +37,11 @@ class FakeWebSocket {
     this.emit("close", new Event("close"));
   }
 
+  serverClose(code: number): void {
+    this.readyState = FakeWebSocket.CLOSED;
+    this.emit("close", Object.assign(new Event("close"), { code }));
+  }
+
   triggerOpen(): void {
     this.readyState = FakeWebSocket.OPEN;
     this.emit("open", new Event("open"));
@@ -100,5 +105,47 @@ describe("WebSocketService", () => {
       payload: { conversationId: "test-conversation-id" },
     });
     expect(socket.sent).toHaveLength(1);
+  });
+
+  test("stays closed after the server rejects the socket as unauthorized", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.resetModules();
+      const { default: websocketService } = await import("./websocket");
+
+      await websocketService.connect();
+      const rejected = FakeWebSocket.instances[0];
+      rejected.triggerOpen();
+      rejected.serverClose(4401);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(FakeWebSocket.instances).toHaveLength(1);
+
+      // Signing in mounts consumers that connect again.
+      await websocketService.connect();
+      expect(FakeWebSocket.instances).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("reconnects after any other close", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.resetModules();
+      const { default: websocketService } = await import("./websocket");
+
+      await websocketService.connect();
+      const dropped = FakeWebSocket.instances[0];
+      dropped.triggerOpen();
+      dropped.serverClose(1006);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(FakeWebSocket.instances).toHaveLength(2);
+
+      websocketService.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

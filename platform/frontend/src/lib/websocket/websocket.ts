@@ -59,10 +59,19 @@ class WebSocketService {
         }
       });
 
-      this.ws.addEventListener("close", () => {
+      this.ws.addEventListener("close", (event) => {
         this.ws = null;
         this.isConnecting = false;
         this.notifyConnectionHandlers(false);
+
+        // The server accepts the upgrade before it authenticates, so a
+        // signed-out socket still fires "open" (resetting the backoff) and is
+        // then closed with 4401. Retrying would loop every second or so for
+        // as long as the sign-in page is open. Stay closed instead: the
+        // signed-in app calls connect() again when it mounts.
+        if (event.code === UNAUTHORIZED_CLOSE_CODE) {
+          return;
+        }
 
         // Attempt to reconnect unless manually disconnected
         if (!this.isManuallyDisconnected) {
@@ -230,3 +239,6 @@ class WebSocketService {
 const websocketService = new WebSocketService();
 
 export default websocketService;
+
+// Mirrors the close code in the backend's sendUnauthorized().
+const UNAUTHORIZED_CLOSE_CODE = 4401;

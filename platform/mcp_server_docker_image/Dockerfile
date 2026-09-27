@@ -164,7 +164,12 @@ RUN apk add --no-cache \
    # expat is pulled in transitively (python), never named in an `apk add` here, so it
    # needs its own floor for the same reason the openssl ones above do: the cached layer
    # never re-runs against a newer index on its own.
-   apk add --no-cache --upgrade "expat>=2.8.5-r0"
+   apk add --no-cache --upgrade "expat>=2.8.5-r0" && \
+   # CVE-2026-81736, CVE-2026-81563, CVE-2026-80274, CVE-2026-77692, CVE-2026-76163,
+   # CVE-2026-19667, CVE-2026-19666: BIND vulnerabilities (HIGH) fixed in 9.20.29-r0.
+   # `bind` in the bare `apk upgrade` above has the same cached-layer problem as openssl,
+   # so both installed bind-origin packages get explicit floors.
+   apk add --no-cache --upgrade "bind-tools>=9.20.29-r0" "bind-libs>=9.20.29-r0"
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

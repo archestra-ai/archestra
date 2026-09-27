@@ -45,7 +45,7 @@ export function initializeDatabaseMetrics(
   });
 
   initialized = true;
-  logger.info("Database pool metrics initialized");
+  logger.debug("Database pool metrics initialized");
 }
 
 // ============================================================

@@ -279,7 +279,7 @@ const ModelListResponseSchema = z.object({
 });
 
 const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  logger.info("[ModelRouterProxy] Registering model router routes");
+  logger.debug("[ModelRouterProxy] Registering model router routes");
 
   fastify.get(
     `${MODEL_ROUTER_PREFIX}/models`,

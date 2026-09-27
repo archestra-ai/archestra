@@ -23,7 +23,7 @@ const cerebrasProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/cerebras`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified Cerebras routes");
+  logger.debug("[UnifiedProxy] Registering unified Cerebras routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.cerebras.baseUrl,

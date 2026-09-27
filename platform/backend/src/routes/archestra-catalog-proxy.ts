@@ -5,7 +5,7 @@ import logger from "@/logging";
 import { ARCHESTRA_CATALOG_PROXY_PREFIX } from "./route-paths";
 
 const archestraCatalogProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  logger.info(
+  logger.debug(
     {
       prefix: ARCHESTRA_CATALOG_PROXY_PREFIX,
       upstream: MCP_CATALOG_API_BASE_URL,

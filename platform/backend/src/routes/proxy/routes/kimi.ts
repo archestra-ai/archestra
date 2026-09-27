@@ -14,7 +14,7 @@ const kimiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/kimi`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified Kimi routes");
+  logger.debug("[UnifiedProxy] Registering unified Kimi routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.kimi.baseUrl,

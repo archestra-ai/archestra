@@ -31,7 +31,7 @@ const vllmProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const EMBEDDINGS_SUFFIX = "/embeddings";
 
-  logger.info("[UnifiedProxy] Registering unified vLLM routes");
+  logger.debug("[UnifiedProxy] Registering unified vLLM routes");
 
   // Only register HTTP proxy if vLLM is configured (has baseUrl)
   // Routes are always registered for OpenAPI schema generation
@@ -48,7 +48,7 @@ const vllmProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }),
     });
   } else {
-    logger.info(
+    logger.debug(
       "[UnifiedProxy] vLLM base URL not configured, HTTP proxy disabled",
     );
   }

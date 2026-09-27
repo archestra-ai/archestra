@@ -27,7 +27,7 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const RESPONSES_SUFFIX = "/responses";
 
-  logger.info("[UnifiedProxy] Registering unified GitHub Copilot routes");
+  logger.debug("[UnifiedProxy] Registering unified GitHub Copilot routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm["github-copilot"].baseUrl,

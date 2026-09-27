@@ -142,7 +142,7 @@ let sentryClient: Sentry.NodeClient | undefined;
  */
 const initSentry = async (): Promise<void> => {
   if (!enabled) {
-    logger.info("Sentry DSN not configured, skipping Sentry initialization");
+    logger.debug("Sentry DSN not configured, skipping Sentry initialization");
     return;
   }
 

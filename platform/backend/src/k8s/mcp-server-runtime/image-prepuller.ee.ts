@@ -527,8 +527,9 @@ export class McpImagePrepuller {
     }
     if (!prepullDaemonSetName()) {
       // Said once, at startup, because the value comes from the environment
-      // and will not appear later in this process's life.
-      logger.warn(
+      // and will not appear later in this process's life. The quickstart
+      // image is never a Helm release, so there it is not worth a warning.
+      logger[config.isQuickstart ? "debug" : "warn"](
         "MCP image pre-pulling is disabled: this deployment did not set ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME, so the pre-pull DaemonSet has no name it can be safely created, upgraded and removed under. The Helm chart sets it; hibernation and everything else keep working without it.",
       );
       return;

@@ -92,7 +92,7 @@ export function initializeSandboxMetrics(): void {
   });
 
   initialized = true;
-  logger.info("Sandbox metrics initialized");
+  logger.debug("Sandbox metrics initialized");
 }
 
 export function reportCommand(params: {

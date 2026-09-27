@@ -28,7 +28,7 @@ const ollamaNativeProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/ollama-native`;
   const CHAT_SUFFIX = "/api/chat";
 
-  logger.info("[UnifiedProxy] Registering Ollama Native routes");
+  logger.debug("[UnifiedProxy] Registering Ollama Native routes");
 
   // Pass every non-chat native endpoint (`/api/tags`, `/api/show`, `/api/embed`,
   // `/api/ps`, …) straight through. Without this only `/api/chat` existed, so

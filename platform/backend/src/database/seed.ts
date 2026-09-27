@@ -306,7 +306,7 @@ export async function syncBuiltInSkillsForOrganization(
         );
         continue;
       }
-      logger.info(
+      logger.debug(
         {
           builtInSkillId: builtInSkill.builtInSkillId,
           organizationId: organization.id,
@@ -351,7 +351,7 @@ export async function syncBuiltInSkillsForOrganization(
       skill: shipped.skill,
       files: shipped.files,
     });
-    logger.info(
+    logger.debug(
       {
         builtInSkillId: builtInSkill.builtInSkillId,
         organizationId: organization.id,
@@ -391,7 +391,7 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
       "Pre-excluded new built-in tools for Auto-mode agents",
     );
   }
-  logger.info("Seeded Archestra catalog and tools");
+  logger.debug("Seeded Archestra catalog and tools");
   // The API refuses such a name now; a catalog that predates that still
   // shadows the built-in tools and keeps the archestra OpenAPPA battery inactive.
   for (const conflict of await InternalMcpCatalogModel.findTakingBuiltInToolPrefix())
@@ -589,7 +589,7 @@ async function seedPlaywrightCatalog(): Promise<void> {
     })
     .where(eq(schema.internalMcpCatalogTable.id, PLAYWRIGHT_MCP_CATALOG_ID));
 
-  logger.info("Seeded Playwright browser preview catalog");
+  logger.debug("Seeded Playwright browser preview catalog");
 }
 
 /**
@@ -644,7 +644,7 @@ async function seedTeamTokens(): Promise<void> {
 
   // Ensure organization token exists
   const orgToken = await TeamTokenModel.ensureOrganizationToken();
-  logger.info(
+  logger.debug(
     { organizationId: org.id, tokenId: orgToken.id },
     "Ensured organization token exists",
   );
@@ -961,7 +961,7 @@ async function ensureExistingUsersHavePersonalChatAgents(): Promise<void> {
   }
 
   if (created > 0) {
-    logger.info(
+    logger.debug(
       { count: created },
       "Created personal chat agents for existing members",
     );
@@ -976,7 +976,7 @@ async function ensureExistingUsersHavePersonalMcpGateways(): Promise<void> {
   try {
     const created = await AgentModel.bulkBackfillPersonalMcpGateways();
     if (created > 0) {
-      logger.info(
+      logger.debug(
         { count: created },
         "Created personal MCP gateways for existing members",
       );
@@ -999,7 +999,7 @@ async function enableSkillToolsForExistingOrgs(): Promise<void> {
   try {
     const enabled = await OrganizationModel.enableSkillToolsForAllOrgs();
     if (enabled > 0) {
-      logger.info(
+      logger.debug(
         { count: enabled },
         "Enabled Agent Skill tools by default for organizations",
       );
@@ -1098,7 +1098,7 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
         }
       }
       if (created > 0) {
-        logger.info(
+        logger.debug(
           { organizationId: org.id, count: created },
           "Seeded default apps for organization",
         );
@@ -1246,7 +1246,7 @@ async function syncBuiltInAgentRow(params: {
     // would sit at latest_version 0 and the first user edit would fold the
     // platform's seeded config into that user's version 1.
     await AgentVersionModel.forkIfChangedBestEffort(inserted.id);
-    logger.info(
+    logger.debug(
       {
         builtInAgentId: builtInAgent.builtInAgentId,
         organizationId,
@@ -1318,7 +1318,7 @@ async function syncBuiltInAgentRow(params: {
     // would attach it to whichever user edits the agent next.
     await AgentVersionModel.forkIfChangedBestEffort(existing.id);
 
-    logger.info(
+    logger.debug(
       {
         builtInAgentId: builtInAgent.builtInAgentId,
         organizationId,
@@ -1329,7 +1329,7 @@ async function syncBuiltInAgentRow(params: {
     return;
   }
 
-  logger.info(
+  logger.debug(
     {
       builtInAgentId: builtInAgent.builtInAgentId,
       organizationId,

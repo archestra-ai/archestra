@@ -32,7 +32,7 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const RESPONSES_SUFFIX = "/responses";
   const EMBEDDINGS_SUFFIX = "/embeddings";
 
-  logger.info("[UnifiedProxy] Registering unified Azure AI Foundry routes");
+  logger.debug("[UnifiedProxy] Registering unified Azure AI Foundry routes");
 
   if (config.llm.azure.baseUrl) {
     await fastify.register(fastifyHttpProxy, {

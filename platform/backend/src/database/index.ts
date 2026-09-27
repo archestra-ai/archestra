@@ -202,7 +202,7 @@ async function doInitializeDatabase(): Promise<void> {
     }
   } else {
     // Use env var
-    logger.info(
+    logger.debug(
       "ARCHESTRA_DATABASE_URL_VAULT_REF is not set or READONLY_VAULT is not enabled, falling back to env var",
     );
     connectionString = config.database.url;
@@ -228,7 +228,7 @@ async function doInitializeDatabase(): Promise<void> {
     await newPool.end().catch(() => {});
     throw error;
   }
-  logger.info(
+  logger.debug(
     { poolMax: config.database.poolMax },
     "Database connection pool initialized",
   );

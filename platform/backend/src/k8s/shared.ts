@@ -100,7 +100,7 @@ export function validateKubeconfig(path?: string) {
     throw new Error("❌ Invalid kubeconfig: users section missing");
   }
 
-  logger.info("✓ Custom kubeconfig validated successfully.");
+  logger.debug("✓ Custom kubeconfig validated successfully.");
 }
 
 /**
@@ -119,11 +119,11 @@ export function loadKubeConfig(): {
 
   if (loadKubeconfigFromCurrentCluster) {
     kc.loadFromCluster();
-    logger.info("Loaded kubeconfig from current cluster");
+    logger.debug("Loaded kubeconfig from current cluster");
   } else if (kubeconfigPath) {
     validateKubeconfig(kubeconfigPath);
     kc.loadFromFile(kubeconfigPath);
-    logger.info(`Loaded kubeconfig from ${kubeconfigPath}`);
+    logger.debug(`Loaded kubeconfig from ${kubeconfigPath}`);
   } else {
     kc.loadFromDefault();
     logger.info("No kubeconfig provided — using default kubeconfig");

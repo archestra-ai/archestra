@@ -11,8 +11,8 @@ import { Info, Settings2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import type { ModelWithApiKeys } from "@/lib/llm-models.query";
-import { cn } from "@/lib/utils/tailwind";
 
 const DISMISSED_MODEL_STORAGE_PREFIX =
   "knowledge-image-embedding-notice-dismissed-model";
@@ -86,34 +86,22 @@ export function EmbeddingModelImageSupportNotice({
   };
 
   return (
-    <div
-      role="note"
-      className={cn(
-        "flex flex-col gap-3 rounded-md border border-border/60 bg-muted/30 px-3 py-2.5 text-sm text-muted-foreground sm:flex-row sm:items-center",
-        className,
-      )}
-    >
-      <div className="flex min-w-0 flex-1 items-start gap-2">
-        <Info className="mt-0.5 size-4 shrink-0" />
-        <div className="min-w-0 space-y-1">
-          <p className="font-medium text-foreground">
-            <code className="break-all">{modelKey}</code>
-          </p>
-          <p className="leading-relaxed">
-            Handles text only. Choose a multimodal embedding model to sync
-            supported image files.{" "}
-            <a
-              href={getDocsUrl(DocsPage.PlatformKnowledge, "image-embedding")}
-              target="_blank"
-              rel="noreferrer"
-              className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
-            >
-              Learn more
-            </a>
-          </p>
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center justify-end gap-1 self-end sm:self-auto">
+    <InlineNotice role="note" variant="warning" className={className}>
+      <Info />
+      <code className="break-all font-medium">{modelKey}</code>
+      <InlineNoticeText className="flex-1 basis-64">
+        Handles text only. Choose a multimodal embedding model to sync supported
+        image files.{" "}
+        <a
+          href={getDocsUrl(DocsPage.PlatformKnowledge, "image-embedding")}
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
+        >
+          Learn more
+        </a>
+      </InlineNoticeText>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
         {showSettingsLink && (
           <Button variant="outline" size="sm" asChild>
             <Link href="/settings/knowledge#embedding-configuration">
@@ -126,7 +114,7 @@ export function EmbeddingModelImageSupportNotice({
           <span>Dismiss</span>
         </Button>
       </div>
-    </div>
+    </InlineNotice>
   );
 }
 

@@ -203,9 +203,9 @@ With a text-only embedding model, image files are skipped and the connector page
 
 ### Search Ranking
 
-Search ranking groups reranking and advanced options. See [Query Results Ranking](#query-results-ranking) for the two ranking stages.
+Search ranking shows reranking directly, with keyword ranking and contextual retrieval under Advanced options. See [Query Results Ranking](#query-results-ranking) for the two ranking stages.
 
-Open **Advanced options** to configure reranking, keyword ranking, and contextual retrieval. Keyword ranking is always on. Its two settings — Term Saturation and Length Normalization — are explained under [Keyword Ranking](#keyword-ranking); they show the defaults until you change them.
+Open **Advanced options** to configure keyword ranking and contextual retrieval. Keyword ranking is always on. Its two settings — Term Saturation and Length Normalization — are explained under [Keyword Ranking](#keyword-ranking); they show the defaults until you change them.
 
 Choose a model to reorder results by relevance. Reranking is optional; without it, results come back in fused order.
 

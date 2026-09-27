@@ -940,8 +940,7 @@ describe("KnowledgeSettingsPage", () => {
   });
 
   describe("reranking section", () => {
-    it("shows OCR while keeping search controls in one closed accordion", async () => {
-      const user = userEvent.setup();
+    it("shows reranking and OCR while keeping tuning controls closed", () => {
       mockOrganization = {
         embeddingChatApiKeyId: null,
         embeddingModel: null,
@@ -955,16 +954,11 @@ describe("KnowledgeSettingsPage", () => {
       expect(screen.getByText("Document OCR")).toBeVisible();
       expect(screen.getByText("Select an OCR API key first...")).toBeVisible();
       expect(
-        screen.queryByText("Select a reranker API key first..."),
-      ).not.toBeInTheDocument();
-
-      await user.click(
-        screen.getByRole("button", { name: "Advanced options" }),
-      );
-
-      expect(
         screen.getByText("Select a reranker API key first..."),
       ).toBeVisible();
+      expect(
+        screen.queryByRole("spinbutton", { name: "Term Saturation" }),
+      ).not.toBeInTheDocument();
     });
 
     it("keeps tuning controls out of the initial view until expanded", async () => {
@@ -1109,7 +1103,7 @@ describe("KnowledgeSettingsPage", () => {
 
       await user.click(
         screen.getByRole("button", {
-          name: "Clear reranking configuration",
+          name: "Clear reranking",
         }),
       );
       await user.click(screen.getByRole("button", { name: "Save" }));

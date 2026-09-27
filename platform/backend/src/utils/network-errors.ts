@@ -22,17 +22,36 @@ export function isTimeoutErrno(code: string | null | undefined): boolean {
 }
 
 /**
- * Gather candidate errno strings from an error and its `cause` chain — Node's
- * `fetch` wraps the real libuv error as `cause`, sometimes a level or two deep.
- * Bounded by `maxDepth` to guard against circular `cause` references.
+ * Native fetch identifies HTTP transport failures with a TypeError wrapper.
+ * Require both that wrapper and a network code: malformed URLs and other
+ * programming errors also throw TypeError and must remain visible.
+ */
+export function isFetchConnectivityError(error: unknown): boolean {
+  return (
+    error instanceof TypeError &&
+    error.message === "fetch failed" &&
+    collectErrorCodes(error).some(
+      (code) => isConnectionErrno(code) || isTimeoutErrno(code),
+    )
+  );
+}
+
+/**
+ * Gather errno strings from causes and AggregateError members. Node's fetch
+ * can wrap separate IPv4/IPv6 connection failures in an aggregate cause.
+ * Bounded by `maxDepth` to guard against circular references.
  */
 export function collectErrorCodes(error: unknown, maxDepth = 3): string[] {
+  if (maxDepth <= 0 || !(error instanceof Error)) return [];
+
   const codes: string[] = [];
-  let current: unknown = error;
-  for (let depth = 0; depth < maxDepth && current instanceof Error; depth++) {
-    const code = (current as Error & { code?: unknown }).code;
-    if (typeof code === "string") codes.push(code);
-    current = (current as Error & { cause?: unknown }).cause;
+  const code = (error as Error & { code?: unknown }).code;
+  if (typeof code === "string") codes.push(code);
+  codes.push(...collectErrorCodes(error.cause, maxDepth - 1));
+  if (error instanceof AggregateError) {
+    for (const member of error.errors) {
+      codes.push(...collectErrorCodes(member, maxDepth - 1));
+    }
   }
   return codes;
 }

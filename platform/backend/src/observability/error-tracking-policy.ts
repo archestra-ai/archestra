@@ -9,6 +9,7 @@ import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import {
   collectErrorCodes,
   isConnectionErrno,
+  isFetchConnectivityError,
   isTimeoutErrno,
 } from "@/utils/network-errors";
 
@@ -44,6 +45,10 @@ interface ErrorTrackingDecision {
 export function classifyErrorForTracking(
   error: unknown,
 ): ErrorTrackingDecision {
+  // A native HTTP fetch failure has a known upstream origin. Its socket errno
+  // can also occur on database connections, so classify it before DB matching.
+  if (isFetchConnectivityError(error)) return { report: false };
+
   // Availability incidents: report once, grouped by root cause.
   //
   // Transient database connectivity failures (DNS lookup, connection refused

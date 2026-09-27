@@ -54,7 +54,6 @@ import { conversationHref } from "@/lib/chat/conversation-href";
 import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
 /**
@@ -120,7 +119,6 @@ function useNavigationDestinations() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const pluginsEnabled = useFeature("plugins");
   const openappaEnabled = useFeature("openappaEnabled");
-  const { data: guardrailsDeployment } = useGuardrailsDeployment();
   // Connect is useful with either half, exactly as the sidebar gates its row.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
   const { data: canReadMcpGateway } = useHasPermissions({
@@ -142,10 +140,8 @@ function useNavigationDestinations() {
         }
         if (item.url === "/plugins") return pluginsEnabled === true;
         if (item.url === "/openappa" && openappaEnabled !== true) return false;
-        if (
-          item.url === "/mcp/tool-guardrails" &&
-          guardrailsDeployment?.enabled === true
-        )
+        // Legacy guardrails step aside once OpenAPPA is on, as in the sidebar.
+        if (item.url === "/mcp/tool-guardrails" && openappaEnabled !== false)
           return false;
         return isNavItemPermitted(item, permissionMap);
       })
@@ -160,7 +156,6 @@ function useNavigationDestinations() {
     permissionMap,
     pluginsEnabled,
     openappaEnabled,
-    guardrailsDeployment?.enabled,
     canReadLlmProxy,
     canReadMcpGateway,
   ]);

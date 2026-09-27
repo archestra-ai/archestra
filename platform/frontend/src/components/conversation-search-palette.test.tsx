@@ -38,10 +38,6 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/config/config.query");
 
-vi.mock("@/lib/guardrails-deployment.query", () => ({
-  useGuardrailsDeployment: vi.fn(),
-}));
-
 vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
     title ?? "Untitled chat",
@@ -148,7 +144,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { act } from "react";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { ConversationSearchPalette } from "./conversation-search-palette";
 
 describe("ConversationSearchPalette", () => {
@@ -176,9 +171,6 @@ describe("ConversationSearchPalette", () => {
       ),
     );
     vi.mocked(useFeature).mockReturnValue(false);
-    vi.mocked(useGuardrailsDeployment).mockReturnValue({
-      data: { enabled: false },
-    } as ReturnType<typeof useGuardrailsDeployment>);
     vi.mocked(usePathname).mockReturnValue("/chat");
     mockUseConversations.mockReturnValue({
       data: [
@@ -448,7 +440,7 @@ describe("ConversationSearchPalette", () => {
     { enabled: true, permitted: true },
     { enabled: false, permitted: true },
     { enabled: true, permitted: false },
-  ])("offers OpenAPPA only when enabled and permitted: %j", ({
+  ])("offers OpenAPPA Guardrails only when enabled and permitted: %j", ({
     enabled,
     permitted,
   }) => {
@@ -466,33 +458,37 @@ describe("ConversationSearchPalette", () => {
       target: { value: "openappa" },
     });
     if (enabled && permitted) {
-      fireEvent.click(screen.getByText("OpenAPPA"));
+      fireEvent.click(screen.getByText("Guardrails"));
       expect(mockRouterPush).toHaveBeenCalledWith("/openappa");
     } else {
-      expect(screen.queryByText("OpenAPPA")).not.toBeInTheDocument();
+      expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
     }
   });
 
-  it("hides legacy Guardrails when the OpenAPPA deployment toggle is on", () => {
+  // The two pages share a name, so exactly one of them is offered: OpenAPPA
+  // replaces the legacy page while it is on, and the legacy page returns,
+  // policies untouched, once it is off.
+  it.each([
+    { openappaEnabled: true, destination: "/openappa" },
+    { openappaEnabled: false, destination: "/mcp/tool-guardrails" },
+  ])("offers one Guardrails page: %j", ({ openappaEnabled, destination }) => {
     mockUseConversations.mockReturnValue({
       data: [],
       isLoading: false,
       isFetching: false,
     });
     vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "openappaEnabled",
+      (feature) => feature === "openappaEnabled" && openappaEnabled,
     );
-    vi.mocked(useGuardrailsDeployment).mockReturnValue({
-      data: { enabled: true },
-    } as ReturnType<typeof useGuardrailsDeployment>);
 
     render(<ConversationSearchPalette {...defaultProps} />);
     fireEvent.change(screen.getByTestId("command-input"), {
       target: { value: "guardrails" },
     });
 
-    expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
-    expect(screen.getByText("OpenAPPA")).toBeInTheDocument();
+    expect(screen.getAllByText("Guardrails")).toHaveLength(1);
+    fireEvent.click(screen.getByText("Guardrails"));
+    expect(mockRouterPush).toHaveBeenCalledWith(destination);
   });
 
   it("searches pages by their visible labels and navigates to a match", () => {

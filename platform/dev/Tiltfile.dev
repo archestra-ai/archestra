@@ -224,7 +224,8 @@ if is_prod:
 else:
   backend_build_cmd = ''
   backend_watch_deps = ['../.env', 'run-backend-dev.sh']
-  if os.getenv('ARCHESTRA_OPENAPPA_ENABLED') == 'true':
+  # OpenAPPA follows the ARCHESTRA_BETA master switch; it has no flag of its own.
+  if os.getenv('ARCHESTRA_BETA') == 'true':
     # Build before starting/restarting Node: native modules stay cached in a
     # running process. resource_deps alone only orders the initial startup.
     # A failed build leaves the previous backend running and surfaces in Tilt.

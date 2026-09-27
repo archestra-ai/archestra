@@ -46,7 +46,7 @@ const testPatterns = {
   // Vault K8s startup test — runs in a dedicated CI job with Vault K8s auth
   vaultK8s: "**/vault-k8s-startup.spec.ts",
   llmProxy: "**/llm-proxy/**/*.spec.ts",
-  // OpenAPPA specs need a stack booted with ARCHESTRA_OPENAPPA_ENABLED=true,
+  // OpenAPPA specs need a stack booted with ARCHESTRA_BETA=true,
   // which the ordinary lite stack is deliberately NOT: with it on the proxy
   // rejects any tool-declaring request that omits the two APPA tools, which
   // other lite specs rely on. So these live in their own project, run by
@@ -346,7 +346,7 @@ export default defineConfig({
       dependencies: dependencies.testProjects,
     },
     // OpenAPPA root tool flow (lite environment, but a stack booted with
-    // ARCHESTRA_OPENAPPA_ENABLED=true — see scripts/e2e-lite.sh and the
+    // ARCHESTRA_BETA=true — see scripts/e2e-lite.sh and the
     // `openappa` leg of the lite E2E matrix). Never add these specs to another
     // project: against an OpenAPPA-off stack they cannot pass.
     {

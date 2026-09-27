@@ -29,7 +29,7 @@
  * before running test assertions.
  *
  * Requirements:
- * The test stack must run with `ARCHESTRA_OPENAPPA_ENABLED=true`.
+ * The test stack must run with `ARCHESTRA_BETA=true`.
  * Run these tests through the `openappa` Playwright project.
  */
 import { randomUUID } from "node:crypto";
@@ -808,7 +808,7 @@ async function setupGovernedChat(params: {
   };
   expect(
     deployment.featureEnabled,
-    "the stack was booted without ARCHESTRA_OPENAPPA_ENABLED=true — the openappa Playwright project requires it",
+    "the stack was booted without ARCHESTRA_BETA=true — the openappa Playwright project requires it",
   ).toBe(true);
   const deploymentWasEnabled = deployment.enabled;
   if (!deployment.enabled) {

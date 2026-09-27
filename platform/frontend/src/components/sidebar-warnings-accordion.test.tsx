@@ -6,7 +6,7 @@ import {
   useHasPermissions,
   useSession,
 } from "@/lib/auth/auth.query";
-import { useDisableBasicAuth } from "@/lib/config/config.query";
+import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { useK8sCapabilities } from "@/lib/environment.query";
 import { SidebarWarningsAccordion } from "./sidebar-warnings-accordion";
 
@@ -14,6 +14,13 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/environment.query", () => ({
   useK8sCapabilities: vi.fn(),
+}));
+vi.mock("@/app/openappa/_parts/guardrails-deployment-toggle", () => ({
+  GuardrailsDisabledWarning: () => <div>Guardrails disabled row</div>,
+}));
+let guardrailsEnabled = false;
+vi.mock("@/lib/guardrails-deployment.query", () => ({
+  useGuardrailsDeployment: () => ({ data: { enabled: guardrailsEnabled } }),
 }));
 
 type EnforcementStatus =
@@ -24,10 +31,18 @@ type EnforcementStatus =
 function setup({
   enforcementStatus,
   canUpdateEnvironment = true,
+  openappaEnabled = false,
+  showGuardrailsStatus,
+  enforcementEnabled = false,
 }: {
   enforcementStatus?: EnforcementStatus;
   canUpdateEnvironment?: boolean;
+  openappaEnabled?: boolean;
+  showGuardrailsStatus?: boolean;
+  enforcementEnabled?: boolean;
 }) {
+  vi.mocked(useFeature).mockReturnValue(openappaEnabled);
+  guardrailsEnabled = enforcementEnabled;
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions: Record<string, unknown>) =>
       ({
@@ -52,7 +67,7 @@ function setup({
 
   return render(
     <SidebarProvider>
-      <SidebarWarningsAccordion />
+      <SidebarWarningsAccordion showGuardrailsStatus={showGuardrailsStatus} />
     </SidebarProvider>,
   );
 }
@@ -152,5 +167,51 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+});
+
+describe("SidebarWarningsAccordion guardrails warning row", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        onchange: null,
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  });
+
+  it("warns where the navigation has no Guardrails row of its own", () => {
+    setup({ openappaEnabled: true });
+
+    expect(screen.getByText("Guardrails disabled row")).toBeInTheDocument();
+  });
+
+  it("stays quiet once enforcement is on", () => {
+    setup({ openappaEnabled: true, enforcementEnabled: true });
+
+    expect(screen.queryByText("Guardrails disabled row")).toBeNull();
+    // And leaves no empty strip behind where the row used to be.
+    expect(screen.queryByRole("list")).toBeNull();
+  });
+
+  it("stays quiet where the navigation already shows Guardrails", () => {
+    setup({ openappaEnabled: true, showGuardrailsStatus: false });
+
+    expect(screen.queryByText("Guardrails disabled row")).toBeNull();
+    expect(screen.queryByRole("list")).toBeNull();
+  });
+
+  it("never warns while OpenAPPA is off", () => {
+    setup({ openappaEnabled: false, showGuardrailsStatus: true });
+
+    expect(screen.queryByText("Guardrails disabled row")).toBeNull();
   });
 });

@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { OpenAppaMascot } from "@/components/openappa-mascot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,34 +65,33 @@ export function OverviewSetupCards() {
   );
 }
 
+/**
+ * The whole page for an organization that has not saved a policy yet. There is
+ * one thing to do here, so the page is that one thing: the mascot, what the
+ * guardrail is for, and the button.
+ */
 function PolicyStep() {
   const { data: canEdit } = useHasPermissions({ toolPolicy: ["update"] });
-  const appName = useAppName();
   return (
-    <Card className="max-w-2xl gap-4 py-5">
-      <CardHeader className="flex items-center gap-3 px-5">
-        <CardIcon>
-          <ShieldCheck />
-        </CardIcon>
-        <div className="flex-1">
-          <p className="text-xs text-muted-foreground">Step 1 of 2</p>
-          <CardTitle className="text-sm">Turn on the guardrail</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4 px-5">
-        <CardDescription className="leading-relaxed">
-          {appName}&apos;s guardrail uses OpenAPPA to control where your
-          agents&apos; data can go.
-        </CardDescription>
-        <ol className="list-decimal space-y-1 border-t pt-4 pl-5 text-sm text-muted-foreground">
-          <li>The policy chat looks at your tools and drafts a policy.</li>
-          <li>You review it. Nothing changes until you approve.</li>
-          <li>Approving turns the guardrail on.</li>
-        </ol>
-      </CardContent>
-      <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5">
+    <section className="mx-auto flex max-w-xl flex-col items-center px-2 py-10 text-center sm:py-16">
+      {/* A flat disc rather than a blurred glow: the mark is pixel art with
+          hard edges, and a soft halo behind it reads as a smudge on the page
+          rather than as a deliberate ground. */}
+      <span className="flex size-40 items-center justify-center rounded-full bg-muted sm:size-52">
+        <OpenAppaMascot className="size-24 sm:size-32" />
+      </span>
+      <h2 className="mt-8 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+        Turn on the guardrail
+      </h2>
+      <p className="mt-3 leading-relaxed text-pretty text-muted-foreground">
+        OpenAPPA is a frontier deterministic guardrail. It tracks where data
+        came from and who may see it, rather than asking a second model to
+        judge, which makes it 100% resistant to data exfiltration from prompt
+        injection or model hallucination.
+      </p>
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
         {canEdit ? (
-          <Button size="sm" asChild>
+          <Button asChild>
             <Link href={openAppaChatHref({ promptKey: "setUpPolicy" })}>
               <MessageCircle />
               <span>Create my policy</span>
@@ -108,8 +108,8 @@ function PolicyStep() {
         >
           How OpenAPPA works
         </ExternalDocsLink>
-      </CardFooter>
-    </Card>
+      </div>
+    </section>
   );
 }
 

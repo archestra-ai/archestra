@@ -50,8 +50,10 @@ export interface NavSubItem {
 export interface NavItem {
   title: string;
   url: string;
-  icon: LucideIcon;
+  icon: LucideIcon | React.ComponentType<React.SVGProps<SVGSVGElement>>;
   iconClassName?: string;
+  /** Extra classes on the row itself, e.g. a destructive tint for a warning state. */
+  className?: string;
   testId?: string;
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
   onClick?: () => void;
@@ -156,6 +158,15 @@ export const contentNavGroups: NavGroup[] = [
         url: "/agents",
         icon: Bot,
         customIsActive: (pathname: string) => pathname.startsWith("/agents"),
+      },
+      {
+        // Directly under Agents: it is the agents' own boundary, and the
+        // reader who is giving an agent tools is the one who sets it.
+        // Named for what the reader does there, not for the engine behind it.
+        title: "Guardrails",
+        url: "/openappa",
+        icon: OpenAppaIcon,
+        customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
       },
       {
         title: "Skills",
@@ -294,12 +305,6 @@ export const contentNavGroups: NavGroup[] = [
         testId: E2eTestId.SidebarNavGuardrails,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/tool-guardrails"),
-      },
-      {
-        title: "OpenAPPA",
-        url: "/openappa",
-        icon: OpenAppaIcon,
-        customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
       },
       {
         title: "Logs",

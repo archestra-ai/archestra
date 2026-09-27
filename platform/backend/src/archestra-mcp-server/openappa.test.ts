@@ -824,10 +824,7 @@ describe("list_guardrails_battery_fits", () => {
             tool: "linear__get_issue",
             selector: null,
             kind: "write",
-            delta: {
-              trust: "suspicious",
-              audience: ["@linear:issue/$id/readers"],
-            },
+            delta: { audience: ["@linear:issue/$id/readers"] },
             requires: { audience: ["internal"] },
             annotator: null,
             currentRule: null,

@@ -47,7 +47,7 @@ describe("handleAuditLogCleanup", () => {
 
     // Nothing is deleted when retention is disabled.
     expect(await countAuditLogs()).toBe(1);
-    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+    expect(vi.mocked(logger.debug)).toHaveBeenCalledWith(
       expect.objectContaining({ retentionDays: 0 }),
       expect.stringContaining("disabled"),
     );

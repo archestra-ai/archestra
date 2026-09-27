@@ -1120,7 +1120,9 @@ export class McpServerRuntimeManager {
           start,
         );
       }
-      logger.debug(`Successfully started MCP server deployment ${id} (${name})`);
+      logger.debug(
+        `Successfully started MCP server deployment ${id} (${name})`,
+      );
 
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

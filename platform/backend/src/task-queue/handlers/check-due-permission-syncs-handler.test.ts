@@ -11,7 +11,7 @@ import {
   KnowledgeBaseConnectorModel,
   TaskModel,
 } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import { handleCheckDuePermissionSyncs } from "./check-due-permission-syncs-handler";
 
 const PAST = () => new Date(Date.now() - 120_000);
@@ -34,33 +34,6 @@ async function countPermissionSyncTasks(connectorId: string): Promise<number> {
 }
 
 describe("handleCheckDuePermissionSyncs", () => {
-  beforeEach(() => {
-    config.kb.autoSyncPermissionsEnabled = true;
-  });
-
-  test("no-ops when the auto-sync permissions beta flag is off, even with a due connector", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    config.kb.autoSyncPermissionsEnabled = false;
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      syncPermissionsFromSource: true,
-      connectorType: "github",
-      enabled: true,
-    });
-    await KnowledgeBaseConnectorModel.update(connector.id, {
-      permissionSyncIntervalSeconds: TINY_INTERVAL_SECONDS,
-      lastPermissionSyncAt: PAST(),
-    });
-
-    await handleCheckDuePermissionSyncs();
-
-    expect(await countPermissionSyncTasks(connector.id)).toBe(0);
-  });
-
   test("no-ops when the enterprise knowledge-base tier is inactive — a lapsed license makes auto-sync connectors dormant", async ({
     makeOrganization,
     makeKnowledgeBase,

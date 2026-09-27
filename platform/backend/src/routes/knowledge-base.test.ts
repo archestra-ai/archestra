@@ -48,9 +48,6 @@ describe("knowledge base routes", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    // The auto-sync-permissions routes are beta-gated; the suite runs with the
-    // gate open, and the dedicated flag-off tests close it per test.
-    config.kb.autoSyncPermissionsEnabled = true;
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -4115,89 +4112,6 @@ describe("knowledge base routes", () => {
         `acc-hidden -> alice@example.com (${alice.id})`,
       ]);
       expect(row?.after?.memberOverrides).toEqual([]);
-    });
-  });
-
-  describe("auto-sync permissions beta gate", () => {
-    beforeEach(async ({ makeMember }) => {
-      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
-    });
-
-    test("selecting the visibility and the permission-family routes are rejected when the flag is off", async ({
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const kb = await makeKnowledgeBase(organizationId);
-      // Pre-existing auto-sync connector (e.g. created while the beta was on).
-      const connector = await makeKnowledgeBaseConnector(
-        kb.id,
-        organizationId,
-        { connectorType: "jira", syncPermissionsFromSource: true },
-      );
-      config.kb.autoSyncPermissionsEnabled = false;
-
-      const create = await app.inject({
-        method: "POST",
-        url: "/api/connectors",
-        payload: {
-          name: "Auto-sync Connector",
-          connectorType: "jira",
-          syncPermissionsFromSource: true,
-          config: {
-            type: "jira",
-            jiraBaseUrl: "https://test.atlassian.net",
-            isCloud: true,
-            projectKey: "TEST",
-          },
-          credentials: { email: "user@example.com", apiToken: "token" },
-        },
-      });
-      expect(create.statusCode).toBe(403);
-      expect(create.json().error.message).toContain("beta feature");
-
-      for (const [method, url] of [
-        ["POST", `/api/connectors/${connector.id}/permission-sync`],
-        ["GET", `/api/connectors/${connector.id}/permission-coverage`],
-        ["GET", `/api/connectors/${connector.id}/user-groups`],
-        ["DELETE", `/api/connectors/${connector.id}/member-overrides/acc-1`],
-      ] as const) {
-        const response = await app.inject({ method, url });
-        expect(response.statusCode, `${method} ${url}`).toBe(403);
-      }
-      const upsert = await app.inject({
-        method: "PUT",
-        url: `/api/connectors/${connector.id}/member-overrides`,
-        payload: { externalAccountId: "acc-1", userId: user.id },
-      });
-      expect(upsert.statusCode).toBe(403);
-    });
-
-    test("an existing auto-sync connector still reads and updates normally with the flag off", async ({
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const kb = await makeKnowledgeBase(organizationId);
-      const connector = await makeKnowledgeBaseConnector(
-        kb.id,
-        organizationId,
-        { connectorType: "jira", syncPermissionsFromSource: true },
-      );
-      config.kb.autoSyncPermissionsEnabled = false;
-
-      const get = await app.inject({
-        method: "GET",
-        url: `/api/connectors/${connector.id}`,
-      });
-      expect(get.statusCode).toBe(200);
-
-      // Updating without switching INTO auto-sync stays allowed (including
-      // switching away from it).
-      const update = await app.inject({
-        method: "PUT",
-        url: `/api/connectors/${connector.id}`,
-        payload: { name: "renamed" },
-      });
-      expect(update.statusCode).toBe(200);
     });
   });
 });

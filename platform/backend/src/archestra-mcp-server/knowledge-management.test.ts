@@ -1730,7 +1730,6 @@ describe("knowledge-management tool execution", () => {
     let memberContext: ArchestraContext;
     let kb: KnowledgeBase;
     let autoSyncConnector: KnowledgeBaseConnector;
-    let originalAutoSyncFlag: boolean;
 
     beforeEach(
       async ({
@@ -1742,8 +1741,6 @@ describe("knowledge-management tool execution", () => {
         makeOrganization,
         makeUser,
       }) => {
-        originalAutoSyncFlag = config.kb.autoSyncPermissionsEnabled;
-        config.kb.autoSyncPermissionsEnabled = true;
         org = await makeOrganization();
         const member = await makeUser();
         // Full knowledgeSource WRITE access but no knowledgeSourceAutoSync
@@ -1771,10 +1768,6 @@ describe("knowledge-management tool execution", () => {
         });
       },
     );
-
-    afterEach(() => {
-      config.kb.autoSyncPermissionsEnabled = originalAutoSyncFlag;
-    });
 
     test("members cannot see auto-sync connectors in the list or get tools", async () => {
       const listResult = await executeArchestraTool(

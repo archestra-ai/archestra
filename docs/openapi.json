@@ -146096,9 +146096,6 @@
                         "chatopsTelegramEnabled": {
                           "type": "boolean"
                         },
-                        "kbAutoSyncPermissionsEnabled": {
-                          "type": "boolean"
-                        },
                         "kbMfilesConnectorEnabled": {
                           "type": "boolean"
                         },
@@ -146197,7 +146194,6 @@
                         "openappaEnabled",
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
-                        "kbAutoSyncPermissionsEnabled",
                         "kbMfilesConnectorEnabled",
                         "kbMfilesOauthEnabled",
                         "kbBm25DefaultK1",

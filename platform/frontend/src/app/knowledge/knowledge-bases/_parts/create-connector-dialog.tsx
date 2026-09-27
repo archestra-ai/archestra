@@ -128,19 +128,17 @@ export function CreateConnectorDialog({
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  // Permission sync is the preferred mode: whenever the feature is enabled,
+  // Permission sync is the preferred mode: whenever
   // the chosen type supports it, and this user may turn it on, a NEW
   // connector defaults to it (any type in the allowlist, current or future).
   // The user can still switch it off.
-  const autoSyncBeta = useFeature("kbAutoSyncPermissionsEnabled") ?? false;
   const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
   const { data: hasAutoSyncCreate } = useHasPermissions({
     knowledgeSourceAutoSync: ["create"],
   });
   const defaultSyncPermissionsFor = (type: ConnectorType): boolean =>
     Boolean(
-      autoSyncBeta &&
-        knowledgeBaseEnterprise &&
+      knowledgeBaseEnterprise &&
         hasAutoSyncCreate &&
         connectorSupportsAutoSync(type, orchestratorK8sRuntime),
     );

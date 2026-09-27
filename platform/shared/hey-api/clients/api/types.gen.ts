@@ -40170,7 +40170,6 @@ export type GetConfigResponses = {
             openappaEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
-            kbAutoSyncPermissionsEnabled: boolean;
             kbMfilesConnectorEnabled: boolean;
             kbMfilesOauthEnabled: boolean;
             kbBm25DefaultK1: number;

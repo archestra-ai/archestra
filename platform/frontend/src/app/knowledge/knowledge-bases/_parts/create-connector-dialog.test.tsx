@@ -792,17 +792,14 @@ describe("CreateConnectorDialog", () => {
       ).not.toBeChecked();
     });
 
-    it("offers no permission sync when the feature flag is off", async () => {
-      mockUseFeature.mockImplementation(
-        (key) => key !== "kbAutoSyncPermissionsEnabled",
-      );
-
+    it("shows permission sync with all beta flags off", async () => {
+      mockUseFeature.mockImplementation(() => false);
       await renderConfigureStep();
       expect(
-        screen.queryByRole("switch", {
+        screen.getByRole("switch", {
           name: "Sync permissions from the source",
         }),
-      ).not.toBeInTheDocument();
+      ).toBeInTheDocument();
 
       mockUseFeature.mockImplementation(() => true);
     });

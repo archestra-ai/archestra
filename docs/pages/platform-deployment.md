@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-25
+lastUpdated: 2026-09-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -2068,9 +2068,6 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 
 Permission sync for connectors using [auto-sync permissions](/docs/platform-knowledge#auto-sync-permissions) runs in its own worker lane, independent of content sync. Its cadence is not an environment variable: each connector's permission sync interval is set in the connector form, and a pass also runs automatically after a content sync ingests new documents or when triggered manually.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`** - Beta gate for the whole auto-sync-permissions feature: the connector visibility option, its permission passes, and the Users and Groups tabs.
-  - Default: `false`
-  - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing auto-sync connectors go dormant while it is off — no passes run and the Permissions APIs return 403.
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`** - Beta gate for the [M-Files connector](/docs/platform-knowledge#m-files): the connector type in the create dialog, creating connectors of the type, and the VAF Add On distribution endpoints.
   - Default: `false`
   - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing M-Files connectors keep syncing while it is off.

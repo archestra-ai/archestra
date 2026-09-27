@@ -39,10 +39,8 @@ const PermissionSyncIntervalSchema = z
   );
 
 import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
-import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
-  AUTO_SYNC_PERMISSIONS_DISABLED_ERROR,
   checkAutoSyncPermissionSyncSupported,
   checkCanSetAutoSyncPermissionsVisibility,
   checkHasAutoSyncConnectorPermission,
@@ -1120,7 +1118,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (body.syncPermissionsFromSource) {
-        // beta flag + enterprise license + connector-type support +
+        // Enterprise license + connector-type support +
         // knowledgeSourceAutoSync:create (admin-only by default)
         const violation = await checkCanSetAutoSyncPermissionsVisibility({
           userId: user.id,
@@ -1725,7 +1723,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       if (!connector.syncPermissionsFromSource && nextSync) {
-        // Transition INTO auto-sync: beta flag + enterprise license +
+        // Transition INTO auto-sync: enterprise license +
         // connector-type support + knowledgeSourceAutoSync:update. An
         // existing auto-sync connector is exempt from the transition-only
         // gates (mirrors team-scoped); its mutations are covered by the
@@ -2370,7 +2368,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       const connector = await findConnectorOrThrow({
         id,
@@ -2439,7 +2437,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       const connector = await findConnectorOrThrow({
         id,
@@ -2548,7 +2546,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       const connector = await findConnectorOrThrow({
         id,
@@ -2695,7 +2693,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       const connector = await findConnectorOrThrow({
         id,
@@ -2757,7 +2755,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { params: { id, externalAccountId }, organizationId, user },
       reply,
     ) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       await findConnectorOrThrow({ id, organizationId, userId: user.id });
 
@@ -3493,10 +3491,7 @@ async function enqueueAudienceRefreshPass(connectorId: string): Promise<void> {
   });
 }
 
-function assertAutoSyncPermissionsFeatureEnabled(): void {
-  if (!config.kb.autoSyncPermissionsEnabled) {
-    throw new ApiError(403, AUTO_SYNC_PERMISSIONS_DISABLED_ERROR);
-  }
+function assertAutoSyncPermissionsLicensed(): void {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

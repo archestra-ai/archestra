@@ -1,7 +1,6 @@
 import { hasScopedPermission, type ScopedPermission } from "@archestra/shared";
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { userHasPermission } from "@/auth/utils";
-import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import {
@@ -145,30 +144,24 @@ export function isTeamScopedWithoutTeams(params: {
   return params.visibility === "team-scoped" && params.teamIds.length === 0;
 }
 
-export const AUTO_SYNC_PERMISSIONS_DISABLED_ERROR =
-  "Auto-sync permissions is a beta feature that is not enabled on this deployment (set ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED=true to enable it)";
-
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Runtime gate for the whole permission-sync family (scheduler, worker,
- * content-sync trigger, manual trigger): beta flag AND enterprise
+ * content-sync trigger, manual trigger): enterprise
  * knowledge-base tier. Enforced at runtime — not only when the visibility is
  * set — so a lapsed license makes existing auto-sync connectors go dormant
  * instead of continuing to sync ACLs.
  */
 export function isAutoSyncPermissionsActive(): boolean {
-  return (
-    config.kb.autoSyncPermissionsEnabled &&
-    enterpriseTier.isKnowledgeBaseActive()
-  );
+  return enterpriseTier.isKnowledgeBaseActive();
 }
 
 /**
  * Gate for selecting the `auto-sync-permissions` visibility on a connector —
  * every path that can set it (REST create/update and the MCP connector tools)
- * must pass: beta flag on, enterprise knowledge-base tier active, connector
+ * must pass: enterprise knowledge-base tier active, connector
  * type supports permission sync, and the caller holds the matching
  * `knowledgeSourceAutoSync` permission ("create" when creating a connector
  * with the visibility, "update" when switching an existing one into it).
@@ -183,9 +176,6 @@ export async function checkCanSetAutoSyncPermissionsVisibility(params: {
   connectorType: ConnectorType;
   action: "create" | "update";
 }): Promise<ApiError | null> {
-  if (!config.kb.autoSyncPermissionsEnabled) {
-    return new ApiError(403, AUTO_SYNC_PERMISSIONS_DISABLED_ERROR);
-  }
   if (!enterpriseTier.isKnowledgeBaseActive()) {
     return new ApiError(
       403,

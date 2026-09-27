@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import { vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "vitest";
 import { ConnectorIdentityCache } from "./identity-cache";
 
 vi.mock("@/cache-manager");

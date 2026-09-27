@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
-import { vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
-import { describe, expect, test } from "@/test";
 import { rfc8693TokenExchangeStrategy } from "./rfc8693-token-exchange";
 
 describe("rfc8693TokenExchangeStrategy", () => {

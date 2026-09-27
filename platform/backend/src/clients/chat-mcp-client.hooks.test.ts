@@ -6,9 +6,8 @@
  * hookDispatcherService.fire is stubbed with vi.spyOn so the real sandbox
  * runtime is never touched.
  */
-import { vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
-import { afterEach, describe, expect, test } from "@/test";
 import { __test as chatClient } from "./chat-tool-builder";
 
 const {

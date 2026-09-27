@@ -1,3 +1,4 @@
+// @vitest-environment node
 import {
   EMBEDDING_ONLY_PROVIDERS,
   providerSupportsChat,

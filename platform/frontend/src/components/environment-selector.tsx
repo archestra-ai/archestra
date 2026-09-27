@@ -16,7 +16,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export const GLOBAL_ENVIRONMENT_SCOPE = "__global__";
 export const GLOBAL_ENVIRONMENT_SCOPE_LABEL = "All environments (default)";

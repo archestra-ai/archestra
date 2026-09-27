@@ -39,7 +39,7 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type CatalogTool =
   archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];

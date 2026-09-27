@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useConnectorRun } from "@/lib/knowledge/connector.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface ConnectorRunDetailsDialogProps {
   connectorId: string;

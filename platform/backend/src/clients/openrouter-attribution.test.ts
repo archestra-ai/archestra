@@ -1,5 +1,5 @@
+import { describe, expect, test } from "vitest";
 import config from "@/config";
-import { describe, expect, test } from "@/test";
 import { openRouterAttributionHeaders } from "./openrouter-attribution";
 
 describe("openRouterAttributionHeaders", () => {

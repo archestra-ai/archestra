@@ -14,7 +14,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 vi.mock("next/navigation");
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import appConfig from "@/lib/config/config";
 import { useConfig, useFeature } from "@/lib/config/config.query";
@@ -123,6 +123,22 @@ const claudeClient = findClient("claude-code");
 
 const COMMAND =
   "curl -fsSL 'http://localhost:9000/api/connection-setups/tok' | bash";
+
+let restoreTimer: () => void;
+
+beforeEach(() => {
+  // These tests cover command generation, not the 350 ms debounce interval.
+  // Keep scheduling asynchronous while avoiding that real wait in every case.
+  const nativeSetTimeout = globalThis.setTimeout;
+  const timerSpy = vi
+    .spyOn(globalThis, "setTimeout")
+    .mockImplementation((handler, timeout, ...args) =>
+      nativeSetTimeout(handler, timeout === 350 ? 0 : timeout, ...args),
+    );
+  restoreTimer = () => timerSpy.mockRestore();
+});
+
+afterEach(() => restoreTimer());
 
 function renderPanelProps(
   overrides: Partial<Parameters<typeof ConnectCommandPanel>[0]> = {},

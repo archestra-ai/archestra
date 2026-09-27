@@ -1,5 +1,4 @@
-import { vi } from "vitest";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   getDbResourceExhaustionErrorCode,

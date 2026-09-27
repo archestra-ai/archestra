@@ -125,29 +125,55 @@ for (const viewport of [
           lastErrorAt: null,
         },
       });
+      await mswControl.registerMany([
+        {
+          method: "get",
+          url: "/api/openappa/coverage/summary",
+          body: {
+            totals: {
+              tools: 0,
+              root: 0,
+              battery: 0,
+              notEnforced: 0,
+              catchAll: 0,
+              builtInFallback: 0,
+            },
+            batteries: { active: [], broken: [], available: [] },
+          },
+        },
+        {
+          method: "get",
+          url: "/api/members/default-model",
+          body: { modelId: null, chatApiKeyId: null },
+        },
+      ]);
       await page.goto("/openappa/policy");
-      const policySource = page.getByRole("heading", { name: "Policy source" });
+      const policySource = page.getByText("Revision 1", { exact: true });
       await expect(policySource).toBeInViewport();
-      await expect(page.getByText("Read only", { exact: true })).toBeVisible();
+      await expect(
+        page.getByRole("switch", { name: "Enforcement" }),
+      ).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Save & apply" }),
       ).toHaveCount(0);
-      const effective = page.getByRole("heading", { name: "Effective policy" });
+      const effective = page.getByText(
+        "What the runtime enforces, batteries included.",
+      );
       await expect(effective).toBeHidden();
-      await page.getByRole("tab", { name: "Effective policy" }).click();
+      await page.getByRole("tab", { name: "Effective", exact: true }).click();
       await expect(effective).toBeVisible();
       await expect(policySource).toBeHidden();
-      await page.getByRole("tab", { name: "Policy", exact: true }).click();
+      await page.getByRole("tab", { name: "Source", exact: true }).click();
       await expect(policySource).toBeVisible();
       await expect(effective).toBeHidden();
       await page.screenshot({
         path: testInfo.outputPath("policy-source.png"),
         fullPage: true,
       });
-      await page.goto("/openappa/configure");
-      await page.getByRole("button", { name: "Set up GitHub sync" }).click();
+      await page.goto("/openappa");
+      await page.getByRole("button", { name: "Connect GitHub" }).click();
       const dialog = page.getByRole("dialog", {
-        name: "Connect APPA to GitHub",
+        name: "Connect OpenAPPA to GitHub",
       });
       await expect(dialog).toBeVisible();
       await dialog
@@ -179,35 +205,28 @@ for (const viewport of [
       // The repository field holds an unsaved value, so Cancel asks first.
       await page.getByRole("button", { name: "Discard changes" }).click();
       await expect(dialog).toBeHidden();
-      await page.goto("/openappa");
+      await page.goto("/openappa/policy");
       await expect(
         page.getByRole("link", { name: "Configure with chat" }),
-      ).toHaveCount(0);
-      await page.goto("/openappa/policy");
-      await expect(page.getByText("Configure with the agent")).toHaveCount(0);
-      await page.getByRole("link", { name: "Configure with chat" }).click();
-      await expect(page).toHaveURL(/\/openappa\/configure$/);
-      await expect(
-        page.getByRole("region", { name: "Change OpenAPPA policy with chat" }),
-      ).toBeVisible();
-      await expect(page.getByText("Selected automatically")).toBeVisible();
+      ).toHaveAttribute(
+        "href",
+        "/chat?openappa=1&openappaPrompt=explainPolicy&from=openappa",
+      );
+      // Open a blank policy draft to check its composer without auto-sending.
+      await page.goto("/chat?openappa=1&from=openappa");
       const policyPrompt = page.getByPlaceholder(
         "Ask about or change your policy…",
       );
       await policyPrompt.scrollIntoViewIfNeeded();
       await expect(policyPrompt).toBeInViewport();
+      await policyPrompt.fill("Review the current policy");
+      await expect(policyPrompt).toHaveValue("Review the current policy");
       await page.screenshot({
-        path: testInfo.outputPath("configure-chat.png"),
+        path: testInfo.outputPath("policy-chat.png"),
         fullPage: true,
       });
-      await expect(page.getByRole("link", { name: "Batteries" })).toHaveCount(
-        0,
-      );
-      await page.getByRole("link", { name: "Policy", exact: true }).click();
+      await page.goBack();
       await expect(page).toHaveURL(/\/openappa\/policy$/);
-      await page.goto("/openappa/chat");
-      await expect(page).toHaveURL(/\/openappa\/configure$/);
-      await page.goto("/openappa/policy");
       await expect(policySource).toBeInViewport();
     });
   });

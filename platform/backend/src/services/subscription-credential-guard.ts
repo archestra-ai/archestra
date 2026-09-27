@@ -6,7 +6,7 @@ import {
   stripBearerTransportPrefix,
   subscriptionKindFromCredential,
 } from "@archestra/shared";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 import { decodeOpenAiCodexCredential } from "./openai-codex-credentials";
 import { decodeXaiSubscriptionCredential } from "./xai-subscription-credentials";
 

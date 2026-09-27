@@ -7,7 +7,7 @@ import {
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { serverCanAccessPage } from "@/lib/auth/auth.server";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import McpRegistryClient from "./page.client";
 

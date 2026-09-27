@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: ""
+      reuse_from_version:
+        description: "Previous main SHA whose image may be reused when inputs are unchanged"
+        required: false
+        type: string
+        default: ""
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -76,6 +81,8 @@ jobs:
       push_image: ${{ inputs.push_to_gcr }}
       auth_provider: gar
       checkout_ref: ${{ inputs.checkout_ref }}
+      reuse_from_version: ${{ inputs.reuse_from_version }}
+      reuse_paths: '["platform/sandbox_base", ".github/workflows/build-sandbox-base-docker-image.yml"]'
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

@@ -1,5 +1,5 @@
+import { describe, expect, test, vi } from "vitest";
 import type { RetainedLogRecord } from "@/logging/log-ring-buffer";
-import { describe, expect, test, vi } from "@/test";
 import { PostHogErrorTrackingService } from "./error-tracking";
 
 const enabledAnalyticsConfig = {

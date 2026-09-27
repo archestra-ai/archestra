@@ -1,4 +1,4 @@
-import Fastify, { type FastifyRequest } from "fastify";
+import Fastify, { type FastifyRequest, LogController } from "fastify";
 import {
   serializerCompiler,
   validatorCompiler,
@@ -27,7 +27,7 @@ type BrowserApiRequest = FastifyRequest & {
 export const createFastifyInstance = () =>
   Fastify({
     loggerInstance: logger,
-    disableRequestLogging: true,
+    logController: new LogController({ disableRequestLogging: true }),
     trustProxy: config.api.trustProxy,
     bodyLimit: config.api.bodyLimit,
     // Held above the keep-alive timeout of any proxy or load balancer in front

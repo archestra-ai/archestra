@@ -1,5 +1,5 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import { vi } from "vitest";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -11,11 +11,9 @@ import type { ClientType, User } from "@/types";
 import skillShareRoutes from "./skill-share.routes";
 import { seedSkill } from "./skill-share.test-helpers";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    plugins: { enabled: true },
-  }),
-);
+beforeEach(() => {
+  config.plugins.enabled = true;
+});
 
 describe("POST /api/skill-share-links", () => {
   const ctx = useRouteTestApp(skillShareRoutes);

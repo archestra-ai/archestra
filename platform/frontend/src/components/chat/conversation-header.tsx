@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
+  ArrowLeft,
   CalendarClock,
   Download,
   FileText,
@@ -30,8 +31,8 @@ import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 import { useProject } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
-import { cn } from "@/lib/utils";
 import { formatRunLabel } from "@/lib/utils/format-run-timestamp";
+import { cn } from "@/lib/utils/tailwind";
 import type { RightPanelTab } from "./right-side-panel";
 
 type Conversation = archestraApiTypes.GetChatConversationResponses["200"];
@@ -66,6 +67,8 @@ interface ConversationHeaderProps {
   /** Whether this chat is eligible to be turned into a project. */
   canCreateProject: boolean;
   isPolicyConversation?: boolean;
+  /** A page this chat was opened from, linked before the title. */
+  backLink?: { href: string; label: string };
   /**
    * When this chat was opened from a scheduled task, its trigger id — renders a
    * non-clickable "scheduled task" breadcrumb segment for orientation.
@@ -94,6 +97,7 @@ export function ConversationHeader({
   isShared,
   canCreateProject,
   isPolicyConversation = false,
+  backLink,
   isAppOversight,
   oversightOwnerName,
   onShare,
@@ -159,6 +163,19 @@ export function ConversationHeader({
         <div className="flex items-center gap-2 min-w-0">
           {conversationId && conversation && (
             <div className="flex items-center flex-shrink min-w-0 gap-2">
+              {backLink && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  asChild
+                >
+                  <Link href={backLink.href}>
+                    <ArrowLeft />
+                    <span>{backLink.label}</span>
+                  </Link>
+                </Button>
+              )}
               {/* Project chats read as "{ProjectName}/{Chat title}" — the
                   project segment (emoji + name, like the sidebar) links to the
                   project. Hidden for viewers without project access. */}

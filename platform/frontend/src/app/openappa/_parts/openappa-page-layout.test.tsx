@@ -10,12 +10,19 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
 vi.mock("./batteries-panel", () => ({
   BatteriesUploadAction: () => null,
 }));
+const setupState = vi.hoisted(() => ({
+  isFresh: false as boolean | undefined,
+}));
+vi.mock("./use-openappa-setup-state", () => ({
+  useOpenAppaSetupState: () => setupState,
+}));
 
 test.each([
   ["/openappa", "Overview"],
   ["/openappa/batteries", "Batteries"],
   ["/openappa/policy", "Policy"],
 ])("selects %s as the %s tab", (pathname, tabName) => {
+  setupState.isFresh = false;
   vi.mocked(usePathname).mockReturnValue(pathname);
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -35,26 +42,32 @@ test.each([
     name: "Configure with chat",
   });
   if (pathname === "/openappa/policy") {
-    expect(configureLink).toHaveAttribute("href", "/openappa/configure");
+    expect(configureLink).toHaveAttribute(
+      "href",
+      expect.stringMatching(
+        /^\/chat\?openappa=1&openappaPrompt=explainPolicy&from=openappa$/,
+      ),
+    );
   } else {
     expect(configureLink).not.toBeInTheDocument();
   }
 });
 
-test.each([
-  "/openappa/configure",
-  "/openappa/conversation-1",
-])("configuration chat at %s replaces the tabs and links back to policy", (pathname) => {
-  vi.mocked(usePathname).mockReturnValue(pathname);
+test("a fresh Overview hides the tabs until a policy is saved", () => {
+  setupState.isFresh = true;
+  vi.mocked(usePathname).mockReturnValue("/openappa");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
   );
-  render(<OpenAppaPageLayout>Chat</OpenAppaPageLayout>);
-  expect(
-    screen.queryByRole("link", { name: "Batteries" }),
-  ).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Policy" })).toHaveAttribute(
-    "href",
-    "/openappa/policy",
+
+  render(
+    <OpenAppaPageLayout>
+      <div>Content</div>
+    </OpenAppaPageLayout>,
   );
+
+  expect(screen.getByText("Content")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: "Policy" }),
+  ).not.toBeInTheDocument();
 });

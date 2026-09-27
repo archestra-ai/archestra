@@ -46,7 +46,7 @@ import {
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFeature } from "@/lib/config/config.query";
 import type { BulkCardSelectionProps } from "@/lib/hooks/use-bulk-card-selection";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { AppDeleteDialog } from "./app-delete-dialog";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];

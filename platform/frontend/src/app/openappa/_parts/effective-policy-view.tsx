@@ -1,6 +1,5 @@
 "use client";
 
-import { Layers } from "lucide-react";
 import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -19,10 +18,11 @@ import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
  * refused composes to nothing, so the document shown then is the last one that
  * opened, kept until a text composes again.
  */
-export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
-  const effective = useEffectivePolicy(enabled);
+export function EffectivePolicyView() {
+  const effective = useEffectivePolicy();
   const declarations = usePolicyDeclarations();
-  if (effective.isPending) return <Skeleton className="h-[65vh] w-full" />;
+  if (effective.isPending)
+    return <Skeleton className="h-[65vh] w-full rounded-t-none" />;
   if (effective.isError || !effective.data)
     return (
       <QueryLoadError
@@ -43,23 +43,10 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
       );
   return (
     <div
-      className="overflow-hidden rounded-lg border bg-background"
+      className="overflow-hidden rounded-b-lg border bg-background"
       data-testid="effective-policy"
       data-refused={refused}
     >
-      <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
-        <Layers className="size-4 text-muted-foreground" />
-        <div>
-          <h2 className="text-sm font-medium">
-            {refused ? "Last composed policy" : "Effective policy"}
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {refused
-              ? "The current text was refused and composes to nothing; this is the last document that opened."
-              : "What the runtime enforces, batteries included."}
-          </p>
-        </div>
-      </div>
       {stubs.length > 0 && (
         <div className="border-b px-4 py-3">
           <InlineNotice variant="warning" data-testid="effective-policy-stubs">
@@ -83,6 +70,10 @@ export function EffectivePolicyView({ enabled }: { enabled: boolean }) {
       {lastError && (
         <div className="border-b px-4 py-3">
           <InlineNotice variant="error" data-testid="effective-policy-error">
+            <span className="font-medium">
+              The current text was refused and composes to nothing; this is the
+              last document that opened.
+            </span>
             <InlineNoticeText className="whitespace-pre-wrap font-mono">
               {lastError}
             </InlineNoticeText>

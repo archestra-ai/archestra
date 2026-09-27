@@ -19,7 +19,7 @@ vi.mock("@archestra/shared", () => ({
   },
 }));
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils/api", () => ({
   handleApiError: (...args: unknown[]) => mockHandleApiError(...args),
   throwOnApiError: (error: unknown) => {
     if (error) throw error;

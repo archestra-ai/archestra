@@ -1,7 +1,6 @@
 import { OAUTH_SCOPES } from "@archestra/shared";
-import { afterEach, describe, expect, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { OAuthClientModel } from "@/models";
-import { test } from "@/test";
 import {
   CimdError,
   ensureCimdClientRegistered,

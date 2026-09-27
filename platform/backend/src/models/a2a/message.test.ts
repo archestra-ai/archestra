@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
+import { describe, expect, test } from "vitest";
 import {
   A2AProtocolRole,
   A2AProtocolTaskState,
 } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
-import { describe, expect, test } from "@/test";
 import A2AContextModel from "./context";
 import A2AMessageModel, { A2AMessageIdExistsError } from "./message";
 import A2ATaskModel from "./task";

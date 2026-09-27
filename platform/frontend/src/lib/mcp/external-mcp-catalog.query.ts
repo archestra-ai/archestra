@@ -4,7 +4,7 @@ import {
 } from "@archestra/shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { SelectedCategory } from "@/app/mcp/registry/_parts/CatalogFilters";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 type SearchResponse =
   archestraCatalogTypes.SearchMcpServerCatalogResponses[200];

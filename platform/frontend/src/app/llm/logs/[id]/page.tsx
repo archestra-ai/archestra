@@ -5,7 +5,7 @@ import {
 } from "@archestra/shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import { ChatPage } from "./page.client";
 

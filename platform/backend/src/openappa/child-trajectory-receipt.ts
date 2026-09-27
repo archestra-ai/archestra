@@ -6,7 +6,7 @@
  */
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import config from "@/config";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 
 export type AppaChildTrajectoryReceipt = {
   token: string;

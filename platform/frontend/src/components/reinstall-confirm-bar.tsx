@@ -4,7 +4,7 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Inline confirm surface that replaces the host form's footer when a

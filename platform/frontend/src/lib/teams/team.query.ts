@@ -2,7 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useFeature } from "@/lib/config/config.query";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 const {
   getTeams,

@@ -48,7 +48,7 @@ import {
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import { useConfig } from "@/lib/config/config.query";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];
 type Binding =

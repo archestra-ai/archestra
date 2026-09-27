@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -14,7 +14,6 @@ import {
   test,
   vi,
 } from "vitest";
-import { authQueryKeys } from "@/lib/auth/auth.query";
 import { invalidatePolicyViews } from "@/lib/openappa-policy-views";
 import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 
@@ -92,9 +91,6 @@ beforeEach(() => {
       effectiveRequests += 1;
       return HttpResponse.json(effective);
     }),
-    http.get(`${origin}/api/user/permissions`, () =>
-      HttpResponse.json({ toolPolicy: ["read", "update"] }),
-    ),
   );
 });
 afterEach(() => server.resetHandlers());
@@ -102,152 +98,17 @@ afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
-function mount() {
+function mount(sourceEntry?: string) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  client.setQueryData(authQueryKeys.session(), {
-    user: { id: "user" },
-    session: { id: "session" },
+    defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
-      <GuardrailsPolicyEditor />
-      <a href="/plugins">Plugins</a>
+      <GuardrailsPolicyEditor sourceEntry={sourceEntry} />
     </QueryClientProvider>,
   );
   return client;
 }
-
-test("validates edits inline, saves the exact text and revision, and becomes clean", async () => {
-  let submitted: unknown;
-  server.use(
-    http.post(`${url}/validate`, () =>
-      HttpResponse.json({
-        valid: true,
-        errors: [],
-        warnings: [],
-      }),
-    ),
-    http.put(url, async ({ request }) => {
-      submitted = await request.json();
-      return HttpResponse.json({
-        ...policy,
-        content: `${content}# edited`,
-        revision: 2,
-      });
-    }),
-  );
-  mount();
-  const editor = await screen.findByRole("textbox", {
-    name: "Organization guardrails policy",
-  });
-  await screen.findByRole("button", { name: "Validate" });
-  fireEvent.change(editor, { target: { value: `${content}# edited` } });
-  fireEvent.click(screen.getByRole("button", { name: "Validate" }));
-  expect(await screen.findByText("Policy is valid.")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Save & apply" }));
-  await screen.findByText("Revision 2");
-  expect(submitted).toEqual({
-    content: `${content}# edited`,
-    expectedRevision: 1,
-  });
-  expect(screen.getByRole("button", { name: "Save & apply" })).toBeDisabled();
-});
-
-test("a failed validation blocks save until the draft changes", async () => {
-  server.use(
-    http.post(`${url}/validate`, () =>
-      HttpResponse.json({
-        valid: false,
-        errors: ["Unknown trust rank"],
-        warnings: [],
-      }),
-    ),
-  );
-  mount();
-  const editor = await screen.findByRole("textbox", {
-    name: "Organization guardrails policy",
-  });
-  fireEvent.change(editor, { target: { value: `${content}# invalid` } });
-  fireEvent.click(screen.getByRole("button", { name: "Validate" }));
-  expect(await screen.findByText("Unknown trust rank")).toBeVisible();
-  expect(screen.getByRole("button", { name: "Save & apply" })).toBeDisabled();
-  fireEvent.change(editor, { target: { value: `${content}# changed again` } });
-  expect(screen.queryByText("Unknown trust rank")).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Save & apply" })).toBeEnabled();
-});
-
-test("asks before a sidebar link discards an unsaved policy", async () => {
-  mount();
-  const editor = await screen.findByRole("textbox", {
-    name: "Organization guardrails policy",
-  });
-  fireEvent.change(editor, { target: { value: `${content}# draft` } });
-  fireEvent.click(screen.getByRole("link", { name: "Plugins" }));
-  expect(await screen.findByText("Discard unsaved changes?")).toBeVisible();
-  expect(mockRouterPush).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
-  expect(editor).toHaveValue(`${content}# draft`);
-  fireEvent.click(screen.getByRole("link", { name: "Plugins" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Discard changes" }),
-  );
-  expect(mockRouterPush).toHaveBeenCalledWith("/plugins");
-});
-
-test("preserves local edits when another writer updates the policy and rejects a stale save", async () => {
-  server.use(
-    http.put(url, () =>
-      HttpResponse.json(
-        {
-          error: {
-            message: "Policy changed; reload before saving",
-            type: "conflict",
-          },
-        },
-        { status: 409 },
-      ),
-    ),
-  );
-  const client = mount();
-  const editor = await screen.findByRole("textbox", {
-    name: "Organization guardrails policy",
-  });
-  await screen.findByRole("button", { name: "Save & apply" });
-  fireEvent.change(editor, { target: { value: `${content}# my change` } });
-  client.setQueryData(["guardrails-policy"], {
-    ...policy,
-    revision: 2,
-    content: `${content}# other change`,
-  });
-  await screen.findByText(/A newer revision is available/);
-  expect(editor).toHaveValue(`${content}# my change`);
-  fireEvent.click(screen.getByRole("button", { name: "Save & apply" }));
-  expect(
-    await screen.findByText("Policy changed; reload before saving"),
-  ).toBeInTheDocument();
-  expect(editor).toHaveValue(`${content}# my change`);
-});
-
-test("read-only users can inspect the policy without editing controls", async () => {
-  server.use(
-    http.get(`${origin}/api/user/permissions`, () =>
-      HttpResponse.json({ toolPolicy: ["read"] }),
-    ),
-  );
-  mount();
-  const editor = await screen.findByRole("textbox", {
-    name: "Organization guardrails policy",
-  });
-  await waitFor(() => expect(editor).toHaveAttribute("readonly"));
-  expect(
-    screen.queryByRole("button", { name: "Save & apply" }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "Validate" }),
-  ).not.toBeInTheDocument();
-});
 
 test("the Policy page selects an included battery source and searches its status", async () => {
   const githubEntry = "batteries/github/appa.toml";
@@ -270,14 +131,7 @@ test("the Policy page selects an included battery source and searches its status
       });
     }),
   );
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <GuardrailsPolicyEditor readOnly sourceEntry={githubEntry} />
-    </QueryClientProvider>,
-  );
+  mount(githubEntry);
 
   expect(
     await screen.findByRole("textbox", {
@@ -323,15 +177,7 @@ test("battery source remains available when root policy and GitHub sync fail", a
       }),
     ),
   );
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <GuardrailsPolicyEditor readOnly sourceEntry={entry} />
-    </QueryClientProvider>,
-  );
+  mount(entry);
   expect(
     await screen.findByRole("textbox", { name: "GitHub battery policy TOML" }),
   ).toHaveValue('[[policy.tool]]\nname = "mcp/github/get_commit"\n');
@@ -349,14 +195,7 @@ test("policy invalidation refreshes the displayed battery source", async () => {
       }),
     ),
   );
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <GuardrailsPolicyEditor readOnly sourceEntry={entry} />
-    </QueryClientProvider>,
-  );
+  const client = mount(entry);
   const source = await screen.findByRole("textbox", {
     name: "GitHub battery policy TOML",
   });
@@ -366,7 +205,7 @@ test("policy invalidation refreshes the displayed battery source", async () => {
   await waitFor(() => expect(source).toHaveValue(batteryContent));
 });
 
-test("GitHub-owned policy is read-only and becomes editable after disconnect", async () => {
+test("a GitHub-synced policy says where it comes from", async () => {
   server.use(
     http.get(`${origin}/api/openappa/github-sync`, () =>
       HttpResponse.json({
@@ -376,45 +215,8 @@ test("GitHub-owned policy is read-only and becomes editable after disconnect", a
       }),
     ),
   );
-  const client = mount();
-  expect(await screen.findByText("Synced from GitHub")).toBeVisible();
-  expect(
-    screen.getByRole("textbox", { name: "Organization guardrails policy" }),
-  ).toHaveAttribute("readonly");
-  expect(
-    screen.queryByRole("button", { name: "Save & apply" }),
-  ).not.toBeInTheDocument();
-  server.use(
-    http.get(`${origin}/api/openappa/github-sync`, () =>
-      HttpResponse.json({
-        enabled: true,
-        source: { interval: null },
-        hasPolicy: true,
-      }),
-    ),
-  );
-  await client.invalidateQueries({ queryKey: ["openappa-github-sync"] });
-  expect(
-    await screen.findByRole("button", { name: "Save & apply" }),
-  ).toBeVisible();
-});
-
-test("a validate that warns keeps the warnings apart from the errors", async () => {
-  server.use(
-    http.post(`${url}/validate`, () =>
-      HttpResponse.json({
-        valid: false,
-        errors: ["Unknown trust rank"],
-        warnings: ['include "acme" resolves to no battery'],
-      }),
-    ),
-  );
   mount();
-  fireEvent.click(await screen.findByRole("button", { name: "Validate" }));
-  const warnings = await screen.findByTestId("policy-warnings");
-  expect(warnings).toHaveTextContent('include "acme" resolves to no battery');
-  expect(warnings).not.toHaveTextContent("Unknown trust rank");
-  expect(screen.getAllByRole("alert")).toHaveLength(2);
+  expect(await screen.findByText("Synced from GitHub")).toBeVisible();
 });
 
 test("the editor footer counts the composed batteries and the unenforced ones", async () => {
@@ -435,6 +237,9 @@ test("the editor footer counts the composed batteries and the unenforced ones", 
   await waitFor(() => expect(summary).toHaveAttribute("data-batteries", "3"));
   expect(summary).toHaveAttribute("data-not-enforced", "1");
   expect(summary).not.toHaveAttribute("data-failed");
+  expect(
+    within(summary).getByRole("link", { name: "1 not enforced" }),
+  ).toHaveAttribute("href", "/openappa/batteries?status=broken");
 });
 
 test("a failed composition says so instead of counting batteries", async () => {
@@ -453,7 +258,7 @@ test("a failed composition says so instead of counting batteries", async () => {
   expect(summary).not.toHaveAttribute("data-batteries");
 });
 
-test("the effective policy is fetched only once its tab is opened", async () => {
+test("the effective policy is fetched only once its view is selected", async () => {
   server.use(
     http.get(effectiveUrl, () => {
       effectiveRequests += 1;
@@ -464,13 +269,15 @@ test("the effective policy is fetched only once its tab is opened", async () => 
     }),
   );
   mount();
-  await screen.findByRole("button", { name: "Validate" });
+  await screen.findByRole("textbox", {
+    name: "Organization guardrails policy",
+  });
   expect(effectiveRequests).toBe(0);
   expect(
     screen.queryByRole("textbox", { name: "Effective guardrails policy" }),
   ).not.toBeInTheDocument();
 
-  await userEvent.click(screen.getByRole("tab", { name: "Effective policy" }));
+  await userEvent.click(screen.getByRole("tab", { name: "Effective" }));
   expect(
     await screen.findByRole("textbox", { name: "Effective guardrails policy" }),
   ).toHaveValue(effective.content);
@@ -482,6 +289,7 @@ test("the effective policy is fetched only once its tab is opened", async () => 
     "data-refused",
     "true",
   );
+  expect(screen.getByText("Last composed policy")).toBeVisible();
   expect(
     screen.getByRole("textbox", { name: "Effective guardrails policy" }),
   ).toHaveAttribute("readonly");
@@ -503,9 +311,7 @@ test("the composed view names the batteries that fold in as empty stubs", async 
     ),
   );
   mount();
-  await userEvent.click(
-    await screen.findByRole("tab", { name: "Effective policy" }),
-  );
+  await userEvent.click(await screen.findByRole("tab", { name: "Effective" }));
   const stubs = await screen.findByTestId("effective-policy-stubs");
   expect(stubs).toHaveTextContent("globex");
   expect(stubs).toHaveTextContent("initech");
@@ -523,27 +329,30 @@ test("the composed view lists no stub while every battery is active", async () =
     ),
   );
   mount();
-  await userEvent.click(
-    await screen.findByRole("tab", { name: "Effective policy" }),
-  );
+  await userEvent.click(await screen.findByRole("tab", { name: "Effective" }));
   await screen.findByRole("textbox", { name: "Effective guardrails policy" });
   expect(
     screen.queryByTestId("effective-policy-stubs"),
   ).not.toBeInTheDocument();
 });
 
-test("switching to the composed view and back keeps an unsaved draft", async () => {
+test("the source picker and revision show only in the Source view", async () => {
   mount();
-  const editor = await screen.findByRole("textbox", {
-    name: "Organization guardrails policy",
-  });
-  fireEvent.change(editor, { target: { value: `${content}# my draft` } });
-  await userEvent.click(screen.getByRole("tab", { name: "Effective policy" }));
-  await screen.findByRole("textbox", { name: "Effective guardrails policy" });
-  await userEvent.click(screen.getByRole("tab", { name: "Policy" }));
+  expect(await screen.findByText("Revision 1")).toBeVisible();
   expect(
-    await screen.findByRole("textbox", {
-      name: "Organization guardrails policy",
-    }),
-  ).toHaveValue(`${content}# my draft`);
+    screen.getByRole("textbox", { name: "Organization guardrails policy" }),
+  ).toHaveAttribute("readonly");
+  expect(screen.getAllByRole("tablist")).toHaveLength(1);
+  expect(
+    screen.getByRole("combobox", { name: "Policy source file" }),
+  ).toBeVisible();
+  await userEvent.click(screen.getByRole("tab", { name: "Effective" }));
+  await screen.findByRole("textbox", { name: "Effective guardrails policy" });
+  expect(
+    screen.queryByRole("combobox", { name: "Policy source file" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText("Revision 1")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("What the runtime enforces, batteries included."),
+  ).toBeVisible();
 });

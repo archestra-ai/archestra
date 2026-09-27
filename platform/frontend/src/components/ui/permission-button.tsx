@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;

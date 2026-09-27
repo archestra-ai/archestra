@@ -54,6 +54,7 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 - Use `Button` over raw `<button>`, `Input` over raw `<input>`, and the matching UI component for selects and other controls.
 - Keep components small and focused, with extracted business logic where it improves clarity.
 - Keep frontend files flat where practical and avoid barrel files.
+- Import helpers from focused `@/lib/utils/*` modules (`tailwind` for `cn`, `api` for API errors, `date-time` for dates). The `@/lib/utils` barrel eagerly loads unrelated modules, including `date-fns`, in every test or server module that imports it. Biome rejects that barrel path.
 - Only export what is needed externally.
 
 ## Notices, warnings, and announcements

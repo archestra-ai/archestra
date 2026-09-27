@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
+import { describe, expect, test } from "vitest";
 import config from "@/config";
-import { describe, expect, test } from "@/test";
 import {
   attestToolDescription,
   removeAttestationTokens,

@@ -1,17 +1,14 @@
-import { vi } from "vitest";
-
-// A cap of 2 with 5 matching chunks: small enough to see the boundary, large
-// enough that the statement still has to choose.
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    kb: { bm25RecallCap: 2 },
-  }),
-);
-
 import { BM25_B_DEFAULT, BM25_K1_DEFAULT } from "@archestra/shared";
+import config from "@/config";
 import { KbChunkModel, KbDocumentModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import type { AclEntry } from "@/types";
+
+beforeEach(() => {
+  // A cap of 2 with 5 matching chunks: small enough to see the boundary,
+  // large enough that the statement still has to choose.
+  config.kb.bm25RecallCap = 2;
+});
 
 const LUCENE_DEFAULTS = { k1: BM25_K1_DEFAULT, b: BM25_B_DEFAULT };
 

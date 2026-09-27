@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trackEvent } from "@/lib/analytics";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 

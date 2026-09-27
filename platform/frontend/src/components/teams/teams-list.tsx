@@ -47,7 +47,7 @@ import {
   useTeamLabelValues,
   useTeams,
 } from "@/lib/teams/team.query";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { TeamManagementDialog } from "./team-management-dialog";
 

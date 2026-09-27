@@ -159,12 +159,9 @@ describe("CreateVirtualKeyDialog", () => {
         .compareDocumentPosition(screen.getByText("Provider Keys")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(
-      screen
-        .getByText("Provider Keys")
-        .compareDocumentPosition(screen.getByText("Permissions")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Permissions" }));
+    expect(screen.getByText("Permissions", { selector: "h3" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "General" }));
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Map provider key" }));
     await user.click(screen.getByRole("button", { name: "Create" }));

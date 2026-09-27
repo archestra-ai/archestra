@@ -34,6 +34,7 @@ export const TOOL_PERMISSIONS: Record<
   yell: null,
   get_remedy_plans: null,
   get_guardrails_policy: { resource: "toolPolicy", action: "read" },
+  list_guardrails_battery_fits: { resource: "toolPolicy", action: "read" },
   validate_guardrails_policy: { resource: "toolPolicy", action: "update" },
   preview_guardrails_policy_change: {
     resource: "toolPolicy",

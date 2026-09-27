@@ -1,5 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "vitest";
 import { useMswServer } from "@/test/msw";
 import type { ConnectorSyncBatch, PermissionSnapshotYield } from "@/types";
 import {
@@ -15,7 +15,14 @@ const SERVER_HOST = "https://jira.mycompany.com";
 const COMPANY_HOST = "https://mycompany.atlassian.net";
 
 describe("JiraConnector", () => {
-  const server = useMswServer();
+  // Ordinary API tokens cannot use the admin directory. Tests that exercise
+  // admin lookup install their own handler for this endpoint.
+  const server = useMswServer(
+    http.get(
+      "https://api.atlassian.com/admin/v1/orgs",
+      () => new HttpResponse(null, { status: 403 }),
+    ),
+  );
   let connector: JiraConnector;
 
   // Captured wire traffic, reset per test.
@@ -86,7 +93,8 @@ describe("JiraConnector", () => {
     myselfHeaders.length = 0;
     enhancedSearchBodies.length = 0;
     v2SearchBodies.length = 0;
-    connector = new JiraConnector();
+    // These tests check wire behavior, not the production request spacing.
+    connector = new JiraConnector(0);
   });
 
   describe("validateConfig", () => {

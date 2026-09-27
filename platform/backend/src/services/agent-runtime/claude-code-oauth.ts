@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 
 /** The same public client and manual callback used by Claude Code setup-token. */
 export const claudeCodeOAuth = {

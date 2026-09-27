@@ -19,7 +19,7 @@ import {
   BOOTSTRAP_QUERY_RETRY,
   PERSISTED_QUERY_META,
 } from "@/lib/query-persistence";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
   getLlmModels,

@@ -76,7 +76,7 @@ import {
   useUpdateChatOpsBinding,
 } from "@/lib/chatops/chatops.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { ChannelDetailsDialog } from "./channel-details-dialog";
 import { ChannelsEmptyState } from "./channels-empty-state";
 import type { ProviderConfig } from "./types";

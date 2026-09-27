@@ -7,7 +7,7 @@ import {
   defaultRemarkPlugins,
   Streamdown,
 } from "streamdown";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type ResponseProps = ComponentProps<typeof Streamdown> & {
   isStreaming?: boolean;

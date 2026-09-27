@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { typeRole } from "@/lib/design/type-scale";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /** One `label` over `value` pair in a {@link DetailFacts} row. */
 export interface DetailFact {

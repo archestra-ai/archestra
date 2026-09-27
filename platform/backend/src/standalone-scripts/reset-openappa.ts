@@ -1,11 +1,13 @@
 // biome-ignore-all lint/suspicious/noConsole: standalone dev CLI — console for TTY UX
 /**
- * Put OpenAPPA back to its first-run state so the setup wizard can be replayed.
+ * Put OpenAPPA back to its first-run state so onboarding can be run again.
  *
  * Turns the deployment switch off and deletes, for every organization, the
  * policy revisions (the policy reads as the built-in default again), the
  * battery rows and uploaded packages, the composed policy and the GitHub sync
  * source. The runtime ledger (sessions, events, decisions) is left alone.
+ * With no saved revision, the next policy saved turns enforcement on again,
+ * as an organization's first policy does.
  *
  * Development only. Run from `backend/`:
  *

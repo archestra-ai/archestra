@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 import {
   useSetChatMessageFeedback,
   useUpdateChatMessage,
@@ -16,8 +16,8 @@ vi.mock("@archestra/shared", () => ({
   },
 }));
 
-vi.mock("@/lib/utils", async () => {
-  const actual = await vi.importActual("@/lib/utils");
+vi.mock("@/lib/utils/api", async () => {
+  const actual = await vi.importActual("@/lib/utils/api");
   return {
     ...actual,
     handleApiError: vi.fn(),

@@ -1,10 +1,18 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { AlertTriangle, CheckCircle2, Github, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  Github,
+  RefreshCw,
+} from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
@@ -28,6 +36,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
+import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
 import {
   useAppaGithubSync,
   useConfigureAppaGithubSync,
@@ -260,6 +270,7 @@ export function OpenAppaSourceForm({
   onOpenChange: (open: boolean) => void;
 }) {
   const mutation = useConfigureAppaGithubSync();
+  const policy = useGuardrailsPolicy();
   const [credentialStep, setCredentialStep] = useState<
     "source" | "define" | "connect"
   >("source");
@@ -314,8 +325,8 @@ export function OpenAppaSourceForm({
         open={credentialStep === "source"}
         onOpenChange={onOpenChange}
         isDirty={form.formState.isDirty}
-        title={source ? "Edit GitHub source" : "Connect APPA to GitHub"}
-        description="Pull a policy file from GitHub. Your current policy stays active until a valid update is accepted."
+        title={source ? "Edit GitHub source" : "Connect OpenAPPA to GitHub"}
+        description="Pull the policy file from GitHub. The first valid pull replaces the policy saved here, so commit your current policy to the repository first."
         size="medium"
         className="w-[calc(100%-2rem)] sm:max-w-xl"
         bodyClassName="space-y-5"
@@ -331,6 +342,39 @@ export function OpenAppaSourceForm({
           </>
         }
       >
+        {!source?.repo && (
+          <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
+            <p className="font-medium">Before you connect</p>
+            <ol className="list-decimal space-y-2 pl-5 text-muted-foreground">
+              <li>
+                Commit your current policy to the repository as{" "}
+                <span className="font-mono text-foreground">appa.toml</span>.{" "}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="ml-1 h-7"
+                  disabled={!policy.data}
+                  onClick={async () => {
+                    if (!policy.data) return;
+                    await copyToClipboard(policy.data.content);
+                    toast.success("Policy copied");
+                  }}
+                >
+                  <Copy />
+                  <span>Copy current policy</span>
+                </Button>
+              </li>
+              <li>
+                Add the policy tests to CI, so a pull request that breaks the
+                policy can&apos;t merge.{" "}
+                <ExternalDocsLink href="https://www.openappa.com/validation#make-policy-tests-a-required-ci-check">
+                  Test changes in CI
+                </ExternalDocsLink>
+              </li>
+            </ol>
+          </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor="appa-repo">Repository</Label>
           <Input
@@ -438,8 +482,7 @@ export function OpenAppaSourceForm({
           </Select>
         </div>
         <p className="rounded-md border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-          Use one self-contained TOML file, up to 1 MiB. Includes and local
-          command bindings are unsupported. APPA validates every update before
+          Use one TOML file, up to 1 MiB. OpenAPPA validates every update before
           accepting it.
         </p>
       </StandardFormDialog>

@@ -200,19 +200,19 @@ describe("DropboxConnector", () => {
 
   describe("validateConfig", () => {
     it("accepts empty config (no fields required)", async () => {
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.validateConfig({});
       expect(result.valid).toBe(true);
     });
 
     it("accepts config with rootPath", async () => {
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.validateConfig({ rootPath: "/team-docs" });
       expect(result.valid).toBe(true);
     });
 
     it("accepts config with fileTypes", async () => {
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.validateConfig({
         fileTypes: [".md", ".txt"],
       });
@@ -220,13 +220,13 @@ describe("DropboxConnector", () => {
     });
 
     it("accepts config with batchSize", async () => {
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.validateConfig({ batchSize: 25 });
       expect(result.valid).toBe(true);
     });
 
     it("rejects invalid batchSize type", async () => {
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.validateConfig({
         batchSize: "not-a-number",
       });
@@ -240,7 +240,7 @@ describe("DropboxConnector", () => {
       mockUsersGetCurrentAccount.mockResolvedValueOnce({
         result: { account_id: "dbid:abc123", display_name: "Test User" },
       });
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.testConnection({
         config: {},
         credentials,
@@ -252,7 +252,7 @@ describe("DropboxConnector", () => {
       mockUsersGetCurrentAccount.mockRejectedValueOnce(
         new Error("Unauthorized"),
       );
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.testConnection({
         config: {},
         credentials,
@@ -263,7 +263,7 @@ describe("DropboxConnector", () => {
 
     it("calls usersGetCurrentAccount", async () => {
       mockUsersGetCurrentAccount.mockResolvedValueOnce({ result: {} });
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       await connector.testConnection({ config: {}, credentials });
       expect(mockUsersGetCurrentAccount).toHaveBeenCalledTimes(1);
     });
@@ -287,7 +287,7 @@ describe("DropboxConnector", () => {
         makeDownloadResult("Some notes here"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -329,7 +329,7 @@ describe("DropboxConnector", () => {
       mockFilesDownload.mockResolvedValueOnce(makeDownloadResult("Hello"));
       mockFilesDownload.mockResolvedValueOnce(makeDownloadResult("World"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -367,7 +367,7 @@ describe("DropboxConnector", () => {
         makeDownloadResult("Text content"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { fileTypes: [".md", ".txt"] },
@@ -399,7 +399,7 @@ describe("DropboxConnector", () => {
         makeDownloadResult("New content"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -424,7 +424,7 @@ describe("DropboxConnector", () => {
       );
       mockFilesDownload.mockResolvedValueOnce(makeDownloadResult("Content"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -444,7 +444,7 @@ describe("DropboxConnector", () => {
         new Error("Dropbox list_folder failed"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const generator = connector.sync({
         config: {},
         credentials,
@@ -477,7 +477,7 @@ describe("DropboxConnector", () => {
         makeDownloadResult("Second content"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -513,7 +513,7 @@ describe("DropboxConnector", () => {
         makeDownloadResult("Good content 2"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -543,7 +543,7 @@ describe("DropboxConnector", () => {
       mockFilesListFolder.mockResolvedValueOnce(makeListFolderResult([file]));
       mockFilesDownload.mockResolvedValueOnce(makeDownloadResult("Content"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -572,7 +572,7 @@ describe("DropboxConnector", () => {
       mockFilesListFolder.mockResolvedValueOnce(makeListFolderResult([file]));
       mockFilesDownload.mockResolvedValueOnce(makeDownloadResult("Content"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -594,7 +594,7 @@ describe("DropboxConnector", () => {
       mockFilesListFolder.mockResolvedValueOnce(makeListFolderResult([]));
       mockFilesListFolder.mockResolvedValueOnce(makeListFolderResult([]));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -620,7 +620,7 @@ describe("DropboxConnector", () => {
         makeDownloadResult("Updated content"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -648,7 +648,7 @@ describe("DropboxConnector", () => {
       );
       mockFilesDownload.mockResolvedValueOnce(makeDownloadResult("Content"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -667,7 +667,7 @@ describe("DropboxConnector", () => {
         makeContinueResult([], { cursor: "cursor-latest" }),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -688,7 +688,7 @@ describe("DropboxConnector", () => {
         new Error("Reset required"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const generator = connector.sync({
         config: {},
         credentials,
@@ -701,7 +701,7 @@ describe("DropboxConnector", () => {
 
   describe("sync — invalid config", () => {
     it("throws when config is invalid", async () => {
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const generator = connector.sync({
         config: { batchSize: "not-a-number" },
         credentials,
@@ -722,7 +722,7 @@ describe("DropboxConnector", () => {
         makeDownloadResult(await buildXlsx(["Quarter", "Spend"])),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -743,7 +743,7 @@ describe("DropboxConnector", () => {
         makeDownloadResult("x".repeat(500_001)),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -766,7 +766,7 @@ describe("DropboxConnector", () => {
       ]);
       mockFilesDownload.mockResolvedValueOnce(makeDownloadResult("plain text"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -794,7 +794,7 @@ describe("DropboxConnector", () => {
       const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
       mockFilesDownload.mockResolvedValueOnce(makeDownloadResult(pngBytes));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -817,7 +817,7 @@ describe("DropboxConnector", () => {
     it("skips images when the embedding model has no image modality", async () => {
       stubFlatListing([makeFile("id:i1", "diagram.png")]);
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -843,7 +843,7 @@ describe("DropboxConnector", () => {
         makeBlobDownloadResult("from a blob"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -860,7 +860,7 @@ describe("DropboxConnector", () => {
       stubFlatListing([makeFile("id:e1", "empty.txt")]);
       mockFilesDownload.mockResolvedValueOnce(makeDownloadResult(""));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {},
@@ -1004,7 +1004,7 @@ describe("DropboxConnector", () => {
 
   describe("syncPermissionSnapshot", () => {
     it("yields nothing when the delta scope excludes the top-level container", async () => {
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncPermissionSnapshot({
           ...makeSnapshotParams(),
@@ -1018,7 +1018,7 @@ describe("DropboxConnector", () => {
       stubAccount();
       stubWalk([makeCorpusFile("id:f1"), makeCorpusFile("id:f2")]);
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncPermissionSnapshot(
           makeSnapshotParams({ sourceIds: ["id:f1", "id:f2"] }),
@@ -1065,7 +1065,7 @@ describe("DropboxConnector", () => {
         }),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncPermissionSnapshot(
           makeSnapshotParams({ sourceIds: ["id:f1", "id:f2"] }),
@@ -1115,7 +1115,7 @@ describe("DropboxConnector", () => {
         }),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncPermissionSnapshot(makeSnapshotParams()),
       );
@@ -1136,7 +1136,7 @@ describe("DropboxConnector", () => {
       stubWalk([makeCorpusFile("id:f1", { sharedFolderId: "sf-9" })]);
       mockSharingListFolderMembers.mockRejectedValue(new Error("403"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncPermissionSnapshot(makeSnapshotParams()),
       );
@@ -1159,7 +1159,7 @@ describe("DropboxConnector", () => {
     it("fail-closes the whole corpus when the tree walk fails", async () => {
       mockFilesListFolder.mockRejectedValue(new Error("network"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncPermissionSnapshot(
           makeSnapshotParams({ sourceIds: ["id:f1", "id:f2"] }),
@@ -1181,7 +1181,7 @@ describe("DropboxConnector", () => {
     });
 
     it("emits the fail-closed boundary container for an empty corpus without upstream calls", async () => {
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncPermissionSnapshot(makeSnapshotParams({ sourceIds: [] })),
       );
@@ -1210,7 +1210,7 @@ describe("DropboxConnector", () => {
         }),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncPermissionSnapshot(
           makeSnapshotParams({
@@ -1248,7 +1248,7 @@ describe("DropboxConnector", () => {
         new Error("missing_scope/groups.read"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncGroups(makeSnapshotParams()),
       );
@@ -1289,7 +1289,7 @@ describe("DropboxConnector", () => {
         }),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncGroups(makeSnapshotParams()),
       );
@@ -1308,7 +1308,7 @@ describe("DropboxConnector", () => {
       stubAccount();
       mockFilesListFolder.mockRejectedValue(new Error("network"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       await expect(
         collectYields(connector.syncGroups(makeSnapshotParams())),
       ).rejects.toThrow("network");
@@ -1319,7 +1319,7 @@ describe("DropboxConnector", () => {
       stubWalk([makeCorpusFile("id:f1", { sharedFolderId: "sf-1" })]);
       mockSharingListFolderMembers.mockRejectedValue(new Error("403"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncGroups(makeSnapshotParams()),
       );
@@ -1369,7 +1369,7 @@ describe("DropboxConnector", () => {
         },
       });
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncGroups(makeSnapshotParams()),
       );
@@ -1401,7 +1401,7 @@ describe("DropboxConnector", () => {
       );
       mockTeamGroupsMembersList.mockRejectedValue(new Error("bad token"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncGroups(makeSnapshotParams()),
       );
@@ -1440,7 +1440,7 @@ describe("DropboxConnector", () => {
     it("testConnection acts as the admin who generated the token", async () => {
       stubTeamToken();
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.testConnection({
         config: {},
         credentials,
@@ -1460,7 +1460,7 @@ describe("DropboxConnector", () => {
         new Error("Response failed with a 400 code"),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.testConnection({
         config: {},
         credentials,
@@ -1482,7 +1482,7 @@ describe("DropboxConnector", () => {
         result: { cursor: "fresh-cursor" },
       });
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       await connector.probePermissionChanges({
         config: {},
         credentials,
@@ -1524,7 +1524,7 @@ describe("DropboxConnector", () => {
         },
       });
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.syncGroups(makeSnapshotParams()),
       );
@@ -1559,7 +1559,7 @@ describe("DropboxConnector", () => {
         }),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       await collectYields(
         connector.syncPermissionSnapshot(makeSnapshotParams()),
       );
@@ -1583,7 +1583,7 @@ describe("DropboxConnector", () => {
         result: { cursor: "fresh-cursor" },
       });
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.probePermissionChanges({
         config: {},
         credentials,
@@ -1606,7 +1606,7 @@ describe("DropboxConnector", () => {
         makeContinueResult([], { cursor: "c2", hasMore: false }),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.probePermissionChanges({
         config: {},
         credentials,
@@ -1629,7 +1629,7 @@ describe("DropboxConnector", () => {
         }),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.probePermissionChanges({
         config: {},
         credentials,
@@ -1647,7 +1647,7 @@ describe("DropboxConnector", () => {
         result: { cursor: "fresh-cursor" },
       });
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const result = await connector.probePermissionChanges({
         config: {},
         credentials,
@@ -1678,7 +1678,7 @@ describe("DropboxConnector", () => {
         result: { cursor: "fresh-cursor" },
       });
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       await connector.probePermissionChanges({
         config: {},
         credentials,
@@ -1698,7 +1698,7 @@ describe("DropboxConnector", () => {
         result: { cursor: "fresh-cursor" },
       });
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       await connector.probePermissionChanges({
         config: {},
         credentials,
@@ -1720,7 +1720,7 @@ describe("DropboxConnector", () => {
         }),
       );
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.refreshContainerAudiences({
           config: {},
@@ -1746,7 +1746,7 @@ describe("DropboxConnector", () => {
       stubAccount();
       mockSharingListFolderMembers.mockRejectedValue(new Error("gone"));
 
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       const yields = await collectYields(
         connector.refreshContainerAudiences({
           config: {},
@@ -1767,7 +1767,7 @@ describe("DropboxConnector", () => {
 
   describe("scopeKeyForDocument", () => {
     it("maps every stored document to the single top-level container", () => {
-      const connector = new DropboxConnector();
+      const connector = new DropboxConnector(0);
       expect(connector.scopeKeyForDocument({})).toBe("account");
       expect(connector.scopeKeyForDocument({ pathDisplay: "/docs/a.md" })).toBe(
         "account",

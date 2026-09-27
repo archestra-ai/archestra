@@ -7,10 +7,19 @@ import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { LabelWithDetailsSchema } from "./label";
+import {
+  isSafePluginPath,
+  PLUGIN_MAX_FILE_BYTES,
+  PLUGIN_MAX_FILES,
+  PLUGIN_MAX_TOTAL_BYTES,
+} from "./plugin-file-constraints";
 
-export const PLUGIN_MAX_FILES = 100;
-export const PLUGIN_MAX_FILE_BYTES = 750 * 1024;
-export const PLUGIN_MAX_TOTAL_BYTES = 5 * 1024 * 1024;
+export {
+  isSafePluginPath,
+  PLUGIN_MAX_FILE_BYTES,
+  PLUGIN_MAX_FILES,
+  PLUGIN_MAX_TOTAL_BYTES,
+} from "./plugin-file-constraints";
 export const PLUGIN_DELIVERY_MAX_COUNT = 50;
 export const PLUGIN_DELIVERY_MAX_BYTES = 100 * 1024 * 1024;
 
@@ -180,16 +189,6 @@ export type UpdatePlugin = z.infer<typeof UpdatePluginSchema>;
 export type PluginWithVisibility = z.infer<typeof PluginWithVisibilitySchema>;
 export type PluginWithFiles = z.infer<typeof PluginWithFilesSchema>;
 export type PluginListItem = z.infer<typeof PluginListItemSchema>;
-
-export function isSafePluginPath(value: string): boolean {
-  if (value.includes("\0") || value.includes("\\")) return false;
-  if (value.startsWith("/") || value.endsWith("/") || value.includes("//")) {
-    return false;
-  }
-  return !value
-    .split("/")
-    .some((segment) => segment === "." || segment === "..");
-}
 
 export function validateFileSet(
   value: { files?: PluginFileInput[] },

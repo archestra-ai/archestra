@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { azureResponsesAdapterFactory } from "./azure-responses";
 import { githubCopilotResponsesAdapterFactory } from "./github-copilot-responses";
 import { openaiAdapterFactory } from "./openai";

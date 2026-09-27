@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { browserStreamFeature } from "./browser-stream.feature";
 
 describe("BrowserStreamFeature", () => {

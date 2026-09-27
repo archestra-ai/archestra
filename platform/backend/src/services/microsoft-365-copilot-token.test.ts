@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import {
   getSecretValueForLlmProviderApiKey,
@@ -8,7 +8,6 @@ import {
   createMicrosoft365CopilotFetch,
   microsoft365CopilotTokenManager,
 } from "@/services/microsoft-365-copilot-token";
-import { afterEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 
 vi.mock("@/models/llm-provider-api-key", () => ({

@@ -35,7 +35,7 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type Endpoint = "model-router" | "provider";
 

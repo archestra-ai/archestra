@@ -6,7 +6,7 @@ import {
   hasRecentlyEnded,
   hasRetainedSessionActivity,
 } from "@/lib/agent-run-activity";
-import { reportApiError, throwOnApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
   cancelAgentRun,

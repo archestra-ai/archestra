@@ -3,7 +3,7 @@ title: OpenAPPA
 category: LLM Proxy
 order: 5
 description: Configure policy for agent tool calls and results
-lastUpdated: 2026-09-25
+lastUpdated: 2026-09-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,7 +18,9 @@ The lethal trifecta is the combination of private data access, untrusted content
 
 ## Enable OpenAPPA
 
-Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the workspace available. See the [deployment settings](./platform-deployment#openappa-tool-guardrails-experimental) for related requirements. On first use, open **OpenAPPA** and follow the setup wizard to choose a starter rule and turn on enforcement. You can skip the starter rule. The current policy must pass validation before enforcement turns on.
+Set `ARCHESTRA_OPENAPPA_ENABLED=true` and restart the backend to make the workspace available. See the [deployment settings](./platform-deployment#openappa-tool-guardrails-experimental) for related requirements. **Create my policy** opens the policy chat to draft your first policy. When an administrator approves it, the policy is saved and enforcement turns on. Later saves leave enforcement unchanged. Administrators turn enforcement on or off with the switch on the **Policy** tab. The current policy must pass validation before enforcement turns on. Once enforcement is on, **Connect GitHub** keeps the policy in a repository for review through pull requests.
+
+The first policy uses the built-in protections without requiring GitHub setup or new credentials. You review examples of what it allows and blocks, along with its limits, before approving. Choose **Show TOML** to inspect the exact proposed policy without saving it. An unchanged starter still needs this first save. Add further batteries and detailed rules after setup.
 
 The feature makes the workspace available; the switch controls enforcement. Administrators can turn enforcement off at any time. The starting policy includes the `archestra` battery for built-in tools. Its catch-all rule adds no restrictions to other tools.
 
@@ -30,17 +32,17 @@ Each session acts for the signed-in user, identified by their email. Sessions st
 
 ## Policy Targets
 
-Open **OpenAPPA → Overview** to see agents, MCP gateways, and MCP servers with tools. Each target shows its total tools and how many have an active OpenAPPA rule. Open its details to see the MCP server and policy source for each tool. Filter by server or policy source, then follow a source link to the rule in the organization policy or included battery.
+Open **OpenAPPA → Overview** to see MCP gateways and MCP servers with tools. Coverage counts tools with an enforced rule that applies without an argument condition. Conditional rules remain visible in the tool details. Follow a source link to the rule in your policy or an included battery.
 
-Choose **Configure with chat** on a target to open a conversation focused on that agent, gateway, or server. The chat waits for your first message or suggested prompt.
+Choose a target's chat action to start a review focused on that gateway or server. Reopen a saved chat to continue with the same target.
 
 ## Configure with the Agent
 
-Select **Configure with chat** on the OpenAPPA Policy tab and describe what you want to protect. The built-in OpenAPPA Configuration Agent reads the current policy, proposes a change, and shows a diff before publishing it. You can also ask it to explain the policy without changing anything.
+Select **Configure with chat** on the OpenAPPA Policy tab and describe what you want to protect. The built-in agent reads the current policy and explains proposed changes before publishing. Ask for the diff when you want to inspect the policy text. You can also ask it to explain the policy without changing anything.
 
 The agent needs an available LLM provider key. If none is configured, the configuration chat offers provider setup. Configuration sessions appear in AI chat history. Reopen one there to continue the conversation with its agent and model fixed.
 
-Ask the agent to identify the tools and data flows you want to govern. Review its proposed diff and validation warnings before publishing. A valid policy can still contain a battery that governs no tools.
+Ask the agent to identify the tools and data flows you want to govern. Review the proposed changes and validation warnings before publishing. A valid policy can still contain a battery that governs no tools.
 
 The agent can save a validated local revision. If you [connect GitHub sync](#github-policy-review), it opens a pull request instead. Local revisions apply to new conversations; existing conversations keep the policy they started with.
 
@@ -53,6 +55,8 @@ Review the effective policy after a change. It reports batteries that could not 
 Rules can name one exact tool. A `*` rule covers tools without a more specific rule. Partial names such as `server__*` are invalid. To govern a whole MCP server, attach a battery that covers its tools.
 
 OpenAPPA evaluates client-run tool calls before they run. A refused call returns a reason and available remedies to the agent. Calls that require human approval remain blocked until the required approval is given.
+
+An external client can use the LLM proxy without connecting an MCP gateway. Allowed tool calls still run. If a call is blocked, the proxy returns the refusal as text; connect the MCP gateway to use remedy plans and approvals.
 
 Provider-hosted tools run inside the model provider. OpenAPPA accepts known hosted declarations but cannot check each call before it runs. OpenAI Responses web search is an exception: the proxy checks its result before the client receives it. Azure Responses hosted web search is refused because its result cannot be checked. Unknown tool types and client-run tools the proxy cannot gate are also refused. Other hosted tool results are not governed as client-run calls. A policy rule cannot refuse all hosted tools with a signed offer to use a local tool instead.
 
@@ -92,4 +96,4 @@ The proxy can add a two-line mark to a protected session's first reply and to co
 
 At fictional Example Co, `support-assistant` searches public troubleshooting pages and updates internal tickets. Its administrator asks the OpenAPPA Configuration Agent to mark web search results as suspicious and require trusted context before ticket updates.
 
-The agent identifies the installed tool names, shows a policy diff, and validates it. The administrator reviews the change before publishing. After a public page enters a conversation, OpenAPPA refuses a ticket update that requires trusted context. A new conversation starts with the updated policy; an existing one keeps its original revision.
+The agent identifies installed tool names, explains a policy change, and validates it. The administrator reviews the change before publishing. After a public page enters a conversation, OpenAPPA refuses a ticket update that requires trusted context. A new conversation starts with the updated policy; an existing one keeps its original revision.

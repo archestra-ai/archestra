@@ -35,7 +35,7 @@ export const OPENAPPA_CONFIG_SUGGESTED_PROMPTS = [
   {
     summaryTitle: "Help me make a change",
     prompt:
-      "Help me change the OpenAPPA policy. Ask what I want to protect, inspect the current policy, and show me the proposed diff before publishing.",
+      "Help me change the OpenAPPA policy. Ask what I want to protect, inspect the current policy, and tell me what the change would do before publishing.",
   },
 ] as const;
 
@@ -73,31 +73,9 @@ export function openAppaTargetScopeContext(
     agent: "Call archestra__get_agent with this ID",
     mcp_gateway: "Call archestra__get_mcp_gateway with this ID",
     mcp_server:
-      "Call archestra__get_mcp_server_tools with this ID as mcpServerId",
+      "Call archestra__get_mcp_server_tools and archestra__list_guardrails_battery_fits with this ID as mcpServerId",
   }[kind];
   return `This conversation is scoped to the ${targetKind} with ID ${id}. ${lookup} before explaining its current OpenAPPA policy rules or proposing changes. If it is unavailable, ask the user to select a target again. Keep changes scoped to this target unless the user says otherwise.`;
-}
-
-/** {@link OPENAPPA_CONFIG_SUGGESTED_PROMPTS}, reworded to name the policy target. */
-export function openAppaTargetSuggestedPrompts(
-  kind: OpenAppaPolicyTargetKind,
-  name: string,
-) {
-  const target = describeOpenAppaPolicyTarget(kind, name);
-  return [
-    {
-      summaryTitle: `Explain the policy for ${name}`,
-      prompt: `Explain the current OpenAPPA policy for ${target} in plain language. What do its rules allow, deny, or require approval for? Do not change it.`,
-    },
-    {
-      summaryTitle: `Review risky calls for ${name}`,
-      prompt: `Review the current OpenAPPA policy for ${target} for risky tool calls and gaps. Suggest specific changes, but do not publish anything yet.`,
-    },
-    {
-      summaryTitle: `Change the policy for ${name}`,
-      prompt: `Help me change the OpenAPPA policy for ${target}. Ask what I want to protect, inspect its current rules, and show me the proposed diff before publishing.`,
-    },
-  ];
 }
 
 /**

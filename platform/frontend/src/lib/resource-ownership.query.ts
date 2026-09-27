@@ -1,7 +1,7 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { reportApiError } from "@/lib/utils";
+import { reportApiError } from "@/lib/utils/api";
 
 export type TransferResourceKind = keyof typeof transfers;
 

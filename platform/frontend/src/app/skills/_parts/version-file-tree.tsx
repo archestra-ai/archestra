@@ -11,7 +11,7 @@ import {
   groupFilesByFolder,
   type SkillFileChange,
 } from "@/lib/skills/skill-version-diff";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * One row of the version's file tree. `path` is null for SKILL.md, which is not

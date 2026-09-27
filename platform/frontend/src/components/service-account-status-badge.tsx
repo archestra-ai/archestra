@@ -15,7 +15,7 @@ import {
   KEY_STATUS_LABELS,
   type KeyStatus,
 } from "@/lib/service-account-status";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The one rendering of service-account and key state, shared by the list, the

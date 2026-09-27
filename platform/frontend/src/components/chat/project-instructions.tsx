@@ -12,7 +12,7 @@ import {
   useProjectInstructions,
   useSetProjectInstructions,
 } from "@/lib/projects/projects.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The pinned project-instructions entry and its editor, shared by the project

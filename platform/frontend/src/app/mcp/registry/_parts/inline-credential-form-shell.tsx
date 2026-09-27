@@ -2,7 +2,7 @@
 
 import type { ComponentProps } from "react";
 import type { StandardFormDialog } from "@/components/standard-dialog";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type StandardFormDialogProps = ComponentProps<typeof StandardFormDialog>;
 

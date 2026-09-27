@@ -26,6 +26,14 @@ class WebSocketService {
   private pendingMessages: ClientWebSocketMessage[] = [];
 
   async connect(): Promise<void> {
+    // Playwright's MSW stack has HTTP handlers but no WebSocket server. Every
+    // caller must share this guard or subscriptions cause a reconnect loop.
+    if (
+      process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
+      process.env.NODE_ENV !== "production"
+    ) {
+      return;
+    }
     if (
       this.ws?.readyState === WebSocket.OPEN ||
       this.ws?.readyState === WebSocket.CONNECTING ||

@@ -87,7 +87,7 @@ import {
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
-import { formatContextLength } from "@/lib/utils";
+import { formatContextLength } from "@/lib/utils/format-context-length";
 import { EditModelDialog } from "./_parts/edit-model-dialog";
 import {
   canFilterFreeModelsForApiKey,

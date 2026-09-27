@@ -1,0 +1,67 @@
+name: Cache backend NAPI binaries
+description: Restore the Linux native addons used by backend tests
+
+inputs:
+  save:
+    description: Whether this job may save a cache entry after building
+    required: false
+    default: "true"
+
+outputs:
+  usable:
+    description: Whether all four cached native addons loaded successfully
+    value: ${{ steps.verify.outputs.usable }}
+
+runs:
+  using: composite
+  steps:
+    # Git tree IDs cover every tracked Rust workspace input, including Cargo
+    # manifests, build scripts, package loaders, and source files. Include the
+    # pinned toolchain, pnpm lock, and turbo task configuration separately.
+    - name: Compute native cache key
+      id: key
+      shell: bash
+      env:
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        digest=$(git rev-parse HEAD:platform/archestra-rs HEAD:platform/rust-toolchain.toml HEAD:platform/pnpm-lock.yaml HEAD:platform/turbo.json | sha256sum | cut -d ' ' -f 1)
+        echo "value=backend-napi-v1-${RUNNER_OS}-${RUNNER_ARCH}-ubuntu2404-${digest}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore and save native addons
+      id: cache
+      if: inputs.save == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          platform/archestra-rs/app-runtime-rs/index.linux-x64-gnu.node
+          platform/archestra-rs/sandbox-rs/index.linux-x64-gnu.node
+          platform/archestra-rs/image-rs/index.linux-x64-gnu.node
+          platform/archestra-rs/openappa-rs/index.linux-x64-gnu.node
+        key: ${{ steps.key.outputs.value }}
+
+    - name: Restore native addons without saving
+      id: restore
+      if: inputs.save != 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          platform/archestra-rs/app-runtime-rs/index.linux-x64-gnu.node
+          platform/archestra-rs/sandbox-rs/index.linux-x64-gnu.node
+          platform/archestra-rs/image-rs/index.linux-x64-gnu.node
+          platform/archestra-rs/openappa-rs/index.linux-x64-gnu.node
+        key: ${{ steps.key.outputs.value }}
+
+    - name: Verify cached native addons
+      id: verify
+      shell: bash
+      working-directory: platform/backend
+      env:
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit || steps.restore.outputs.cache-hit }}
+      run: |
+        if [ "$CACHE_HIT" = "true" ] && node -e 'for (const name of ["@archestra/app-runtime-rs", "@archestra/sandbox-rs", "@archestra/image-rs", "@archestra/openappa-rs"]) require(name)'; then
+          echo "usable=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "usable=false" >> "$GITHUB_OUTPUT"
+          rm -f ../archestra-rs/{app-runtime-rs,sandbox-rs,image-rs,openappa-rs}/index.linux-x64-gnu.node
+        fi

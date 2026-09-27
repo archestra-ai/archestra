@@ -1,3 +1,4 @@
+// @vitest-environment node
 import * as simpleIcons from "simple-icons";
 import { describe, expect, it } from "vitest";
 import {

@@ -6,7 +6,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface SettingsBlockProps {
   title: ReactNode;

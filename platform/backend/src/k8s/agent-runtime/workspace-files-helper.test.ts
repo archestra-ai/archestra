@@ -1,5 +1,5 @@
+import { afterEach, expect, test, vi } from "vitest";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
-import { afterEach, expect, test, vi } from "@/test";
 import type { AgentRunRecord } from "@/types";
 
 /**

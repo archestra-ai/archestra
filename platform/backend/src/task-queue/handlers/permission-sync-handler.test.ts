@@ -2,9 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import { randomUUID } from "node:crypto";
-import { vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
 
 const mockExecutePass = vi.hoisted(() => vi.fn());
 vi.mock("@/knowledge-base", () => ({

@@ -1,5 +1,5 @@
 import { ArchestraInternalErrorCode, GroqErrorCodes } from "@archestra/shared";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { groqAdapterFactory } from "./groq";
 
 /**

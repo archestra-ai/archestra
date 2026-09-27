@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { probeAnthropicCredit } from "./anthropic-credit-probe";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -104,7 +103,7 @@ describe("probeAnthropicCredit", () => {
       .mockResolvedValueOnce(jsonResponse(200, { id: "msg_1" }));
 
     const promise = probeAnthropicCredit("sk-key");
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(500);
     await expect(promise).resolves.toBe("usable");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

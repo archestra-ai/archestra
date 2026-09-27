@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { SkillVersionSummary } from "@/lib/skills/skill.query";
 import { groupVersionsByDay, languageForPath } from "./skill-version-format";

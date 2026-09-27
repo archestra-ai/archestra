@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import {
   executeArchestraTool,
@@ -13,13 +14,17 @@ import {
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { initialPolicy } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import routes from "./guardrails-policy.routes";
 
 const content =
   '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n';
+const agent = { id: "test-agent", name: "Test assistant" };
 
 describe("guardrails policy authoring", () => {
   let app: FastifyInstanceWithZod;
@@ -199,6 +204,160 @@ describe("guardrails policy authoring", () => {
     ).rejects.toThrow(
       "The policy changed. Read it again before proposing changes.",
     );
+  });
+
+  test("an unchanged unsaved starter previews without writing and publishes once with enforcement", async () => {
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const context = { organizationId: orgId, userId, agent };
+    const draft = { content: initialPolicy(), expectedRevision: 0 };
+    const preview = await executeArchestraTool(
+      "archestra__preview_guardrails_policy_change",
+      draft,
+      context,
+    );
+    expect(preview.structuredContent).toMatchObject({
+      valid: true,
+      before: draft.content,
+      after: draft.content,
+      turnsOnEnforcement: true,
+    });
+    expect(await GuardrailsPolicyModel.findLatest(orgId)).toBeNull();
+    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
+    const saved = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      draft,
+      context,
+    );
+    expect(saved.structuredContent).toMatchObject({
+      revision: 1,
+      after: draft.content,
+      enforcement: { enabled: true, turnedOn: true },
+      effective: { error: null },
+    });
+    expect(await GuardrailsPolicyModel.findLatest(orgId)).toMatchObject({
+      revision: 1,
+      content: draft.content,
+    });
+    await expect(
+      executeArchestraTool(
+        "archestra__update_guardrails_policy",
+        draft,
+        context,
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    await expect(
+      executeArchestraTool(
+        "archestra__update_guardrails_policy",
+        { ...draft, expectedRevision: 1 },
+        context,
+      ),
+    ).rejects.toThrow("The proposed policy has no changes");
+    expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
+  });
+
+  test("an administrator's first saved policy turns enforcement on, later saves leave it alone", async () => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const context = { organizationId: orgId, userId, agent };
+    const preview = await executeArchestraTool(
+      "archestra__preview_guardrails_policy_change",
+      { content, expectedRevision: 0 },
+      context,
+    );
+    expect(preview.structuredContent?.turnsOnEnforcement).toBe(true);
+
+    const first = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content, expectedRevision: 0 },
+      context,
+    );
+    expect(first.structuredContent?.enforcement).toEqual({
+      enabled: true,
+      turnedOn: true,
+    });
+    const rows = await AuditLogModel.findPaginated({
+      organizationId: orgId,
+      limit: 20,
+      offset: 0,
+    });
+    expect(
+      rows.data.some(
+        (row) =>
+          row.action === "organization.updated" &&
+          row.actorId === userId &&
+          row.after?.enabled === true,
+      ),
+    ).toBe(true);
+
+    const later = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content: `${content}# later\n`, expectedRevision: 1 },
+      context,
+    );
+    expect(later.structuredContent?.enforcement).toEqual({
+      enabled: true,
+      turnedOn: false,
+    });
+  });
+
+  test("readback recovers a lost publication response without another revision and reports disabled enforcement separately", async () => {
+    const context = { organizationId: orgId, userId, agent };
+    await GuardrailsDeploymentModel.setEnabled(false);
+    // The client loses this response; recovery uses only the read tool.
+    await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content, expectedRevision: 0 },
+      context,
+    );
+    const recovered = await executeArchestraTool(
+      "archestra__get_guardrails_policy",
+      {},
+      context,
+    );
+    expect(recovered.structuredContent).toMatchObject({
+      content,
+      revision: 1,
+      effective: { error: null },
+      enforcement: { enabled: true, active: true, featureEnabled: true },
+    });
+    expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
+    // A healthy saved composition must never stand in for the deployment switch.
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const off = await executeArchestraTool(
+      "archestra__get_guardrails_policy",
+      {},
+      context,
+    );
+    expect(off.structuredContent).toMatchObject({
+      content,
+      revision: 1,
+      effective: { error: null },
+      enforcement: { enabled: false, active: false },
+    });
+  });
+
+  test("a non-administrator's first saved policy leaves enforcement off and says why", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+  }) => {
+    const author = await makeUser();
+    const role = await makeCustomRole(orgId, {
+      permission: { toolPolicy: ["read", "update"] },
+    });
+    await makeMember(author.id, orgId, { role: role.role });
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const saved = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content, expectedRevision: 0 },
+      { organizationId: orgId, userId: author.id, agent },
+    );
+    expect(saved.structuredContent?.enforcement).toMatchObject({
+      enabled: false,
+      turnedOn: false,
+      reason: expect.stringContaining("administrator"),
+    });
+    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
   });
 
   test("granting a battery a credential needs credential update, removing it does not", async ({

@@ -65,7 +65,7 @@ import {
   useImportGithubSkills,
   usePreviewGithubSkill,
 } from "@/lib/skills/skill.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { SkillPreviewDialog } from "./skill-preview-dialog";
 
 /**

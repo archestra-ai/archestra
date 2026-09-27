@@ -1,7 +1,7 @@
 import type { ClientFamily } from "@archestra/shared";
 import { ClientIcon } from "@/components/provider-icon";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Client-app badge for the LLM logs screens. Every client family shares the

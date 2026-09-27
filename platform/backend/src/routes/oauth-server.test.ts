@@ -5,8 +5,8 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import config, { parseTrustProxy } from "@/config";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
 describe("OAuth Server - Well-Known Endpoints", () => {

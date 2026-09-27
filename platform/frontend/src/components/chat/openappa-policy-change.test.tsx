@@ -1,6 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
-import { OpenAppaPolicyChange } from "./openappa-policy-change";
+import {
+  OpenAppaPolicyChange,
+  OpenAppaPolicyCompletion,
+} from "./openappa-policy-change";
 
 test("shows a policy preview from the chat tool's text result", () => {
   render(
@@ -50,4 +53,53 @@ test("shows a reviewable policy diff and the pull request link", () => {
   expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
     '+name = "new"',
   );
+});
+
+const saved = {
+  delivery: "revision",
+  revision: 1,
+  before: "starter",
+  after: "starter",
+  enforcement: { enabled: true },
+  effective: { error: null, batteries: [{ status: "active" }] },
+};
+
+test("confirmed publication offers a return action without opening the diff", () => {
+  render(<OpenAppaPolicyCompletion output={{ structuredContent: saved }} />);
+  expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
+  expect(screen.getByText(/Enforcement confirmed on/)).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Back to OpenAPPA" }),
+  ).toHaveAttribute("href", "/openappa");
+  expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+});
+
+test.each([
+  { ...saved, enforcement: { enabled: false } },
+  { ...saved, effective: { error: "Composition failed", batteries: [] } },
+  {
+    ...saved,
+    effective: { error: null, batteries: [{ status: "missing_credentials" }] },
+  },
+  { ...saved, enforcement: undefined },
+  { ...saved, effective: undefined },
+])("saved but unconfirmed results do not claim active protection", (output) => {
+  render(<OpenAppaPolicyCompletion output={output} />);
+  expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
+  expect(
+    screen.queryByText(/Enforcement confirmed on/),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Check policy" })).toHaveAttribute(
+    "href",
+    "/openappa/policy",
+  );
+});
+
+test.each([
+  { ...saved, stage: "preview" },
+  { ...saved, delivery: "pull_request", number: 4 },
+  { ...saved, revision: 0 },
+])("preview and pending PR do not appear as a saved local policy", (output) => {
+  const { container } = render(<OpenAppaPolicyCompletion output={output} />);
+  expect(container).toBeEmptyDOMElement();
 });

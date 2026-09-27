@@ -22,7 +22,8 @@ import type {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { OPENAI_CODEX_INSTRUCTIONS } from "@/services/openai-codex-credentials";
-import { ApiError, type OpenAi } from "@/types";
+import type { OpenAi } from "@/types";
+import { ApiError } from "@/types/api";
 
 type ChatCompletionsRequest = OpenAi.Types.ChatCompletionsRequest;
 type ChatCompletionsResponse = OpenAi.Types.ChatCompletionsResponse;

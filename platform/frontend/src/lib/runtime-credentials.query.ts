@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { rememberGitHubConnectionReturn } from "@/lib/github-connection-return";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
-import { reportApiError, throwOnApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
   createRuntimeCredential,

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import type { AuditEventName, AuditLog } from "@/lib/audit-log/audit-log.query";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import {
   ACTION_BADGE_VARIANT,
   ACTOR_TYPE_LABEL,

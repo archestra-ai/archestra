@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { organizationKeys } from "@/lib/organization.query";
-import { getApiErrorMessage, handleApiError } from "@/lib/utils";
+import { getApiErrorMessage, handleApiError } from "@/lib/utils/api";
 
 const {
   createConnectionSetup,

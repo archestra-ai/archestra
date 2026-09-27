@@ -1,44 +1,51 @@
 "use client";
 
-import { ShieldOff } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
+import { CoverageCharts } from "./coverage-charts";
 import { EntitiesTable } from "./entities-table";
+import { OverviewSetupCards } from "./overview-setup-cards";
+import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 /** The visible policy targets whose tool calls can enter the OpenAPPA path. */
 export function OverviewTab() {
-  const deployment = useGuardrailsDeployment();
+  const { isFresh } = useOpenAppaSetupState();
+
   return (
     <div className="space-y-6">
-      {deployment.data?.enabled === false && (
-        <InlineNotice variant="warning">
-          <ShieldOff />
-          <span className="font-medium">OpenAPPA is off.</span>
-          <InlineNoticeText>
-            Tool calls are not checked. The setup walks you through a first rule
-            and turns it on.
-          </InlineNoticeText>
-          <Button size="sm" className="ml-auto h-7" asChild>
-            <Link href="/openappa/setup">Set up OpenAPPA</Link>
-          </Button>
-        </InlineNotice>
+      <OverviewSetupCards />
+      {isFresh === false && (
+        <>
+          <section
+            aria-labelledby="overview-policy-coverage"
+            className="space-y-3"
+          >
+            <div className="space-y-1">
+              <h2
+                id="overview-policy-coverage"
+                className="text-base font-semibold"
+              >
+                Policy coverage
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                How many of your tools a rule covers, and the batteries that
+                could cover more.
+              </p>
+            </div>
+            <CoverageCharts />
+          </section>
+          <section
+            aria-labelledby="overview-servers-and-gateways"
+            className="space-y-3"
+          >
+            <h2
+              id="overview-servers-and-gateways"
+              className="text-base font-semibold"
+            >
+              Servers and gateways
+            </h2>
+            <EntitiesTable />
+          </section>
+        </>
       )}
-      <section aria-labelledby="overview-policy-targets" className="space-y-3">
-        <div className="space-y-1">
-          <h2 id="overview-policy-targets" className="text-base font-semibold">
-            Policy targets
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Agents, MCP gateways, and MCP servers you can access. Open a target
-            to see which of its tools have an active rule and which may use the
-            catch-all. Auto mode counts include tools you can currently
-            discover.
-          </p>
-        </div>
-        <EntitiesTable />
-      </section>
     </div>
   );
 }

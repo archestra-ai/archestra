@@ -11,8 +11,7 @@ import {
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
-import { vi } from "vitest";
-import { beforeEach, describe, expect, it } from "@/test";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockSentryCaptureException = vi.hoisted(() => vi.fn());
 

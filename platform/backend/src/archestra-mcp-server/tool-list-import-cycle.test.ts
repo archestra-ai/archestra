@@ -22,7 +22,7 @@ vi.mock("@/logging");
  * the order that breaks rather than leaving it to which file loaded first.
  */
 describe("built-in aggregations under the @/models import cycle", () => {
-  test("tool lists survive the cycle entered through ./sandbox", async () => {
+  test("tool lists and dispatch map survive the cycle entered through ./sandbox", async () => {
     vi.resetModules();
 
     await import("./sandbox");
@@ -30,14 +30,6 @@ describe("built-in aggregations under the @/models import cycle", () => {
 
     expect(index.getAllArchestraMcpTools().length).toBeGreaterThan(0);
     expect(index.getArchestraMcpTools().length).toBeGreaterThan(0);
-  });
-
-  test("the dispatch map still resolves a sandbox tool's schema", async () => {
-    vi.resetModules();
-
-    await import("./sandbox");
-    const index = await import(".");
-
     // Resolved through the tool-entry map, so an incomplete one returns
     // undefined here instead of failing anywhere the model can see.
     expect(

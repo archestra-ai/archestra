@@ -15,7 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export interface LabelSelectProps {
   labelKeys: string[] | undefined;

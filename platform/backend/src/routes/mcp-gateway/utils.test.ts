@@ -1667,6 +1667,7 @@ describe("createAgentServer tools/list", () => {
     );
     for (const policyTool of [
       "get_guardrails_policy",
+      "list_guardrails_battery_fits",
       "validate_guardrails_policy",
       "preview_guardrails_policy_change",
       "update_guardrails_policy",

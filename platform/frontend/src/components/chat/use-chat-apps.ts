@@ -3,7 +3,7 @@ import { archestraApiSdk } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 import type { PanelApp } from "./apps-context";
 import { deriveAppsFromMessages } from "./chat-messages.utils";
 

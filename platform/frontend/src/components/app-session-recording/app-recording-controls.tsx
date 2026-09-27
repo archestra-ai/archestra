@@ -28,7 +28,7 @@ import {
   APPS_HACKATHON_SETTINGS_HREF,
 } from "@/lib/app-session-recording/apps-hackathon";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The Apps Hackathon session recorder — a self-contained control cluster for the

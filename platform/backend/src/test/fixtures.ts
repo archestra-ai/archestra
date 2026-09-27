@@ -2,39 +2,35 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  DEFAULT_APP_NAME,
-  MEMBER_ROLE_NAME,
-  type SupportedProvider,
-} from "@archestra/shared";
+import type { SupportedProvider } from "@archestra/shared";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared/archestra-mcp-server";
+import { DEFAULT_APP_NAME } from "@archestra/shared/consts";
+import { MEMBER_ROLE_NAME } from "@archestra/shared/roles";
 import { and, eq, ne } from "drizzle-orm";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
-import {
-  AgentModel,
-  AgentToolModel,
-  AppDataModel,
-  AppModel,
-  AppToolModel,
-  AppVersionModel,
-  InternalMcpCatalogModel,
-  KnowledgeBaseConnectorModel,
-  KnowledgeBaseModel,
-  LlmProviderApiKeyModel,
-  MemberModel,
-  ScheduleTriggerModel,
-  ScheduleTriggerRunModel,
-  SecretModel,
-  SessionModel,
-  SkillModel,
-  TeamModel,
-  ToolInvocationPolicyModel,
-  ToolModel,
-  TrustedDataPolicyModel,
-  VirtualApiKeyModel,
-} from "@/models";
+import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
+import AppModel from "@/models/app";
+import AppDataModel from "@/models/app-data";
+import AppToolModel from "@/models/app-tool";
+import AppVersionModel from "@/models/app-version";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import KnowledgeBaseModel from "@/models/knowledge-base";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
+import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
+import SecretModel from "@/models/secret";
+import SessionModel from "@/models/session";
+import SkillModel from "@/models/skill";
+import TeamModel from "@/models/team";
+import ToolModel from "@/models/tool";
+import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
+import TrustedDataPolicyModel from "@/models/trusted-data-policy";
+import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import type {
   Agent,

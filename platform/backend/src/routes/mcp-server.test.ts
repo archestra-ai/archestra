@@ -5008,6 +5008,7 @@ describe("mcp server core route coverage", () => {
         .from(schema.mcpServersTable)
         .where(eq(schema.mcpServersTable.id, mcpServer.id));
       expect(row.hibernationMode).toBe("disabled");
+      await drainPendingReinstall(mcpServer.id);
     });
     // SPDX-SnippetEnd
   });

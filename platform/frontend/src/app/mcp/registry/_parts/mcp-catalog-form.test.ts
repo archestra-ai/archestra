@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { formSchema } from "./mcp-catalog-form.types";
 import { stripEnvVarQuotes } from "./mcp-catalog-form.utils";
 

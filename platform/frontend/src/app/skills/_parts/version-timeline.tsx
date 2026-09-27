@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { SkillVersionSummary } from "@/lib/skills/skill.query";
 import { groupVersionsByDay } from "@/lib/skills/skill-version-format";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { LoadFailure } from "./load-failure";
 
 /**

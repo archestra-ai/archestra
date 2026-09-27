@@ -46,7 +46,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
 import { TerminalBlock } from "./terminal-block";

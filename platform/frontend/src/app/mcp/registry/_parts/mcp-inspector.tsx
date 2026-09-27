@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useReloadMcpServerTools } from "@/lib/mcp/mcp-server.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { filterMcpTools } from "./mcp-tool-search";
 
 interface McpTool {

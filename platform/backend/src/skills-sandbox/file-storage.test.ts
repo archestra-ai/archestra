@@ -1,9 +1,8 @@
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
-import { describe, expect, test } from "@/test";
 import type { StoredBlobRow } from "@/types";
 import { UnsafePathError } from "./file-path";
 import {

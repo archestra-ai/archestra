@@ -1,5 +1,4 @@
-import { vi } from "vitest";
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/clients/gemini-client", () => ({
   createGoogleGenAIClient: vi.fn(),

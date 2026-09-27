@@ -1,10 +1,9 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { Agent } from "undici";
-import { vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { BedrockClient } from "@/clients/bedrock-client";
 import config from "@/config";
-import { describe, expect, test } from "@/test";
 import { Bedrock } from "@/types";
 import { bedrockAdapterFactory, getCommandInput } from "./bedrock";
 

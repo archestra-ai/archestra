@@ -5,7 +5,7 @@ import {
   runtimeCredentialsQueryKey,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
   getGithubAppConfig,

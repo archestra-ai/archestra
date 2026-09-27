@@ -68,7 +68,7 @@ import { Button } from "@/components/ui/button";
 import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 import { parsePolicyDenied } from "@/lib/chat/mcp-error-ui";
 import { useOrganization } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type PersistedChatError =
   archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"][number];

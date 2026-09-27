@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from "vitest";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 

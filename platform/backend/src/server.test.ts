@@ -1,7 +1,6 @@
-import { vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import * as proxyPlugins from "@/proxy/plugins/registry";
-import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 
 // Create a hoisted mock function that defaults to returning true (healthy)

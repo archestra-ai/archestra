@@ -2,9 +2,9 @@ import {
   ConversationModel,
   ProjectAccessModel,
   ProjectModel,
-  ProjectNameExistsError,
   ProjectPinModel,
 } from "@/models";
+import { ProjectNameExistsError } from "@/models/project";
 import { describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
 

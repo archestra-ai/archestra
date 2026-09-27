@@ -13,7 +13,7 @@ import {
   getMcpServerIssueKindMeta,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const ISSUE_TONE: Record<McpServerIssue["kind"], string> = {
   "failed-to-start":

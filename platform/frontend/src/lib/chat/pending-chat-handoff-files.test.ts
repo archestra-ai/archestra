@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { FileUIPart } from "ai";
 import { beforeEach, describe, expect, it } from "vitest";
 import {

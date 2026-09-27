@@ -1,6 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export function useClientConnection(id: string) {
   return useQuery({

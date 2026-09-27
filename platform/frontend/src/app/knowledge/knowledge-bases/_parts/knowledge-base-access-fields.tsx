@@ -15,12 +15,15 @@ export interface KnowledgeBaseFormValues {
 
 export function KnowledgeBaseAccessFields({
   form,
+  standalone,
 }: {
   form: UseFormReturn<KnowledgeBaseFormValues>;
+  standalone?: boolean;
 }) {
   return (
     <InitialResourcePermissions
       resource="knowledgeBase"
+      standalone={standalone}
       grants={form.watch("initialGrants")}
       onChange={(grants) =>
         form.setValue("initialGrants", grants, { shouldDirty: true })

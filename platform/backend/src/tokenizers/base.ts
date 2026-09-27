@@ -1,4 +1,4 @@
-import { LRUCacheManager } from "@/cache-manager";
+import { LRUCacheManager } from "@/in-memory-lru-cache";
 import type {
   Anthropic,
   Cohere,

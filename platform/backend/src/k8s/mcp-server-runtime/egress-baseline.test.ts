@@ -1,6 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
-import { vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "vitest";
 import type { K8sNetworkPolicyCapabilities } from "@/types";
 import { ensureEgressBaselineNetworkPolicy } from "./egress-baseline";
 

@@ -1,6 +1,5 @@
 import type { AppRecordingBundle } from "@archestra/shared";
-import { beforeEach, vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ApiError } from "@/types";
 import { admitRender } from "./app-recording-render";
 import {

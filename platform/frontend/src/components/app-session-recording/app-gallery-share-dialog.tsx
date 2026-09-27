@@ -69,7 +69,7 @@ import { reviveRecordingEvents } from "@/lib/app-session-recording/app-recording
 import { recordingStore } from "@/lib/app-session-recording/app-recording-store";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import {
   buildPlayback,
   formatMs,

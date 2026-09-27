@@ -1,9 +1,9 @@
 import { Octokit } from "@octokit/rest";
+import type { PluginFileInput } from "@/types/plugin";
 import {
   PLUGIN_MAX_FILE_BYTES,
   PLUGIN_MAX_TOTAL_BYTES,
-  type PluginFileInput,
-} from "@/types";
+} from "@/types/plugin-file-constraints";
 import { readResponseBodyWithLimit } from "./bounded-response";
 import {
   isGithubRateLimitError,

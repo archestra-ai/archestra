@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { describe, expect, test } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
-import { describe, expect, test } from "@/test";
 import { extractGatewayToolDeclarations } from "./gateway-tool-declarations";
 
 const ORG = "org-gateway-tool-declarations";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { resolveSpeechRecognitionLocale } from "./speech-locale";
 

@@ -282,6 +282,7 @@ const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
 ]);
 const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   "get_guardrails_policy",
+  "list_guardrails_battery_fits",
   "validate_guardrails_policy",
   "preview_guardrails_policy_change",
   "update_guardrails_policy",

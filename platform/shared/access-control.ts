@@ -1778,6 +1778,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Read-only views of what the policy covers; nothing here changes state.
   [RouteId.GetOpenappaCoverageEntities]: { toolPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageTools]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageSummary]: { toolPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },

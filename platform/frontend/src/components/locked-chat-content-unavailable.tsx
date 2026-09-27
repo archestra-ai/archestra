@@ -6,7 +6,7 @@ import {
   type LockedChatSealedContent,
 } from "@archestra/shared";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type UnavailableContent = LockedChatSealedContent | LockedChatRedactedContent;
 

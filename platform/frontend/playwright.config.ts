@@ -36,8 +36,8 @@ export default defineConfig({
   // subpaths without going through the package's published exports map).
   tsconfig: "./tests-integration/tsconfig.json",
   // Tests within one shard share a Next.js server with a process-global MSW
-  // handler list and must remain serial. CI runs four Playwright processes in
-  // two runner groups, each with its own port, Next dist directory, and output
+  // handler list and must remain serial. CI runs four Playwright processes on
+  // one runner, each with its own port, Next dist directory, and output
   // directory, so the shards overlap without leaking handler overrides.
   fullyParallel: false,
   workers: 1,

@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { jwksValidator } from "./jwks-validator";
 
 // We'll generate a real RSA key pair for testing

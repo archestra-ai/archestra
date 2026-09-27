@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
+  KeyRound,
   Loader2,
   Pencil,
   Plus,
@@ -32,7 +33,6 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { FormDialog } from "@/components/form-dialog";
 import { LabelTags } from "@/components/label-tags";
 import {
   deserializeExtraHeaders,
@@ -45,8 +45,10 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -54,11 +56,6 @@ import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
 import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -222,11 +219,15 @@ export default function ApiKeysPage() {
     defaultValues: DEFAULT_FORM_VALUES,
   });
   const [editLabels, setEditLabels] = useState<ProfileLabel[]>([]);
+  const [editSection, setEditSection] = useState<"general" | "permissions">(
+    "general",
+  );
   const editLabelsRef = useRef<ProfileLabelsRef>(null);
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {
     if (editingApiKey) {
+      setEditSection("general");
       editForm.reset({
         name: editingApiKey.name,
         provider: editingApiKey.provider,
@@ -807,42 +808,25 @@ export default function ApiKeysPage() {
         )}
 
         {/* Edit Dialog */}
-        <FormDialog
+        <TabbedDialogShell
           open={!!editingApiKey}
           onOpenChange={(open) => {
             if (!open) closeEditDialog();
           }}
           title="Edit API Key"
           description="Update the name, the API key value, or who can reach it"
-          size="small"
-          className="sm:max-w-xl"
-          isDirty={
-            editForm.formState.isDirty ||
-            JSON.stringify(editLabels) !==
-              JSON.stringify(editingApiKey?.labels ?? [])
-          }
-        >
-          <DialogForm
-            onSubmit={handleEdit}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <DialogBody>
-              {editingApiKey && (
-                <LlmProviderApiKeyForm
-                  mode="full"
-                  showConsoleLink={false}
-                  existingKey={editingApiKey}
-                  existingKeys={apiKeys}
-                  form={editForm}
-                  isPending={updateMutation.isPending}
-                  progressive
-                  labels={editLabels}
-                  onLabelsChange={setEditLabels}
-                  labelsRef={editLabelsRef}
-                />
-              )}
-            </DialogBody>
-            <DialogStickyFooter className="mt-0">
+          sidebarLabel={editForm.watch("name") || "Provider key"}
+          sidebarDescription="Model provider"
+          sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
+          activeSection={editSection}
+          navItems={[
+            { id: "general", label: "General" },
+            { id: "permissions", label: "Permissions" },
+          ]}
+          onActiveSectionChange={setEditSection}
+          onSubmit={handleEdit}
+          footer={
+            <>
               <DialogCancelButton>Cancel</DialogCancelButton>
               <Button
                 type="submit"
@@ -853,9 +837,41 @@ export default function ApiKeysPage() {
                 )}
                 <span>Test & Save</span>
               </Button>
-            </DialogStickyFooter>
-          </DialogForm>
-        </FormDialog>
+            </>
+          }
+          isDirty={
+            editForm.formState.isDirty ||
+            JSON.stringify(editLabels) !==
+              JSON.stringify(editingApiKey?.labels ?? [])
+          }
+        >
+          <div hidden={editSection !== "general"}>
+            {editingApiKey && (
+              <LlmProviderApiKeyForm
+                mode="full"
+                showConsoleLink={false}
+                existingKey={editingApiKey}
+                existingKeys={apiKeys}
+                form={editForm}
+                isPending={updateMutation.isPending}
+                progressive
+                hidePermissions
+                labels={editLabels}
+                onLabelsChange={setEditLabels}
+                labelsRef={editLabelsRef}
+              />
+            )}
+          </div>
+          <div hidden={editSection !== "permissions"}>
+            {editingApiKey && (
+              <ResourceAccessSection
+                resource="llmProviderApiKey"
+                id={editingApiKey.id}
+                standalone
+              />
+            )}
+          </div>
+        </TabbedDialogShell>
 
         {/* Delete Confirmation Dialog */}
         <DeleteConfirmDialog

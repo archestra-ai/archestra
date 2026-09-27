@@ -2,7 +2,7 @@ import { archestraApiSdk, type ChatMessageFeedback } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { callApi } from "@/lib/chat/api-call";
 import { lockedChatRequestHeaders } from "@/lib/chat/locked-chat";
-import { handleApiError, toApiError } from "@/lib/utils";
+import { handleApiError, toApiError } from "@/lib/utils/api";
 
 const { updateChatMessage, setChatMessageFeedback } = archestraApiSdk;
 

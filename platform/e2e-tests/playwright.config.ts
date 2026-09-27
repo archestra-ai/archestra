@@ -103,7 +103,6 @@ const uiTestMatch = [
 const apiTestMatch = [
   "**/a2a-public-origin.spec.ts",
   "**/built-in-agents.spec.ts",
-  "**/chat-api.spec.ts",
   "**/knowledge-permission-sync.spec.ts",
   "**/custom-yaml-restart.spec.ts",
   "**/mcp-gateway-jwks-credential-priority.ee.spec.ts",

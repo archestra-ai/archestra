@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 // The app shell's mobile-only header exposes this container so pages can
 // portal actions into the header bar next to the sidebar trigger.

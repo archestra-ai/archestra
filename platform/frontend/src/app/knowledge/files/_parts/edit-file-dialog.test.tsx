@@ -97,10 +97,14 @@ it("renames a document without rewriting the sharing columns nothing reads", asy
     { wrapper },
   );
 
+  await user.click(screen.getByRole("button", { name: "Permissions" }));
+
   // Access is the document's own policy now, so the recipients on screen are
   // the real ones — not the row's stale `teamIds`.
   expect(await screen.findByText("Support")).toBeVisible();
   expect(screen.queryByText("Who can see this")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "General" }));
 
   await user.clear(screen.getByLabelText("Name"));
   await user.type(screen.getByLabelText("Name"), "employee-handbook.pdf");

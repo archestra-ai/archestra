@@ -15,7 +15,7 @@ import {
   serverCanAccessPage,
   serverHasPermissions,
 } from "@/lib/auth/auth.server";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import McpGatewaysPage from "./page.client";
 

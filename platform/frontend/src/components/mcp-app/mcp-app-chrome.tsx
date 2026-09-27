@@ -18,7 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { appRunUrl } from "@/lib/apps/app-run-url";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /** Ghost icon + text button shared by the app top bar's labeled actions. */
 export const LABELED_BUTTON_CLASS =

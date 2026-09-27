@@ -1,8 +1,5 @@
-import { vi } from "vitest";
-
-vi.mock("@/logging");
-
 import { count, eq } from "drizzle-orm";
+import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ConversationModel, MessageModel } from "@/models";
@@ -93,7 +90,6 @@ async function countRows(
 
 describe("handleContentRetentionCleanup", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     config.retention.llmLogsDays = 0;
     config.retention.mcpLogsDays = 0;
     config.retention.chatConversationsDays = 0;
@@ -363,9 +359,12 @@ describe("handleContentRetentionCleanup", () => {
       .spyOn((await import("@/models")).InteractionModel, "deleteExpired")
       .mockRejectedValueOnce(new Error("boom"));
 
-    await handleContentRetentionCleanup();
+    try {
+      await handleContentRetentionCleanup();
 
-    expect(await countRows(schema.mcpToolCallsTable)).toBe(0);
-    spy.mockRestore();
+      expect(await countRows(schema.mcpToolCallsTable)).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

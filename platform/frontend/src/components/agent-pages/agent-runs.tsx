@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import { type AgentRunListItem, useAgentRuns } from "@/lib/agent-runtime.query";
 import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export function AgentRuns({ agentId }: { agentId: string }) {
   const { data: session } = useSession();

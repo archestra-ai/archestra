@@ -42,7 +42,7 @@ import {
   usageTextColor,
 } from "@/lib/chat/context-window-status";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 // ============================================================================
 // Category metadata — label, color, one-line hint in canonical stack order

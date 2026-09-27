@@ -50,6 +50,10 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
   ),
 }));
 
+vi.mock("@/components/resource-access-section", () => ({
+  ResourceAccessSection: () => <div>Permissions</div>,
+}));
+
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useLlmProviderApiKeys: () => ({ data: [] }),
   useCreateLlmProviderApiKey: () => ({

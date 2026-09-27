@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { AppaOpenCodeAdapter } from "./opencode";
 
 describe("OpenCode question from ask_user", () => {

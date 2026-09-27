@@ -16,7 +16,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { prettyPrintJson, splitHookPayload } from "./hook-run-chip.utils";
 
 export interface HookRunChipData {

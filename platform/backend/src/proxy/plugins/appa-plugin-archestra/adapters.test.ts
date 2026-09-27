@@ -1,8 +1,8 @@
+import { describe, expect, test } from "vitest";
 import config from "@/config";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { mintDelegationMarker } from "@/openappa/delegation";
 import { prepareAppaRequest } from "@/openappa/request";
-import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
@@ -1111,6 +1111,7 @@ function delegated(params: {
         interactionType: params.interactionType,
         identity: {
           mode: "compat",
+          gatewayConnected: true,
           canonicalize: (name) => name,
           attestationOf: () => undefined,
           verified: [],

@@ -1,7 +1,7 @@
 import { CustomObjectsApi, KubeConfig } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
+import { expect, test } from "vitest";
 import config from "@/config";
-import { expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { KubernetesAgentRunLaunchSpec } from "./manifests";
 import { agentWarmPoolManager, readWorkspaceSandbox } from "./warm-pool";

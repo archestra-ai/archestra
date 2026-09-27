@@ -1,7 +1,7 @@
 import Fastify from "fastify";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
-import { afterEach, beforeEach, describe, expect, it } from "@/test";
 import { ApiError } from "@/types";
 import {
   enterpriseLicenseMiddleware,

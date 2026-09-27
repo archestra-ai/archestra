@@ -7,7 +7,7 @@ import {
   formatRuntimeDuration as formatDuration,
   useRuntimeClock as useCurrentTime,
 } from "@/lib/agent-runtime-time";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export function AgentRunLiveness({
   run,

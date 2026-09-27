@@ -37,8 +37,8 @@ import {
   type McpServerAttentionFacet,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 import {
   DismissAlertDialog,
   type DismissAlertTarget,

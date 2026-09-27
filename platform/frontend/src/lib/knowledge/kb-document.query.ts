@@ -4,7 +4,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
   bulkDeleteConnectorDocuments,

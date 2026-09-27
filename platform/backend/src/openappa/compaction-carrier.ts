@@ -1,4 +1,4 @@
-import { ApiError } from "@/types";
+import { ApiError } from "@/types/api";
 
 export function unwrapCompactionCarriersFromRequest(body: unknown): string[] {
   if (!isRecord(body) || !Array.isArray(body.input)) return [];

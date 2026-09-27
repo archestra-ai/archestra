@@ -32,6 +32,7 @@ import {
   McpServerReadinessTimeoutError,
   McpServerUnschedulableError,
 } from "./k8s-deployment";
+import { McpServerWakeError } from "./wake-errors.ee";
 
 /**
  * Idle hibernation (scale-to-zero) of MCP server deployments: who is allowed
@@ -43,66 +44,6 @@ import {
  * lives here: the licence and organization gates, the per-install overrides,
  * and the sweep/wake orchestration itself.
  */
-
-/**
- * Thrown when a demand-path call found its MCP server hibernated for idleness
- * and the wake did not reach ready within the wait budget. The wake keeps
- * progressing in the cluster (the pod continues starting up), so the call is
- * safe to retry shortly. `detail` replaces the generic reason when the wake
- * knows more — a cluster with no free capacity, an attempt cut by its
- * deadline — while keeping the same retryable shape for callers.
- *
- * `concluded` separates the two very different things this one retryable
- * shape carries. A wake can fail because it LOST A RACE it is allowed to lose
- * (a superseded transition, a lease another replica still holds) — those
- * settle in seconds, and the demand path is right to re-enter the wake rather
- * than answer. Or it can fail because it RAN TO THE END of its readiness
- * budget and reached a verdict about the cluster: no capacity to place the
- * pod, an image the kubelet never managed to pull. Re-entering on a verdict
- * only spends the caller's remaining budget to arrive at the same answer, and
- * costs the caller the one thing worth having — the reason. Verdicts set this
- * flag so {@link McpServerWakeError} consumers can tell them apart.
- */
-export class McpServerWakeError extends Error {
-  /** The wake reached a verdict rather than losing a retryable race. */
-  readonly concluded: boolean;
-  /**
-   * The reason, kept apart from the rendered message. A wake is single-flighted
-   * per PHYSICAL deployment, so its error is addressed to whichever install
-   * loaded that deployment — not necessarily the caller who receives it. A
-   * consumer that re-reports a wake's reason re-addresses it to its own server
-   * and needs the reason without the other install's name baked in.
-   */
-  readonly detail?: string;
-  /**
-   * Extra sentence appended AFTER the message's own, never spliced into it.
-   * `detail` replaces the reason clause, so anything routed through it changes
-   * a sentence that callers — and the hibernation e2e specs — match on to tell
-   * one wake failure from another. A suffix adds what the wake learned without
-   * moving what was already there.
-   */
-  readonly suffix?: string;
-
-  constructor(
-    serverName: string,
-    options?: ErrorOptions & {
-      detail?: string;
-      concluded?: boolean;
-      suffix?: string;
-    },
-  ) {
-    super(
-      `MCP server ${serverName} is waking from idle hibernation but ${
-        options?.detail ?? "did not become ready in time"
-      }; retry shortly.${options?.suffix ? ` ${options.suffix}` : ""}`,
-      options,
-    );
-    this.name = "McpServerWakeError";
-    this.concluded = options?.concluded ?? false;
-    this.detail = options?.detail;
-    this.suffix = options?.suffix;
-  }
-}
 
 /**
  * How long a caller waits on a wake before being answered instead of held.
@@ -129,24 +70,6 @@ export class McpServerWakeError extends Error {
  */
 export function wakeResponseBudgetMs(): number {
   return config.mcpGateway.wakeWaitTimeoutMs;
-}
-
-/**
- * Raised when a wake is still running at {@link wakeResponseBudgetMs}. It is
- * not a failure — the wake has not failed, it simply has not finished — so it
- * is deliberately a `McpServerWakeError` subclass and stays classified
- * retryable and not-the-caller's-fault by the tool-call funnel.
- */
-export class McpServerWakePendingError extends McpServerWakeError {
-  constructor(serverName: string, waitedMs: number) {
-    super(serverName, {
-      detail:
-        `it is still starting up and did not become ready within ${Math.round(waitedMs / 1000)}s. ` +
-        "It is still starting in the background: retry this same tool call with the same arguments " +
-        "in about 30 seconds and it should run normally. Nothing needs to be fixed or changed",
-    });
-    this.name = "McpServerWakePendingError";
-  }
 }
 
 /**

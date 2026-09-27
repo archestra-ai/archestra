@@ -3,7 +3,7 @@
 import { FileText, FolderUp, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The bordered file picker plus its hidden input. The entire surface opens the

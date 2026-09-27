@@ -1,5 +1,5 @@
 import { CheckCircle2, type LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Selectable tile for choosing a connection/reachability mode in trigger

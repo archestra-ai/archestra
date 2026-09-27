@@ -24,7 +24,7 @@ import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import type { ModelCapabilities } from "@/lib/llm-models.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { providerLogoUrl } from "@/lib/provider-logos";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export type LlmModelSelectOption = {
   value: string;

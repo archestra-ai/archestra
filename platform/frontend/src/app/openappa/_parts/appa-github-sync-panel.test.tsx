@@ -14,7 +14,6 @@ import {
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { AppaGithubSyncPanel } from "./appa-github-sync-panel";
-import { GithubSyncNotice } from "./github-sync-notice";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
@@ -59,23 +58,6 @@ function show(content = <AppaGithubSyncPanel />) {
   render(<QueryClientProvider client={client}>{content}</QueryClientProvider>);
   return client;
 }
-
-test("overview opens GitHub setup in place", async () => {
-  state = { enabled: true, hasPolicy: true, source: null };
-  server.use(
-    http.get("http://localhost:9000/api/credentials", () =>
-      HttpResponse.json([]),
-    ),
-  );
-  show(<GithubSyncNotice />);
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Set up GitHub sync" }),
-  );
-  expect(await screen.findByRole("dialog")).toHaveTextContent(
-    "Connect APPA to GitHub",
-  );
-  expect(screen.getByLabelText("Repository")).toBeVisible();
-});
 
 test("syncs on demand and shows the server's failure while retaining the source", async () => {
   server.use(

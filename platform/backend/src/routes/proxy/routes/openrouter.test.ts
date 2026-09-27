@@ -4,8 +4,8 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { describe, expect, test } from "vitest";
 import config from "@/config";
-import { describe, expect, test } from "@/test";
 import openrouterProxyRoutes from "./openrouter";
 
 describe("OpenRouter proxy routes", () => {

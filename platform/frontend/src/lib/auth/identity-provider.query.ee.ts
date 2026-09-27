@@ -5,7 +5,7 @@ import {
   useEnterpriseFeature,
   usePublicEnterpriseCoreActive,
 } from "@/lib/config/config.query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 
 /**
  * Query key factory for identity provider-related queries

@@ -1,11 +1,8 @@
 name: Platform E2E Tests
 
-# Runs automatically in merge queue as the required E2E gate.
-# Trusted public-repo PR updates prebuild the Platform and MCP images so a
-# later merge-group run can retag them instead of compiling on the queue
-# critical path. Untrusted PRs and private mirrors keep the placeholder checks
-# because their event contexts cannot authenticate to the public image
-# registry. Add the "run-e2e" label to trigger the full E2E suite on demand,
+# Runs automatically in merge queue as the required E2E gate. Ordinary PR
+# updates report the required checks without building images or running E2E.
+# Add the "run-e2e" label to trigger the full E2E suite on demand,
 # hibernation included. Remove and re-add the label to re-trigger after new
 # commits.
 #
@@ -73,34 +70,31 @@ jobs:
   # expands, so it reports as the literal "Build ${{ matrix.name }} Image" —
   # the required "Build Platform Image" / "Build MCP Server Base Image"
   # contexts would wait forever on ordinary PR pushes. Its placeholder is safe
-  # precisely for the same reason: skipped on merge_group, it reports under
-  # the unexpanded name, which cannot mask a real matrix job's failure.
+  # because, skipped on merge_group, it reports under the unexpanded name and
+  # cannot mask a real matrix-job failure. Docker scan PR placeholders live in
+  # docker-image-scanning.yml; do not duplicate those check names here.
   platform-e2e-build-placeholder:
     name: Build ${{ matrix.name }} Image
     runs-on: ubuntu-latest
-    # Excludes EVERY e2e-triggering label: a label event that starts the real
-    # build must not also run this placeholder under the same check names (the
-    # duplicate-name masking hazard the NOTE above forbids re-adding). Every
-    # trusted public-repo PR event runs the real builder instead; this
-    # placeholder remains only for ordinary events that cannot access the
-    # registry, including private-mirror PRs.
-    if: ${{ github.event_name == 'pull_request' && (github.event.repository.private || github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]') && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    # The explicit run-e2e label runs the real builder; every other PR event
+    # gets the required check names without paying for an image build.
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
     strategy:
       fail-fast: false
       matrix:
         name: [Platform, MCP Server Base]
     steps:
       - name: Skip full image build on ordinary PR updates
-        run: echo "Full E2E image builds run on trusted same-repo PR updates, merge queue, or when the run-e2e label is added."
+        run: echo "Full E2E image builds run in merge queue, on the nightly/manual runs, or when the run-e2e label is added."
 
   # Build Docker images for e2e tests (platform and MCP server base).
-  # Trusted PRs and merge queue runs push the platform image to Artifact Registry so
+  # Trusted runs push the platform image to Artifact Registry so
   # the e2e jobs can pull layers directly instead of downloading a tarball artifact.
   # Untrusted PRs still fall back to artifacts because they do not receive OIDC-backed secrets.
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || (github.event_name == 'pull_request' && github.event.repository.private == false && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e') }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
@@ -174,8 +168,8 @@ jobs:
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       # Reuse a platform image already built for this exact image-input hash —
-      # by this PR's trusted prebuild, a labeled run-e2e build, a prior
-      # merge-queue entry, or the scheduled warm build — instead of rebuilding
+      # by a labeled run-e2e build, a prior merge-queue entry, or the scheduled
+      # warm build — instead of rebuilding
       # it on the merge-queue critical path. The hash covers the ./platform
       # context plus the workflow/action files that define the build command.
       # On a hit we do a registry-side manifest copy to the commit-SHA e2e
@@ -825,26 +819,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Each leg boots its own full lite stack — the duplicated setup
-          # buys test wall-clock. The nightly
-          # cross-browser projects ride the api leg: they only carry the
-          # small @firefox/@webkit-tagged subset.
+          # Each leg boots its own full lite stack. The API and identity
+          # provider projects follow the first Chromium shard on its existing
+          # stack, avoiding a separate runner and duplicate setup. Nightly
+          # cross-browser projects ride that second step too.
           # The chromium legs cap Playwright at 2 workers: sized on 4-vcpu
           # standard runners, where the CI default (90% of cores) oversubscribed
           # a runner that was also hosting the whole lite stack, and the
           # resulting CPU starvation made the heavy dialog-interaction specs
           # (static-credentials, chat) miss their interaction windows.
-          # Conservative on the 8-vcpu runners; raising it is a follow-up. The
-          # api leg keeps the default — API-bound specs gain from parallelism
-          # and don't fight for paint time.
-          - name: api
-            projects_default: api --project=identity-providers
-            projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
-            shard: ""
-            workers_arg: ""
-          # Three shards preserve all selected tests. PR #7574's API-driven
-          # gateway cleanup removed the list-UI failure that blocked this width
-          # in its earlier experiment.
+          # Conservative on the 8-vcpu runners; raising it is a follow-up.
+          # The API step keeps the default worker count because it runs after
+          # Chromium and does not compete with its browser interaction tests.
+          # Two Chromium shards retain the complete project while avoiding a
+          # third full lite stack and its runner setup.
           # The OpenAPPA root tool flow, on a stack booted with the feature on.
           # It is its own leg because the flag is not additive: with OpenAPPA
           # enabled the proxy rejects any tool-declaring request that omits the
@@ -858,20 +846,17 @@ jobs:
             shard: ""
             workers_arg: ""
             openappa_enabled: "true"
-          - name: chromium-1of3
+          - name: chromium-1of2
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=1/3"
+            shard: "--shard=1/2"
             workers_arg: "--workers=2"
-          - name: chromium-2of3
+            secondary_projects_default: api --project=identity-providers
+            secondary_projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
+          - name: chromium-2of2
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=2/3"
-            workers_arg: "--workers=2"
-          - name: chromium-3of3
-            projects_default: chromium
-            projects_nightly: chromium
-            shard: "--shard=3/3"
+            shard: "--shard=2/2"
             workers_arg: "--workers=2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -969,6 +954,16 @@ jobs:
           timeout: "20"
           env_file: /tmp/lite-e2e.env
 
+      - name: Run API and identity provider E2E tests on the same stack
+        if: ${{ matrix.name == 'chromium-1of2' }}
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.secondary_projects_nightly || matrix.secondary_projects_default }}
+          extra_args: "--grep-invert '@quickstart'"
+          timeout: "20"
+          env_file: /tmp/lite-e2e.env
+          blob_report_dir: blob-report-api
+
       - name: Upload blob report
         if: ${{ !cancelled() }}
         # Playwright reports are diagnostic artifacts; an artifact-service
@@ -978,6 +973,15 @@ jobs:
         with:
           name: blob-report-lite-${{ matrix.name }}
           path: platform/e2e-tests/blob-report/
+          retention-days: 1
+
+      - name: Upload API and identity provider blob report
+        if: ${{ !cancelled() && matrix.name == 'chromium-1of2' }}
+        continue-on-error: true
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-lite-api
+          path: platform/e2e-tests/blob-report-api/
           retention-days: 1
 
       - name: Show platform logs on failure

@@ -18,6 +18,7 @@ import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import * as openappaService from "@/openappa/service";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { seedCoverage } from "@/test/openappa-coverage";
 import type { Agent } from "@/types";
 import {
   type ArchestraContext,
@@ -734,5 +735,167 @@ describe("openappa remedy plan HITL execution", () => {
       offer_id: "offer-hitl",
     });
     expect(executeSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("list_guardrails_battery_fits", () => {
+  const toolFullName = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_guardrails_battery_fits`;
+  const originalOpenappaConfig = { ...config.openappa };
+  afterEach(() => {
+    config.openappa = originalOpenappaConfig;
+  });
+
+  const setUp = async (fixtures: {
+    makeOrganization: any;
+    makeUser: any;
+    makeMember: any;
+    makeInternalMcpCatalog: any;
+    makeTool: any;
+    makeAgent: any;
+    makeAgentTool: any;
+  }) => {
+    config.openappa = { ...originalOpenappaConfig, enabled: true };
+    const org = await fixtures.makeOrganization();
+    const user = await fixtures.makeUser();
+    await fixtures.makeMember(user.id, org.id, { role: "admin" });
+    const { catalogIds } = await seedCoverage({
+      organizationId: org.id,
+      userId: user.id,
+      fixtures,
+    });
+    await fixtures.makeTool({
+      catalogId: catalogIds.linear,
+      name: "linear__get_issue",
+      rawName: "get_issue",
+    });
+    // The bundled linear battery names no such tool.
+    await fixtures.makeTool({
+      catalogId: catalogIds.linear,
+      name: "linear__summon_unicorn",
+      rawName: "summon_unicorn",
+    });
+    const context: ArchestraContext = {
+      agent: { id: "agent", name: "Agent" },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    return { catalogIds, context };
+  };
+
+  const fits = async (args: Record<string, unknown>, context: any) => {
+    const result = await executeArchestraTool(toolFullName, args, context);
+    expect(result.isError).toBeFalsy();
+    return (result.structuredContent as any).fits;
+  };
+
+  test("says how to declare a battery that fits and what its rules would do", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const { catalogIds, context } = await setUp({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+    });
+
+    // Docs and Acme already have their batteries declared, so only Linear fits.
+    expect(await fits({}, context)).toEqual([
+      expect.objectContaining({
+        mcpServerId: catalogIds.linear,
+        mcpServerName: "Linear",
+        toolPrefixes: ["linear"],
+        battery: "linear",
+        evidence: "host",
+        include: "batteries/linear/appa.toml",
+        namespaces: ["linear"],
+        credentials: ["APPA_PROVIDER_LINEAR_TOKEN"],
+        newlyCovered: 1,
+        rules: [
+          {
+            tool: "linear__get_issue",
+            selector: null,
+            kind: "write",
+            delta: {
+              trust: "suspicious",
+              audience: ["@linear:issue/$id/readers"],
+            },
+            requires: { audience: ["internal"] },
+            annotator: null,
+            currentRule: null,
+          },
+        ],
+      }),
+    ]);
+  });
+
+  test("narrows to one server", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const { catalogIds, context } = await setUp({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+    });
+
+    expect(
+      await fits({ mcpServerId: catalogIds.linear }, context),
+    ).toHaveLength(1);
+    expect(await fits({ mcpServerId: catalogIds.acme }, context)).toEqual([]);
+  });
+
+  test("leaves out another member's personal server", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    config.openappa = { ...originalOpenappaConfig, enabled: true };
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    await makeMember(owner.id, org.id, { role: "member" });
+    await makeMember(viewer.id, org.id, { role: "member" });
+    const linear = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: owner.id,
+      access: "personal",
+      name: "Linear",
+      serverUrl: "https://mcp.linear.app/mcp",
+    });
+    await makeTool({
+      catalogId: linear.id,
+      name: "linear__get_issue",
+      rawName: "get_issue",
+    });
+    const context = (userId: string): ArchestraContext => ({
+      agent: { id: "agent", name: "Agent" },
+      userId,
+      organizationId: org.id,
+    });
+
+    expect(await fits({}, context(owner.id))).toEqual([
+      expect.objectContaining({ mcpServerId: linear.id }),
+    ]);
+    expect(await fits({}, context(viewer.id))).toEqual([]);
   });
 });

@@ -3,7 +3,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 const { getAuditLogs, getAuditLog } = archestraApiSdk;
 

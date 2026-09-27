@@ -1,6 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation } from "@tanstack/react-query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 
 const {
   microsoft365CopilotDeviceAuthStart,

@@ -432,9 +432,13 @@ vi.mock("@/lib/docs/docs", () => ({
   getFrontendDocsUrl: () => "/docs",
 }));
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils/tailwind", () => ({
   cn: (...classes: Array<string | false | null | undefined>) =>
     classes.filter(Boolean).join(" "),
+}));
+
+vi.mock("@/lib/utils/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils/api")>()),
   // The real predicate: the query layer marks the errors it already toasted by
   // name, and the form stays quiet for exactly those.
   isReportedApiError: (error: unknown) =>

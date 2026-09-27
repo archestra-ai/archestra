@@ -531,34 +531,27 @@ export async function listMcpTools(
   return listResult.result.tools;
 }
 
-export async function assignArchestraToolsToProfile(
+export async function assignWhoamiToolToProfile(
   request: APIRequestContext,
   profileId: string,
-): Promise<string[]> {
+): Promise<void> {
   const toolsResponse = await makeApiRequest({
     request,
     method: "get",
-    urlSuffix: "/api/tools?limit=100",
+    urlSuffix: "/api/tools/with-assignments?search=archestra__whoami&limit=100",
   });
   const { data: tools } = (await toolsResponse.json()) as {
     data: Array<{ id: string; name: string }>;
   };
-  const archestraTools = tools.filter((tool: { name: string }) =>
-    tool.name.startsWith("archestra__"),
-  );
+  const whoami = tools.find((tool) => tool.name === "archestra__whoami");
+  if (!whoami) throw new Error("Built-in whoami tool is unavailable");
 
-  const assignedToolIds: string[] = [];
-  for (const tool of archestraTools) {
-    await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: `/api/agents/${profileId}/tools/${tool.id}`,
-      data: {},
-    });
-    assignedToolIds.push(tool.id);
-  }
-
-  return assignedToolIds;
+  await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/agents/${profileId}/tools/${whoami.id}`,
+    data: {},
+  });
 }
 
 export async function openManageCredentialsDialog(

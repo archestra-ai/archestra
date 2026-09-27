@@ -69,7 +69,7 @@ import {
   usePlugins,
   usePreviewGithubPlugin,
 } from "@/lib/plugins/plugin.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { PluginClientIcon } from "./plugin-client-icon";
 import { PluginPreviewDialog } from "./plugin-preview-dialog";
 

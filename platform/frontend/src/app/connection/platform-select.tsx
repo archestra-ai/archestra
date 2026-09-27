@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { OsLogos } from "./os-logos";
 import {
   CONNECT_PLATFORM_OPTIONS,

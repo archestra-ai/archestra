@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { ModelWithApiKeys } from "@/lib/llm-models.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const DISMISSED_MODEL_STORAGE_PREFIX =
   "knowledge-image-embedding-notice-dismissed-model";

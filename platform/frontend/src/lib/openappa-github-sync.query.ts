@@ -5,7 +5,7 @@ import {
   appaGithubSyncQueryKey,
   invalidatePolicyViews,
 } from "@/lib/openappa-policy-views";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export function useAppaGithubSync() {
   return useQuery({

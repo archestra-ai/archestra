@@ -6,7 +6,7 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import McpGatewayLogsPage from "./page.client";
 

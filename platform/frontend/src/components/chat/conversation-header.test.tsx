@@ -238,3 +238,30 @@ it("keeps a policy conversation focused on its messages", () => {
     screen.queryByRole("button", { name: "More options" }),
   ).not.toBeInTheDocument();
 });
+
+it("links a chat back to the page it was opened from, before its title", () => {
+  render(
+    <ConversationHeader
+      conversationId="policy-1"
+      conversation={makeConversation({ origin: "openappa" })}
+      messageCount={2}
+      isTitleAnimating={false}
+      canManageShare={false}
+      isShared={false}
+      canCreateProject={false}
+      isPolicyConversation
+      backLink={{ href: "/openappa", label: "Back to OpenAPPA" }}
+      onShare={vi.fn()}
+      onExportMarkdown={vi.fn()}
+      onCreateProject={vi.fn()}
+      panel={makePanel()}
+    />,
+  );
+  const backLink = screen.getByRole("link", { name: "Back to OpenAPPA" });
+  expect(backLink).toHaveAttribute("href", "/openappa");
+  expect(
+    backLink.compareDocumentPosition(
+      screen.getByRole("heading", { name: "My chat" }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});

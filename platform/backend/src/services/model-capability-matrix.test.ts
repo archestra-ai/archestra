@@ -1,8 +1,8 @@
 import type { SupportedProvider } from "@archestra/shared";
+import { describe, expect, test } from "vitest";
 import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
 import { ModelModel } from "@/models";
 import type { FetchedModelCapabilities } from "@/routes/chat/model-fetchers/types";
-import { describe, expect, test } from "@/test";
 import type {
   ModelInputModality,
   ModelOutputModality,

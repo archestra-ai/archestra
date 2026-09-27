@@ -3,8 +3,7 @@ import {
   PERPLEXITY_AGENT_MODELS,
   PERPLEXITY_MODELS,
 } from "@archestra/shared";
-import { vi } from "vitest";
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { modelFetchers } from "./index";
 
 const mockFetch = vi.fn();

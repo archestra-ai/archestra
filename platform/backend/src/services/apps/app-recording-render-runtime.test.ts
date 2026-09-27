@@ -1,5 +1,4 @@
-import { beforeEach, vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 /**
  * A filesystem and a package manager are the two boundaries this resolver is

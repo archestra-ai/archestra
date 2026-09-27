@@ -4,7 +4,7 @@ import {
   useEnterpriseFeature,
   usePublicEnterpriseCoreActive,
 } from "@/lib/config/config.query";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 export const identityProviderReadKeys = {
   all: ["identity-provider"] as const,

@@ -8,7 +8,7 @@ import {
   isAgentImageIcon,
 } from "@/components/agent-icon.utils";
 import { imageToneClassName, useImageTone } from "@/lib/hooks/use-image-tone";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export type AgentIconVariant = Exclude<
   archestraApiTypes.GetAgentsResponses["200"]["data"][number]["agentType"],

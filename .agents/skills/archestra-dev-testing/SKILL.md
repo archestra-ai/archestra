@@ -1,6 +1,6 @@
 ---
 name: archestra-dev-testing
-description: Use when deciding whether a change needs a test and at which level — unit, backend route-level integration, MSW-backed frontend integration, or e2e — or when reviewing tests for the "fluff test" anti-pattern. Start here before archestra-dev-backend-tests or archestra-dev-e2e.
+description: Use for test selection and quality across backend, frontend, and e2e; load its backend reference for Vitest projects, mocking, DB fixtures, and performance.
 ---
 
 # What to test, and at which level
@@ -10,22 +10,47 @@ Run commands from `platform/` unless specifically instructed otherwise.
 This skill answers *should this test exist, and where does it belong*. Once you
 know the level, the mechanics live elsewhere:
 
-- `archestra-dev-backend-tests` — backend mocking rules, vitest projects, DB fixtures.
+- For backend Vitest tests, read [references/backend-tests.md](references/backend-tests.md) for mocking rules, project selection, DB fixtures, and performance.
 - `archestra-dev-e2e` — Playwright fixtures, WireMock, selectors.
 - `archestra-dev-frontend` — component/query-hook conventions.
+
+Frontend Vitest defaults to jsdom. For a test of pure logic whose runtime
+imports do not need browser APIs, put `// @vitest-environment node` at the top
+of the file. Check its dependency graph and run the file under Node before
+adding the directive; a `.test.ts` suffix alone does not establish that it is
+browser-free. This opt-in uses a shared worker module cache, so do not use
+`vi.mock` or leak mutable module/global state across files; the config rejects
+module mocks in this project. Keep UI, storage, canvas, and browser binary API
+tests on jsdom.
 
 ## The one rule
 
 **A test earns its place by being able to fail for a reason you'd want to hear about.**
 
-CI time is a real budget. Every test runs on every push, forever, and every test
-is code someone has to keep working during unrelated refactors. A test that can
-only fail when someone edits the literal it is compared against costs that
-budget and returns nothing.
+CI time is a real budget. Every test runs on merge-queue attempts, and every
+test is code someone has to keep working during unrelated refactors. A test
+that can only fail when someone edits the literal it is compared against costs
+that budget and returns nothing.
 
 Before writing a test, answer: *what plausible mistake does this catch?* If the
 answer is "someone deliberately changing this exact line", don't write it. If
 you cannot name the bug, there is no test to write.
+
+## Local checks and merge queue
+
+Ordinary PR pushes run the PR policy checks; the expensive build, lint, test,
+and E2E jobs run on `merge_group`. Their skipped PR status is a queue-entry
+signal, not evidence that the code passed those checks. Before marking a PR
+ready, run the relevant checks locally from `platform/` with `pnpm` (including
+focused tests for changed behavior) and review the PR policy results. Use the
+`run-e2e` label when browser coverage is worth getting before queue entry.
+
+When the PR is ready, add it to the merge queue. If a queue check fails, read
+the failure, reproduce it locally, fix it, run the affected local checks, push
+the fix, and requeue. Keep the full failure picture from the queue run; do not
+blindly rerun until it passes. Release-please PRs are an exception: their
+platform lint/build job also runs before queue entry so generated release files
+can be committed.
 
 ## Pick the level
 
@@ -231,6 +256,19 @@ what it covers:
 
 The question is never "is this duplicated" but "does the second copy have its
 own way to fail".
+
+## Reuse setup without hiding the behavior
+
+Before copying setup into a new test, check the existing fixtures and data
+factories. Backend database tests should use `@/test` fixtures rather than
+repeating table inserts; add a focused fixture when the same meaningful setup
+recurs. Keep database-free `*.unit.test.ts` files free of `@/test` and database
+imports. Frontend integration tests should reuse
+`frontend/tests-integration/fixtures.ts` and the factories in
+`frontend/src/mocks/data/` before adding page, MSW, or entity setup of their
+own. Batch independent MSW overrides with `mswControl.registerMany` when a
+scenario needs several of them. Keep each scenario's requests and assertions
+visible in its test so the behavior remains clear.
 
 ## Checklist before adding a test
 

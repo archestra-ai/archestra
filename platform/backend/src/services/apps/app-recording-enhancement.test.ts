@@ -1,5 +1,5 @@
 import { APP_GALLERY_CATEGORIES } from "@archestra/shared";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import {
   sanitizeCategory,
   sanitizeHumanAsk,

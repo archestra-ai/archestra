@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
+import { describe, expect, test, vi } from "vitest";
 /**
  * The two pure pieces of the hibernation lifecycle: the gate (given the
  * organization's master toggle and the per-install modes of a sibling group,
@@ -15,7 +16,6 @@
  * server an administrator explicitly pinned up.
  */
 import config from "@/config";
-import { describe, expect, test, vi } from "@/test";
 import type { McpServerHibernationMode } from "@/types";
 import {
   isGroupHibernationAllowed,

@@ -1,7 +1,7 @@
 "use client";
 
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
-import { Loader2 } from "lucide-react";
+import { KeyRound, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveAdminDefaultBaseUrl,
@@ -10,7 +10,6 @@ import {
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
-import { FormDialog } from "@/components/form-dialog";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -29,12 +28,8 @@ import {
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
@@ -149,6 +144,9 @@ export function CreateVirtualKeyDialog({
     {},
   );
   const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
+  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
+    "general",
+  );
   const createdKeyValue = createdKey?.value ?? null;
 
   const prevOpenRef = useRef(open);
@@ -179,6 +177,7 @@ export function CreateVirtualKeyDialog({
     const wasOpen = prevOpenRef.current;
     prevOpenRef.current = open;
     if (open && !wasOpen) {
+      setActiveSection("general");
       setCreatedKey(null);
       const initialExpiresAt = computeDefaultExpiresAt(
         defaultExpirationSeconds,
@@ -286,7 +285,7 @@ export function CreateVirtualKeyDialog({
   ]);
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
       title={
@@ -305,97 +304,22 @@ export function CreateVirtualKeyDialog({
             ? "Create an attribution key for requests that pass a provider credential through."
             : "Map this standard virtual key to provider API keys."
       }
-      size="medium"
-      isDirty={isDirty}
-    >
-      <DialogForm onSubmit={handleCreate}>
-        <DialogBody
-          className="space-y-4"
-          data-testid={E2eTestId.VirtualKeyCreateDialog}
-        >
-          {createdKey ? (
-            <VirtualKeyConnectionGuide
-              keyValue={createdKey.value}
-              keyType={createdKey.keyType}
-              mappedProviderKeys={createdKey.providerApiKeys}
-              connectionBaseUrl={connectionBaseUrl}
-              name={createdKey.name}
-              expiration={formatExpiration(createdKey.expiresAt)}
-              visibleTo={getVisibleToLabel({
-                keyType: createdKey.keyType,
-                grants: initialGrants,
-                ownerName: ownerId ? selectedOwnerName : null,
-              })}
-            />
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="virtual-key-name">Name</Label>
-                <Input
-                  id="virtual-key-name"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  placeholder={
-                    isPassthrough ? "My passthrough key" : "My virtual key"
-                  }
-                />
-              </div>
-
-              {!isPassthrough && (
-                <ProviderKeyAccessFields
-                  providerApiKeyIds={providerApiKeyIds}
-                  onProviderApiKeyIdsChange={setProviderApiKeyIds}
-                  providerApiKeys={parentableKeys}
-                />
-              )}
-
-              <ExpirationDateTimeField
-                value={expiresAt}
-                onChange={setExpiresAt}
-                noExpirationText="Key will never expire"
-                formatExpiration={formatExpiration}
-              />
-
-              {/* SPDX-SnippetBegin
-                  SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-                  SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-              {!isPassthrough && (
-                <InitialResourcePermissions
-                  resource="llmVirtualKey"
-                  grants={initialGrants}
-                  onChange={setInitialGrants}
-                  ownerName={
-                    ownerId
-                      ? (selectedOwnerName ?? "Selected owner")
-                      : (currentUser?.name ?? "You")
-                  }
-                />
-              )}
-              {/* SPDX-SnippetEnd */}
-
-              <AdvancedLabelsSection
-                ref={labelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
-              >
-                {showOwnerField && (
-                  <OwnerSelectField
-                    value={ownerId}
-                    onChange={setOwnerId}
-                    onSelectedOwnerChange={(owner) =>
-                      setSelectedOwnerName(
-                        owner.userId === currentUser?.id
-                          ? null
-                          : (owner.name ?? owner.email ?? null),
-                      )
-                    }
-                  />
-                )}
-              </AdvancedLabelsSection>
-            </>
-          )}
-        </DialogBody>
-        <DialogStickyFooter className="mt-0">
+      sidebarLabel={newKeyName || "New virtual key"}
+      sidebarDescription="Virtual key"
+      sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={
+        isPassthrough || createdKeyValue
+          ? [{ id: "general", label: "General" }]
+          : [
+              { id: "general", label: "General" },
+              { id: "permissions", label: "Permissions" },
+            ]
+      }
+      onActiveSectionChange={setActiveSection}
+      onSubmit={() => void handleCreate()}
+      footer={
+        <>
           <DialogCancelButton>
             {createdKeyValue ? "Close" : "Cancel"}
           </DialogCancelButton>
@@ -407,9 +331,100 @@ export function CreateVirtualKeyDialog({
               <span>Create</span>
             </Button>
           )}
-        </DialogStickyFooter>
-      </DialogForm>
-    </FormDialog>
+        </>
+      }
+      isDirty={isDirty}
+    >
+      <div
+        hidden={activeSection !== "general"}
+        className="space-y-4"
+        data-testid={E2eTestId.VirtualKeyCreateDialog}
+      >
+        {createdKey ? (
+          <VirtualKeyConnectionGuide
+            keyValue={createdKey.value}
+            keyType={createdKey.keyType}
+            mappedProviderKeys={createdKey.providerApiKeys}
+            connectionBaseUrl={connectionBaseUrl}
+            name={createdKey.name}
+            expiration={formatExpiration(createdKey.expiresAt)}
+            visibleTo={getVisibleToLabel({
+              keyType: createdKey.keyType,
+              grants: initialGrants,
+              ownerName: ownerId ? selectedOwnerName : null,
+            })}
+          />
+        ) : (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="virtual-key-name">Name</Label>
+              <Input
+                id="virtual-key-name"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder={
+                  isPassthrough ? "My passthrough key" : "My virtual key"
+                }
+              />
+            </div>
+
+            {!isPassthrough && (
+              <ProviderKeyAccessFields
+                providerApiKeyIds={providerApiKeyIds}
+                onProviderApiKeyIdsChange={setProviderApiKeyIds}
+                providerApiKeys={parentableKeys}
+              />
+            )}
+
+            <ExpirationDateTimeField
+              value={expiresAt}
+              onChange={setExpiresAt}
+              noExpirationText="Key will never expire"
+              formatExpiration={formatExpiration}
+            />
+
+            <AdvancedLabelsSection
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+            >
+              {showOwnerField && (
+                <OwnerSelectField
+                  value={ownerId}
+                  onChange={setOwnerId}
+                  onSelectedOwnerChange={(owner) =>
+                    setSelectedOwnerName(
+                      owner.userId === currentUser?.id
+                        ? null
+                        : (owner.name ?? owner.email ?? null),
+                    )
+                  }
+                />
+              )}
+            </AdvancedLabelsSection>
+          </>
+        )}
+      </div>
+      {/* SPDX-SnippetBegin
+            SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+      {!isPassthrough && !createdKeyValue && (
+        <div hidden={activeSection !== "permissions"}>
+          <InitialResourcePermissions
+            resource="llmVirtualKey"
+            grants={initialGrants}
+            onChange={setInitialGrants}
+            ownerName={
+              ownerId
+                ? (selectedOwnerName ?? "Selected owner")
+                : (currentUser?.name ?? "You")
+            }
+            standalone
+          />
+        </div>
+      )}
+      {/* SPDX-SnippetEnd */}
+    </TabbedDialogShell>
   );
 }
 

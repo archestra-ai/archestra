@@ -34,12 +34,6 @@ import {
   getArchestraMcpTools,
 } from ".";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    plugins: { enabled: true },
-  }),
-);
-
 const HOOKS_BYTES = '{\n  "hooks": { "SessionStart": [] }\n}\n';
 
 function pluginPayload(overrides: Partial<CreatePlugin> = {}): CreatePlugin {

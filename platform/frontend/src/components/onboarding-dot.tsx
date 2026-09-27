@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /** How long the fade/scale-out plays before the dot unmounts (ms). */
 const EXIT_MS = 260;

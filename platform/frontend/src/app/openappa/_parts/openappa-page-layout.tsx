@@ -1,37 +1,29 @@
 "use client";
 
-import { ArrowLeft, MessageCircle } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
-import { isOpenAppaChatPath } from "@/lib/openappa-routes";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { openAppaChatHref } from "@/lib/openappa-routes";
 import { BatteriesUploadAction } from "./batteries-panel";
+import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  // The setup wizard lays out its own page: no tabs, the wizard column.
-  if (pathname === "/openappa/setup") return children;
-  const isChat = isOpenAppaChatPath(pathname);
+  const appName = useAppName();
+  const { isFresh } = useOpenAppaSetupState();
+  // Until a policy is saved, the Overview shows only that first step.
+  const firstStepOnly = isFresh === true && pathname === "/openappa";
 
   return (
     <PageLayout
-      fillContent={isChat}
       title="OpenAPPA"
-      description="Manage the policy that governs tool calls and their results."
-      backLink={
-        isChat ? (
-          <Link
-            href="/openappa"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            OpenAPPA / Configure
-          </Link>
-        ) : undefined
-      }
+      description={`${appName}'s guardrail against data leaks. Every tool call is checked before it runs.`}
       tabs={
-        isChat
+        firstStepOnly
           ? []
           : [
               { label: "Overview", href: "/openappa" },
@@ -40,18 +32,11 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
             ]
       }
       actionButton={
-        pathname === "/openappa/policy" ? (
+        firstStepOnly ? null : pathname === "/openappa/policy" ? (
           <Button asChild>
-            <Link href="/openappa/configure">
+            <Link href={openAppaChatHref({ promptKey: "explainPolicy" })}>
               <MessageCircle />
               <span>Configure with chat</span>
-            </Link>
-          </Button>
-        ) : isChat ? (
-          <Button variant="outline" asChild>
-            <Link href="/openappa/policy">
-              <ArrowLeft />
-              <span>Policy</span>
             </Link>
           </Button>
         ) : (

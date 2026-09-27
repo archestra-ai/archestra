@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {

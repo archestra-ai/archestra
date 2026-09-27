@@ -1,7 +1,6 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import { ArchestraInternalErrorCode } from "@archestra/shared";
-import { vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "vitest";
 import type { Anthropic } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
 

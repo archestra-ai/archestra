@@ -34,7 +34,7 @@ import {
   getApiErrorMessage,
   handleApiError,
   throwOnApiError,
-} from "@/lib/utils";
+} from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
 const {

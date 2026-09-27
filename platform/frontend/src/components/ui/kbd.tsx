@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * A single keycap for rendering a keyboard shortcut — inside a tooltip, a

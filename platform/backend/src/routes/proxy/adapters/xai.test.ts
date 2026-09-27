@@ -2,9 +2,9 @@ import {
   ArchestraInternalErrorCode,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
+import { describe, expect, test } from "vitest";
 import config from "@/config";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
-import { describe, expect, test } from "@/test";
 import type { ApiError } from "@/types";
 import { xaiAdapterFactory } from "./xai";
 

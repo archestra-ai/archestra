@@ -21,11 +21,11 @@ import {
   ProjectAlreadyAssignedError,
   ProjectLabelModel,
   ProjectModel,
-  ProjectNameExistsError,
   ProjectPinModel,
   TeamModel,
   UserModel,
 } from "@/models";
+import { ProjectNameExistsError } from "@/models/project";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { fileStore } from "@/skills-sandbox/file-store";

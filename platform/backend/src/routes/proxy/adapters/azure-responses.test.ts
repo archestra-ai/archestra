@@ -1,5 +1,5 @@
 import type OpenAIProvider from "openai";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { azureResponsesAdapterFactory } from "./azure-responses";
 
 describe("azureResponsesAdapterFactory", () => {

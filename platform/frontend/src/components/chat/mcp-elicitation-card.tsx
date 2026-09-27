@@ -22,7 +22,7 @@ import {
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import type { AskUserGroupMember } from "./ask-user-outcome";
 import {
   type ChatMcpElicitationRequest,

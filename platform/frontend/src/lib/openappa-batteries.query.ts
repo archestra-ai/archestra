@@ -13,7 +13,11 @@ import {
   invalidatePolicyViews,
   policyDeclarationsQueryKey,
 } from "@/lib/openappa-policy-views";
-import { getApiErrorType, reportApiError, throwOnApiError } from "@/lib/utils";
+import {
+  getApiErrorType,
+  reportApiError,
+  throwOnApiError,
+} from "@/lib/utils/api";
 
 export type BatteryMatches =
   archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"];

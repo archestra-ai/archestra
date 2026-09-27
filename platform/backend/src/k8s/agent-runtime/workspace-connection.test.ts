@@ -1,8 +1,7 @@
 import { KubeConfig } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
-import { vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import config from "@/config";
-import { beforeEach, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import manager from "./manager";
 

@@ -1,7 +1,7 @@
 import type { Action, Resource } from "@archestra/shared";
 import { Fragment } from "react";
 import { CodeText } from "@/components/code-text";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type PermissionRequirement = {
   resource: Resource;

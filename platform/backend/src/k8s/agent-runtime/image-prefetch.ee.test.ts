@@ -4,9 +4,8 @@
 import { getAgentCatalogImages } from "@archestra/shared";
 import { KubeConfig, type V1DaemonSet } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
-import { vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import config from "@/config";
-import { beforeEach, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { agentImagePrefetcher } from "./image-prefetch.ee";
 

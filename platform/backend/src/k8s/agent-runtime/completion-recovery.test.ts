@@ -346,6 +346,13 @@ test.for([
 ] as const)("re-adopted lifecycle preserves work through a timeout and settles %s correctly", async (outcome, {
   run,
 }) => {
+  // Exercise the real lifecycle without waiting for the production 5s poll.
+  const timer = setTimeout;
+  vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+    fn: (...args: unknown[]) => void,
+    ms?: number,
+    ...rest: unknown[]
+  ) => timer(fn, ms === 5_000 ? 1 : ms, ...rest)) as typeof setTimeout);
   const timeout = AbortSignal.timeout.bind(AbortSignal);
   vi.spyOn(AbortSignal, "timeout").mockImplementation(() => timeout(100));
   const lifecycle = new A2AManager({ taskMode: "full" });

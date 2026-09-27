@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { Octokit } from "@octokit/rest";
-import { LRUCacheManager } from "@/cache-manager";
+import { LRUCacheManager } from "@/in-memory-lru-cache";
 import {
   isGithubRateLimitError,
   readPublicGithubTree,

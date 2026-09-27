@@ -1,6 +1,5 @@
 import { createServer } from "node:http";
-import { vi } from "vitest";
-import { afterEach, beforeEach, expect, test } from "@/test";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { WebCrawlerConnector } from "./web-crawler-connector";
 
 // Chromium is an external subprocess. Exercise the real crawler and HTML

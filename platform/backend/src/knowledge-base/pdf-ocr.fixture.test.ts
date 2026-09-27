@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MockLanguageModelV3 } from "ai/test";
-import { expect, test } from "@/test";
+import { expect, test } from "vitest";
 import type { OcrConfig } from "./kb-llm-client";
 import { extractPdfText } from "./pdf-ocr";
 

@@ -1,5 +1,4 @@
-import { vi } from "vitest";
-import { expect, test } from "@/test";
+import { expect, test, vi } from "vitest";
 import {
   consumeHitlRuling,
   getHitlAskUserArguments,

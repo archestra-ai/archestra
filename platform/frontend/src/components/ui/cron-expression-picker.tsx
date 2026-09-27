@@ -9,8 +9,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
+import { cn } from "@/lib/utils/tailwind";
 
 export type CronPresetOption = {
   label: string;

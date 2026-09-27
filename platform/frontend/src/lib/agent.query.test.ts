@@ -10,7 +10,7 @@ import {
   usePinAgent,
   useUpdateProfile,
 } from "@/lib/agent.query";
-import { isReportedApiError } from "@/lib/utils";
+import { isReportedApiError } from "@/lib/utils/api";
 
 // Partial: `@/consts` (pulled in by agent.query.ts) reads real exports of this
 // module at import time, so only the two SDK calls under test are replaced.

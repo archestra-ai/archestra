@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { hasPagePermissions, hasPermissions } from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 export const authQueryKeys = {
   all: ["auth"] as const,

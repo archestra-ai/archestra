@@ -1,6 +1,6 @@
 import { KeyRound } from "lucide-react";
 import { AgentIcon } from "@/components/agent-icon";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export function RuntimeCredentialIcon({
   icon,

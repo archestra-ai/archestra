@@ -33,7 +33,7 @@ import {
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 type DropdownLlmProviderApiKey = Pick<
   LlmProviderApiKey,

@@ -109,8 +109,8 @@ import {
 import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 import { computeCanModifySkill } from "@/lib/skills/use-skill-access";
 import { useMyTeams } from "@/lib/teams/team.query";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 import { PluginSourceIcon } from "../plugins/_parts/plugin-source-icon";
 import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
 import {

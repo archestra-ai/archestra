@@ -7,7 +7,7 @@ import {
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /** The subset of a knowledge source this editor names and toggles. */
 export interface KnowledgeSourceOption {

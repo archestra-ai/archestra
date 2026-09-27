@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
+import { describe, expect, test } from "vitest";
 import db, { schema } from "@/database";
 import { OpenAppaSessionModel } from "@/models";
-import { describe, expect, test } from "@/test";
 import { openappaActor } from "./actor";
 import {
   appendSessionReceipt,

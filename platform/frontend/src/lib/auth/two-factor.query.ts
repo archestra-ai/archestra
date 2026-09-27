@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 
 type AuthClientError = {
   message?: string;

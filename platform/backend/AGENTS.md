@@ -16,10 +16,16 @@
 
 ## Test import boundaries
 - Name a test `*.unit.test.ts` only when its runtime imports do not reach the
-  database, models, server entry point, or database fixtures. These tests run
-  without PGlite. Import test APIs from `vitest`, not `@/test`.
+  database, models, application config, server entry point, or database fixtures.
+  These tests run without PGlite or a database URL. Import test APIs from
+  `vitest`, not `@/test`.
 - Keep `*.test.ts` for database-backed and route tests. Use real PGlite and
   fixtures for database behavior.
+- In database-backed tests that do not use fixtures, import test APIs directly
+  from `vitest`; importing `@/test` loads the entire fixture graph. The
+  `useRouteTestApp` helper uses fixtures internally, so its tests still need
+  `test` from `@/test`. The `check:test-imports` command rejects unused fixture
+  imports.
 - In route tests, import the Fastify factory from `@/fastify-instance` and the
   route helper from `@/test/route-test-app`. Do not import `@/server` from a test
   or re-export route helpers through the general `@/test` barrel.

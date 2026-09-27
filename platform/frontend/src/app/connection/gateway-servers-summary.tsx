@@ -8,7 +8,7 @@ import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { useProfile } from "@/lib/agent.query";
 import { useCanManageGateway } from "@/lib/auth/use-can-manage-gateway";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface GatewayServersSummaryProps {
   gatewayId: string;

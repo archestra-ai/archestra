@@ -1,6 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { vi } from "vitest";
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { useMswServer } from "@/test/msw";
 import {
   UnsupportedEmbeddingProviderError,

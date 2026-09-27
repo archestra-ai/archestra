@@ -12,11 +12,10 @@
  * concurrent exchanges for the same token.
  */
 import { createHmac, randomBytes } from "node:crypto";
-import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
+import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
-import { ApiError } from "@/types";
-import { recordSubscriptionAuthenticationFailure } from "./subscription-authentication-status";
+import { ApiError } from "@/types/api";
 
 /**
  * Editor-identity headers the Copilot endpoints require on every request.
@@ -195,6 +194,9 @@ export function createGithubCopilotFetch(params: {
 
     const recordFailure = async () => {
       if (!providerApiKeyId) return;
+      const { recordSubscriptionAuthenticationFailure } = await import(
+        "./subscription-authentication-status"
+      );
       await recordSubscriptionAuthenticationFailure({
         providerApiKeyId,
         provider: "github-copilot",

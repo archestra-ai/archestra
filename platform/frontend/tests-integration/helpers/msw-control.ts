@@ -26,16 +26,21 @@ export class MswControl {
   }
 
   async use(override: HandlerOverride): Promise<void> {
-    const res = await this.request.post(this.endpoint, { data: override });
+    await this.registerMany([override]);
+  }
+
+  async registerMany(overrides: HandlerOverride[]): Promise<void> {
+    if (overrides.length === 0) return;
+    const res = await this.request.post(this.endpoint, { data: overrides });
     if (!res.ok()) {
       throw new Error(
-        `MswControl.use failed (status ${res.status()}): ${await res.text()}`,
+        `MswControl.registerMany failed (status ${res.status()}): ${await res.text()}`,
       );
     }
-    // Push the new override straight into the browser worker as a single
-    // worker.use(handler) call. Deliberately not a reset+replay — that would
-    // resurrect `once: true` handlers MSW had already consumed.
-    await this.applyToBrowser(override);
+    // Each worker.use prepends a handler. Preserve registration order so the
+    // latest matching override wins in both the browser and server runtimes.
+    // Do not reset+replay: that would resurrect consumed `once: true` handlers.
+    await this.applyToBrowser(overrides);
   }
 
   /**
@@ -69,15 +74,16 @@ export class MswControl {
     await this.request.get(`${this.mockBackend}/health`).catch(() => {});
   }
 
-  // Push a single override into the browser worker. No-op if the page has
+  // Push overrides into the browser worker. No-op if the page has
   // not navigated yet — the initial registry replay at MswInit startup will
   // pick it up when the page eventually loads.
-  private async applyToBrowser(override: HandlerOverride): Promise<void> {
+  private async applyToBrowser(overrides: HandlerOverride[]): Promise<void> {
     try {
-      await this.page.evaluate(
-        async (o) => await window.__archestraApplyMswOverride?.(o),
-        override,
-      );
+      await this.page.evaluate(async (items) => {
+        for (const override of items) {
+          await window.__archestraApplyMswOverride?.(override);
+        }
+      }, overrides);
     } catch {
       // No active page context.
     }

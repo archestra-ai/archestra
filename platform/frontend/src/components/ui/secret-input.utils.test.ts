@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { SECRET_FIELD_SUPPRESSION_PROPS } from "./secret-input.utils";
 

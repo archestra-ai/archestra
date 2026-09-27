@@ -4,8 +4,8 @@ import {
   privateDecrypt,
   randomBytes,
 } from "node:crypto";
+import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
 import { isContentEnvelope } from "@/utils/crypto";
 import {
   decryptLockedChatMessageRow,

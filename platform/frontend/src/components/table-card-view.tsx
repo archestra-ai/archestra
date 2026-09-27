@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import { BulkRangeSelectionScope } from "@/lib/bulk-range-selection-context";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export type TableCardViewMode = "cards" | "table";
 export const COLLECTION_CARD_HOVER_CLASSNAME = "hover:bg-muted/50";

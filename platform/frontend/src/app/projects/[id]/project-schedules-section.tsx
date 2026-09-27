@@ -52,8 +52,8 @@ import {
   useScheduleTriggers,
   useUpdateScheduleTrigger,
 } from "@/lib/schedule-trigger.query";
-import { cn } from "@/lib/utils";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Schedules that belong to a project: recurring agent runs whose chats land in

@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sql } from "drizzle-orm";
+import { expect, test } from "vitest";
 import db from "@/database";
-import { expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
   path.join(__dirname, "0260_repair-conversation-attachments-table.sql"),

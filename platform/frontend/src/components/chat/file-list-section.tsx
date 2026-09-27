@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /** One row of a file list: a previewable item with a byte endpoint. */
 export type FileListItem = {

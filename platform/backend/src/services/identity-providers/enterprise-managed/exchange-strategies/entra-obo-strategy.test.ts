@@ -4,9 +4,8 @@ import {
   OAUTH_CLIENT_ASSERTION_TYPE,
   OAUTH_TOKEN_TYPE,
 } from "@archestra/shared";
-import { vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
-import { describe, expect, test } from "@/test";
 import { entraOboStrategy } from "./entra-obo-strategy";
 
 describe("entraOboStrategy", () => {

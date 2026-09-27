@@ -53,6 +53,7 @@ import {
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
 import { appaWireFamily } from "@/openappa/wire";
+import { rememberYellSession } from "@/openappa/yell-session";
 import type {
   LlmProxyBeforeModelContext,
   LlmProxyBufferedModelResponseContext,
@@ -210,8 +211,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         results,
       }),
     );
-    // Requests with results submit them to runtime even if current request declares no tools.
-    if (!binding.request.tools && context.toolResults.length === 0) return;
+    // Requests with results submit them to runtime even if current request
+    // declares no tools. Proxy-only sessions declared local tools, so their
+    // session still starts; a session that declared nothing has nothing to do.
+    if (
+      !binding.request.tools &&
+      context.toolResults.length === 0 &&
+      binding.request.declaredTools.length === 0
+    ) {
+      return;
+    }
     assertUniqueNativeQuestionResultIds({
       binding,
       results: context.toolResults,
@@ -308,11 +317,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding?.adapter?.stripCarrierMetadata(context.request);
     if (binding?.compaction) return;
     if (binding && binding.adapter?.id !== "archestra-chat") {
-      appendQuestionContinuation({
-        request: context.request,
-        interactionType: context.interactionType,
-        guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
-      });
+      if (binding.request.tools?.control) {
+        appendQuestionContinuation({
+          request: context.request,
+          interactionType: context.interactionType,
+          guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+        });
+      }
       const askUser = binding.request.tools?.askUser;
       const nativeQuestion =
         binding.adapter?.nativeQuestion &&
@@ -645,12 +656,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Children named by this trajectory mint under this request's own id: the
     // minted parent:child id for a child turn, the root id for a parent.
     const rootId = session.session_id;
+    const blockedTranscriptCalls = new Set<string>();
     if (binding.adapter) {
       for (const call of calls) {
         // Native transcript files contain unchecked intermediate output, not
         // the child's admitted return. A correctly prefixed id is not proof
         // that reading those bytes is safe.
         if (
+          !handbackIds.has(call.id) &&
           !binding.adapter.isSpawnTool(call.name, call.namespace) &&
           binding.adapter.childTranscriptPaths &&
           referencesChildTranscriptPath({
@@ -658,10 +671,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             pathPatterns: binding.adapter.childTranscriptPaths,
           })
         ) {
-          throw new ApiError(
-            409,
-            "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
-          );
+          blockedTranscriptCalls.add(call.id);
+          continue;
         }
         protectNamedChildren({
           children: binding.adapter.namesChildren({
@@ -673,7 +684,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
       }
     }
-    const rest = calls.filter((call) => !handbackIds.has(call.id));
+    const rest = calls.filter(
+      (call) =>
+        !handbackIds.has(call.id) && !blockedTranscriptCalls.has(call.id),
+    );
     const policy = sharedPolicy(session.organization_id);
     const decisions = rest.length
       ? await evaluateToolCalls(
@@ -711,6 +725,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    for (const id of blockedTranscriptCalls) {
+      decisionById.set(id, {
+        kind: "deny",
+        feedback:
+          "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
+      });
+    }
 
     const notice = binding.request.tools?.notice;
     const blocked: { id: string; name: string; reason: string }[] = [];
@@ -771,6 +792,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
         released.push(delegated?.call ?? call);
         if (delegated) annotated.push(delegated.annotation);
+        await rememberYellSession({
+          session,
+          call,
+          resolution: this.resolution(binding),
+        });
         continue;
       }
       // The registry pins `blocked` to the wire batch: the entry names the
@@ -786,7 +812,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           ),
           policy,
         );
-        const contentMessage = `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`;
+        const contentMessage =
+          binding.request.declaredTools.length === 0
+            ? `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`
+            : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
         return {
           decision: "refuse",
           refusal: {

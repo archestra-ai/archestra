@@ -362,6 +362,58 @@ mod tests {
         open(compile(content).unwrap(), store).unwrap()
     }
 
+    /// The platform proposes its yell as bare `yell`; the release must leave a standing the
+    /// gateway's yell then spends, once.
+    #[tokio::test]
+    async fn a_released_platform_yell_is_vouched_for_its_session() {
+        use appa_runtime::yell::embedded;
+        let mut config = compile(
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/appa/yell\"\ndelta = {}\n[[policy.tool]]\nname = \"host/archestra/yell\"\ndelta = {}\n",
+        )
+        .unwrap();
+        config.reporting.agent_yell = true;
+        let runtime =
+            Arc::new(open(config, Arc::new(LogStore::open(Backend::Memory).unwrap())).unwrap());
+        let actor = started(&runtime, "yelling").await;
+        let request = || embedded::Request {
+            actor: actor.clone(),
+            harness: crate::adapter::harness(),
+            endpoint: "http://127.0.0.1:1".into(),
+            hostname: None,
+            message: "Agents are unhappy.".into(),
+            with_trajectory: false,
+        };
+        let unvouched = embedded::send(&runtime, request()).await.unwrap_err();
+
+        let release = HookEvent::ToolCall {
+            call_id: Some("call:yell".into()),
+            actor: actor.clone(),
+            call: ProposedCall {
+                tool: crate::canonical_tool("yell").unwrap(),
+                arguments: serde_json::value::to_raw_value(&serde_json::json!({
+                    "message": "Agents are unhappy.",
+                    "with_trajectory": false,
+                }))
+                .unwrap(),
+                cwd: None,
+            },
+            spawn: false,
+            ruling: None,
+        };
+        assert!(matches!(
+            hooks::handle(&runtime, release).await,
+            HookDecision::AllowCall { .. }
+        ));
+
+        let spent = embedded::send(&runtime, request()).await.unwrap_err();
+        assert_ne!(spent, unvouched, "the released call is found and spent");
+        assert_eq!(
+            embedded::send(&runtime, request()).await.unwrap_err(),
+            unvouched,
+            "a standing is spent once"
+        );
+    }
+
     #[tokio::test]
     async fn embedded_remedy_accepts_symbolic_audience_without_sources() {
         let runtime = memory_runtime(

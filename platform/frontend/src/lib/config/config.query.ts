@@ -2,7 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
-import { throwOnApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils/api";
 import appConfig, { DEFAULT_BACKEND_URL } from "./config";
 
 const { getConfig } = archestraApiSdk;

@@ -1,6 +1,5 @@
-import { vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { fetchGithubCopilotModels } from "@/routes/chat/model-fetchers/github-copilot";
-import { afterEach, describe, expect, test } from "@/test";
 import { GithubCopilot } from "@/types";
 
 let tokenCounter = 0;

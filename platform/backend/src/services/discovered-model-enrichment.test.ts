@@ -1,7 +1,7 @@
 import type { SupportedProvider } from "@archestra/shared";
+import { expect, test } from "vitest";
 import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
 import { ModelModel } from "@/models";
-import { expect, test } from "@/test";
 import { enrichDiscoveredModel } from "./discovered-model-enrichment";
 
 /** `ensureModelExists` reports null for a model already present; these tests

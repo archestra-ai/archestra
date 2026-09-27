@@ -18,7 +18,7 @@ import {
   BOOTSTRAP_QUERY_RETRY,
   PERSISTED_QUERY_META,
 } from "@/lib/query-persistence";
-import { reportApiError, throwOnApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
   bulkDeleteAgents,

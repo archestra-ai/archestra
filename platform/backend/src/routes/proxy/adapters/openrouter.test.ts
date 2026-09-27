@@ -1,5 +1,5 @@
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { Openrouter } from "@/types";
 import { openrouterAdapterFactory } from "./openrouter";
 

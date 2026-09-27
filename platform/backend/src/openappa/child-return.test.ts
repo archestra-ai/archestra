@@ -1,6 +1,5 @@
-import { vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
 import {
   childReturnMarkersConfigured,
   collectAndStripChildReturns,

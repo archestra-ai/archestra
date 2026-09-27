@@ -5,7 +5,7 @@ import { type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface CopyableCodeProps {
   /** The text to copy to clipboard */

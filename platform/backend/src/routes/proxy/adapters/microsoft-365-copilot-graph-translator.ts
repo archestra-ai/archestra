@@ -13,7 +13,8 @@
  *   tokenizer-estimated usage, so cost and metrics paths keep working.
  */
 import { getTokenizer } from "@/tokenizers";
-import { ApiError, type OpenAi } from "@/types";
+import type { OpenAi } from "@/types";
+import { ApiError } from "@/types/api";
 
 type ChatCompletionsRequest = OpenAi.Types.ChatCompletionsRequest;
 type ChatCompletionsResponse = OpenAi.Types.ChatCompletionsResponse;

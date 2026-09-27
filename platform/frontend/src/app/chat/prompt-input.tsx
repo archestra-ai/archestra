@@ -68,7 +68,7 @@ import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.quer
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import {
   ChatPromptInputTools,
   type ChatPromptInputToolsProps,

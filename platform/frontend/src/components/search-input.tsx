@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useState } from "react";
 import { useReportSearchInFlight } from "@/lib/hooks/use-is-app-loading";
 import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { DebouncedInput } from "./debounced-input";
 
 type SearchInputProps = {

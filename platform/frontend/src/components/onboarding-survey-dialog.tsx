@@ -18,7 +18,7 @@ import {
   useOnboardingSurveyEligibility,
   useSubmitOnboardingSurvey,
 } from "@/lib/onboarding/onboarding.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * One-time first-login survey for admins of an empty, unlicensed instance.

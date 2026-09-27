@@ -1,6 +1,5 @@
-import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { fetchBedrockModels } from "./bedrock";
 
 const mockFetch = vi.fn();

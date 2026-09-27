@@ -1,5 +1,5 @@
 import type { Writable } from "node:stream";
-import { describe, expect, test, vi } from "@/test";
+import { describe, expect, test, vi } from "vitest";
 import type { AgentRunRecord } from "@/types";
 import type { AgentRuntimeBackendDriver } from "./backends";
 import {

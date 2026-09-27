@@ -32,6 +32,7 @@ describe("resolveGatewayToolIdentity: attested", () => {
       const identity = await resolve([declaration]);
 
       expect(identity.mode).toBe("attested");
+      expect(identity.gatewayConnected).toBe(true);
       expect(identity.looseRunToolDispatch).toBe(false);
       expect(identity.canonicalize(form.name, form.namespace)).toBe(
         "archestra__run_tool",
@@ -383,6 +384,39 @@ describe("resolveGatewayToolIdentity: attested", () => {
 });
 
 describe("resolveGatewayToolIdentity: compat", () => {
+  test("only infers gateway availability from an anchored declaration", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+    for (const [name, connected] of [
+      ["read", false],
+      ["mcp__evil__archestra__run_tool", false],
+      ["prod_gateway_metrics__query", false],
+      ["mcp__prod_gateway__archestra__run_tool", true],
+      ["prod_gateway_archestra__run_tool", true],
+      ["archestra__run_tool", true],
+    ] as const) {
+      const identity = await resolveGatewayToolIdentity({
+        organizationId: org.id,
+        declarations: [{ name }],
+        internalChat: false,
+      });
+      expect(identity.gatewayConnected, name).toBe(connected);
+    }
+    const chat = await resolveGatewayToolIdentity({
+      organizationId: org.id,
+      declarations: [{ name: "read" }],
+      internalChat: true,
+    });
+    expect(chat.gatewayConnected).toBe(true);
+  });
+
   test("is compat, with the loose run_tool scan, when no marker verifies", async ({
     makeOrganization,
   }) => {

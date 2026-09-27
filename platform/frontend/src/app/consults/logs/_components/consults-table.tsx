@@ -249,9 +249,12 @@ const COLUMNS: ColumnDef<ConsultView>[] = [
   {
     id: "externalName",
     header: "External",
-    size: 200,
+    size: 160,
     cell: ({ row }) => (
-      <span className="truncate font-mono text-xs">
+      <span
+        className="block truncate font-mono text-xs"
+        title={row.original.consult.externalName}
+      >
         {row.original.consult.externalName}
       </span>
     ),
@@ -259,10 +262,13 @@ const COLUMNS: ColumnDef<ConsultView>[] = [
   {
     id: "tool",
     header: "Tool",
-    size: 220,
+    size: 320,
     cell: ({ row }) =>
       row.original.toolCall ? (
-        <span className="truncate font-mono text-xs">
+        <span
+          className="block truncate font-mono text-xs"
+          title={row.original.toolCall.name}
+        >
           {row.original.toolCall.name}
         </span>
       ) : (

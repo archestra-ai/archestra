@@ -76,7 +76,7 @@ import {
   useDefaultEnvironment,
   useOrganization,
 } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
 import { shouldShowMcpCardChatButton } from "../_parts/chat-button-visibility";

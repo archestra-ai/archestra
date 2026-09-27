@@ -1,7 +1,7 @@
 import type { AgentScope } from "@archestra/shared";
 import { platformOwnedStyles, SCOPE_META } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 // The three visibility scopes speak the shared vocabulary. "builtIn" is not a
 // scope — it marks an agent the platform ships rather than one an org created —

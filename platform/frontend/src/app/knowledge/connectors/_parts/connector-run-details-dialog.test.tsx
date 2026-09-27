@@ -38,8 +38,8 @@ vi.mock("@/components/ui/dialog", () => ({
   ),
 }));
 
-vi.mock("@/lib/utils", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/utils")>()),
+vi.mock("@/lib/utils/date-time", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils/date-time")>()),
   formatDate: ({ date }: { date: string }) => date,
 }));
 

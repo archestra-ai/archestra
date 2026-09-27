@@ -1,4 +1,4 @@
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 
 /**
  * The fields of an SDK call result this helper reads. `response` is undefined on

@@ -129,6 +129,7 @@ export function PluginForm({
             id={pluginId}
             grants={draft.initialGrants}
             onGrantsChange={(initialGrants) => onChange({ initialGrants })}
+            standalone
           />
           <ProfileLabels
             ref={labelsRef}

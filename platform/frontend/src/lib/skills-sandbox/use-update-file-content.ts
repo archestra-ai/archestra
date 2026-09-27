@@ -1,7 +1,7 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils/api";
 
 const { updateSkillSandboxArtifactContent } = archestraApiSdk;
 

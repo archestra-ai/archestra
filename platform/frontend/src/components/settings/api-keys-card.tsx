@@ -44,8 +44,8 @@ import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { formatDate } from "@/lib/utils";
 import {
+  formatDate,
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";

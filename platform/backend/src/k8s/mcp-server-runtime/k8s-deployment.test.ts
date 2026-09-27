@@ -3,7 +3,7 @@ import { PassThrough } from "node:stream";
 import type { LocalConfigSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Exec, Log } from "@kubernetes/client-node";
-import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
 import {
@@ -16,7 +16,6 @@ import {
   // SPDX-SnippetEnd
 } from "@/k8s/shared";
 import type { ClusterLeaseGuard } from "@/models/mcp-deployment-lease";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
   EffectiveNetworkPolicy,
   K8sNetworkPolicyCapabilities,

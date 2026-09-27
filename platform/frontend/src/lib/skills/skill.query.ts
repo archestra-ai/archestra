@@ -18,7 +18,7 @@ import {
   getApiErrorMessage,
   handleApiError,
   throwOnApiError,
-} from "@/lib/utils";
+} from "@/lib/utils/api";
 
 const {
   bulkDeleteSkills,

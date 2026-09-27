@@ -2,7 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 export type SectionNavItem = {
   href: string;

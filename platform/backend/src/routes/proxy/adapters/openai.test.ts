@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import type { OpenAi } from "@/types";
 import { openaiAdapterFactory } from "./openai";
 
@@ -870,18 +870,6 @@ describe("openaiAdapterFactory", () => {
       const headers = {} as unknown as OpenAi.Types.ChatCompletionsHeaders;
       const apiKey = openaiAdapterFactory.extractApiKey(headers);
       expect(apiKey).toBeUndefined();
-    });
-  });
-
-  describe("provider info", () => {
-    test("has correct provider name", () => {
-      expect(openaiAdapterFactory.provider).toBe("openai");
-    });
-
-    test("has correct interaction type", () => {
-      expect(openaiAdapterFactory.interactionType).toBe(
-        "openai:chatCompletions",
-      );
     });
   });
 });

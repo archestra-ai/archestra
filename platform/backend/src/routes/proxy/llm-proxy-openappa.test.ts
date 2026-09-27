@@ -3631,11 +3631,74 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ["Bash", { command: "cat /tmp/tasks/[a-z]*.output" }],
       ["Bash", { command: "cat /tmp/tasks/unused/../a1.output" }],
     ])("withholds native child transcript access through %s", async (name, input) => {
-      options = { nonStreamingToolUse: { name, input } };
+      for (const stream of [false, true]) {
+        options = stream
+          ? {
+              includeToolUse: true,
+              streamStopReason: "tool_use",
+              streamingToolUse: { name, input },
+            }
+          : { nonStreamingToolUse: { name, input } };
+        const body = payload(stream);
+        body.tools.push({
+          name,
+          description: "Local file access",
+          input_schema: { type: "object", properties: {} },
+        });
+        const response = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.0 (external, cli)",
+            "x-claude-code-session-id": `raw-transcript-parent-${stream}`,
+          },
+          payload: body,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const notice = noticeFrom(response.body, stream);
+        expect(notice.name).toBe("archestra__get_remedy_plans");
+        expect(JSON.stringify(notice.input)).toContain(
+          "withheld raw child transcript access",
+        );
+        expect(response.body).not.toContain("event: error");
+        expect(events.filter((event) => event.event === "tool_call")).toEqual(
+          [],
+        );
+      }
+    });
+
+    test("withholds only the transcript call when another call is allowed", async () => {
+      vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+        () => {
+          const client = createAnthropicTestClient({
+            nonStreamingToolUse: {
+              name: "Bash",
+              input: { command: "cat /tmp/tasks/a1.output" },
+            },
+          });
+          const create = client.messages.create;
+          client.messages.create = async (params) => {
+            const response = await create(params);
+            if ("content" in response) {
+              response.content.push({
+                type: "tool_use",
+                id: "toolu_allowed_weather",
+                name: "get_weather",
+                input: { location: "SF" },
+                caller: { type: "direct" },
+              });
+            }
+            return response;
+          };
+          return client as never;
+        },
+      );
       const body = payload(false);
       body.tools.push({
-        name,
-        description: "Local file access",
+        name: "Bash",
+        description: "Run a local command",
         input_schema: { type: "object", properties: {} },
       });
       const response = await app.inject({
@@ -3645,13 +3708,22 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         headers: {
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.0 (external, cli)",
-          "x-claude-code-session-id": "raw-transcript-parent",
+          "x-claude-code-session-id": "mixed-transcript-parent",
         },
         payload: body,
       });
-      expect(response.statusCode, response.body).toBe(409);
-      expect(response.body).toContain("withheld raw child transcript access");
-      expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      const calls = response
+        .json()
+        .content.filter((block: { type: string }) => block.type === "tool_use");
+      expect(calls.map((call: { name: string }) => call.name)).toEqual([
+        "archestra__get_remedy_plans",
+        "get_weather",
+      ]);
+      expect(events.filter((event) => event.event === "tool_call")).toEqual([
+        expect.objectContaining({ tool: "get_weather" }),
+      ]);
     });
 
     test("refuses a Claude child spawn when the native runtime did not prepare its fork", async () => {
@@ -3833,7 +3905,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ])("a Claude child return crosses as exact runtime bytes before the parent sees it (stream=%s)", async (stream) => {
       config.openappa.offerSigningSecret = secret;
       const session = `child-return-${stream ? "stream" : "buffered"}`;
-      const rawMarker = "REPORT-RAW-KOALA-0831";
+      const rawMarker = "REPORT-RAW-KOALA-0831 /tmp/subagents/agent-a1.jsonl";
       const admitted = "SUMMARY(24 characters): safe";
       const spawn = {
         description: "Read the report",
@@ -5490,6 +5562,60 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     "user-agent": "opencode/1.18.29",
   });
 
+  test.each([
+    ["allowed", false],
+    ["blocked", true],
+  ])("serves a proxy-only OpenCode client when a tool is %s", async (_label, blocked) => {
+    const dispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      if (blocked && JSON.parse(raw).event === "tool_call")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] This tool is blocked by policy",
+        });
+      return dispatch?.(raw);
+    });
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
+      const client = createOpenAiTestClient({
+        nonStreamingToolCalls: [
+          { id: "call_weather", name: "get_weather", arguments: "{}" },
+        ],
+      });
+      const create = client.chat.completions.create;
+      client.chat.completions.create = async (params) => {
+        providerBodies.push(structuredClone(params));
+        return create(params);
+      };
+      return client as never;
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...openCodeHeaders(),
+        "x-appa-session-id": `proxy-only-${blocked ? "blocked" : "allowed"}`,
+      },
+      payload: {
+        ...openCodePayload(),
+        stream: false,
+        tools: openCodePayload().tools.slice(0, 1),
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const message = response.json().choices[0].message;
+    if (blocked) {
+      expect(message.content).toContain("This tool is blocked by policy");
+      expect(message.content).toContain("MCP gateway");
+      expect(message.tool_calls ?? []).toHaveLength(0);
+    } else {
+      expect(message.tool_calls[0].function.name).toBe("get_weather");
+    }
+    expect(JSON.stringify(providerBodies)).not.toContain("archestra__");
+  });
+
   test("marks a fresh Codex root when its native session arrives in client metadata", async () => {
     config.openappa.offerSigningSecret =
       "test-context-secret-with-32-characters";
@@ -5539,7 +5665,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     expect(JSON.stringify(providerBodies)).not.toContain("protected session");
   });
 
-  test("prepares an OpenCode task fork through the Responses API", async () => {
+  test("gates an OpenCode task fork without inventing a gateway notice tool", async () => {
     vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
       () =>
         ({
@@ -5610,9 +5736,8 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     const unprepared = await send(OPENCODE_FORK_SESSION);
     expect(unprepared.statusCode, unprepared.body).toBe(200);
     expect(unprepared.body).toContain("context_control");
-    expect(unprepared.json().output[0].name).toBe(
-      "archestra__get_remedy_plans",
-    );
+    expect(unprepared.json().output[0].type).toBe("message");
+    expect(unprepared.body).toContain("Connect the MCP gateway");
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "cancel_call",

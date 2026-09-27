@@ -499,6 +499,7 @@ export function EditConnectorDialog({
         <ResourceAccessSection
           resource="knowledgeConnector"
           id={connector.id}
+          standalone
         />
       </div>
       <div hidden={activeSection !== "advanced"} className="space-y-4">

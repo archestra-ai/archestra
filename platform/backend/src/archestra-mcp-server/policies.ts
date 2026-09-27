@@ -21,11 +21,11 @@ import {
   TrustedData,
   UuidIdSchema,
 } from "@/types";
+import { EmptyToolArgsSchema } from "./empty-tool-args-schema";
 import {
   catchError,
   defineArchestraTool,
   defineArchestraTools,
-  EmptyToolArgsSchema,
   errorResult,
   structuredSuccessResult,
 } from "./helpers";

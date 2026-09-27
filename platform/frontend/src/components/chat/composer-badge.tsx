@@ -1,6 +1,6 @@
 import type * as React from "react";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The muted pill used for status chips in the composer toolbar (model source,

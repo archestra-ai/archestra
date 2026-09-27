@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 const DISMISSED_STORAGE_PREFIX = "knowledge-document-ocr-notice-dismissed";
 

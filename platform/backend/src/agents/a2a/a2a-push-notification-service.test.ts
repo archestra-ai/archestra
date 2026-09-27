@@ -1,10 +1,9 @@
-import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   A2AContextModel,
   A2APushNotificationConfigModel,
   A2ATaskModel,
 } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { A2AProtocolTaskState } from "./a2a-protocol";
 import { a2aPushNotificationService } from "./a2a-push-notification-service";
 

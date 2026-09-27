@@ -1,3 +1,4 @@
+// @vitest-environment node
 import {
   EXTERNAL_AGENT_ID_HEADER,
   OPENCODE_CLIENT_ID,

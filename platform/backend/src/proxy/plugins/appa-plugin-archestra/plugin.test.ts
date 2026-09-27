@@ -1199,6 +1199,7 @@ describe("rendering runtime text for this client", () => {
     trusted.request = {
       tools: undefined,
       customTools: new Set(),
+      declaredTools: [],
     };
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
@@ -1249,6 +1250,7 @@ describe("rendering runtime text for this client", () => {
     trusted.request = {
       tools: undefined,
       customTools: new Set(),
+      declaredTools: [{ name: "read_file" }],
     };
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
@@ -1284,6 +1286,10 @@ describe("rendering runtime text for this client", () => {
       });
       expect(cancelCalls).toHaveBeenCalledTimes(1);
       expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      expect(
+        (outcome as { refusal: { contentMessage: string } }).refusal
+          .contentMessage,
+      ).toContain("Connect the MCP gateway");
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
@@ -1989,6 +1995,7 @@ describe("rendering runtime text for this client", () => {
     trusted.request = {
       tools: undefined,
       customTools: new Set(),
+      declaredTools: [],
     };
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
@@ -2392,6 +2399,7 @@ describe("rendering runtime text for this client", () => {
     };
     const identity = {
       mode: "chat" as const,
+      gatewayConnected: true,
       canonicalize: (name: string) => name,
       attestationOf: () => undefined,
       verified: [],
@@ -4239,6 +4247,7 @@ async function boundSessionId(
 function requestIdentity() {
   return {
     mode: "compat" as const,
+    gatewayConnected: true,
     canonicalize: (name: string) => name,
     attestationOf: () => undefined,
     verified: [] as const,

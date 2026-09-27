@@ -3,7 +3,7 @@
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/tailwind";
 
 interface ExternalDocsLinkProps {
   href: string | null | undefined;

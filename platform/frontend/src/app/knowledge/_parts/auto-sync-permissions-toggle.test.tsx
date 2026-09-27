@@ -71,7 +71,7 @@ it("locks the capability for a source that cannot sync permissions", () => {
   expect(screen.getByText("Not supported for this source.")).toBeVisible();
 });
 
-it("locks the capability for someone without the auto-sync permission", () => {
+it("locks the capability for someone without connector update permission", () => {
   setGates({ permitted: false });
   renderToggle();
   expect(toggle()).toBeDisabled();

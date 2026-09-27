@@ -391,7 +391,7 @@ Connectors can preserve document permissions from their source system. Those res
 
 Auto-sync permissions mirrors the source system's access control into Archestra. Each query returns only documents allowed by the latest permission snapshot.
 
-The option appears for every connector. Enabling it requires the Knowledge enterprise feature, a supported connector, and the applicable `knowledgeSourceAutoSync:create` or `update` action.
+The option appears for every connector. Enabling it requires the Knowledge enterprise feature, a supported connector, and permission to create or update knowledge connectors.
 
 Auto-sync permissions works with the connectors marked *Supported* below. *Limited* means the source's access control is mirrored with a coarser audience model — the row says which. The others do not support it yet.
 

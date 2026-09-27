@@ -3431,6 +3431,13 @@
       "when": 1790288193279,
       "tag": "0489_scoped_resource_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 490,
+      "version": "7",
+      "when": 1790512777964,
+      "tag": "0490_remove-knowledge-source-auto-sync-permission",
+      "breakpoints": true
     }
   ]
 }

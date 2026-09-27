@@ -134,7 +134,7 @@ export function CreateConnectorDialog({
   // The user can still switch it off.
   const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
   const { data: hasAutoSyncCreate } = useHasPermissions({
-    knowledgeSourceAutoSync: ["create"],
+    knowledgeSource: ["create"],
   });
   const defaultSyncPermissionsFor = (type: ConnectorType): boolean =>
     Boolean(

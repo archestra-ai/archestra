@@ -209,10 +209,6 @@ The following table lists all available permissions that can be assigned to cust
 | `knowledgeSource:update` | Modify Knowledge Bases and Connectors |
 | `knowledgeSource:delete` | Delete Knowledge Bases and Connectors, view the deleted ones, and restore them |
 | `knowledgeSource:query` | Query knowledge sources for information retrieval |
-| `knowledgeSourceAutoSync:read` | View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings |
-| `knowledgeSourceAutoSync:create` | Create connectors with auto-sync permissions (access mirrors the source system) |
-| `knowledgeSourceAutoSync:update` | Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs |
-| `knowledgeSourceAutoSync:delete` | Delete auto-sync-permissions connectors |
 | `llmCost:read` | View organization-wide LLM usage cost statistics and analytics |
 | `llmLimit:read` | View token usage limits |
 | `llmLimit:create` | Create new usage limits |
@@ -283,7 +279,7 @@ The following table lists all available permissions that can be assigned to cust
 | `serviceAccount:create` | Create service accounts |
 | `serviceAccount:update` | Modify service accounts |
 | `serviceAccount:delete` | Delete service accounts |
-| `simpleView:enable` | Sidebar is collapsed by default on page load |
+| `simpleView:enable` | Collapse the app sidebar by default |
 | `siteNotification:read` | View site-wide notifications |
 | `siteNotification:create` | Create new site notifications |
 | `siteNotification:update` | Modify site notifications |

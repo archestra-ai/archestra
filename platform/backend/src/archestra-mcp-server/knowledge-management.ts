@@ -26,7 +26,6 @@ import {
   buildUserAccessControlList,
   checkAutoSyncPermissionSyncSupported,
   checkCanSetAutoSyncPermissionsVisibility,
-  checkHasAutoSyncConnectorPermission,
   didKnowledgeSourceAclInputsChange,
   findAccessTokensForUserCached,
   isTeamScopedWithoutTeams,
@@ -88,12 +87,6 @@ import type { ArchestraContext } from "./types";
 
 // === Constants ===
 
-// Fallback for the userId-less (system) caller, where the permission gate
-// cannot even be evaluated — managing auto-sync visibility always requires an
-// identified user holding the knowledgeSourceAutoSync permission.
-const AUTO_SYNC_REQUIRES_PERMISSION_ERROR =
-  "Auto-sync-permissions connectors require an authenticated user with the auto-sync connectors permission";
-
 const KnowledgeBaseCreateToolArgsSchema = z
   .object({
     initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
@@ -143,7 +136,7 @@ const ConnectorCreateToolArgsSchema = z
       .boolean()
       .optional()
       .describe(
-        "Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync connectors permission and a connector type that supports it.",
+        "Mirror each document's access control from the source, so a query only returns what the caller could open there. Requires an enterprise license and a connector type that supports it.",
       ),
   })
   .strict();
@@ -1040,20 +1033,13 @@ async function handleCreateKnowledgeConnector(params: {
       if (!parsedConnectorType.success) {
         return errorResult(`Unknown connector type: ${args.connector_type}`);
       }
-      // Same gate as the REST create route: beta flag + enterprise license +
-      // connector-type support + knowledgeSourceAutoSync:create.
-      const violation = context.userId
-        ? await checkCanSetAutoSyncPermissionsVisibility({
-            userId: context.userId,
-            organizationId: context.organizationId,
-            connectorType: parsedConnectorType.data,
-            action: "create",
-          })
-        : null;
-      if (!context.userId || violation) {
-        return errorResult(
-          violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
-        );
+      // The tool already requires connector create; permission sync adds the
+      // enterprise and connector capability checks.
+      const violation = await checkCanSetAutoSyncPermissionsVisibility({
+        connectorType: parsedConnectorType.data,
+      });
+      if (violation) {
+        return errorResult(violation.message);
       }
     }
 
@@ -1157,7 +1143,6 @@ async function handleGetKnowledgeConnectors(params: {
     const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
       organizationId: context.organizationId,
       canReadAll: access?.canReadAll,
-      canManageAutoSync: access?.canManageAutoSync,
       viewerTeamIds: access?.teamIds,
       viewerUserId: access?.userId,
       environmentId: agentEnvironmentId,
@@ -1287,37 +1272,14 @@ async function handleUpdateKnowledgeConnector(params: {
       );
     }
     if (!existingConnector.syncPermissionsFromSource && nextSync) {
-      // Same transition gate as the REST update route: beta flag + enterprise
-      // license + connector-type support + knowledgeSourceAutoSync:update.
-      const violation = context.userId
-        ? await checkCanSetAutoSyncPermissionsVisibility({
-            userId: context.userId,
-            organizationId: context.organizationId,
-            connectorType: existingConnector.connectorType,
-            action: "update",
-          })
-        : null;
-      if (!context.userId || violation) {
-        return errorResult(
-          violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
-        );
+      // The tool already requires connector update.
+      const violation = await checkCanSetAutoSyncPermissionsVisibility({
+        connectorType: existingConnector.connectorType,
+      });
+      if (violation) {
+        return errorResult(violation.message);
       }
     } else if (existingConnector.syncPermissionsFromSource) {
-      // Mutating a connector that already carries the auto-sync visibility
-      // (or switching it away): mirrors the REST update route's dedicated
-      // permission check.
-      const violation = context.userId
-        ? await checkHasAutoSyncConnectorPermission({
-            userId: context.userId,
-            organizationId: context.organizationId,
-            action: "update",
-          })
-        : null;
-      if (!context.userId || violation) {
-        return errorResult(
-          violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
-        );
-      }
       if (nextSync) {
         const unsupported = checkAutoSyncPermissionSyncSupported(
           existingConnector.connectorType,
@@ -1419,21 +1381,6 @@ async function handleDeleteKnowledgeConnector(params: {
         ))
     ) {
       return knowledgeConnectorNotFound(args.id);
-    }
-    if (existing.syncPermissionsFromSource) {
-      // Mirrors the REST delete route's dedicated permission check.
-      const violation = context.userId
-        ? await checkHasAutoSyncConnectorPermission({
-            userId: context.userId,
-            organizationId: context.organizationId,
-            action: "delete",
-          })
-        : null;
-      if (!context.userId || violation) {
-        return errorResult(
-          violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
-        );
-      }
     }
     // Shared service so this MCP path cancels queued syncs + invalidates the
     // cache identically to the REST route (a bare model soft-delete would skip
@@ -1733,9 +1680,8 @@ function knowledgeConnectorNotFound(id: string) {
 }
 
 /**
- * Resolve a connector the caller may MANAGE (org match + management
- * visibility: team-scoped needs team membership, auto-sync-permissions needs
- * knowledgeSource admin). Assignment tools route through this so referencing
+ * Resolve a connector the caller may manage through its grants. Assignment
+ * tools route through this so referencing
  * a connector by id can't bypass the visibility rules the list/get tools
  * enforce. Returns null when the connector should read as "not found".
  */

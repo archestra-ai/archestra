@@ -29,17 +29,12 @@ export function AutoSyncPermissionsToggle({
   onEnabledChange: (enabled: boolean) => void;
   /** Whether the chosen connector type's implementation supports permission sync. */
   supported: boolean;
-  /**
-   * Which knowledgeSourceAutoSync action the backend will require: "create"
-   * for the create-connector flow, "update" when editing an existing one.
-   */
+  /** Connector action required for the create or edit flow. */
   permissionAction: "create" | "update";
 }) {
   const enterprise = useEnterpriseFeature("knowledgeBase");
-  // Turning it on requires the dedicated knowledgeSourceAutoSync permission
-  // (admin-only by default; the backend rejects everyone else).
   const { data: hasPermission } = useHasPermissions({
-    knowledgeSourceAutoSync: [permissionAction],
+    knowledgeSource: [permissionAction],
   });
 
   const lockReason = !supported

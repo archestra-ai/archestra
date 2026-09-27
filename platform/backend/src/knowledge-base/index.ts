@@ -9,7 +9,6 @@ export {
   buildUserAccessControlList,
   checkAutoSyncPermissionSyncSupported,
   checkCanSetAutoSyncPermissionsVisibility,
-  checkHasAutoSyncConnectorPermission,
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,

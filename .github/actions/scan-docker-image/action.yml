@@ -12,9 +12,9 @@ inputs:
     required: false
     default: ""
   concurrent:
-    description: "Scan images concurrently. Disable for local:// byte indexing because Scout shares an indexing cache."
+    description: "Scan images concurrently. Scout's shared indexing cache can lock when two images are indexed at once."
     required: false
-    default: "true"
+    default: "false"
   dockerhub-user:
     description: "Docker Hub username for Scout authentication"
     required: true
@@ -124,8 +124,9 @@ runs:
             pids+=("")
             statuses+=("0")
           else
+            status=$?
             pids+=("")
-            statuses+=("$?")
+            statuses+=("$status")
           fi
           logs+=("$log")
         done
@@ -138,9 +139,9 @@ runs:
             status=0
           else
             status=$?
-            if [ "$status" -gt "$result" ]; then
-              result=$status
-            fi
+          fi
+          if [ "$status" -gt "$result" ]; then
+            result=$status
           fi
           echo "::group::Docker Scout CVEs: ${images[$index]}"
           cat "${logs[$index]}"

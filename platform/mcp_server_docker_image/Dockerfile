@@ -156,6 +156,9 @@ RUN apk add --no-cache \
    # upstream), so this moves to the same 1.26.6 toolchain the platform image's
    # go-builder stage already uses.
    apk upgrade --no-cache nodejs bind openssl zlib expat sqlite-libs && \
+   # The pinned build can keep bind 9.20.26-r0 after Alpine publishes security
+   # fixes. Require the 9.20.29-r0 release that fixes its seven HIGH CVEs.
+   apk add --no-cache --upgrade "bind>=9.20.29-r0" && \
    apk add --no-cache --upgrade "curl>=8.22.0-r0" "libcurl>=8.22.0-r0" \
        "util-linux>=2.41.6-r1" && \
    # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,

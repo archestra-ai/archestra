@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0-rc.24](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.23...platform-v1.4.0-rc.24) (2026-09-27)
+
+
+### Features
+
+* **frontend:** simplify Knowledge settings ([#8236](https://github.com/archestra-ai/archestra/issues/8236)) ([f9e158f](https://github.com/archestra-ai/archestra/commit/f9e158f013ccb7ce1c17fca6715c9d9d3fa4f1e7))
+
 ## [1.4.0-rc.23](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.22...platform-v1.4.0-rc.23) (2026-09-27)
 
 

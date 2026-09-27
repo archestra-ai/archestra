@@ -576,6 +576,9 @@ describe("KnowledgeSettingsPage", () => {
         },
       ];
       renderPage();
+      await user.click(
+        screen.getByRole("button", { name: "Advanced options" }),
+      );
 
       await user.click(getRerankerModelTrigger());
 
@@ -736,7 +739,7 @@ describe("KnowledgeSettingsPage", () => {
 
       expect(screen.getByText("Embedding index locked")).toBeInTheDocument();
       expect(
-        screen.getByText(/Drop the index to change models/),
+        screen.getByText(/Changing models re-embeds documents/),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Drop index" }),
@@ -937,7 +940,29 @@ describe("KnowledgeSettingsPage", () => {
   });
 
   describe("reranking section", () => {
-    it("shows reranking configuration section", () => {
+    it("shows reranking and OCR while keeping tuning controls closed", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+        ocrChatApiKeyId: null,
+        ocrModel: null,
+      };
+      renderPage();
+
+      expect(screen.getByText("Document OCR")).toBeVisible();
+      expect(screen.getByText("Select an OCR API key first...")).toBeVisible();
+      expect(
+        screen.getByText("Select a reranker API key first..."),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("spinbutton", { name: "Term Saturation" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps tuning controls out of the initial view until expanded", async () => {
+      const user = userEvent.setup();
       mockOrganization = {
         embeddingChatApiKeyId: null,
         embeddingModel: null,
@@ -947,8 +972,34 @@ describe("KnowledgeSettingsPage", () => {
       renderPage();
 
       expect(
-        screen.getByText("Search Ranking Configuration"),
-      ).toBeInTheDocument();
+        screen.queryByRole("spinbutton", { name: "Term Saturation" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("combobox", { name: "Context generation" }),
+      ).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: /Advanced options/ }),
+      );
+
+      expect(
+        screen.getByRole("spinbutton", { name: "Term Saturation" }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("combobox", { name: "Context generation" }),
+      ).toBeVisible();
+    });
+
+    it("shows reranking configuration section", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      renderPage();
+
+      expect(screen.getByText("Search ranking")).toBeInTheDocument();
     });
 
     it("saves per-passage context generation independently", async () => {
@@ -961,6 +1012,9 @@ describe("KnowledgeSettingsPage", () => {
         kbContextualRetrievalMode: "document",
       };
       renderPage();
+      await user.click(
+        screen.getByRole("button", { name: /Advanced options/ }),
+      );
 
       const mode = screen.getByRole("combobox", {
         name: "Context generation",
@@ -992,6 +1046,7 @@ describe("KnowledgeSettingsPage", () => {
           ? "document"
           : false) as unknown as typeof useFeature);
       renderPage();
+      fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
 
       expect(
         screen.getByRole("combobox", { name: "Context generation" }),
@@ -1018,6 +1073,7 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
+      fireEvent.click(screen.getByRole("button", { name: "Advanced options" }));
       expect(
         screen.getByText("Select a reranker API key first..."),
       ).toBeInTheDocument();
@@ -1041,10 +1097,13 @@ describe("KnowledgeSettingsPage", () => {
         },
       ];
       renderPage();
+      await user.click(
+        screen.getByRole("button", { name: "Advanced options" }),
+      );
 
       await user.click(
         screen.getByRole("button", {
-          name: "Clear reranking configuration",
+          name: "Clear reranking",
         }),
       );
       await user.click(screen.getByRole("button", { name: "Save" }));
@@ -1120,8 +1179,11 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
+      await user.click(
+        screen.getByRole("button", { name: "Advanced options" }),
+      );
       const rerankingSection = screen
-        .getByText("Search Ranking Configuration")
+        .getByText("Search ranking")
         .closest("section");
       expect(rerankingSection).not.toBeNull();
       await user.click(
@@ -1160,8 +1222,11 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
+      await user.click(
+        screen.getByRole("button", { name: "Advanced options" }),
+      );
       const rerankingSection = screen
-        .getByText("Search Ranking Configuration")
+        .getByText("Search ranking")
         .closest("section");
       expect(rerankingSection).not.toBeNull();
       await user.click(
@@ -1185,13 +1250,15 @@ describe("KnowledgeSettingsPage", () => {
       renderPage();
 
       // Loading spinner should be present
-      expect(
-        screen.queryByText("Embedding Configuration"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText("Embedding model")).not.toBeInTheDocument();
     });
   });
 
   describe("keyword ranking section", () => {
+    const renderAdvancedPage = () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
+    };
     const baseOrg = {
       embeddingChatApiKeyId: null,
       embeddingModel: null,
@@ -1214,11 +1281,9 @@ describe("KnowledgeSettingsPage", () => {
     it("shows the BM25 factors — a saved override and the deployment default — as plain values", () => {
       mockOrganization = { ...baseOrg, kbBm25K1: 1.5, kbBm25B: null };
       mockFeatures();
-      renderPage();
+      renderAdvancedPage();
 
-      expect(
-        screen.getByText("Search Ranking Configuration"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Search ranking")).toBeInTheDocument();
       expect(screen.getByText("Keyword ranking")).toBeInTheDocument();
       const k1 = screen.getByLabelText("Term Saturation") as HTMLInputElement;
       const b = screen.getByLabelText(
@@ -1252,11 +1317,10 @@ describe("KnowledgeSettingsPage", () => {
         lastRefreshedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
       });
       const { unmount: unmountReady } = renderPage();
-      // On the heading line, right of the subsection title.
-      const heading = screen.getByRole("heading", { name: "Keyword ranking" });
-      expect(heading.parentElement).toHaveTextContent(
-        /Ready · statistics refreshed 5 minutes ago/,
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Advanced options" }));
+      expect(
+        screen.getByText("Keyword ranking").parentElement,
+      ).toHaveTextContent(/Ready · statistics refreshed 5 minutes ago/);
       unmountReady();
 
       mockStatus({
@@ -1264,6 +1328,7 @@ describe("KnowledgeSettingsPage", () => {
         nextRefreshAt: new Date(Date.now() + 40 * 60_000).toISOString(),
       });
       const { unmount: unmountPending } = renderPage();
+      fireEvent.click(screen.getByRole("button", { name: "Advanced options" }));
       expect(screen.getByText("Building statistics")).toBeInTheDocument();
       expect(screen.getByText(/ready in 40 minutes/)).toBeInTheDocument();
       // The consequence moved to the hover detail to keep the line glanceable.
@@ -1277,6 +1342,7 @@ describe("KnowledgeSettingsPage", () => {
         refreshing: true,
       });
       const { unmount: unmountRefreshing } = renderPage();
+      fireEvent.click(screen.getByRole("button", { name: "Advanced options" }));
       expect(screen.getByText("Updating statistics…")).toBeInTheDocument();
       unmountRefreshing();
 
@@ -1285,7 +1351,7 @@ describe("KnowledgeSettingsPage", () => {
         lastRefreshFailed: true,
         nextRefreshAt: new Date(Date.now() + 60_000).toISOString(),
       });
-      renderPage();
+      renderAdvancedPage();
       expect(screen.getByText("Statistics update failed")).toBeInTheDocument();
       expect(screen.getByText(/retrying in 1 minute/)).toBeInTheDocument();
       // A flag, never the raw database error: one rebuild covers every
@@ -1307,7 +1373,7 @@ describe("KnowledgeSettingsPage", () => {
           lastRefreshFailed: false,
         },
       } as unknown as ReturnType<typeof useKeywordRankingStatus>);
-      renderPage();
+      renderAdvancedPage();
 
       expect(screen.getByText("No documents indexed yet")).toBeInTheDocument();
       expect(
@@ -1329,7 +1395,7 @@ describe("KnowledgeSettingsPage", () => {
         kbBm25B: null,
       };
       mockFeatures();
-      renderPage();
+      renderAdvancedPage();
 
       fireEvent.change(screen.getByLabelText("Term Saturation"), {
         target: { value: "1.6" },
@@ -1346,7 +1412,7 @@ describe("KnowledgeSettingsPage", () => {
     it("keeps a factor edit through a refetch that does not change the saved factors", async () => {
       mockOrganization = { ...baseOrg, kbBm25K1: null, kbBm25B: null };
       mockFeatures();
-      renderPage();
+      renderAdvancedPage();
 
       fireEvent.change(screen.getByLabelText("Term Saturation"), {
         target: { value: "1.6" },
@@ -1380,7 +1446,7 @@ describe("KnowledgeSettingsPage", () => {
           lastRefreshFailed: false,
         },
       } as unknown as ReturnType<typeof useKeywordRankingStatus>);
-      renderPage();
+      renderAdvancedPage();
 
       expect(screen.getByText(/ready shortly/)).toBeInTheDocument();
       expect(screen.queryByText(/ago/)).not.toBeInTheDocument();
@@ -1393,7 +1459,7 @@ describe("KnowledgeSettingsPage", () => {
         data: false,
         isPending: false,
       } as ReturnType<typeof useHasPermissions>);
-      renderPage();
+      renderAdvancedPage();
 
       // The status line still reports where ranking stands — that only needs
       // knowledgeSettings:read — but neither factor can be edited.
@@ -1404,7 +1470,7 @@ describe("KnowledgeSettingsPage", () => {
     it("orders ranking sections and links each one to its matching docs", () => {
       mockOrganization = { ...baseOrg, kbBm25K1: null, kbBm25B: null };
       mockFeatures();
-      renderPage();
+      renderAdvancedPage();
 
       expect(
         screen
@@ -1425,7 +1491,7 @@ describe("KnowledgeSettingsPage", () => {
       mockOrganization = { ...baseOrg, kbBm25K1: 1.5, kbBm25B: 0.3 };
       mockFeatures();
       mockUpdateKnowledgeSettings = vi.fn().mockResolvedValue({});
-      renderPage();
+      renderAdvancedPage();
 
       const k1 = screen.getByLabelText("Term Saturation");
       const b = screen.getByLabelText("Length Normalization");
@@ -1444,7 +1510,7 @@ describe("KnowledgeSettingsPage", () => {
       const user = userEvent.setup();
       mockOrganization = { ...baseOrg, kbBm25K1: 1.5, kbBm25B: null };
       mockFeatures();
-      renderPage();
+      renderAdvancedPage();
 
       const k1 = screen.getByLabelText("Term Saturation") as HTMLInputElement;
       await user.clear(k1);

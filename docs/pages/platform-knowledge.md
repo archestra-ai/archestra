@@ -67,14 +67,14 @@ flowchart LR
 A short primer on the terms behind the settings, and how Archestra puts them together. Each search runs the stages below in order, and every stage is on by default except reranking.
 
 - **RAG (retrieval-augmented generation).** The agent does not know your documents. For each question it retrieves the most relevant passages and answers from them. Retrieval quality caps answer quality — the ranking below decides what the agent gets to read.
-- **Vector ranking (semantic search).** At sync, the embedding model turns every chunk into a vector. At query time the question is embedded the same way and chunks are ranked by how close their vectors are — close in meaning, even when the words differ. Configured under [Embedding Configuration](#embedding-configuration); pgvector does the arithmetic.
+- **Vector ranking (semantic search).** At sync, the embedding model turns every chunk into a vector. At query time the question is embedded the same way and chunks are ranked by how close their vectors are — close in meaning, even when the words differ. Configured under [Embedding Model](#embedding-model); pgvector does the arithmetic.
 - **Keyword ranking.** Passages that contain the question's words are ranked by how well the words match. It catches what embeddings blur — an identifier, an error code, a product name. Fine-tuned under [Keyword Ranking](#keyword-ranking).
 - **BM25.** The standard keyword scoring function, used by Lucene, Elasticsearch, and most search engines — and Archestra's keyword ranker. Rare words count more than common ones, a word that repeats earns less each time, and long passages are held back, so a short passage that answers directly beats a long one that merely repeats the words. Archestra computes it in plain SQL, so it runs on any PostgreSQL with no extension.
 - **Hybrid search.** Vector and keyword ranking run together, each finding what the other misses: the meaning without the words, the words without the meaning. Archestra always runs both; `ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED=false` drops the keyword leg.
 - **Reciprocal Rank Fusion (RRF).** Vector and keyword scores are on different scales, so the two lists are merged by rank position, not score. A chunk near the top of both lists wins. Nothing to configure.
-- **Cross-encoder reranking.** A model reads the question and one chunk together and scores that pair — more accurate than comparing vectors, and far more expensive, so it runs only on the fused shortlist. In Archestra the reranking model is a chat model, or a Cohere Rerank model (a purpose-built cross-encoder). Optional, configured under [Search Ranking Configuration](#search-ranking-configuration).
+- **Cross-encoder reranking.** A model reads the question and one chunk together and scores that pair — more accurate than comparing vectors, and far more expensive, so it runs only on the fused shortlist. In Archestra the reranking model is a chat model, or a Cohere Rerank model (a purpose-built cross-encoder). Optional, configured under [Search Ranking](#search-ranking).
 
-In order, a search is: question → [query expansion](#querying) → vector ranking and keyword ranking in parallel → RRF → reranking → [access filtering](#querying) → [context expansion](#context-expansion). Keyword ranking and reranking are two stages of one search, not alternatives: keyword ranking decides which chunks reach the shortlist, reranking decides the final order of that shortlist. Both live under **Settings > Knowledge > Search Ranking Configuration**, in that order.
+In order, a search is: question → [query expansion](#querying) → vector ranking and keyword ranking in parallel → RRF → reranking → [access filtering](#querying) → [context expansion](#context-expansion). Keyword ranking and reranking are two stages of one search, not alternatives: keyword ranking decides which chunks reach the shortlist, reranking decides the final order of that shortlist. Both live under **Settings > Knowledge > Search Ranking**, in that order.
 
 ```mermaid
 flowchart LR
@@ -90,7 +90,7 @@ Why it is set up this way: BM25 is simply better than PostgreSQL's built-in `ts_
 
 #### Keyword Ranking
 
-Step 1 of search ranking. Passages that contain the question's words are scored with BM25 and merged with the passages that match by meaning. There is nothing to set up. Two factors under **Settings > Knowledge > Search Ranking Configuration** fine-tune it — a change applies to the next search, and nothing is re-indexed. The defaults suit almost every knowledge base.
+Step 1 of search ranking. Passages that contain the question's words are scored with BM25 and merged with the passages that match by meaning. There is nothing to set up. Two factors under **Settings > Knowledge > Search ranking > Advanced options** fine-tune it — a change applies to the next search, and nothing is re-indexed. The defaults suit almost every knowledge base.
 
 - **Term Saturation** (`k1`, 0–10, default 1.2) — how much repeating a word keeps helping a passage. Lower it when long, repetitive documents keep crowding out concise answers; raise it when the best passages genuinely use a term over and over.
 - **Length Normalization** (`b`, 0–1, default 0.75) — how much long passages are held back. Lower it when long, detailed passages deserve an equal chance; raise it when short, focused passages should pull ahead.
@@ -103,7 +103,7 @@ BM25 scores from statistics that Archestra rebuilds in the background — right 
 
 Step 2 of search ranking. The reranking model reads each shortlisted chunk together with the question, scores it, reorders the list, and drops the chunks it finds irrelevant. A chunk that matched on words alone — the right terms in the wrong context — falls away here.
 
-Reranking is optional. Without it, results come back in fused order. Query expansion and [contextual retrieval](#contextual-retrieval) use the same model, so they are off too. Reranking costs one model call per search, recorded in [LLM cost statistics](/docs/platform-llm-proxy) under "Knowledge - Reranker". Set it up under [Search Ranking Configuration](#search-ranking-configuration).
+Reranking is optional. Without it, results come back in fused order. Query expansion and [contextual retrieval](#contextual-retrieval) use the same model, so they are off too. Reranking costs one model call per search, recorded in [LLM cost statistics](/docs/platform-llm-proxy) under "Knowledge - Reranker". Set it up under [Search Ranking](#search-ranking).
 
 ### Citations
 
@@ -115,7 +115,7 @@ In the built-in chat, the agent also marks each claim with a numbered reference 
 
 Chunking separates a passage from the context it sits in. A chunk reading "the limit was raised to 5,000 per minute" is a poor match for "what is the rate limit on the billing API", because neither the product nor the subject appears in it.
 
-Under **Settings > Knowledge > Search Ranking Configuration**, choose how context is generated:
+Under **Settings > Knowledge > Search ranking > Advanced options**, choose how context is generated:
 
 - **Disabled** — index each chunk without generated context.
 - **Per document — lower cost** — generate one document-wide context and index it with every chunk. This costs one model call per changed document.
@@ -169,16 +169,14 @@ Chunk sizes and contextual retrieval apply at ingest. A normal sync updates chan
 
 Open **Settings > Knowledge**. An embedding model must be set before Knowledge Bases can be used. Document OCR, a reranking model, and [contextual retrieval](#contextual-retrieval) are optional. Keyword ranking needs no setup, though two factors can be tuned — see [Keyword Ranking](#keyword-ranking).
 
-### Embedding Configuration
-
-![Embedding Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_embedding-configuration.webp)
+### Embedding Model
 
 Pick the API key and embedding model. The embedding model vectorizes ingested documents so they can be queried semantically. The same model is used for both indexing and querying, which is why it is locked once saved.
 
 - **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1408, 1536, 3072. Keys connected through a subscription sign-in (a SuperGrok login, for example) do not appear — Knowledge needs an API key.
 - **Model** — any embedding-capable model exposed by the selected key.
 
-To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions and input modalities cannot be edited until the configuration is dropped.
+To change the embedding model, click **Drop index** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions and input modalities cannot be edited until the configuration is dropped.
 
 ### Image Embedding
 
@@ -203,15 +201,13 @@ Cohere embedding models come from the Cohere key's model list in **LLM Providers
 
 With a text-only embedding model, image files are skipped and the connector page says so. Scanned pages inside PDFs are a separate case: [Document OCR](#document-ocr) transcribes them whatever the embedding model is. It does not read standalone image files.
 
-### Search Ranking Configuration
+### Search Ranking
 
-![Search Ranking Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge_search-ranking.webp)
+Search ranking shows reranking directly, with keyword ranking and contextual retrieval under Advanced options. See [Query Results Ranking](#query-results-ranking) for the two ranking stages.
 
-One card for both ranking stages — what each does is described under [Query Results Ranking](#query-results-ranking).
+Open **Advanced options** to configure keyword ranking and contextual retrieval. Keyword ranking is always on. Its two settings — Term Saturation and Length Normalization — are explained under [Keyword Ranking](#keyword-ranking); they show the defaults until you change them.
 
-**Keyword ranking** is always on. Its two settings — Term Saturation and Length Normalization — are explained under [Keyword Ranking](#keyword-ranking); they show the defaults until you change them.
-
-**Reranking** takes the model that scores and reorders search results by relevance. It is optional; without it, results come back in fused order.
+Choose a model to reorder results by relevance. Reranking is optional; without it, results come back in fused order.
 
 - **Key** — any LLM provider API key. Subscription sign-ins do not appear here either.
 - **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
@@ -222,9 +218,7 @@ A chat reranker scores passages by returning a JSON object, so Archestra asks th
 
 ### Document OCR
 
-![Document OCR card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge_document-ocr.webp)
-
-A scanned PDF has no text layer, so connectors cannot index it — the run reports it under "No text extracted". Configure Document OCR and syncs transcribe those pages with a vision model instead. The text becomes searchable like any other document.
+A scanned PDF has no text layer, so connectors cannot index it — the run reports it under "No text extracted". Configure Document OCR with a vision model. Connector syncs then transcribe those pages. The text becomes searchable like any other document.
 
 - **Key** — an API key on a provider that accepts PDF input: Anthropic, OpenAI, Gemini, Bedrock, Azure, OpenRouter, or vLLM.
 - **Model** — a vision-capable model from that provider. Self-hosted models (a vLLM server, for example) sync without modality metadata: mark the model's image or PDF input modality in **LLM Providers > Models** to make it selectable. **Test connection** sends a synthetic PDF page to verify the pair works.
@@ -449,7 +443,7 @@ Global admins can also delete an entry from the trash for good, with **Delete pe
 
 ## Supported Connectors
 
-Archestra ships with these built-in connector types. Go to **Settings → Knowledge → Available connectors** to remove any your organization does not allow. A connector type you remove disappears from the pickers, and the API refuses to configure it. Connectors that already exist keep syncing until you delete them.
+Archestra ships with these built-in connector types. Go to **Settings → Knowledge → Available connectors**. A connector type you remove disappears from the pickers, and the API refuses to configure it. Connectors that already exist keep syncing until you delete them.
 
 A sync that indexes nothing, on a connector that holds nothing, finishes as **No documents** rather than a success. The run names the likely cause -- content that was never shared with the credential, a folder that identity cannot see, or a file-type filter that excludes everything. A later sync that finds no changes is an ordinary success.
 

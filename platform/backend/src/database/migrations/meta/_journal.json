@@ -3435,8 +3435,22 @@
     {
       "idx": 490,
       "version": "7",
-      "when": 1790533701472,
-      "tag": "0490_normalize-openappa-chat-origin",
+      "when": 1790433957125,
+      "tag": "0490_openappa_receipts_organization",
+      "breakpoints": true
+    },
+    {
+      "idx": 491,
+      "version": "7",
+      "when": 1790519899310,
+      "tag": "0491_remove-knowledge-source-auto-sync-permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 492,
+      "version": "7",
+      "when": 1790539489018,
+      "tag": "0492_normalize-openappa-chat-origin",
       "breakpoints": true
     }
   ]

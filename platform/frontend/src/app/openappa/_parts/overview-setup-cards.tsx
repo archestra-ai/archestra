@@ -23,7 +23,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useGuardrailsDeployment,
+  useUpdateGuardrailsDeployment,
+} from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -34,8 +40,8 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 /**
  * Where OpenAPPA setup stands. A fresh organization sees only the first step,
  * saving a policy in the policy chat (which turns enforcement on). After that,
- * three compact cards report enforcement and GitHub sync and link to the
- * docs, and the first unfinished one is highlighted as the next step.
+ * three compact cards report enforcement (with its switch) and GitHub sync
+ * and link to the docs, and the first unfinished one is highlighted as the next step.
  */
 export function OverviewSetupCards() {
   const { enabled, isFresh } = useOpenAppaSetupState();
@@ -107,6 +113,9 @@ function PolicyStep() {
 
 function EnforcementCard({ next }: { next: boolean }) {
   const { enabled } = useOpenAppaSetupState();
+  const deployment = useGuardrailsDeployment();
+  const update = useUpdateGuardrailsDeployment();
+  const { data: canManage } = useHasPermissions({ organization: ["update"] });
   const appName = useAppName();
   return (
     <StatusCard
@@ -115,28 +124,45 @@ function EnforcementCard({ next }: { next: boolean }) {
       title="Enforcement"
       status={enabled ? <Status done>On</Status> : <Status>Off</Status>}
       description={
-        enabled
-          ? `${appName} checks every tool call against your policy before it runs.`
-          : "Tool calls run unchecked. Turn the guardrail on from the Policy tab."
+        <span>
+          <span>
+            {enabled
+              ? `${appName} checks every tool call against your policy before it runs.`
+              : "Tool calls run unchecked. Turn enforcement on to apply your policy."}
+          </span>
+          {!canManage && (
+            <span> Only administrators can turn enforcement on or off.</span>
+          )}
+        </span>
       }
       action={
-        enabled ? (
-          <OpenAppaChatButton
-            size="sm"
-            variant="outline"
-            promptKey="explainPolicy"
-          >
-            <MessageCircle />
-            <span>Ask about the policy</span>
-          </OpenAppaChatButton>
-        ) : (
-          <Button size="sm" variant={next ? "default" : "outline"} asChild>
-            <Link href="/openappa/policy">
-              <span>Open the policy</span>
-              <ArrowRight />
-            </Link>
-          </Button>
-        )
+        <>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="openappa-overview-enforcement"
+              checked={Boolean(enabled)}
+              disabled={
+                !canManage ||
+                !deployment.data?.featureEnabled ||
+                update.isPending
+              }
+              onCheckedChange={(checked) => update.mutate(checked)}
+            />
+            <Label htmlFor="openappa-overview-enforcement" className="text-sm">
+              Enforce the policy
+            </Label>
+          </div>
+          {enabled && (
+            <OpenAppaChatButton
+              size="sm"
+              variant="outline"
+              promptKey="explainPolicy"
+            >
+              <MessageCircle />
+              <span>Ask about the policy</span>
+            </OpenAppaChatButton>
+          )}
+        </>
       }
     />
   );

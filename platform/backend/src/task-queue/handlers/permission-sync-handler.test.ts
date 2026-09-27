@@ -3,7 +3,6 @@
 
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import config from "@/config";
 
 const mockExecutePass = vi.hoisted(() => vi.fn());
 vi.mock("@/knowledge-base", () => ({
@@ -43,7 +42,6 @@ describe("handlePermissionSync", () => {
     connectorId = randomUUID();
     vi.clearAllMocks();
     mockWithinResumeBudget.mockResolvedValue(true);
-    config.kb.autoSyncPermissionsEnabled = true;
   });
 
   test("a mapping follow-up (refreshAudiences) runs a plain delta pass — every delta verifies audiences", async () => {
@@ -111,18 +109,6 @@ describe("handlePermissionSync", () => {
 
     await handlePermissionSync({ connectorId });
 
-    expect(mockEnqueue).not.toHaveBeenCalled();
-  });
-
-  test("completes as a no-op when the beta flag is disabled", async () => {
-    // A task enqueued before the flag flipped off must not run a pass for a
-    // hidden feature (and must not throw, which would burn retries).
-    config.kb.autoSyncPermissionsEnabled = false;
-    mockExecutePass.mockResolvedValue({ runId: "run-1", status: "success" });
-
-    await handlePermissionSync({ connectorId });
-
-    expect(mockExecutePass).not.toHaveBeenCalled();
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
 

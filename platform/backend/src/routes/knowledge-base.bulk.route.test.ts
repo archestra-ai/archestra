@@ -1,5 +1,4 @@
 import { and, eq } from "drizzle-orm";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -15,7 +14,6 @@ describe("knowledge bases and connectors bulk routes", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    config.kb.autoSyncPermissionsEnabled = true;
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
     // An admin's organization-wide grants reach every knowledge source.

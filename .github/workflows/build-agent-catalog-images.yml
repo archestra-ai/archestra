@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: ""
+      reuse_from_version:
+        description: "Previous main SHA whose images may be reused when inputs are unchanged"
+        required: false
+        type: string
+        default: ""
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -54,6 +59,8 @@ jobs:
       push_image: ${{ inputs.push_to_gcr }}
       auth_provider: gar
       checkout_ref: ${{ inputs.checkout_ref }}
+      reuse_from_version: ${{ inputs.reuse_from_version }}
+      reuse_paths: '["platform/agent_images", "platform/backend/src/static/workspace-files.py", "platform/.dockerignore", ".github/workflows/build-agent-catalog-images.yml"]'
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

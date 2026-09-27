@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowUpRight, FileText, TriangleAlert } from "lucide-react";
+import {
+  ArrowUpRight,
+  CheckCircle2,
+  FileText,
+  TriangleAlert,
+} from "lucide-react";
+import Link from "next/link";
 import {
   CodeBlock,
   CodeBlockCopyButton,
@@ -20,6 +26,8 @@ type PolicyChange = {
   url?: string;
   warnings?: string[];
   errors?: string[];
+  enforcement?: { enabled: boolean; reason?: string };
+  effective?: { error: string | null; batteries: { status: string }[] };
 };
 
 export function OpenAppaPolicyChange({ output }: { output: unknown }) {
@@ -75,6 +83,46 @@ export function OpenAppaPolicyChange({ output }: { output: unknown }) {
           <InlineNoticeText>{error}</InlineNoticeText>
         </InlineNotice>
       ))}
+    </div>
+  );
+}
+
+/** A published result stays visible even when tool details are collapsed. */
+export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
+  const change = parsePolicyChange(output);
+  if (
+    !change ||
+    change.stage === "preview" ||
+    change.delivery !== "revision" ||
+    !Number.isSafeInteger(change.revision) ||
+    (change.revision ?? 0) < 1
+  )
+    return null;
+  const healthy =
+    change.effective?.error === null &&
+    Array.isArray(change.effective.batteries) &&
+    change.effective.batteries.every((battery) => battery.status === "active");
+  const active = healthy && change.enforcement?.enabled === true;
+  return (
+    <div className="mt-4">
+      <InlineNotice variant={active ? "success" : "warning"}>
+        {active ? <CheckCircle2 /> : <TriangleAlert />}
+        <span className="font-medium">{`Saved revision ${change.revision}`}</span>
+        <InlineNoticeText>
+          {active
+            ? "Enforcement confirmed on. New conversations use this policy."
+            : change.effective?.error ||
+              change.enforcement?.reason ||
+              (change.enforcement?.enabled === false
+                ? "Enforcement is off. Check the Policy page."
+                : "Check composition and enforcement on the Policy page.")}
+        </InlineNoticeText>
+        <Button variant="outline" size="sm" className="ml-auto" asChild>
+          <Link href={active ? "/openappa" : "/openappa/policy"}>
+            <span>{active ? "Back to OpenAPPA" : "Check policy"}</span>
+          </Link>
+        </Button>
+      </InlineNotice>
     </div>
   );
 }

@@ -1,16 +1,16 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { Database } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
-import { FormDialog } from "@/components/form-dialog";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -49,6 +49,9 @@ export function EditKnowledgeBaseDialog({
     knowledgeBase.labels ?? [],
   );
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
+    "general",
+  );
 
   const form = useForm<EditKnowledgeBaseFormValues>({
     defaultValues: {
@@ -59,6 +62,7 @@ export function EditKnowledgeBaseDialog({
 
   useEffect(() => {
     if (open) {
+      setActiveSection("general");
       form.reset({
         name: knowledgeBase.name,
         description: knowledgeBase.description ?? "",
@@ -83,79 +87,84 @@ export function EditKnowledgeBaseDialog({
   };
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
       title="Edit Knowledge Base"
       description="Update the knowledge base settings."
-      size="medium"
-      className="max-w-lg"
+      sidebarLabel={form.watch("name") || "Knowledge base"}
+      sidebarDescription="Knowledge base"
+      sidebarIcon={<Database className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={[
+        { id: "general", label: "General" },
+        { id: "permissions", label: "Permissions" },
+      ]}
+      onActiveSectionChange={setActiveSection}
+      onSubmit={form.handleSubmit(handleSubmit)}
+      wrapForm={(content) => <Form {...form}>{content}</Form>}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={updateKnowledgeBase.isPending}>
+            {updateKnowledgeBase.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </>
+      }
     >
-      <Form {...form}>
-        <DialogForm
-          onSubmit={form.handleSubmit(handleSubmit)}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-            <DetailFacts facts={[createdByFact(knowledgeBase.createdBy)]} />
-            <FormField
-              control={form.control}
-              name="name"
-              rules={{ required: "Name is required" }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="My Knowledge Base" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+      <div hidden={activeSection !== "general"} className="space-y-4">
+        <DetailFacts facts={[createdByFact(knowledgeBase.createdBy)]} />
+        <FormField
+          control={form.control}
+          name="name"
+          rules={{ required: "Name is required" }}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Name</FormLabel>
+              <FormControl>
+                <Input placeholder="My Knowledge Base" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description (optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="A short description of this knowledge base"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description (optional)</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="A short description of this knowledge base"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            <ResourceAccessSection
-              resource="knowledgeBase"
-              id={knowledgeBase.id}
-            />
-
-            <AdvancedLabelsSection
-              ref={labelsRef}
-              labels={labels}
-              onLabelsChange={setLabels}
-            />
-          </div>
-
-          <DialogStickyFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={updateKnowledgeBase.isPending}>
-              {updateKnowledgeBase.isPending ? "Saving..." : "Save Changes"}
-            </Button>
-          </DialogStickyFooter>
-        </DialogForm>
-      </Form>
-    </FormDialog>
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
+      </div>
+      <div hidden={activeSection !== "permissions"}>
+        <ResourceAccessSection
+          resource="knowledgeBase"
+          id={knowledgeBase.id}
+          standalone
+        />
+      </div>
+    </TabbedDialogShell>
   );
 }

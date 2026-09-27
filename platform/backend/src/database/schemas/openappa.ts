@@ -114,7 +114,7 @@ export const openappaOperationsTable = pgTable(
   (table) => [
     primaryKey({
       name: "openappa_operations_pk",
-      columns: [table.sessionId, table.operationId],
+      columns: [table.organizationId, table.sessionId, table.operationId],
     }),
     index("openappa_operations_pending_idx")
       .on(table.root)
@@ -142,7 +142,7 @@ export const openappaProcessedResultsTable = pgTable(
   (table) => [
     primaryKey({
       name: "openappa_results_pk",
-      columns: [table.sessionId, table.toolCallId],
+      columns: [table.organizationId, table.sessionId, table.toolCallId],
     }),
     index("openappa_results_pending_idx")
       .on(table.root)

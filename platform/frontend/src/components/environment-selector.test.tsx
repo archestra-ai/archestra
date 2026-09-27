@@ -57,6 +57,28 @@ describe("EnvironmentSelector — Manage environments link", () => {
       screen.getByRole("link", { name: /manage environments/i }),
     ).toHaveAttribute("href", "/settings/environments");
   });
+
+  test("keeps connector help and the default-only note in one paragraph", () => {
+    setCanManageEnvironments(true);
+    render(
+      <EnvironmentSelector
+        value={null}
+        onChange={vi.fn()}
+        resource="knowledgeSource"
+        helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
+      />,
+    );
+
+    const description = screen.getByText(
+      /The environment this connector belongs to/,
+    );
+    expect(description).toHaveTextContent(
+      "The environment this connector belongs to, controlling which gateways and agents can use its knowledge. Only the default environment is available. Manage environments",
+    );
+    expect(description).toContainElement(
+      screen.getByRole("link", { name: "Manage environments" }),
+    );
+  });
 });
 
 describe("EnvironmentSelector — saved value", () => {

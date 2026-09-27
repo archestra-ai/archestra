@@ -16,6 +16,11 @@ on:
         description: "Version tag for the Docker image"
         required: true
         type: string
+      previous_version:
+        description: "Previous release on this branch to carry frontend chunks from; empty skips the carry-over"
+        required: false
+        type: string
+        default: ""
       push_image:
         description: "Whether to push the image to Docker Hub"
         required: true
@@ -69,8 +74,7 @@ jobs:
       # image; keep release builds on the same measured native runners as dev.
       amd64_runner: blacksmith-16vcpu-ubuntu-2404
       arm64_runner: blacksmith-32vcpu-ubuntu-2404-arm
-      # supply-chain-policy: allow-latest internal release channel
-      previous_image: docker.io/archestra/${{ inputs.image_name }}:latest
+      previous_image: ${{ inputs.previous_version && format('docker.io/archestra/{0}:{1}', inputs.image_name, inputs.previous_version) || '' }}
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}

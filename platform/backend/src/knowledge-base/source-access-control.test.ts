@@ -121,7 +121,7 @@ describe("knowledgeSourceAccessControlService", () => {
     ).toBe(false);
   });
 
-  test("blocks auto-sync-permissions connectors for non-admin members but keeps them queryable", async ({
+  test("connectors without a management grant remain queryable through source ACLs", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -138,6 +138,7 @@ describe("knowledgeSourceAccessControlService", () => {
       {
         connectorType: "github",
         syncPermissionsFromSource: true,
+        access: "personal",
       },
     );
 
@@ -147,13 +148,11 @@ describe("knowledgeSourceAccessControlService", () => {
         organizationId: org.id,
       });
 
-    // Management surfaces need the knowledgeSourceAutoSync permission
-    // (admin-only by default)...
+    // This member has no connector management grant.
     expect(
       knowledgeSourceAccessControlService.canAccessConnector(access, connector),
     ).toBe(false);
-    // ...but the member's queries still span the connector — the per-chunk
-    // ACL is the enforcement there.
+    // Queries still span it; the per-chunk ACL enforces access there.
     expect(
       knowledgeSourceAccessControlService.filterQueryableConnectors(access, [
         connector,
@@ -161,7 +160,7 @@ describe("knowledgeSourceAccessControlService", () => {
     ).toEqual([connector]);
   });
 
-  test("managing a permission-sync connector takes the auto-sync permission on top of its read grant", async ({
+  test("a connector read grant also reaches permission-sync connectors", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -208,13 +207,12 @@ describe("knowledgeSourceAccessControlService", () => {
       });
 
     const memberAccess = await context(member.id);
-    expect(memberAccess.canManageAutoSync).toBe(false);
     expect(
       knowledgeSourceAccessControlService.canAccessConnector(
         memberAccess,
         syncConnector,
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       knowledgeSourceAccessControlService.canAccessConnector(
         memberAccess,
@@ -224,13 +222,12 @@ describe("knowledgeSourceAccessControlService", () => {
     const memberList = await KnowledgeBaseConnectorModel.findByOrganization({
       organizationId: org.id,
       canReadAll: memberAccess.canReadAll,
-      canManageAutoSync: memberAccess.canManageAutoSync,
       viewerTeamIds: memberAccess.teamIds,
       viewerUserId: member.id,
     });
-    expect(memberList.map((connector) => connector.id)).toEqual([
-      plainConnector.id,
-    ]);
+    expect(memberList.map((connector) => connector.id).sort()).toEqual(
+      [syncConnector.id, plainConnector.id].sort(),
+    );
     // Queries still span the sync connector for the member.
     const memberQueryable =
       await KnowledgeBaseConnectorModel.findByOrganization({
@@ -245,7 +242,6 @@ describe("knowledgeSourceAccessControlService", () => {
     );
 
     const adminAccess = await context(admin.id);
-    expect(adminAccess.canManageAutoSync).toBe(true);
     expect(
       knowledgeSourceAccessControlService.canAccessConnector(
         adminAccess,
@@ -255,7 +251,6 @@ describe("knowledgeSourceAccessControlService", () => {
     const adminList = await KnowledgeBaseConnectorModel.findByOrganization({
       organizationId: org.id,
       canReadAll: adminAccess.canReadAll,
-      canManageAutoSync: adminAccess.canManageAutoSync,
       viewerTeamIds: adminAccess.teamIds,
       viewerUserId: admin.id,
     });

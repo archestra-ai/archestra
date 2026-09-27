@@ -183,8 +183,13 @@ test('two organizations concurrently start sessions under one client session id,
   const orgB = { ...orgA, organization_id: `shared-id-b-${randomUUID()}` };
   const started = await Promise.all([orgA, orgB].map((session) => hook(session, { event: 'session_start' }, policy)));
   assert.deepEqual(started.map(({ decision }) => decision), ['ack', 'ack']);
-  const calls = await Promise.all([call(orgA, 'a-only', 'read', policy), call(orgB, 'b-only', 'read', policy)]);
+  // Receipts are keyed by organization too, so one call id under one session id is two calls.
+  const calls = await Promise.all([orgA, orgB].map((session) => call(session, 'shared', 'read', policy)));
   assert.deepEqual(calls.map(({ decision }) => decision), ['allow_call', 'allow_call']);
+  const results = await Promise.all([orgA, orgB].map((session) =>
+    hook(session, { event: 'tool_result', tool_call_id: 'shared', output: `from ${session.organization_id}`, outcome: 'success' }, policy)));
+  assert.deepEqual(results.map(({ approved_output }) => approved_output), [orgA, orgB].map(({ organization_id }) => `from ${organization_id}`));
+  assert.equal((await call(orgA, 'a-only', 'read', policy)).decision, 'allow_call');
 
   const { rows } = await client.query(
     'SELECT organization_id, actor, root FROM openappa_sessions WHERE session_id = $1 ORDER BY organization_id',

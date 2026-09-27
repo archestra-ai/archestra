@@ -64,6 +64,51 @@ describe("CompactToolGroup", () => {
     vi.mocked(useExternalMcpSkills).mockReturnValue({ data: [] } as never);
   });
 
+  it("shows the confirmed policy return action while tool details remain collapsed", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name === "archestra__update_guardrails_policy"
+        ? "update_guardrails_policy"
+        : null,
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "publish",
+              toolName: "archestra__update_guardrails_policy",
+              part: {
+                type: "tool-archestra__update_guardrails_policy",
+                state: "output-available",
+                toolCallId: "publish",
+                input: {},
+                output: {
+                  structuredContent: {
+                    delivery: "revision",
+                    revision: 1,
+                    before: "starter",
+                    after: "starter",
+                    enforcement: { enabled: true },
+                    effective: { error: null, batteries: [] },
+                  },
+                },
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getByRole("link", { name: "Back to OpenAPPA" }),
+    ).toHaveAttribute("href", "/openappa");
+    expect(
+      screen.getByRole("button", { name: "update guardrails policy" }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("shows a denial notice's arguments as the object they hold", async () => {
     const noticeToolName = "archestra__get_remedy_plans";
     mockGetToolShortName.mockImplementation((name: string) =>

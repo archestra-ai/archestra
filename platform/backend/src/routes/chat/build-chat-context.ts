@@ -147,6 +147,7 @@ export async function buildChatContext(params: {
     // The stream above carries ask_user's question to the user and back.
     canAskUser: true,
   });
+
   return {
     mcpTools,
     toolUiResourceUris,

@@ -125,6 +125,17 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
     KIND_NODE_IMAGE="kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
 
+    # Put the cluster on an IPv4-only network of our own instead of KinD's
+    # default `kind` network, which is dual-stack. This container joins that
+    # network, and with an IPv6 address on it, Docker runtimes such as OrbStack
+    # forward host `localhost` (::1) to our IPv4-only servers and the
+    # connection is reset.
+    KIND_NETWORK="archestra-kind"
+    export KIND_EXPERIMENTAL_DOCKER_NETWORK="${KIND_NETWORK}"
+    if ! docker network inspect "${KIND_NETWORK}" >/dev/null 2>&1; then
+        docker network create --ipv6=false "${KIND_NETWORK}" >/dev/null
+    fi
+
     # Check if cluster already exists
     if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
@@ -191,7 +202,13 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
 
     # Get the KinD control plane container IP address
     CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
-    CONTROL_PLANE_IP=$(docker inspect -f '{{with index .NetworkSettings.Networks "kind"}}{{.IPAddress}}{{end}}' "${CONTROL_PLANE_CONTAINER}")
+    # A cluster left over from a run that exited uncleanly may predate
+    # KIND_NETWORK and sit on KinD's default network; join whichever network
+    # the node is actually on.
+    if ! docker inspect -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' "${CONTROL_PLANE_CONTAINER}" 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
+        KIND_NETWORK="kind"
+    fi
+    CONTROL_PLANE_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "${CONTROL_PLANE_CONTAINER}")
 
     if [ -z "$CONTROL_PLANE_IP" ]; then
         echo "ERROR: Could not get KinD control plane IP address"
@@ -231,20 +248,15 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         # SECURITY WARNING: This grants the container privileged access to manipulate
         # host Docker networks. This is acceptable ONLY for local development.
         CONTAINER_ID=$(hostname)
-        if ! docker network inspect kind >/dev/null 2>&1; then
-            echo "WARNING: KinD network not found"
+        if docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
+            echo "Container already connected to KinD network"
         else
-            # Check if already connected to kind network
-            if docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{$net}} {{end}}' 2>/dev/null | grep -q "kind"; then
-                echo "Container already connected to KinD network"
-            else
-                echo "Connecting container to KinD network..."
-                if ! docker network connect kind "$CONTAINER_ID"; then
-                    echo "ERROR: Failed to connect container to KinD network"
-                    exit 1
-                fi
-                echo "Connected to KinD network successfully"
+            echo "Connecting container to KinD network..."
+            if ! docker network connect "${KIND_NETWORK}" "$CONTAINER_ID"; then
+                echo "ERROR: Failed to connect container to KinD network"
+                exit 1
             fi
+            echo "Connected to KinD network successfully"
         fi
 
         # Export the kubeconfig path for supervisord to inherit, only if setup succeeded

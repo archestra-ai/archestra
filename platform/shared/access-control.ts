@@ -68,7 +68,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
-  knowledgeSourceAutoSync: ["read", "create", "update", "delete"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -136,7 +135,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
-  knowledgeSourceAutoSync: [],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -212,7 +210,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "query"],
-  knowledgeSourceAutoSync: [],
   // Members can see analyses and their results, but dispatching a run
   // spends LLM budget across a whole grid, so running is an editor action.
 
@@ -534,20 +531,13 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:delete":
     "Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
-  "knowledgeSourceAutoSync:read":
-    "View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings",
-  "knowledgeSourceAutoSync:create":
-    "Create connectors with auto-sync permissions (access mirrors the source system)",
-  "knowledgeSourceAutoSync:update":
-    "Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs",
-  "knowledgeSourceAutoSync:delete": "Delete auto-sync-permissions connectors",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
     "Modify knowledge settings (embedding and reranking models)",
 
   // UI behavior
-  "simpleView:enable": "Sidebar is collapsed by default on page load",
+  "simpleView:enable": "Collapse the app sidebar by default",
   "chatAgentPicker:enable": "Show agent picker in chat",
   "chatProviderSettings:enable": "Show model and API key selectors in chat",
   "chatExpandToolCalls:enable": "Allow expanding tool call details in chat",
@@ -1691,14 +1681,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.BulkDeleteConnectorDocuments]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
-  [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },
-  [RouteId.GetPermissionSyncCoverage]: { knowledgeSourceAutoSync: ["read"] },
-  [RouteId.GetConnectorUserGroups]: { knowledgeSourceAutoSync: ["read"] },
+  [RouteId.TriggerPermissionSync]: { knowledgeSource: ["update"] },
+  [RouteId.GetPermissionSyncCoverage]: { knowledgeSource: ["read"] },
+  [RouteId.GetConnectorUserGroups]: { knowledgeSource: ["read"] },
   [RouteId.UpsertConnectorMemberOverride]: {
-    knowledgeSourceAutoSync: ["update"],
+    knowledgeSource: ["update"],
   },
   [RouteId.DeleteConnectorMemberOverride]: {
-    knowledgeSourceAutoSync: ["update"],
+    knowledgeSource: ["update"],
   },
   [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },

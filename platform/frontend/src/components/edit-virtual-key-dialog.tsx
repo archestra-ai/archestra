@@ -1,26 +1,21 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { Loader2 } from "lucide-react";
+import { KeyRound, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { formatExpiration } from "@/components/create-virtual-key-dialog";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
-import { FormDialog } from "@/components/form-dialog";
 import {
   type ProviderApiKeyMap,
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
@@ -60,9 +55,13 @@ export function EditVirtualKeyDialog({
   // Permission edits live outside this dialog's own snapshot, so the unsaved
   // guard and the Save button need to hear about them separately.
   const [permissionsDirty, setPermissionsDirty] = useState(false);
+  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
+    "general",
+  );
 
   useEffect(() => {
     if (!virtualKey) return;
+    setActiveSection("general");
     const initialExpiresAt = virtualKey.expiresAt
       ? new Date(virtualKey.expiresAt)
       : null;
@@ -135,77 +134,44 @@ export function EditVirtualKeyDialog({
       }));
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open
       onOpenChange={onOpenChange}
       title={
-        <span className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 pr-5">
-          <span>
-            {isPassthrough
-              ? "Edit Passthrough Virtual Key"
-              : "Edit Standard Virtual Key"}
-          </span>
-          {virtualKey.createdBy && (
-            <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-              <span>Created by</span>
-              <CreatedByCell createdBy={virtualKey.createdBy} />
-            </span>
-          )}
-        </span>
+        isPassthrough
+          ? "Edit Passthrough Virtual Key"
+          : "Edit Standard Virtual Key"
       }
       description={
         isPassthrough
           ? "Update the passthrough virtual key name and expiration."
           : "Update the standard virtual key name, expiration, and who can reach it."
       }
-      size="medium"
+      sidebarLabel={name || "Virtual key"}
+      sidebarDescription="Virtual key"
+      sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
       isDirty={isDirty}
-    >
-      <DialogForm onSubmit={handleUpdate}>
-        <DialogBody className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="edit-virtual-key-name">Name</Label>
-            <Input
-              id="edit-virtual-key-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          {isPassthrough ? (
-            <ExpirationDateTimeField
-              value={expiresAt}
-              onChange={setExpiresAt}
-              noExpirationText="Key will never expire"
-              formatExpiration={formatExpiration}
-            />
-          ) : (
-            <>
-              <ExpirationDateTimeField
-                value={expiresAt}
-                onChange={setExpiresAt}
-                noExpirationText="Key will never expire"
-                formatExpiration={formatExpiration}
-              />
-              <ProviderKeyAccessFields
-                providerApiKeyIds={providerApiKeyIds}
-                onProviderApiKeyIdsChange={setProviderApiKeyIds}
-                providerApiKeys={providerApiKeys}
-              />
-              <ResourceAccessSection
-                resource="llmVirtualKey"
-                id={virtualKey.id}
-                registerSave={registerPermissionsSave}
-                onDirtyChange={setPermissionsDirty}
-              />
-            </>
-          )}
-          <AdvancedLabelsSection
-            ref={labelsRef}
-            labels={labels}
-            onLabelsChange={setLabels}
-          />
-        </DialogBody>
-        <DialogStickyFooter className="mt-0">
+      activeSection={activeSection}
+      navItems={
+        isPassthrough
+          ? [{ id: "general", label: "General" }]
+          : [
+              { id: "general", label: "General" },
+              { id: "permissions", label: "Permissions" },
+            ]
+      }
+      onActiveSectionChange={setActiveSection}
+      onSubmit={() => void handleUpdate()}
+      headerExtra={
+        virtualKey.createdBy && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>Created by</span>
+            <CreatedByCell createdBy={virtualKey.createdBy} />
+          </span>
+        )
+      }
+      footer={
+        <>
           <DialogCancelButton>Cancel</DialogCancelButton>
           <Button type="submit" disabled={!canSubmit}>
             {updateMutation.isPending && (
@@ -213,8 +179,57 @@ export function EditVirtualKeyDialog({
             )}
             <span>Save Changes</span>
           </Button>
-        </DialogStickyFooter>
-      </DialogForm>
-    </FormDialog>
+        </>
+      }
+    >
+      <div hidden={activeSection !== "general"} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="edit-virtual-key-name">Name</Label>
+          <Input
+            id="edit-virtual-key-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </div>
+        {isPassthrough ? (
+          <ExpirationDateTimeField
+            value={expiresAt}
+            onChange={setExpiresAt}
+            noExpirationText="Key will never expire"
+            formatExpiration={formatExpiration}
+          />
+        ) : (
+          <>
+            <ExpirationDateTimeField
+              value={expiresAt}
+              onChange={setExpiresAt}
+              noExpirationText="Key will never expire"
+              formatExpiration={formatExpiration}
+            />
+            <ProviderKeyAccessFields
+              providerApiKeyIds={providerApiKeyIds}
+              onProviderApiKeyIdsChange={setProviderApiKeyIds}
+              providerApiKeys={providerApiKeys}
+            />
+          </>
+        )}
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
+      </div>
+      {!isPassthrough && (
+        <div hidden={activeSection !== "permissions"}>
+          <ResourceAccessSection
+            resource="llmVirtualKey"
+            id={virtualKey.id}
+            registerSave={registerPermissionsSave}
+            onDirtyChange={setPermissionsDirty}
+            standalone
+          />
+        </div>
+      )}
+    </TabbedDialogShell>
   );
 }

@@ -40,6 +40,7 @@ import {
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
   firstPolicyRefusal,
+  getGuardrailsDeployment,
   turnOnForFirstPolicy,
 } from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -137,7 +138,7 @@ const registry = defineArchestraTools([
     shortName: "get_guardrails_policy",
     title: "Read OpenAPPA policy",
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Use this read to recover after a lost local publish response, without publishing again. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       if (!context.organizationId)
@@ -150,6 +151,7 @@ const registry = defineArchestraTools([
       return result({
         ...root,
         effective,
+        enforcement: await getGuardrailsDeployment(),
         delivery: sync.source?.interval
           ? {
               mode: "pull_request",

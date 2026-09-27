@@ -51,6 +51,7 @@ import {
 import {
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
+  OpenAppaPolicyCompletion,
 } from "./openappa-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
@@ -542,6 +543,19 @@ export function CompactToolGroup({
           );
         })}
       </div>
+      {tools.map((entry) => {
+        if (entry.kind === "hook" || entry.errorText) return null;
+        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
+          getToolShortName,
+        });
+        if (getToolShortName(name) !== "update_guardrails_policy") return null;
+        return (
+          <OpenAppaPolicyCompletion
+            key={entry.key}
+            output={entry.toolResultPart?.output ?? entry.part.output}
+          />
+        );
+      })}
       {expandedEntry && (
         <div className="mt-2">
           {expandedEntry.kind === "hook" ? (

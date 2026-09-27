@@ -1,6 +1,6 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -139,14 +139,59 @@ function nextStep(container: HTMLElement) {
 test("a saved policy with enforcement off makes enforcement the next step", async () => {
   revision = 3;
   const { container } = show();
-  const open = await screen.findByRole("link", { name: "Open the policy" });
-  expect(open).toHaveAttribute("href", "/openappa/policy");
+  const toggle = await screen.findByRole("switch", {
+    name: "Enforce the policy",
+  });
+  expect(toggle).not.toBeChecked();
+  expect(toggle).toBeEnabled();
   expect(nextStep(container)).toHaveTextContent("Enforcement");
   expect(
     screen.queryByRole("link", { name: "Ask about the policy" }),
   ).not.toBeInTheDocument();
   expect(screen.getByText("How it works")).toBeInTheDocument();
   expect(screen.queryByText("Turn on the guardrail")).not.toBeInTheDocument();
+});
+
+test("the enforcement switch turns enforcement on and off", async () => {
+  revision = 3;
+  const sent: boolean[] = [];
+  server.use(
+    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
+      const body = (await request.json()) as { enabled: boolean };
+      sent.push(body.enabled);
+      enabled = body.enabled;
+      return HttpResponse.json({
+        enabled,
+        featureEnabled: true,
+        active: enabled,
+      });
+    }),
+  );
+  show();
+  const toggle = await screen.findByRole("switch", {
+    name: "Enforce the policy",
+  });
+  fireEvent.click(toggle);
+  await waitFor(() => expect(toggle).toBeChecked());
+  expect(await screen.findByText("On")).toBeInTheDocument();
+  await waitFor(() => expect(toggle).toBeEnabled());
+  fireEvent.click(toggle);
+  await waitFor(() => expect(toggle).not.toBeChecked());
+  expect(sent).toEqual([true, false]);
+});
+
+test("members who cannot manage enforcement see the switch disabled", async () => {
+  revision = 3;
+  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
+    typeof useHasPermissions
+  >);
+  show();
+  expect(
+    await screen.findByRole("switch", { name: "Enforce the policy" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByText(/Only administrators can turn enforcement on or off/),
+  ).toBeInTheDocument();
 });
 
 test("an enforced policy makes GitHub step 2 of 2", async () => {
@@ -166,8 +211,8 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
     expect.stringContaining("/chat?agentId=appa-agent&user_prompt="),
   );
   expect(
-    screen.queryByRole("link", { name: "Open the policy" }),
-  ).not.toBeInTheDocument();
+    screen.getByRole("switch", { name: "Enforce the policy" }),
+  ).toBeChecked();
   expect(
     screen.getByRole("link", { name: /Read about OpenAPPA/ }),
   ).toHaveAttribute("href", "https://www.openappa.com/how-it-works");

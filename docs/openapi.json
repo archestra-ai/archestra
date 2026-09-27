@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.21"
+    "version": "1.4.0-rc.24"
   },
   "components": {
     "schemas": {
@@ -146083,9 +146083,6 @@
                         "chatopsTelegramEnabled": {
                           "type": "boolean"
                         },
-                        "kbAutoSyncPermissionsEnabled": {
-                          "type": "boolean"
-                        },
                         "kbMfilesConnectorEnabled": {
                           "type": "boolean"
                         },
@@ -146184,7 +146181,6 @@
                         "openappaEnabled",
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
-                        "kbAutoSyncPermissionsEnabled",
                         "kbMfilesConnectorEnabled",
                         "kbMfilesOauthEnabled",
                         "kbBm25DefaultK1",
@@ -260726,7 +260722,7 @@
                     "type": "string"
                   },
                   "syncPermissionsFromSource": {
-                    "description": "Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync permission and a connector type that supports it.",
+                    "description": "Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs an enterprise license and a connector type that supports it.",
                     "type": "boolean"
                   },
                   "connectorType": {
@@ -270893,7 +270889,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Manually trigger a permission-sync pass for an auto-sync-permissions connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSourceAutoSync:update`: Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs",
+        "description": "Manually trigger a permission-sync pass for an auto-sync-permissions connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -271162,7 +271158,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSourceAutoSync:update"
+            "knowledgeSource:update"
           ]
         }
       }
@@ -271173,7 +271169,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Live ACL coverage for an auto-sync-permissions connector: how many ingested documents are tagged vs still fail-closed (awaiting a permission-sync pass)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSourceAutoSync:read`: View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings",
+        "description": "Live ACL coverage for an auto-sync-permissions connector: how many ingested documents are tagged vs still fail-closed (awaiting a permission-sync pass)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -271451,7 +271447,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSourceAutoSync:read"
+            "knowledgeSource:read"
           ]
         }
       }
@@ -271462,7 +271458,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Synced external user groups for an auto-sync-permissions connector: each group's member emails, the Archestra org users they resolve to, and how many documents grant the group\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSourceAutoSync:read`: View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings",
+        "description": "Synced external user groups for an auto-sync-permissions connector: each group's member emails, the Archestra org users they resolve to, and how many documents grant the group\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -271827,7 +271823,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSourceAutoSync:read"
+            "knowledgeSource:read"
           ]
         }
       }
@@ -271838,7 +271834,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Manually map an upstream member account to an Archestra user for an auto-sync-permissions connector — the admin escape hatch when the upstream hides the member's email from every credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSourceAutoSync:update`: Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs",
+        "description": "Manually map an upstream member account to an Archestra user for an auto-sync-permissions connector — the admin escape hatch when the upstream hides the member's email from every credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -272127,7 +272123,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSourceAutoSync:update"
+            "knowledgeSource:update"
           ]
         }
       }
@@ -272138,7 +272134,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Remove a manual member mapping; the member falls back to email-based resolution (fail-closed when the upstream hides their email)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSourceAutoSync:update`: Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs",
+        "description": "Remove a manual member mapping; the member falls back to email-based resolution (fail-closed when the upstream hides their email)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -272412,7 +272408,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSourceAutoSync:update"
+            "knowledgeSource:update"
           ]
         }
       }

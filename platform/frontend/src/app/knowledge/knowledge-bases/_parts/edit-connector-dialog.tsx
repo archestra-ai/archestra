@@ -294,8 +294,13 @@ export function EditConnectorDialog({
         setActiveSection("general"),
       )}
       wrapForm={(children) => <Form {...form}>{children}</Form>}
-      sidebarFooter={
-        <ExternalDocsLink href={connectorDocsUrl}>Learn more</ExternalDocsLink>
+      headerExtra={
+        <ExternalDocsLink
+          href={connectorDocsUrl}
+          className="shrink-0 text-sm text-muted-foreground"
+        >
+          Learn more
+        </ExternalDocsLink>
       }
       footer={
         <>
@@ -401,6 +406,37 @@ export function EditConnectorDialog({
           <NotionAutoSyncPermissionsNote />
         )}
 
+        {autoSyncPermissions && connectorSupportsAdminApiKey(connectorType) && (
+          <FormField
+            control={form.control}
+            name="adminApiKey"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Organization admin API key (optional)</FormLabel>
+                <FormDescription>
+                  <AdminApiKeyDescription type={connectorType} /> Leave empty to
+                  keep the existing key.
+                </FormDescription>
+                <FormControl>
+                  <SecretInput
+                    placeholder="Atlassian organization admin API key"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {autoSyncPermissions && connectorType === "perforce" && (
+          <PerforcePermissionSyncFields
+            form={form}
+            mode="edit"
+            adminCredentialDescription={permissionSyncRequirement}
+          />
+        )}
+
         <div className="border-t" />
 
         {urlConfig && (
@@ -463,42 +499,12 @@ export function EditConnectorDialog({
             )}
           />
         )}
-
-        {autoSyncPermissions && connectorSupportsAdminApiKey(connectorType) && (
-          <FormField
-            control={form.control}
-            name="adminApiKey"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Organization admin API key (optional)</FormLabel>
-                <FormDescription>
-                  <AdminApiKeyDescription type={connectorType} /> Leave empty to
-                  keep the existing key.
-                </FormDescription>
-                <FormControl>
-                  <SecretInput
-                    placeholder="Atlassian organization admin API key"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        {autoSyncPermissions && connectorType === "perforce" && (
-          <PerforcePermissionSyncFields
-            form={form}
-            mode="edit"
-            adminCredentialDescription={permissionSyncRequirement}
-          />
-        )}
       </div>
       <div hidden={activeSection !== "permissions"}>
         <ResourceAccessSection
           resource="knowledgeConnector"
           id={connector.id}
+          standalone
         />
       </div>
       <div hidden={activeSection !== "advanced"} className="space-y-4">

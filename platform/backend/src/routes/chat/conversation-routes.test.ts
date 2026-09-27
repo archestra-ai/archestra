@@ -81,7 +81,7 @@ describe("chat conversation and message routes", () => {
     const migration = fs.readFileSync(
       path.join(
         __dirname,
-        "../../database/migrations/0490_normalize-openappa-chat-origin.sql",
+        "../../database/migrations/0492_normalize-openappa-chat-origin.sql",
       ),
       "utf8",
     );

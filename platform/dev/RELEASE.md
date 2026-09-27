@@ -4,7 +4,7 @@ Archestra uses two release pipelines:
 - **Release candidate (RC):** Automatic prereleases from `main` (for example, `1.4.0-rc.14`).
 - **Stable:** Tested and approved releases from `release/X.Y` (for example, `1.3.52` or `1.4.0`).
 
-[Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`.
+[Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. `archestra/platform:latest` follows the newest published release, RCs included, and never moves backward. Every other image's `latest` moves only on approved stable releases, because stable platforms reference the agent images by that tag.
 
 ### Transition From Beta To RC
 
@@ -12,7 +12,7 @@ The next release after `1.4.0-beta.13` uses temporary `release-as: 1.4.0-rc.14` 
 Changing only `prerelease-type` does not replace an existing beta suffix in Release Please.
 Keep the manifest and published beta versions unchanged until the generated RC release PR updates them.
 After `1.4.0-rc.14` publishes, remove only `release-as` so rolling releases continue at `1.4.0-rc.15`.
-The existing GitHub environment remains named `beta-release`. RCs do not update `latest` or require stable approval.
+The existing GitHub environment remains named `beta-release`. RCs do not require stable approval. They move only `archestra/platform:latest`.
 
 ```mermaid
 gitGraph
@@ -162,7 +162,7 @@ This is a complete cutover. Once the new stable release publishes, it becomes th
 11. [ ] Open and merge a PR that removes `release-as` from `release/1.4`. Future patches become `1.4.1`, `1.4.2`, etc.
 12. [ ] Get separate explicit approval to cut `1.5.0-rc.1`. State the current `main` SHA and the configuration and release PRs that will be merged.
 13. [ ] On `main`, open and merge a PR setting the **Next RC** configuration below. Merge the generated `1.5.0-rc.1` release PR through the queue.
-14. [ ] Confirm the RC published without moving Docker `latest`, then open and merge a PR removing `release-as` from `main`. Confirm rolling RC PRs resume.
+14. [ ] Confirm the RC published and moved only `archestra/platform:latest`, then open and merge a PR removing `release-as` from `main`. Confirm rolling RC PRs resume.
 
 The operator or release agent must create, queue, monitor, and verify these PRs and settings directly. Human actions are limited to the two explicit cut approvals, the independent `stable-release` approval, reviewer selection when it cannot be derived safely, and exceptional recovery decisions.
 
@@ -194,8 +194,8 @@ Merging a release PR on `release/X.Y` builds the artifacts and waits for `stable
 6. [ ] Have a second maintainer approve the `stable-release` environment in GitHub Actions.
    - Add a brief, sanitized test summary in the approval comment. Never include sensitive data.
    - A rerun or new candidate requires a fresh approval after its artifacts are verified.
-7. [ ] Confirm the workflow publishes the GitHub release, updates Helm charts, and points Docker `latest` to the new version.
-8. [ ] Confirm each `latest` image tag resolves to the digest from the approved `release-image-*` artifacts.
+7. [ ] Confirm the workflow publishes the GitHub release, updates Helm charts, and points each companion and agent image's `latest` to the new version. `archestra/platform:latest` moves only when no newer release, such as an RC, is published.
+8. [ ] Confirm each moved `latest` image tag resolves to the digest from the approved `release-image-*` artifacts.
 
 ## Troubleshooting
 

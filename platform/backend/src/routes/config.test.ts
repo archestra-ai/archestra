@@ -128,7 +128,6 @@ describe("config routes", () => {
       ngrokDomain: expect.any(String),
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
       chatSecretScanEnabled: true,
-      kbAutoSyncPermissionsEnabled: expect.any(Boolean),
       kbContextualRetrievalDefaultMode: config.kb.contextualRetrievalEnabled
         ? "document"
         : "disabled",

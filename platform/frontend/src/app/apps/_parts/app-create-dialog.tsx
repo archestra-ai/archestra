@@ -1,12 +1,14 @@
 "use client";
 
+import { AppWindow } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
 } from "@/components/initial-resource-permissions";
-import { StandardFormDialog } from "@/components/standard-dialog";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +38,13 @@ export function AppCreateDialog({
 }) {
   const router = useRouter();
   const createApp = useCreateApp();
+  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
+    "general",
+  );
+
+  useEffect(() => {
+    if (open) setActiveSection("general");
+  }, [open]);
 
   const form = useForm<CreateFormValues>({
     defaultValues: { name: "", initialGrants: [] },
@@ -72,12 +81,20 @@ export function AppCreateDialog({
   });
 
   return (
-    <StandardFormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={handleOpenChange}
       title="New app"
       description="This creates a blank app and opens it in chat, where you can start building."
-      size="medium"
+      sidebarLabel={form.watch("name") || "New app"}
+      sidebarDescription="App"
+      sidebarIcon={<AppWindow className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={[
+        { id: "general", label: "General" },
+        { id: "permissions", label: "Permissions" },
+      ]}
+      onActiveSectionChange={setActiveSection}
       isDirty={form.formState.isDirty}
       onSubmit={onSubmit}
       footer={
@@ -89,7 +106,10 @@ export function AppCreateDialog({
         </>
       }
     >
-      <div className="flex flex-col gap-1.5">
+      <div
+        hidden={activeSection !== "general"}
+        className="flex flex-col gap-1.5"
+      >
         <Label htmlFor="app-name">Name</Label>
         <Input
           id="app-name"
@@ -110,13 +130,16 @@ export function AppCreateDialog({
           </p>
         ) : null}
       </div>
-      <InitialResourcePermissions
-        resource="app"
-        grants={form.watch("initialGrants")}
-        onChange={(initialGrants) =>
-          form.setValue("initialGrants", initialGrants, { shouldDirty: true })
-        }
-      />
-    </StandardFormDialog>
+      <div hidden={activeSection !== "permissions"}>
+        <InitialResourcePermissions
+          resource="app"
+          grants={form.watch("initialGrants")}
+          onChange={(initialGrants) =>
+            form.setValue("initialGrants", initialGrants, { shouldDirty: true })
+          }
+          standalone
+        />
+      </div>
+    </TabbedDialogShell>
   );
 }

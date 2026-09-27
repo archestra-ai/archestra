@@ -2,11 +2,10 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import { and, count, eq, sql } from "drizzle-orm";
-import config from "@/config";
 import db, { schema } from "@/database";
 import { enqueuePermissionSyncAfterContentSync } from "@/knowledge-base";
 import { TaskModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 
 async function permissionSyncTaskCount(connectorId: string): Promise<number> {
   const [row] = await db
@@ -22,31 +21,6 @@ async function permissionSyncTaskCount(connectorId: string): Promise<number> {
 }
 
 describe("enqueuePermissionSyncAfterContentSync (documents-sync trigger)", () => {
-  beforeEach(() => {
-    config.kb.autoSyncPermissionsEnabled = true;
-  });
-
-  test("no-ops when the auto-sync permissions beta flag is off", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    config.kb.autoSyncPermissionsEnabled = false;
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
-      syncPermissionsFromSource: true,
-      connectorType: "github",
-    });
-
-    await enqueuePermissionSyncAfterContentSync({
-      connector,
-      documentsIngested: 3,
-    });
-
-    expect(await permissionSyncTaskCount(connector.id)).toBe(0);
-  });
-
   test("enqueues a permission_sync when an auto-sync connector ingested >=1 doc", async ({
     makeOrganization,
     makeKnowledgeBase,

@@ -132,4 +132,56 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
       screen.queryByRole("option", { name: /Gemini/ }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps shared key access in a separate permissions tab", async () => {
+    const user = userEvent.setup();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={client}>
+        <CreateLlmProviderApiKeyDialog
+          open
+          onOpenChange={vi.fn()}
+          title="Add API Key"
+          description="Create a provider key"
+          allowedProviders={["anthropic"]}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Shared" }));
+    await user.click(screen.getByRole("button", { name: "Permissions" }));
+    expect(screen.getByRole("heading", { name: "Permissions" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "General" }));
+    expect(screen.getByText("Who uses this key")).toBeVisible();
+  });
+
+  it("keeps key selection in General and endpoint settings in Connectivity", async () => {
+    const user = userEvent.setup();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <CreateLlmProviderApiKeyDialog
+          open
+          onOpenChange={vi.fn()}
+          title="Add API Key"
+          description="Create a provider key"
+          allowedProviders={["anthropic"]}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Primary key")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Connectivity" }));
+    expect(screen.getByLabelText(/Base URL/)).toBeVisible();
+    expect(screen.getByText("Extra HTTP headers")).toBeVisible();
+    expect(screen.getByText("Primary key")).not.toBeVisible();
+  });
 });

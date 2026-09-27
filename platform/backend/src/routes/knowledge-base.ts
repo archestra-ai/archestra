@@ -39,13 +39,10 @@ const PermissionSyncIntervalSchema = z
   );
 
 import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
-import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
-  AUTO_SYNC_PERMISSIONS_DISABLED_ERROR,
   checkAutoSyncPermissionSyncSupported,
   checkCanSetAutoSyncPermissionsVisibility,
-  checkHasAutoSyncConnectorPermission,
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
@@ -407,7 +404,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await Promise.all([
           KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
             canReadAll: access.canReadAll,
-            canManageAutoSync: access.canManageAutoSync,
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
           }),
@@ -915,7 +911,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           knowledgeBaseId,
           {
             canReadAll: access.canReadAll,
-            canManageAutoSync: access.canManageAutoSync,
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
           },
@@ -936,7 +931,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // it. Managed at /knowledge/files instead.
             excludeConnectorTypes: ["file_upload"],
             canReadAll: access.canReadAll,
-            canManageAutoSync: access.canManageAutoSync,
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
             status,
@@ -1071,7 +1065,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Mirror each document's access control from the source, so a " +
                   "query only returns what the caller could open there. Needs " +
-                  "the auto-sync permission and a connector type that supports it.",
+                  "an enterprise license and a connector type that supports it.",
               ),
             connectorType: UserSelectableConnectorTypeSchema,
             config: ConnectorConfigSchema,
@@ -1120,13 +1114,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (body.syncPermissionsFromSource) {
-        // beta flag + enterprise license + connector-type support +
-        // knowledgeSourceAutoSync:create (admin-only by default)
+        // Enterprise license and connector-type support. The route already
+        // requires the ordinary connector create permission.
         const violation = await checkCanSetAutoSyncPermissionsVisibility({
-          userId: user.id,
-          organizationId,
           connectorType: body.connectorType,
-          action: "create",
         });
         if (violation) {
           throw violation;
@@ -1725,33 +1716,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       if (!connector.syncPermissionsFromSource && nextSync) {
-        // Transition INTO auto-sync: beta flag + enterprise license +
-        // connector-type support + knowledgeSourceAutoSync:update. An
-        // existing auto-sync connector is exempt from the transition-only
-        // gates (mirrors team-scoped); its mutations are covered by the
-        // dedicated permission check below.
+        // Transition into permission sync requires the enterprise license and
+        // connector support. The route already requires connector update.
         const violation = await checkCanSetAutoSyncPermissionsVisibility({
-          userId: user.id,
-          organizationId,
           connectorType: connector.connectorType,
-          action: "update",
         });
         if (violation) {
           throw violation;
         }
       } else if (connector.syncPermissionsFromSource) {
-        // Mutating a connector that already carries the auto-sync visibility
-        // (settings, credentials, or switching AWAY from it): viewing rights
-        // (findConnectorOrThrow above) are not enough — require the dedicated
-        // update permission.
-        const violation = await checkHasAutoSyncConnectorPermission({
-          userId: user.id,
-          organizationId,
-          action: "update",
-        });
-        if (violation) {
-          throw violation;
-        }
         if (nextSync) {
           const unsupported = checkAutoSyncPermissionSyncSupported(
             connector.connectorType,
@@ -2039,19 +2012,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Team-scoped connectors require an enterprise license",
             );
           }
-          // Moving a connector AWAY from auto-sync is a mutation of an
-          // auto-sync connector, so it needs the dedicated grant — viewing
-          // rights are not enough, exactly as on the single update.
-          if (connector.syncPermissionsFromSource) {
-            const violation = await checkHasAutoSyncConnectorPermission({
-              userId: user.id,
-              organizationId,
-              action: "update",
-            });
-            if (violation) {
-              throw violation;
-            }
-          }
           // SPDX-SnippetEnd
         },
         applyEach: async (connector, id) => {
@@ -2146,22 +2106,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return found;
         },
         describe: (connector) => connector.name,
-        authorize: async (connector) => {
-          // SPDX-SnippetBegin
-          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          if (connector.syncPermissionsFromSource) {
-            const violation = await checkHasAutoSyncConnectorPermission({
-              userId: user.id,
-              organizationId,
-              action: "delete",
-            });
-            if (violation) {
-              throw violation;
-            }
-          }
-          // SPDX-SnippetEnd
-        },
         applyEach: async (_connector, id) => {
           const success = await deleteConnector(id);
           if (!success) {
@@ -2187,26 +2131,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      const connector = await findConnectorOrThrow({
+      await findConnectorOrThrow({
         id,
         organizationId,
         userId: user.id,
       });
-
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      if (connector.syncPermissionsFromSource) {
-        const violation = await checkHasAutoSyncConnectorPermission({
-          userId: user.id,
-          organizationId,
-          action: "delete",
-        });
-        if (violation) {
-          throw violation;
-        }
-      }
-      // SPDX-SnippetEnd
 
       // Soft-delete via the shared service: cancels queued syncs (they no longer
       // self-heal via FK cascade under soft-delete) then stamps deleted_at and
@@ -2370,7 +2299,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       const connector = await findConnectorOrThrow({
         id,
@@ -2439,7 +2368,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       const connector = await findConnectorOrThrow({
         id,
@@ -2548,7 +2477,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       const connector = await findConnectorOrThrow({
         id,
@@ -2695,7 +2624,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       const connector = await findConnectorOrThrow({
         id,
@@ -2757,7 +2686,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { params: { id, externalAccountId }, organizationId, user },
       reply,
     ) => {
-      assertAutoSyncPermissionsFeatureEnabled();
+      assertAutoSyncPermissionsLicensed();
 
       await findConnectorOrThrow({ id, organizationId, userId: user.id });
 
@@ -3493,10 +3422,7 @@ async function enqueueAudienceRefreshPass(connectorId: string): Promise<void> {
   });
 }
 
-function assertAutoSyncPermissionsFeatureEnabled(): void {
-  if (!config.kb.autoSyncPermissionsEnabled) {
-    throw new ApiError(403, AUTO_SYNC_PERMISSIONS_DISABLED_ERROR);
-  }
+function assertAutoSyncPermissionsLicensed(): void {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -3595,22 +3521,14 @@ async function findConnectorOrThrow(params: {
 /**
  * `findConnectorOrThrow` for the trash: resolves ONLY soft-deleted rows (the
  * ordinary lookup is `notDeleted`-filtered and would 404 every restore), and
- * applies the same management-visibility gate — team-scoped connectors need
- * team membership, `auto-sync-permissions` ones need the auto-sync grant.
+ * applies the same connector management grants as active rows.
  *
  * Without that second half, restore would be a by-id bypass of the visibility
- * rules every other connector mutation enforces: the trash LISTING hides those
- * rows from non-admins (buildVisibilityFilter in the model), so a delete-holder
- * outside the team could revive a connector they cannot see, edit, or delete.
+ * rules every other connector mutation enforces: the trash listing hides rows
+ * outside the caller's grants, so an unrelated delete-holder cannot revive
+ * a connector they cannot see.
  * Skill restore authorizes the deleted object the same way.
  *
- * The one asymmetry, inherited from the active list rather than introduced
- * here: `buildVisibilityFilter` short-circuits on `canReadAll`, while
- * `canAccessSource` deliberately does NOT let that bypass reach
- * `auto-sync-permissions` connectors. So a `knowledgeSource:admin` WITHOUT
- * `knowledgeSourceAutoSync:read` sees those rows listed and 404s here — the
- * same 404 they already get from edit and delete on the active list. No
- * default role holds that combination.
  */
 async function findDeletedConnectorOrThrow(params: {
   id: string;

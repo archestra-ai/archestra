@@ -6,11 +6,9 @@ export { enqueuePermissionSyncAfterContentSync } from "./permission-sync-trigger
 
 export { queryService } from "./query";
 export {
-  AUTO_SYNC_PERMISSIONS_DISABLED_ERROR,
   buildUserAccessControlList,
   checkAutoSyncPermissionSyncSupported,
   checkCanSetAutoSyncPermissionsVisibility,
-  checkHasAutoSyncConnectorPermission,
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,

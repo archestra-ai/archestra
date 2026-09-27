@@ -32,9 +32,9 @@ import {
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
-import { openAppaChatHref } from "@/lib/openappa-routes";
 import { cn } from "@/lib/utils/tailwind";
 import { OpenAppaSourceForm } from "./appa-github-sync-panel";
+import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 /**
@@ -91,12 +91,10 @@ function PolicyStep() {
       </CardContent>
       <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5">
         {canEdit ? (
-          <Button size="sm" asChild>
-            <Link href={openAppaChatHref({ promptKey: "setUpPolicy" })}>
-              <MessageCircle />
-              <span>Create my policy</span>
-            </Link>
-          </Button>
+          <OpenAppaChatButton size="sm" promptKey="setUpPolicy">
+            <MessageCircle />
+            <span>Create my policy</span>
+          </OpenAppaChatButton>
         ) : (
           <p className="text-sm text-muted-foreground">
             Ask an administrator to turn on the guardrail.
@@ -155,12 +153,14 @@ function EnforcementCard({ next }: { next: boolean }) {
             </Label>
           </div>
           {enabled && (
-            <Button size="sm" variant="outline" asChild>
-              <Link href={openAppaChatHref({ promptKey: "explainPolicy" })}>
-                <MessageCircle />
-                <span>Ask about the policy</span>
-              </Link>
-            </Button>
+            <OpenAppaChatButton
+              size="sm"
+              variant="outline"
+              promptKey="explainPolicy"
+            >
+              <MessageCircle />
+              <span>Ask about the policy</span>
+            </OpenAppaChatButton>
           )}
         </>
       }

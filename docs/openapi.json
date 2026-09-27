@@ -52822,7 +52822,7 @@
             "in": "query",
             "name": "excludeBuiltIn",
             "required": false,
-            "description": "Exclude built-in agents from the results. Defaults to false."
+            "description": "Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false."
           },
           {
             "schema": {
@@ -126747,8 +126747,7 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open",
-                          "openappa"
+                          "app_open"
                         ]
                       },
                       "titleIsPlaceholder": {
@@ -127457,14 +127456,11 @@
                       "medium",
                       "high"
                     ]
-                  },
-                  "origin": {
-                    "type": "string",
-                    "enum": [
-                      "openappa"
-                    ]
                   }
-                }
+                },
+                "required": [
+                  "agentId"
+                ]
               }
             }
           }
@@ -127605,8 +127601,7 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open",
-                        "openappa"
+                        "app_open"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -128371,8 +128366,7 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open",
-                          "openappa"
+                          "app_open"
                         ]
                       },
                       "titleIsPlaceholder": {
@@ -129148,8 +129142,7 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open",
-                        "openappa"
+                        "app_open"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -129980,8 +129973,7 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open",
-                        "openappa"
+                        "app_open"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -132533,8 +132525,7 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open",
-                        "openappa"
+                        "app_open"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -133597,8 +133588,7 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open",
-                        "openappa"
+                        "app_open"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -134727,8 +134717,7 @@
                           "enum": [
                             "user",
                             "schedule_trigger",
-                            "app_open",
-                            "openappa"
+                            "app_open"
                           ]
                         },
                         "titleIsPlaceholder": {
@@ -135527,8 +135516,7 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open",
-                        "openappa"
+                        "app_open"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -136333,8 +136321,7 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open",
-                        "openappa"
+                        "app_open"
                       ]
                     },
                     "titleIsPlaceholder": {
@@ -369377,8 +369364,7 @@
                         "enum": [
                           "user",
                           "schedule_trigger",
-                          "app_open",
-                          "openappa"
+                          "app_open"
                         ]
                       },
                       "lastMessageAt": {
@@ -378320,8 +378306,7 @@
                       "enum": [
                         "user",
                         "schedule_trigger",
-                        "app_open",
-                        "openappa"
+                        "app_open"
                       ]
                     },
                     "titleIsPlaceholder": {

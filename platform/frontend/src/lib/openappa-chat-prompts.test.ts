@@ -1,11 +1,18 @@
 import { expect, test } from "vitest";
 import { resolveOpenAppaLaunchPrompt } from "./openappa-chat-prompts";
 
-const gateway = { kind: "mcp_gateway" as const, name: "Research" };
+const gateway = {
+  kind: "mcp_gateway" as const,
+  name: "Research",
+  id: "gateway-123",
+};
 
 test("the coverage review names its target", () => {
   expect(resolveOpenAppaLaunchPrompt("reviewCoverage", gateway)).toMatch(
     /^Review how my OpenAPPA policy governs the MCP gateway "Research"\./,
+  );
+  expect(resolveOpenAppaLaunchPrompt("reviewCoverage", gateway)).toContain(
+    "Target ID: gateway-123",
   );
 });
 

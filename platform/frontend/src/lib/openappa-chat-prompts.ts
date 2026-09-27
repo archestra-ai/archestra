@@ -1,21 +1,8 @@
 import {
   describeOpenAppaPolicyTarget,
-  OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
   type OpenAppaPolicyTargetKind,
 } from "@archestra/shared";
 
-/**
- * Every prompt the OpenAPPA policy chat is started or steered with. Add new
- * ones here, not at the call site, so what the agent is asked and from where
- * reads in one place. Launch with `openAppaChatHref({ promptKey })`: the link
- * carries the key, not the text, and the chat resolves it with
- * `resolveOpenAppaLaunchPrompt`, so a prompt can grow without growing the URL.
- *
- * A launch prompt is sent as the user's first message and titles the chat, so
- * it speaks as the user. Any prompt that can lead to a policy change asks the
- * agent to explain what the change would do and ask before applying it: the user decides what is
- * published.
- */
 const POLICY_LAUNCH_PROMPTS = {
   /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:
@@ -31,10 +18,6 @@ const POLICY_LAUNCH_PROMPTS = {
     "Walk me through my current OpenAPPA policy in plain language: what it allows, denies, and sends for approval. Then ask me what I'd like to change.",
 } as const;
 
-/**
- * Prompts for a chat scoped to one policy target, worded around the target's
- * description. They resolve only once the chat has loaded the target.
- */
 const TARGET_LAUNCH_PROMPTS = {
   /**
    * Servers and gateways row: one review for any target, whatever its
@@ -49,8 +32,7 @@ export type OpenAppaLaunchPromptKey =
   | keyof typeof POLICY_LAUNCH_PROMPTS
   | keyof typeof TARGET_LAUNCH_PROMPTS;
 
-/** Whether the prompt `key` names needs the chat's target to resolve. */
-export function isOpenAppaTargetPromptKey(
+function isOpenAppaTargetPromptKey(
   key: string,
 ): key is keyof typeof TARGET_LAUNCH_PROMPTS {
   return Object.hasOwn(TARGET_LAUNCH_PROMPTS, key);
@@ -62,39 +44,12 @@ export function isOpenAppaTargetPromptKey(
  */
 export function resolveOpenAppaLaunchPrompt(
   key: string,
-  target?: { kind: OpenAppaPolicyTargetKind; name: string },
+  target?: { kind: OpenAppaPolicyTargetKind; name: string; id: string },
 ): string | undefined {
   if (Object.hasOwn(POLICY_LAUNCH_PROMPTS, key))
     return POLICY_LAUNCH_PROMPTS[key as keyof typeof POLICY_LAUNCH_PROMPTS];
   if (!isOpenAppaTargetPromptKey(key) || !target) return undefined;
-  return TARGET_LAUNCH_PROMPTS[key](
+  return `${TARGET_LAUNCH_PROMPTS[key](
     describeOpenAppaPolicyTarget(target.kind, target.name),
-  );
-}
-
-/**
- * The pills on the start screen of a new policy chat. The untargeted set is
- * seeded onto the OpenAPPA agent by the backend, so it lives in
- * `@archestra/shared`; the targeted set rewords it to name the target.
- */
-export function openAppaSuggestedPrompts(target?: {
-  kind: OpenAppaPolicyTargetKind;
-  name: string;
-}): { summaryTitle: string; prompt: string }[] {
-  if (!target) return [...OPENAPPA_CONFIG_SUGGESTED_PROMPTS];
-  const subject = describeOpenAppaPolicyTarget(target.kind, target.name);
-  return [
-    {
-      summaryTitle: `Explain the policy for ${target.name}`,
-      prompt: `Explain the current OpenAPPA policy for ${subject} in plain language. What do its rules allow, deny, or require approval for? Do not change it.`,
-    },
-    {
-      summaryTitle: `Review risky calls for ${target.name}`,
-      prompt: `Review the current OpenAPPA policy for ${subject} for risky tool calls and gaps. Suggest specific changes, but do not publish anything yet.`,
-    },
-    {
-      summaryTitle: `Change the policy for ${target.name}`,
-      prompt: `Help me change the OpenAPPA policy for ${subject}. Ask what I want to protect, inspect its current rules, and tell me what the change would do before publishing.`,
-    },
-  ];
+  )}\n\nTarget type: ${target.kind}\nTarget ID: ${target.id}`;
 }

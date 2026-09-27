@@ -1,3 +1,4 @@
+import { makeAgent } from "../src/mocks/data/agents";
 import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 
@@ -125,7 +126,19 @@ for (const viewport of [
           lastErrorAt: null,
         },
       });
+      const configurationAgent = makeAgent({
+        id: "openappa-configuration-agent",
+        scope: "org",
+        builtIn: true,
+        builtInAgentConfig: { name: "openappa-configuration-agent" },
+        authorId: null,
+      });
       await mswControl.registerMany([
+        {
+          method: "get",
+          url: "/api/agents/all",
+          body: [configurationAgent],
+        },
         {
           method: "get",
           url: "/api/openappa/coverage/summary",
@@ -210,24 +223,10 @@ for (const viewport of [
         page.getByRole("link", { name: "Configure with chat" }),
       ).toHaveAttribute(
         "href",
-        "/chat?openappa=1&openappaPrompt=explainPolicy&from=openappa",
+        expect.stringMatching(
+          /^\/chat\?agentId=openappa-configuration-agent&user_prompt=Walk/,
+        ),
       );
-      // Open a blank policy draft to check its composer without auto-sending.
-      await page.goto("/chat?openappa=1&from=openappa");
-      const policyPrompt = page.getByPlaceholder(
-        "Ask about or change your policy…",
-      );
-      await policyPrompt.scrollIntoViewIfNeeded();
-      await expect(policyPrompt).toBeInViewport();
-      await policyPrompt.fill("Review the current policy");
-      await expect(policyPrompt).toHaveValue("Review the current policy");
-      await page.screenshot({
-        path: testInfo.outputPath("policy-chat.png"),
-        fullPage: true,
-      });
-      await page.goBack();
-      await expect(page).toHaveURL(/\/openappa\/policy$/);
-      await expect(policySource).toBeInViewport();
     });
   });
 }

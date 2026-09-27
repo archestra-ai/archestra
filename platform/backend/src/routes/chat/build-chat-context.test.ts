@@ -1,7 +1,6 @@
 import { TOOL_ASK_USER_SHORT_NAME } from "@archestra/shared";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import config from "@/config";
 import { ConversationEnabledToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
@@ -32,16 +31,14 @@ describe("buildChatContext", () => {
     agentName: string;
     organizationId: string;
     user: { id: string; email: string; name: string };
-    conversationOrigin?: "openappa";
-    openAppaPolicyTargetContext?: string;
+    systemPrompt?: string;
   }) =>
     buildChatContext({
       conversationId: params.conversationId,
-      conversationOrigin: params.conversationOrigin,
       agentId: params.agentId,
       agent: {
         name: params.agentName,
-        systemPrompt: null,
+        systemPrompt: params.systemPrompt ?? null,
         toolExposureMode: "full",
       },
       user: params.user,
@@ -51,7 +48,6 @@ describe("buildChatContext", () => {
       projectInstructions: undefined,
       openedApp: undefined,
       projectFileNames: undefined,
-      openAppaPolicyTargetContext: params.openAppaPolicyTargetContext,
       hookRunCollector: [],
       kbChunksCollector: [],
       elicitation: {} as never,
@@ -160,69 +156,35 @@ describe("buildChatContext", () => {
     );
   });
 
-  test("guides policy chats through the built-in skill and policy tools", async ({
+  test("uses the policy assistant's configured prompt and tools", async ({
     makeAgent,
     makeConversation,
     makeOrganization,
     makeUser,
   }) => {
-    const originalEnabled = config.openappa.enabled;
-    config.openappa.enabled = true;
-    try {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      const agent = await makeAgent({ organizationId: org.id });
-      const conversation = await makeConversation(agent.id, {
-        organizationId: org.id,
-        userId: user.id,
-      });
-      const common = {
-        conversationId: conversation.id,
-        agentId: agent.id,
-        agentName: agent.name,
-        organizationId: org.id,
-        user: { id: user.id, email: user.email, name: user.name },
-      };
-      const policyTool = archestraMcpBranding.getToolName(
-        "get_guardrails_policy",
-      );
-      const getAgentTool = archestraMcpBranding.getToolName("get_agent");
-      const getGatewayTool =
-        archestraMcpBranding.getToolName("get_mcp_gateway");
-      const remedyTool = archestraMcpBranding.getToolName("get_remedy_plans");
-      const appTool = archestraMcpBranding.getToolName("scaffold_app");
-      mockGetChatMcpTools.mockResolvedValue({
-        [policyTool]: {},
-        [getAgentTool]: {},
-        [getGatewayTool]: {},
-        [remedyTool]: {},
-        [appTool]: {},
-      });
-      const policyChat = await run({
-        ...common,
-        conversationOrigin: "openappa",
-        openAppaPolicyTargetContext: "scoped to target ID",
-      });
-      const ordinaryChat = await run({
-        ...common,
-        openAppaPolicyTargetContext: "scoped to target ID",
-      });
-      expect(policyChat.systemPrompt).toContain("appa-guide");
-      expect(policyChat.systemPrompt).toContain("preview proposed changes");
-      expect(policyChat.systemPrompt).toContain("scoped to target ID");
-      expect(Object.keys(policyChat.mcpTools)).toEqual([
-        policyTool,
-        getAgentTool,
-        getGatewayTool,
-        remedyTool,
-      ]);
-      expect(Object.keys(ordinaryChat.mcpTools)).toContain(appTool);
-      expect(ordinaryChat.systemPrompt).not.toContain(
-        "You are helping the user configure this deployment's OpenAPPA policy",
-      );
-      expect(ordinaryChat.systemPrompt).not.toContain("scoped to target ID");
-    } finally {
-      config.openappa.enabled = originalEnabled;
-    }
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const policyTool = archestraMcpBranding.getToolName(
+      "get_guardrails_policy",
+    );
+    const appTool = archestraMcpBranding.getToolName("scaffold_app");
+    mockGetChatMcpTools.mockResolvedValue({ [policyTool]: {}, [appTool]: {} });
+    const result = await run({
+      conversationId: conversation.id,
+      agentId: agent.id,
+      agentName: "Policy assistant",
+      systemPrompt: "Help configure policy and create an app to explain it.",
+      organizationId: org.id,
+      user: { id: user.id, email: user.email, name: user.name },
+    });
+    expect(result.systemPrompt).toContain(
+      "Help configure policy and create an app to explain it.",
+    );
+    expect(Object.keys(result.mcpTools)).toEqual([policyTool, appTool]);
   });
 });

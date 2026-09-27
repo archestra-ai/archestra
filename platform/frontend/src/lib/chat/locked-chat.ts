@@ -125,20 +125,6 @@ export type ConversationBlockedAction =
   | "pin"
   | "export";
 
-const POLICY_BLOCKED_ACTIONS: ReadonlySet<ConversationBlockedAction> = new Set([
-  "sandboxCommands",
-  "share",
-  "fork",
-  "createProject",
-  "changeProject",
-  "generateTitle",
-  "compaction",
-  "saveToKnowledge",
-  "rename",
-  "pin",
-  "export",
-]);
-
 /**
  * Whether an action is available for a conversation. All of the
  * {@link LockedChatBlockedAction}s are unavailable on locked chats
@@ -146,15 +132,9 @@ const POLICY_BLOCKED_ACTIONS: ReadonlySet<ConversationBlockedAction> = new Set([
  * call site and keeps the block list greppable.
  */
 export function isActionAvailableForConversation(
-  conversation: { lockedChat?: boolean; origin?: string } | null | undefined,
+  conversation: { lockedChat?: boolean } | null | undefined,
   action: ConversationBlockedAction,
 ): boolean {
-  if (
-    conversation?.origin === "openappa" &&
-    POLICY_BLOCKED_ACTIONS.has(action)
-  ) {
-    return false;
-  }
   return (
     conversation?.lockedChat !== true ||
     action === "rename" ||

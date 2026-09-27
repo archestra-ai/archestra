@@ -1,13 +1,20 @@
 import { isDeepStrictEqual } from "node:util";
 import {
+  BUILT_IN_AGENT_IDS,
+  isBuiltInCatalogId,
   MCP_HUMAN_RULING_META_KEY,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
+import AgentModel from "@/models/agent";
+import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   coverageVisibility,
@@ -30,6 +37,7 @@ import {
   recallYellSession,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
   firstPolicyRefusal,
   getGuardrailsDeployment,
@@ -41,12 +49,16 @@ import {
   getOpenAppaPolicyChangeStatus,
   publishOpenAppaPolicyChange,
 } from "@/services/openappa-policy-change";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
 import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
+import { isToolEnabledForConversation } from "./conversation-tool-filter";
+import { getUnassignedDiscoverableTools } from "./dynamic-tools";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
+import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
 
 const RemedyPlanArgumentsSchema = z.object({
@@ -148,6 +160,135 @@ const registry = defineArchestraTools([
               githubAppReady: Boolean(sync.source.githubAppConfigId),
             }
           : { mode: "revision" },
+      });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "inspect_guardrails_server",
+    title: "Inspect MCP server policy",
+    description:
+      "Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. Pass its exact catalog ID. The built-in OpenAPPA configuration agent sees the whole readable catalog across environments (scope: organization); other agents see only their normally accessible tools (scope: agent), which may be a subset. This reads metadata only: it does not connect to the server, execute its tools, reveal credentials, or change configuration. Coverage describes stored policy rules, not a guarantee about a particular runtime call.",
+    schema: z.strictObject({
+      mcpServerId: UuidIdSchema.describe(
+        "The exact MCP catalog ID to inspect.",
+      ),
+    }),
+    async handler({ args, context }) {
+      const { organizationId, userId } = context;
+      if (!organizationId || !userId)
+        throw new ApiError(401, "Organization and user context are required");
+      const agent = await AgentModel.findById(context.agent.id);
+      if (
+        !agent ||
+        agent.organizationId !== organizationId ||
+        (context.agentId !== undefined && context.agentId !== agent.id)
+      ) {
+        throw new ApiError(
+          403,
+          "Valid agent context for this organization is required",
+        );
+      }
+      if (
+        !(await userHasPermission(userId, organizationId, "toolPolicy", "read"))
+      )
+        throw new ApiError(403, "You do not have permission to read policy");
+      const catalog = await InternalMcpCatalogModel.findById(args.mcpServerId, {
+        organizationId,
+        userId,
+        expandSecrets: false,
+      });
+      if (!catalog)
+        throw new ApiError(
+          404,
+          "MCP server not found or you don't have access",
+        );
+      if (isBuiltInCatalogId(catalog.id)) {
+        if (
+          !(await userHasPermission(
+            userId,
+            organizationId,
+            "mcpRegistry",
+            "read",
+          ))
+        )
+          throw new ApiError(
+            403,
+            "You do not have permission to view this MCP server",
+          );
+      } else {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId,
+          userId,
+          resource: "mcpRegistry",
+          scope: catalog.id,
+          action: "read",
+        });
+        // SPDX-SnippetEnd
+      }
+      const organizationScope =
+        agent.agentType === "agent" &&
+        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
+      const allowedIds = organizationScope
+        ? null
+        : await inspectableToolIds({ ...context, agentId: agent.id });
+      const catalogTools = await ToolModel.findByCatalogId(catalog.id);
+      const tools = catalogTools.filter(
+        (tool) => allowedIds === null || allowedIds.has(tool.id),
+      );
+      if (!organizationScope && tools.length === 0)
+        throw new ApiError(
+          404,
+          "MCP server not found or you don't have access",
+        );
+      const inspectedToolIds = new Set(tools.map((tool) => tool.id));
+      const visibility = await coverageVisibility(userId, organizationId);
+      const coverage = await openappaCoverageService.toolsForCatalog({
+        ...visibility,
+        organizationId,
+        catalogId: catalog.id,
+      });
+      return result({
+        scope: organizationScope ? "organization" : "agent",
+        mcpServer: {
+          id: catalog.id,
+          name: catalog.name,
+          environmentId: catalog.environmentId,
+        },
+        tools: tools.map(({ id, name, description, parameters }) => ({
+          id,
+          name,
+          description,
+          parameters,
+        })),
+        coverage: coverage
+          .filter((tool) => inspectedToolIds.has(tool.toolId))
+          .map(
+            ({
+              toolId,
+              fullName,
+              readOnly,
+              kind,
+              policySource,
+              rule,
+              fallbackLine,
+              unlisted,
+              enforced,
+            }) => ({
+              toolId,
+              fullName,
+              readOnly,
+              kind,
+              policySource,
+              rule,
+              fallbackLine,
+              unlisted,
+              enforced,
+            }),
+          ),
+        note: "Stored metadata and policy coverage only; coverage does not guarantee the outcome of a runtime call.",
       });
     },
   }),
@@ -658,6 +799,43 @@ function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
   return undefined;
 }
 
+/** Assigned and Auto-discovered rows allowed by RBAC and conversation selection. */
+async function inspectableToolIds(
+  context: ArchestraContext & { agentId: string },
+): Promise<Set<string>> {
+  const { agentId, userId, organizationId, conversationId } = context;
+  const { tools: assigned, exclusionSets } =
+    await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+  const discoverable = await getUnassignedDiscoverableTools({
+    agentId,
+    userId,
+    organizationId,
+    assignedToolNames: new Set(assigned.map((tool) => tool.name)),
+    exclusionSets,
+  });
+  const candidates = [...assigned, ...discoverable];
+  const permittedNames = await filterToolNamesByPermission(
+    candidates.map((tool) => tool.name),
+    userId,
+    organizationId,
+  );
+  const enabledNames = conversationId
+    ? await ConversationEnabledToolModel.getEnabledToolNameSet(conversationId)
+    : null;
+  const byName = new Map<string, string>();
+  // Assignment wins over Auto discovery; preserve the existing source ordering
+  // on duplicate names before restricting to the requested catalog.
+  for (const tool of candidates) {
+    if (
+      !byName.has(tool.name) &&
+      permittedNames.has(tool.name) &&
+      isToolEnabledForConversation(tool.name, enabledNames)
+    )
+      byName.set(tool.name, tool.id);
+  }
+  return new Set(byName.values());
+}
+
 export function isOpenappaTool(shortName: string | null | undefined): boolean {
   return (
     shortName === "yell" ||
@@ -665,6 +843,7 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
     shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
     shortName === "get_guardrails_policy" ||
     shortName === "list_guardrails_battery_fits" ||
+    shortName === "inspect_guardrails_server" ||
     shortName === "validate_guardrails_policy" ||
     shortName === "preview_guardrails_policy_change" ||
     shortName === "update_guardrails_policy" ||

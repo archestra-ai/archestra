@@ -1,14 +1,12 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageLayout } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { openAppaChatHref } from "@/lib/openappa-routes";
 import { BatteriesUploadAction } from "./batteries-panel";
+import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
@@ -33,12 +31,10 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
       }
       actionButton={
         firstStepOnly ? null : pathname === "/openappa/policy" ? (
-          <Button asChild>
-            <Link href={openAppaChatHref({ promptKey: "explainPolicy" })}>
-              <MessageCircle />
-              <span>Configure with chat</span>
-            </Link>
-          </Button>
+          <OpenAppaChatButton promptKey="explainPolicy">
+            <MessageCircle />
+            <span>Configure with chat</span>
+          </OpenAppaChatButton>
         ) : (
           <BatteriesUploadAction />
         )

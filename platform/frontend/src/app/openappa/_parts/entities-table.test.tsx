@@ -24,7 +24,6 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { openAppaChatHref } from "@/lib/openappa-routes";
 import { EntitiesTable } from "./entities-table";
 import { ToolTable } from "./tool-table";
 
@@ -35,7 +34,21 @@ vi.mock("@/lib/auth/auth.query");
 const origin = "http://localhost:9000";
 const entityId = "f12fd5c7-d482-4a3b-9971-bbe81ca4fdf0";
 const serverId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
-const server = setupServer();
+const server = setupServer(
+  http.get("http://localhost:9000/api/agents/all", () =>
+    HttpResponse.json([
+      {
+        id: "appa-agent",
+        name: "OpenAPPA Configuration Agent",
+        scope: "org",
+        builtIn: true,
+        builtInAgentConfig: { name: "openappa-configuration-agent" },
+        authorId: null,
+        labels: [],
+      },
+    ]),
+  ),
+);
 const entityRequests: URLSearchParams[] = [];
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
@@ -65,6 +78,10 @@ beforeEach(() => {
             name: "Research gateway",
             type: "mcp_gateway",
             scope: "org",
+            builtIn: true,
+            builtInAgentConfig: { name: "openappa-configuration-agent" },
+            authorId: null,
+            labels: [],
             icon: null,
             toolCount: 3,
             // The third tool has only a selector rule; coverage counts the
@@ -189,22 +206,30 @@ test("lists registry servers and gateways, servers first, each with a chat and s
   expect(entityRequests[0]?.get("sortBy")).toBe("type");
   expect(entityRequests[0]?.get("sortDirection")).toBe("asc");
   // One chat for every target, whatever its coverage.
-  expect(
-    targets.getByRole("link", { name: "Ask in chat: Research gateway" }),
-  ).toHaveAttribute(
-    "href",
-    openAppaChatHref({
-      promptKey: "reviewCoverage",
-      target: { kind: "mcp_gateway", id: entityId },
-    }),
+  const gatewayLink = await targets.findByRole("link", {
+    name: "Ask in chat: Research gateway",
+  });
+  const gatewayUrl = new URL(gatewayLink.getAttribute("href") ?? "", origin);
+  expect([...gatewayUrl.searchParams.keys()]).toEqual([
+    "agentId",
+    "user_prompt",
+  ]);
+  expect(gatewayUrl.searchParams.get("agentId")).toBe("appa-agent");
+  expect(gatewayUrl.searchParams.get("user_prompt")).toContain(
+    'MCP gateway "Research gateway"',
   );
-  expect(
-    targets.getByRole("link", { name: "Ask in chat: GitHub" }),
-  ).toHaveAttribute(
-    "href",
-    expect.stringContaining(
-      `targetType=mcp_server&targetId=${serverId}&openappaPrompt=reviewCoverage&from=openappa`,
-    ),
+  expect(gatewayUrl.searchParams.get("user_prompt")).toContain(
+    `Target ID: ${entityId}`,
+  );
+  const serverLink = await targets.findByRole("link", {
+    name: "Ask in chat: GitHub",
+  });
+  const serverUrl = new URL(serverLink.getAttribute("href") ?? "", origin);
+  expect(serverUrl.searchParams.get("user_prompt")).toContain(
+    'MCP server "GitHub"',
+  );
+  expect(serverUrl.searchParams.get("user_prompt")).toContain(
+    `Target ID: ${serverId}`,
   );
   expect(targets.getByText("2 of 3 covered")).toBeVisible();
   expect(

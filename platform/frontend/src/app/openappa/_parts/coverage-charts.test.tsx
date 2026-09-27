@@ -10,7 +10,21 @@ import { CoverageCharts } from "./coverage-charts";
 vi.mock("sonner");
 
 const origin = "http://localhost:9000";
-const server = setupServer();
+const server = setupServer(
+  http.get("http://localhost:9000/api/agents/all", () =>
+    HttpResponse.json([
+      {
+        id: "appa-agent",
+        name: "OpenAPPA Configuration Agent",
+        scope: "org",
+        builtIn: true,
+        builtInAgentConfig: { name: "openappa-configuration-agent" },
+        authorId: null,
+        labels: [],
+      },
+    ]),
+  ),
+);
 beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
   archestraApiClient.setConfig({ baseUrl: origin });
@@ -110,7 +124,7 @@ test("splits every tool by what judges it, with the share a rule covers and a ch
     coverage.getByRole("link", { name: "Improve with chat" }),
   ).toHaveAttribute(
     "href",
-    expect.stringContaining("openappaPrompt=improveCoverage"),
+    expect.stringContaining("user_prompt=Help+me+improve"),
   );
 });
 
@@ -174,7 +188,7 @@ test("counts batteries by status, names them on hover, links each to its filter,
     batteries.getByRole("link", { name: "Configure with chat" }),
   ).toHaveAttribute(
     "href",
-    expect.stringContaining("openappaPrompt=configureBatteries"),
+    expect.stringContaining("user_prompt=Help+me+configure"),
   );
 });
 

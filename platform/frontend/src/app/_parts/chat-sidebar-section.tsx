@@ -31,7 +31,6 @@ import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { OpenAppaIcon } from "@/components/openappa-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
@@ -569,18 +568,6 @@ export function ChatSidebarSection({
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                {conv.origin === "openappa" && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <OpenAppaIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        OpenAPPA configuration
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
                 {conv.share && (
                   <TooltipProvider>
                     <Tooltip>
@@ -660,7 +647,7 @@ export function ChatSidebarSection({
               controls must not be nested, and the trigger must be a real
               button rather than a bare svg. */}
           {editingId !== conv.id &&
-            ((canUpdateConversation && conv.origin !== "openappa") ||
+            (canUpdateConversation ||
               canDeleteConversation ||
               showCreateProject) && (
               <DropdownMenu
@@ -685,7 +672,7 @@ export function ChatSidebarSection({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right">
-                  {canUpdateConversation && conv.origin !== "openappa" && (
+                  {canUpdateConversation && (
                     <>
                       <DropdownMenuItem
                         onClick={(e) => {

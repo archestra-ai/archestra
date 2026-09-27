@@ -2,7 +2,6 @@
 
 import type { Column, ColumnDef, SortingState } from "@tanstack/react-table";
 import { Bot, ChevronDown, ChevronUp, MessageCircle } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
@@ -18,7 +17,6 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_FILTER_ALL } from "@/consts";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
@@ -26,7 +24,7 @@ import {
   type CoverageEntity,
   useCoverageEntities,
 } from "@/lib/openappa-coverage.query";
-import { openAppaChatHref } from "@/lib/openappa-routes";
+import { OpenAppaChatButton } from "./openappa-chat-button";
 import { RuleCoverageBar } from "./rule-coverage-bar";
 import { ToolTable } from "./tool-table";
 
@@ -172,7 +170,7 @@ export function EntitiesTable() {
         header: "Actions",
         size: 100,
         cell: ({ row }) => (
-          <PermissionButton
+          <OpenAppaChatButton
             permissions={
               row.original.type === "mcp_server"
                 ? { mcpRegistry: ["read"] }
@@ -183,19 +181,17 @@ export function EntitiesTable() {
             className="h-7"
             // On the button, so a refused one, which drops the link, keeps it.
             aria-label={`Ask in chat: ${row.original.name}`}
-            asChild
+            promptKey="reviewCoverage"
+            target={{
+              kind: row.original.type,
+              id: row.original.id,
+              name: row.original.name,
+            }}
+            onClick={(event) => event.stopPropagation()}
           >
-            <Link
-              href={openAppaChatHref({
-                promptKey: "reviewCoverage",
-                target: { kind: row.original.type, id: row.original.id },
-              })}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <MessageCircle />
-              <span>Ask</span>
-            </Link>
-          </PermissionButton>
+            <MessageCircle />
+            <span>Ask</span>
+          </OpenAppaChatButton>
         ),
       },
     ],

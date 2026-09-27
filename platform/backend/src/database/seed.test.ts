@@ -4,6 +4,7 @@ import {
   ADVISOR_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_PREFIX,
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
@@ -52,28 +53,234 @@ import {
 const [BASE_SKILL] = getEnabledBuiltInSkills();
 
 describe("syncBuiltInAgents", () => {
-  test("seeds the OpenAPPA configuration agent only while OpenAPPA is available", async ({
+  test("reuses the built-in OpenAPPA agent and reconciles its capabilities", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id);
+    config.openappa.enabled = false;
+    await syncBuiltInAgents();
+    await syncOpenAppaConfigAgentCapabilities();
+    const disabledAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    expect(disabledAgent).not.toBeNull();
+    expect(
+      await ResourcePermissionPolicyModel.find({
+        organizationId: organization.id,
+        resource: "agent",
+        scope: disabledAgent?.id ?? "",
+      }),
+    ).not.toBeNull();
+    config.openappa.enabled = true;
+    await syncBuiltInSkills();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncBuiltInAgents();
+    await syncOpenAppaConfigAgentCapabilities();
+    const seededTools = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, disabledAgent?.id ?? ""));
+    const seededPrompts = await db
+      .select()
+      .from(schema.agentSuggestedPromptsTable)
+      .where(
+        eq(schema.agentSuggestedPromptsTable.agentId, disabledAgent?.id ?? ""),
+      );
+    await syncBuiltInAgents();
+    await syncOpenAppaConfigAgentCapabilities();
+    expect(
+      await db
+        .select()
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.agentId, disabledAgent?.id ?? "")),
+    ).toEqual(seededTools);
+    expect(
+      await db
+        .select()
+        .from(schema.agentSuggestedPromptsTable)
+        .where(
+          eq(
+            schema.agentSuggestedPromptsTable.agentId,
+            disabledAgent?.id ?? "",
+          ),
+        ),
+    ).toEqual(seededPrompts);
+    const agent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    expect(agent).toMatchObject({
+      id: disabledAgent?.id,
+      builtIn: true,
+      scope: "org",
+    });
+    const originalToolIds = await AgentToolModel.findToolIdsByAgent(
+      agent?.id ?? "",
+    );
+    expect(originalToolIds).toHaveLength(12);
+    const extraTools = await ToolModel.findBuiltInToolIdsByNames([
+      archestraMcpBranding.getToolName("whoami"),
+    ]);
+    await AgentToolModel.createManyIfNotExists(agent?.id ?? "", extraTools);
+    await AgentModel.update(agent?.id ?? "", {
+      name: "Changed name",
+      systemPrompt: "Changed prompt",
+    });
+    await syncBuiltInAgents();
+    await syncOpenAppaConfigAgentCapabilities();
+    const reconciled = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    expect(reconciled?.id).toBe(agent?.id);
+    expect(reconciled?.name).toBe(BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG);
+    expect(reconciled?.systemPrompt).toBe("Changed prompt");
+    expect(
+      (await AgentToolModel.findToolIdsByAgent(agent?.id ?? "")).sort(),
+    ).toEqual(originalToolIds.sort());
+    expect(
+      await AgentSuggestedPromptModel.getForAgent(agent?.id ?? ""),
+    ).toEqual(OPENAPPA_CONFIG_SUGGESTED_PROMPTS);
+    const systemRows = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organization.id),
+          sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG}`,
+          isNull(schema.agentsTable.deletedAt),
+        ),
+      );
+    expect(systemRows).toHaveLength(1);
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: organization.id,
+      resource: "agent",
+      scope: agent?.id ?? "",
+    });
+    expect(policy?.grants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          subject: { type: "organization", id: "*" },
+          actions: expect.arrayContaining(["use"]),
+        }),
+      ]),
+    );
+  });
+
+  test("keeps an existing system agent and provisions its normal access policy", async ({
     makeOrganization,
   }) => {
-    const original = config.openappa.enabled;
+    config.openappa.enabled = true;
     const organization = await makeOrganization();
-    try {
-      config.openappa.enabled = true;
-      await syncBuiltInAgents();
-      const agent = await AgentModel.getBuiltInAgent(
+    const [previous] = await db
+      .insert(schema.agentsTable)
+      .values({
+        organizationId: organization.id,
+        name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG,
+        agentType: "agent",
+        scope: "org",
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+      })
+      .returning();
+    await syncBuiltInAgents();
+    await syncBuiltInSkills();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncOpenAppaConfigAgentCapabilities();
+    expect(
+      await AgentModel.getBuiltInAgent(
         BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
         organization.id,
-      );
-      expect(agent?.name).toBe(BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG);
-      expect(agent?.builtInAgentConfig).toEqual({
-        name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-      });
+      ),
+    ).toMatchObject({
+      id: previous.id,
+      builtIn: true,
+      systemPrompt:
+        BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+        ],
+    });
+    await AgentModel.update(previous.id, {
+      systemPrompt:
+        "Configure the organization's OpenAPPA policy. Load the appa-guide skill, inspect the current policy, preview requested changes and explain the diff before publishing. Answer questions without changing the policy. Use only OpenAPPA policy and discovery tools.",
+    });
+    await syncBuiltInAgents();
+    expect((await AgentModel.findById(previous.id))?.systemPrompt).toBe(
+      BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG],
+    );
+    expect(
+      await ResourcePermissionPolicyModel.find({
+        organizationId: organization.id,
+        resource: "agent",
+        scope: previous.id,
+      }),
+    ).not.toBeNull();
+  });
+
+  test("rolls back interrupted capability provisioning and retries the existing built-in", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    const organization = await makeOrganization();
+    await syncBuiltInAgents();
+    const existing = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    await syncBuiltInSkills();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await db.execute(
+      sql`ALTER TABLE agent_activation_skill_rules ADD CONSTRAINT test_interrupt_openappa_seed CHECK (false)`,
+    );
+    try {
+      await expect(syncOpenAppaConfigAgentCapabilities()).rejects.toThrow();
       expect(
-        await AgentSuggestedPromptModel.getForAgent(agent?.id ?? ""),
-      ).toEqual(OPENAPPA_CONFIG_SUGGESTED_PROMPTS);
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organization.id,
+        ),
+      ).toMatchObject({ id: existing?.id });
+      expect(
+        await AgentToolModel.findToolIdsByAgent(existing?.id ?? ""),
+      ).toHaveLength(0);
+      expect(
+        await ResourcePermissionPolicyModel.find({
+          organizationId: organization.id,
+          resource: "agent",
+          scope: existing?.id ?? "",
+        }),
+      ).toBeNull();
     } finally {
-      config.openappa.enabled = original;
+      await db.execute(
+        sql`ALTER TABLE agent_activation_skill_rules DROP CONSTRAINT test_interrupt_openappa_seed`,
+      );
     }
+    await syncOpenAppaConfigAgentCapabilities();
+    const agent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    expect(agent?.id).toBe(existing?.id);
+    expect(
+      (await AgentActivationSkillRuleModel.findPolicySnapshot(agent?.id ?? ""))
+        ?.rules,
+    ).toHaveLength(1);
+    expect(
+      await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
+    ).toHaveLength(12);
+    await syncOpenAppaConfigAgentCapabilities();
+    expect(
+      (
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organization.id,
+        )
+      )?.id,
+    ).toBe(agent?.id);
   });
 
   test("assigns the OpenAPPA guide and policy tools to its dedicated agent", async ({
@@ -88,10 +295,11 @@ describe("syncBuiltInAgents", () => {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       await syncOpenAppaConfigAgentCapabilities();
 
-      const agent = await AgentModel.getBuiltInAgent(
-        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-        organization.id,
-      );
+      const agentId = await AgentModel.findActiveIdByNameInOrganization({
+        name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG,
+        organizationId: organization.id,
+      });
+      const agent = await AgentModel.findById(agentId ?? "");
       const guide = await SkillModel.findBuiltIn({
         organizationId: organization.id,
         sourceRef: builtInSkillSourceRef("appa-guide"),
@@ -107,6 +315,18 @@ describe("syncBuiltInAgents", () => {
         archestraMcpBranding.getToolName("ask_user"),
       ]);
       expect(assignedIds).toEqual(expect.arrayContaining(loadSkillIds));
+      const inspectionIds = await ToolModel.findBuiltInToolIdsByNames([
+        archestraMcpBranding.getToolName("inspect_guardrails_server"),
+      ]);
+      expect(inspectionIds).toHaveLength(1);
+      expect(assignedIds).toEqual(expect.arrayContaining(inspectionIds));
+      const environmentDiscoveryIds = await ToolModel.findBuiltInToolIdsByNames(
+        [archestraMcpBranding.getToolName("get_mcp_server_tools")],
+      );
+      expect(environmentDiscoveryIds).toHaveLength(1);
+      expect(assignedIds).not.toEqual(
+        expect.arrayContaining(environmentDiscoveryIds),
+      );
       expect(
         await AgentActivationSkillRuleModel.findPolicySnapshot(agent?.id ?? ""),
       ).toMatchObject({

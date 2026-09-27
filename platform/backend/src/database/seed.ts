@@ -40,7 +40,6 @@ import {
   AgentActivationSkillRuleModel,
   AgentExcludedToolModel,
   AgentModel,
-  AgentToolModel,
   AgentVersionModel,
   AppModel,
   InternalMcpCatalogModel,
@@ -57,6 +56,7 @@ import {
   UserModel,
 } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { secretManager } from "@/secrets-manager";
 import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-guard";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
@@ -115,23 +115,20 @@ export async function syncBuiltInAgents(): Promise<void> {
     );
 
     const builtInAgents = [
-      ...(config.openappa.enabled
-        ? [
-            {
-              builtInAgentId: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-              name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG,
-              description:
-                "Guides policy configuration using the OpenAPPA skill and policy tools",
-              systemPrompt:
-                BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
-                  BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
-                ],
-              builtInAgentConfig: {
-                name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-              } as const,
-            },
-          ]
-        : []),
+      {
+        builtInAgentId: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+        name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG,
+        description:
+          "Guides policy configuration using the OpenAPPA skill and policy tools",
+        systemPrompt: archestraMcpBranding.brandBuiltInText(
+          BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
+            BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+          ],
+        ),
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+        } as const,
+      },
       {
         builtInAgentId: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
         name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
@@ -211,23 +208,6 @@ export async function syncBuiltInAgents(): Promise<void> {
         organizationId: organization.id,
         builtInAgent,
       });
-      if (builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG) {
-        const agent = await AgentModel.getBuiltInAgent(
-          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-          organization.id,
-        );
-        if (agent) {
-          const current = await AgentSuggestedPromptModel.getForAgent(agent.id);
-          if (
-            JSON.stringify(current) !==
-            JSON.stringify(OPENAPPA_CONFIG_SUGGESTED_PROMPTS)
-          ) {
-            await AgentSuggestedPromptModel.syncForAgent(agent.id, [
-              ...OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
-            ]);
-          }
-        }
-      }
     }
   }
 }
@@ -403,8 +383,6 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
 
 /** @public — startup reconciliation, exported for behavior tests. */
 export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
-  if (!config.openappa.enabled) return;
-
   const toolShortNames = [
     "get_agent",
     "get_mcp_gateway",
@@ -415,7 +393,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "update_guardrails_policy",
     "get_guardrails_policy_change_status",
     "list_mcp_server_deployments",
-    "get_mcp_server_tools",
+    "inspect_guardrails_server",
     "load_skill",
     "ask_user",
   ] as const;
@@ -424,53 +402,117 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     archestraMcpBranding.syncFromOrganization(
       await OrganizationModel.getById(organization.id),
     );
-    const toolIds = await ToolModel.findBuiltInToolIdsByNames(
-      toolShortNames.map((shortName) =>
-        archestraMcpBranding.getToolName(shortName),
-      ),
-    );
+    const guide = config.openappa.enabled
+      ? await SkillModel.findBuiltIn({
+          organizationId: organization.id,
+          sourceRef: builtInSkillSourceRef("appa-guide"),
+        })
+      : null;
+    const toolIds =
+      guide && !guide.deletedAt
+        ? await ToolModel.findBuiltInToolIdsByNames(
+            toolShortNames.map((shortName) =>
+              archestraMcpBranding.getToolName(shortName),
+            ),
+          )
+        : [];
+
     const agent = await AgentModel.getBuiltInAgent(
       BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
       organization.id,
     );
-    const guide = await SkillModel.findBuiltIn({
-      organizationId: organization.id,
-      sourceRef: builtInSkillSourceRef("appa-guide"),
-    });
-    if (!agent || !guide || guide.deletedAt) continue;
+    if (!agent) continue;
 
-    await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
-    const snapshot = await AgentActivationSkillRuleModel.findPolicySnapshot(
-      agent.id,
-    );
-    if (
-      snapshot?.mode === "manual" &&
-      snapshot.rules.length === 1 &&
-      snapshot.rules[0].disposition === "allow" &&
-      snapshot.rules[0].reference.source === "native" &&
-      snapshot.rules[0].reference.skillId === guide.id
-    ) {
-      continue;
-    }
-    await withDbTransaction(async (tx) => {
+    const agentId = await withDbTransaction(async (tx) => {
       await AgentModel.lockRowForUpdate(agent.id, tx);
-      await AgentActivationSkillRuleModel.replaceRules({
-        agentId: agent.id,
-        rules: [
-          {
-            disposition: "allow",
-            reference: { source: "native", skillId: guide.id },
-          },
-        ],
+      const [policy] = await tx
+        .select({ scope: schema.resourcePermissionPoliciesTable.scope })
+        .from(schema.resourcePermissionPoliciesTable)
+        .where(
+          and(
+            eq(
+              schema.resourcePermissionPoliciesTable.organizationId,
+              organization.id,
+            ),
+            eq(schema.resourcePermissionPoliciesTable.resource, "agent"),
+            eq(schema.resourcePermissionPoliciesTable.scope, agent.id),
+          ),
+        );
+      if (!policy) {
+        await ResourcePermissionPolicyModel.createInitial({
+          tx,
+          organizationId: organization.id,
+          resource: "agent",
+          scope: agent.id,
+          authorId: null,
+          publishToOrganization: true,
+        });
+      }
+      if (!guide || guide.deletedAt) return agent.id;
+
+      const currentTools = await tx
+        .select({ toolId: schema.agentToolsTable.toolId })
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.agentId, agent.id));
+      const intendedToolIds = new Set(toolIds);
+      if (
+        currentTools.length !== toolIds.length ||
+        currentTools.some(({ toolId }) => !intendedToolIds.has(toolId))
+      ) {
+        await tx
+          .delete(schema.agentToolsTable)
+          .where(eq(schema.agentToolsTable.agentId, agent.id));
+        if (toolIds.length > 0) {
+          await tx
+            .insert(schema.agentToolsTable)
+            .values(toolIds.map((toolId) => ({ agentId: agent.id, toolId })));
+        }
+      }
+      const snapshot = await AgentActivationSkillRuleModel.findPolicySnapshot(
+        agent.id,
         tx,
-      });
-      await AgentModel.setActivationSkillPolicyState({
-        id: agent.id,
-        mode: "manual",
-        revision: (snapshot?.revision ?? 0) + 1,
+      );
+      const guideIsAssigned =
+        snapshot?.mode === "manual" &&
+        snapshot.rules.length === 1 &&
+        snapshot.rules[0].disposition === "allow" &&
+        snapshot.rules[0].reference.source === "native" &&
+        snapshot.rules[0].reference.skillId === guide.id;
+      if (!guideIsAssigned) {
+        await AgentActivationSkillRuleModel.replaceRules({
+          agentId: agent.id,
+          rules: [
+            {
+              disposition: "allow",
+              reference: { source: "native", skillId: guide.id },
+            },
+          ],
+          tx,
+        });
+        await AgentModel.setActivationSkillPolicyState({
+          id: agent.id,
+          mode: "manual",
+          revision: (snapshot?.revision ?? 0) + 1,
+          tx,
+        });
+      }
+      const currentPrompts = await AgentSuggestedPromptModel.getForAgent(
+        agent.id,
         tx,
-      });
+      );
+      if (
+        JSON.stringify(currentPrompts) !==
+        JSON.stringify(OPENAPPA_CONFIG_SUGGESTED_PROMPTS)
+      ) {
+        await AgentSuggestedPromptModel.syncForAgent({
+          agentId: agent.id,
+          prompts: [...OPENAPPA_CONFIG_SUGGESTED_PROMPTS],
+          tx,
+        });
+      }
+      return agent.id;
     });
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
   }
 }
 
@@ -1341,6 +1383,12 @@ function shouldSyncBuiltInAgentSystemPrompt(params: {
   builtInAgentId: string;
   systemPrompt: string | null;
 }): boolean {
+  if (params.builtInAgentId === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG) {
+    return (
+      params.systemPrompt === null ||
+      params.systemPrompt === LEGACY_OPENAPPA_CONFIG_SYSTEM_PROMPT
+    );
+  }
   if (params.systemPrompt === null) {
     return false;
   }
@@ -1350,6 +1398,9 @@ function shouldSyncBuiltInAgentSystemPrompt(params: {
     SUPERSEDED_POLICY_CONFIG_SYSTEM_PROMPTS.includes(params.systemPrompt)
   );
 }
+
+const LEGACY_OPENAPPA_CONFIG_SYSTEM_PROMPT =
+  "Configure the organization's OpenAPPA policy. Load the appa-guide skill, inspect the current policy, preview requested changes and explain the diff before publishing. Answer questions without changing the policy. Use only OpenAPPA policy and discovery tools.";
 
 const LEGACY_POLICY_CONFIG_SYSTEM_PROMPT = `Analyze this MCP tool and determine security policies:
 

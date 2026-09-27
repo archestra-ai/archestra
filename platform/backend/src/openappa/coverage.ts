@@ -42,6 +42,21 @@ import { openappaBatteriesService } from "./batteries";
  * in memory.
  */
 class OpenAppaCoverageService {
+  /** Complete policy rows for one caller-readable catalog, without list facets. */
+  async toolsForCatalog(
+    params: { organizationId: string; catalogId: string } & CoverageVisibility,
+  ): Promise<CoverageTool[]> {
+    if (!params.visibleCatalogIds?.includes(params.catalogId)) return [];
+    const { tools } = await buildReport(params.organizationId, {
+      ...params,
+      visibleCatalogIds: [params.catalogId],
+      includeAutoModeTools: false,
+    });
+    return tools
+      .map((row) => row.tool)
+      .filter((tool) => tool.catalogId === params.catalogId);
+  }
+
   async tools(
     params: { organizationId: string } & CoverageToolsQuery &
       CoverageVisibility,

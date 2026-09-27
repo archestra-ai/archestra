@@ -37,9 +37,7 @@ import {
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
-import { ModelSelector } from "@/components/chat/model-selector";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
-import { OpenAppaIcon } from "@/components/openappa-icon";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -221,11 +219,6 @@ export interface ArchestraPromptInputProps
   /** Render the new-chat composer as a dedicated runtime launcher. */
   runtimeMode?: boolean;
   runtimeAgentName?: string;
-  /** Reuse the chat composer for a focused launch form without chat controls. */
-  minimalMode?: boolean;
-  fixedAgentName?: string;
-  fixedModelName?: string;
-  placeholderOverride?: string;
 }
 
 type SlashCommand = {
@@ -292,10 +285,6 @@ const PromptInputContent = ({
   placeholderPreview,
   runtimeMode = false,
   runtimeAgentName,
-  minimalMode = false,
-  fixedAgentName,
-  fixedModelName,
-  placeholderOverride,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
@@ -376,9 +365,9 @@ const PromptInputContent = ({
       : (chatPlaceholder ?? "What would you like to get done?");
   const isPreviewingSuggestion =
     !!placeholderPreview && controller.textInput.value.length === 0;
-  const placeholder =
-    placeholderOverride ??
-    (isPreviewingSuggestion ? placeholderPreview : defaultPlaceholder);
+  const placeholder = isPreviewingSuggestion
+    ? placeholderPreview
+    : defaultPlaceholder;
 
   // Skills exposed as slash commands whenever the org's skill tools are on —
   // the same flag that gates the backend's activation injection.
@@ -980,14 +969,14 @@ const PromptInputContent = ({
           ))}
         </div>
       )}
-      {!minimalMode && isSandboxCommandHintVisible && (
+      {isSandboxCommandHintVisible && (
         <div className="absolute inset-x-0 bottom-full mb-2 px-3 text-xs text-muted-foreground">
           Messages starting with{" "}
           <span className="font-mono font-medium">!</span> run as commands in
           the sandbox
         </div>
       )}
-      {!minimalMode && isSlashCommandOpen && (
+      {isSlashCommandOpen && (
         <div className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
           <PromptInputCommand className="h-auto rounded-none bg-transparent">
             <PromptInputCommandList className="max-h-64">
@@ -1061,9 +1050,9 @@ const PromptInputContent = ({
         </div>
       )}
       <PromptInput
-        globalDrop={!minimalMode}
-        multiple={!minimalMode}
-        onSubmit={minimalMode ? onSubmit : handleWrappedSubmit}
+        globalDrop
+        multiple
+        onSubmit={handleWrappedSubmit}
         accept={showFileUploadButton ? undefined : "application/x-empty"}
         maxFileSize={storageByteLimit}
         onError={handleFileError}
@@ -1080,16 +1069,11 @@ const PromptInputContent = ({
         )}
       >
         {/* File attachments display - shown inline above textarea */}
-        {!minimalMode && (
-          <PromptInputAttachments className="px-3 pt-2 pb-0">
-            {(attachment) => <PromptInputAttachment data={attachment} />}
-          </PromptInputAttachments>
-        )}
+        <PromptInputAttachments className="px-3 pt-2 pb-0">
+          {(attachment) => <PromptInputAttachment data={attachment} />}
+        </PromptInputAttachments>
         <PromptInputBody className="relative block w-full">
           <PromptInputTextarea
-            aria-label={
-              minimalMode ? "Describe the OpenAPPA policy change" : undefined
-            }
             placeholder={placeholder}
             ref={textareaRef}
             // Keep empty composers stable: sizing to a long placeholder moves
@@ -1106,7 +1090,7 @@ const PromptInputContent = ({
             // (no conversation to queue into yet) Enter stays blocked while
             // the conversation is being created.
             disableEnterSubmit={isResponseInFlight && !conversationId}
-            onKeyDown={minimalMode ? undefined : handleTextareaKeyDown}
+            onKeyDown={handleTextareaKeyDown}
             data-testid={E2eTestId.ChatPromptTextarea}
           />
           {isPreviewingSuggestion && (
@@ -1118,85 +1102,54 @@ const PromptInputContent = ({
             </div>
           )}
         </PromptInputBody>
-        <PromptInputFooter
-          ref={footerRef}
-          className={minimalMode ? "justify-between" : undefined}
-        >
-          {minimalMode && (
-            <div className="flex min-w-0 items-center gap-2">
-              {fixedAgentName && (
-                <span
-                  className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground"
-                  title={`Agent: ${fixedAgentName}`}
-                >
-                  <OpenAppaIcon className="size-4 shrink-0" />
-                  <span className="truncate">{fixedAgentName}</span>
-                </span>
-              )}
-              {fixedModelName ? (
-                <span
-                  className="truncate px-2 text-sm text-muted-foreground"
-                  title={`Model: ${fixedModelName}`}
-                >
-                  {fixedModelName}
-                </span>
-              ) : (
-                <ModelSelector
-                  selectedModel={selectedModel}
-                  onModelChange={onModelChange}
-                />
-              )}
-            </div>
-          )}
-          {!minimalMode && (
-            <ChatPromptInputTools
-              isNarrow={isNarrow}
-              toolbarRef={toolbarRef}
-              selectedModel={selectedModel}
-              onModelChange={onModelChange}
-              conversationId={conversationId}
-              currentConversationChatApiKeyId={currentConversationChatApiKeyId}
-              currentProvider={currentProvider}
-              initialApiKeyId={initialApiKeyId}
-              onApiKeyChange={onApiKeyChange}
-              onProviderChange={onProviderChange}
-              allowFileUploads={allowFileUploads}
-              lockedChat={lockedChat}
-              onLockedChatChange={onLockedChatChange}
-              sandboxAvailable={sandboxAvailable}
-              isModelsLoading={isModelsLoading}
-              tokensUsed={tokensUsed}
-              cachedTokens={cachedTokens}
-              maxContextLength={maxContextLength}
-              agentLlmApiKeyId={agentLlmApiKeyId}
-              selectorAgentId={selectorAgentId}
-              onAgentChange={onAgentChange}
-              modelSource={modelSource}
-              toolsUnavailable={toolsUnavailable}
-              notRecommendedForAgents={notRecommendedForAgents}
-              runtimeMode={runtimeMode}
-              onResetModelOverride={onResetModelOverride}
-              thinkingEffort={thinkingEffort}
-              onThinkingEffortChange={onThinkingEffortChange}
-              agentRequiresPerUserConnect={agentRequiresPerUserConnect}
-              subscriptionConnectRequired={subscriptionConnectRequired}
-              subscriptionProvider={subscriptionProvider}
-              onSubscriptionConnect={requestSubscriptionConnect}
-              subscriptionConnectRequest={subscriptionConnectRequest}
-              agentModelDisplayName={agentModelDisplayName}
-              textareaRef={textareaRef}
-              contextWindow={contextWindow}
-              lastCompaction={lastCompaction}
-              onCompactConversation={compactConversation}
-              isContextCompacting={isContextCompacting}
-            />
-          )}
+        <PromptInputFooter ref={footerRef}>
+          <ChatPromptInputTools
+            isNarrow={isNarrow}
+            toolbarRef={toolbarRef}
+            selectedModel={selectedModel}
+            onModelChange={onModelChange}
+            conversationId={conversationId}
+            currentConversationChatApiKeyId={currentConversationChatApiKeyId}
+            currentProvider={currentProvider}
+            initialApiKeyId={initialApiKeyId}
+            onApiKeyChange={onApiKeyChange}
+            onProviderChange={onProviderChange}
+            allowFileUploads={allowFileUploads}
+            lockedChat={lockedChat}
+            onLockedChatChange={onLockedChatChange}
+            sandboxAvailable={sandboxAvailable}
+            isModelsLoading={isModelsLoading}
+            tokensUsed={tokensUsed}
+            cachedTokens={cachedTokens}
+            maxContextLength={maxContextLength}
+            agentLlmApiKeyId={agentLlmApiKeyId}
+            selectorAgentId={selectorAgentId}
+            onAgentChange={onAgentChange}
+            modelSource={modelSource}
+            toolsUnavailable={toolsUnavailable}
+            notRecommendedForAgents={notRecommendedForAgents}
+            runtimeMode={runtimeMode}
+            onResetModelOverride={onResetModelOverride}
+            thinkingEffort={thinkingEffort}
+            onThinkingEffortChange={onThinkingEffortChange}
+            agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+            subscriptionConnectRequired={subscriptionConnectRequired}
+            subscriptionProvider={subscriptionProvider}
+            onSubscriptionConnect={requestSubscriptionConnect}
+            subscriptionConnectRequest={subscriptionConnectRequest}
+            agentModelDisplayName={agentModelDisplayName}
+            textareaRef={textareaRef}
+            contextWindow={contextWindow}
+            lastCompaction={lastCompaction}
+            onCompactConversation={compactConversation}
+            isContextCompacting={isContextCompacting}
+          />
           {/* shrink-0: the send/mic cluster is a fixed unit and must never
               compress. When the toolbar runs out of room the collapse hook
               folds the inline tools into a menu (freeing space for the pinned
               recorder pill) rather than squeezing the send button. */}
           <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
-            {!runtimeMode && !minimalMode && (
+            {!runtimeMode && (
               <PromptInputSpeechButton
                 textareaRef={textareaRef}
                 onTranscriptionChange={handleTranscriptionChange}
@@ -1207,11 +1160,9 @@ const PromptInputContent = ({
                 <PromptInputSubmit
                   className="!h-8"
                   aria-label={
-                    minimalMode
-                      ? "Start policy chat"
-                      : isResponseInFlight && onStop && !isQueueingSubmit
-                        ? "Stop"
-                        : "Submit"
+                    isResponseInFlight && onStop && !isQueueingSubmit
+                      ? "Stop"
+                      : "Submit"
                   }
                   status={submitStatus}
                   disabled={
@@ -1309,10 +1260,6 @@ const ArchestraPromptInput = ({
   placeholderPreview,
   runtimeMode,
   runtimeAgentName,
-  minimalMode,
-  fixedAgentName,
-  fixedModelName,
-  placeholderOverride,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId ?? undefined);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -1425,10 +1372,6 @@ const ArchestraPromptInput = ({
           placeholderPreview={placeholderPreview}
           runtimeMode={runtimeMode}
           runtimeAgentName={runtimeAgentName}
-          minimalMode={minimalMode}
-          fixedAgentName={fixedAgentName}
-          fixedModelName={fixedModelName}
-          placeholderOverride={placeholderOverride}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
           externalMcpSkillAttachment={externalMcpSkillAttachment}

@@ -372,8 +372,6 @@ export class ResourcePermissions {
       });
       if (target?.enabled === false)
         throw new ApiError(400, "Locked chats cannot be shared");
-      if (target?.policyConversation)
-        throw new ApiError(400, "Policy conversations cannot be shared");
     }
     await ResourcePermissions.assertAdvisorStaysOrganizationWide(params);
     const effective = await ResourcePermissions.getEffective(params);

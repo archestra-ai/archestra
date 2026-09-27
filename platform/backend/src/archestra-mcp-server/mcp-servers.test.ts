@@ -1116,7 +1116,7 @@ describe("mcp server tools respect the agent's environment", () => {
     expect((result.content[0] as any).text).toContain("not found");
   });
 
-  test("policy configuration can inspect a visible server in another environment", async ({
+  test("policy configuration obeys the same environment boundary as other agents", async ({
     makeAgent,
     makeInternalMcpCatalog,
   }) => {
@@ -1141,7 +1141,8 @@ describe("mcp server tools respect the agent's environment", () => {
       policyContext,
     );
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("not found");
   });
 
   test("create_mcp_server defaults to the calling agent's environment", async () => {

@@ -235,8 +235,9 @@ describe("APPA Guide feature availability", () => {
     expect(content).toContain("archestra__update_guardrails_policy");
     expect(content).toContain("archestra__get_guardrails_policy_change_status");
 
-    // P02: Complete host inventory before proposal
+    // P02: Inspect available inventory and account for the caller's scope
     expect(content).toContain("archestra__list_mcp_server_deployments");
+    expect(content).toContain("archestra__inspect_guardrails_server");
     expect(content).toContain("archestra__get_mcp_server_tools");
     expect(content).toContain("archestra__search_tools");
 

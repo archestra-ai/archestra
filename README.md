@@ -95,8 +95,8 @@ live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
 ### Release channels
 
 Archestra maintains two active release tracks:
-- **Stable releases** (e.g. `1.3.51`): Qualified, tested releases for production deployments. Archestra maintains one active stable release line at a time with security patches and bug fixes. The Docker tag `latest` points to the most recent stable release.
-- **Beta releases** (e.g. `1.4.0-beta.1`): Previews of upcoming features built directly from the `main` branch. Beta releases let you test new capabilities and provide feedback before they land in a stable release.
+- **Stable releases** (e.g. `1.3.51`): Qualified, tested releases for production deployments. Archestra maintains one active stable release line at a time with security patches and bug fixes.
+- **Release candidates** (e.g. `1.4.0-rc.22`): Previews of upcoming features built directly from the `main` branch. They let you test new capabilities and provide feedback before they land in a stable release. The Docker tag `archestra/platform:latest` points to the newest release, so it usually runs a release candidate.
 
 New features and bug fixes land on `main` first and ship in rolling beta releases. Fixes are then selectively backported to the supported stable branch. For production environments, pin an exact version tag or Helm chart version rather than tracking `latest`. See our [Release guide](platform/dev/RELEASE.md) for full release lifecycle details.
 

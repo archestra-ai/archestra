@@ -29,6 +29,7 @@ jobs:
       platform_version: ${{ steps.resolve-release.outputs.version }}
       platform_tag_name: ${{ steps.resolve-release.outputs.tag_name }}
       platform_checkout_ref: ${{ steps.resolve-release.outputs.checkout_ref }}
+      platform_previous_version: ${{ steps.previous-release.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -188,6 +189,19 @@ jobs:
             echo "Created tag ${TAG_NAME} -> ${RELEASE_SHA}"
           fi
 
+      - name: Resolve previous release on this branch
+        if: ${{ steps.resolve-release.outputs.should_publish == 'true' }}
+        id: previous-release
+        env:
+          RELEASE_SHA: ${{ steps.resolve-release.outputs.release_sha }}
+        run: |
+          # The platform image carries the previous release's frontend chunks so
+          # open tabs survive an upgrade. Take them from the release this branch
+          # upgrades from, not from a floating tag.
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match 'platform-v*' "${RELEASE_SHA}^" 2>/dev/null || true)
+          echo "version=${PREVIOUS_TAG#platform-v}" >> "${GITHUB_OUTPUT}"
+          echo "Previous release: ${PREVIOUS_TAG:-none}"
+
       - name: Create or update the next release PR
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         # Native rolling PRs on each branch. Pause only for consumed cutover overrides,
@@ -305,6 +319,7 @@ jobs:
       image_directory: ./platform
       image_name: platform
       version: ${{ needs.release-please.outputs.platform_version }}
+      previous_version: ${{ needs.release-please.outputs.platform_previous_version }}
       push_image: true
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
@@ -408,7 +423,6 @@ jobs:
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Log in to Docker Hub
-        if: ${{ github.ref_name != 'main' }}
         uses: ./.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -419,7 +433,6 @@ jobs:
         shell: bash
         run: |
           test -s release-images/mcp-server-base
-          PLATFORM_IMAGE=$(cat release-images/platform)
           helm push "archestra-platform-${VERSION}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
           for file in release-images/*; do
             [ "${file##*/}" = platform ] && continue
@@ -427,8 +440,44 @@ jobs:
             # supply-chain-policy: allow-latest approved stable release channel
             docker buildx imagetools create --tag "${IMAGE%@*}:latest" "$IMAGE"
           done
-          # Move platform last, after its companion images are ready.
-          # supply-chain-policy: allow-latest approved stable release channel
+
+      - name: Move the platform latest tag
+        shell: bash
+        run: |
+          # Quickstart pulls archestra/platform:latest, so it follows the newest
+          # published release, release candidates included. Companion and agent
+          # images keep :latest on the stable line: stable platforms reference
+          # the agent images by that tag. This step runs after the companion
+          # images are tagged, so a stable platform never points ahead of them.
+          PLATFORM_IMAGE=$(cat release-images/platform)
+          version_is_newer() {
+            local a_base=${1%%-*} b_base=${2%%-*} a_pre= b_pre=
+            [[ "$1" == *-* ]] && a_pre=${1#*-}
+            [[ "$2" == *-* ]] && b_pre=${2#*-}
+            if [ "$a_base" != "$b_base" ]; then
+              [ "$(printf '%s\n' "$a_base" "$b_base" | sort -V | tail -1)" = "$a_base" ]
+              return
+            fi
+            # A stable release outranks its own release candidates.
+            if [ -z "$a_pre" ] || [ -z "$b_pre" ]; then
+              [ -z "$a_pre" ] && [ -n "$b_pre" ]
+              return
+            fi
+            [ "$a_pre" != "$b_pre" ] \
+              && [ "$(printf '%s\n' "$a_pre" "$b_pre" | sort -V | tail -1)" = "$a_pre" ]
+          }
+          # Drafts are excluded: they have not moved the tag. This release is
+          # still a draft here, so a retry is allowed to move it again.
+          RELEASE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.draft | not) | .tag_name') \
+            || { echo "::error::Cannot list releases to order the platform latest tag"; exit 1; }
+          while IFS= read -r RELEASE_TAG; do
+            [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]] || continue
+            if version_is_newer "${RELEASE_TAG#platform-v}" "$VERSION"; then
+              echo "Newer release ${RELEASE_TAG} already holds the platform latest tag"
+              exit 0
+            fi
+          done <<< "$RELEASE_TAGS"
+          # supply-chain-policy: allow-latest newest published platform release
           docker buildx imagetools create --tag "${PLATFORM_IMAGE%@*}:latest" "$PLATFORM_IMAGE"
 
       - name: Publish GitHub release

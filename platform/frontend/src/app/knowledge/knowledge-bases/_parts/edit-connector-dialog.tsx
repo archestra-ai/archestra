@@ -406,6 +406,37 @@ export function EditConnectorDialog({
           <NotionAutoSyncPermissionsNote />
         )}
 
+        {autoSyncPermissions && connectorSupportsAdminApiKey(connectorType) && (
+          <FormField
+            control={form.control}
+            name="adminApiKey"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Organization admin API key (optional)</FormLabel>
+                <FormDescription>
+                  <AdminApiKeyDescription type={connectorType} /> Leave empty to
+                  keep the existing key.
+                </FormDescription>
+                <FormControl>
+                  <SecretInput
+                    placeholder="Atlassian organization admin API key"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {autoSyncPermissions && connectorType === "perforce" && (
+          <PerforcePermissionSyncFields
+            form={form}
+            mode="edit"
+            adminCredentialDescription={permissionSyncRequirement}
+          />
+        )}
+
         <div className="border-t" />
 
         {urlConfig && (
@@ -466,37 +497,6 @@ export function EditConnectorDialog({
                 <FormMessage />
               </FormItem>
             )}
-          />
-        )}
-
-        {autoSyncPermissions && connectorSupportsAdminApiKey(connectorType) && (
-          <FormField
-            control={form.control}
-            name="adminApiKey"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Organization admin API key (optional)</FormLabel>
-                <FormDescription>
-                  <AdminApiKeyDescription type={connectorType} /> Leave empty to
-                  keep the existing key.
-                </FormDescription>
-                <FormControl>
-                  <SecretInput
-                    placeholder="Atlassian organization admin API key"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        {autoSyncPermissions && connectorType === "perforce" && (
-          <PerforcePermissionSyncFields
-            form={form}
-            mode="edit"
-            adminCredentialDescription={permissionSyncRequirement}
           />
         )}
       </div>

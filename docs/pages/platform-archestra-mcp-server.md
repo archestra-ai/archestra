@@ -1850,7 +1850,7 @@ Required RBAC permission: `knowledgeSource:create`
 | `connector_type` | `string` | Yes | Type of the knowledge connector (for example jira, confluence, or google_drive). |
 | `config` | `object` | Yes | Provider-specific configuration object. |
 | `description` | `string \| null` | No | Description of the knowledge connector. |
-| `sync_permissions_from_source` | `boolean` | No | Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync connectors permission and a connector type that supports it. |
+| `sync_permissions_from_source` | `boolean` | No | Mirror each document's access control from the source, so a query only returns what the caller could open there. Requires an enterprise license and a connector type that supports it. |
 
 ##### Output
 

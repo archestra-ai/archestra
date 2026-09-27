@@ -1717,8 +1717,6 @@ describe("ConnectorSyncService", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    const { default: config } = await import("@/config");
-    config.kb.autoSyncPermissionsEnabled = true;
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const secretId = await createSecret();

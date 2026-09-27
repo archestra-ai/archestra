@@ -48,9 +48,6 @@ describe("knowledge base routes", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    // The auto-sync-permissions routes are beta-gated; the suite runs with the
-    // gate open, and the dedicated flag-off tests close it per test.
-    config.kb.autoSyncPermissionsEnabled = true;
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -1470,11 +1467,10 @@ describe("knowledge base routes", () => {
       );
     });
 
-    test("rejects auto-sync-permissions creation for a member without the dedicated permission", async ({
+    test("allows connector creators to enable permission sync", async ({
       makeMember,
     }) => {
-      // Default member role: knowledgeSource create, but no
-      // knowledgeSourceAutoSync grants.
+      // The member's ordinary connector create permission is sufficient.
       await MemberModel.updateRole(user.id, organizationId, "member");
       const response = await app.inject({
         method: "POST",
@@ -1493,10 +1489,8 @@ describe("knowledge base routes", () => {
         },
       });
 
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error.message).toContain(
-        '"create" permission for auto-sync-permissions connectors',
-      );
+      expect(response.statusCode).toBe(200);
+      expect(response.json().syncPermissionsFromSource).toBe(true);
     });
 
     test("allows an admin to create an auto-sync-permissions connector", async ({
@@ -1666,7 +1660,7 @@ describe("knowledge base routes", () => {
   });
 
   describe("GET /api/connectors", () => {
-    test("hides auto-sync-permissions connectors from non-admin members", async ({
+    test("shows permission-sync connectors to members with connector grants", async ({
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
       makeMember,
@@ -1689,26 +1683,25 @@ describe("knowledge base routes", () => {
       expect(list.statusCode).toBe(200);
       const listedIds = list.json().data.map((c: { id: string }) => c.id);
       expect(listedIds).toContain(orgWide.id);
-      expect(listedIds).not.toContain(autoSync.id);
+      expect(listedIds).toContain(autoSync.id);
 
-      // The detail surfaces must read as "not found", not just be filtered
-      // from lists.
+      // The same grant reaches the detail and document surfaces.
       const detail = await app.inject({
         method: "GET",
         url: `/api/connectors/${autoSync.id}`,
       });
-      expect(detail.statusCode).toBe(404);
+      expect(detail.statusCode).toBe(200);
       const documents = await app.inject({
         method: "GET",
         url: `/api/connectors/${autoSync.id}/documents`,
       });
-      expect(documents.statusCode).toBe(404);
+      expect(documents.statusCode).toBe(200);
       const update = await app.inject({
         method: "PUT",
         url: `/api/connectors/${autoSync.id}`,
         payload: { name: "renamed" },
       });
-      expect(update.statusCode).toBe(404);
+      expect(update.statusCode).toBe(200);
     });
 
     test("shows auto-sync-permissions connectors to knowledgeSource admins", async ({
@@ -1974,7 +1967,7 @@ describe("knowledge base routes", () => {
       makeMember,
     }) => {
       // Switching into auto-sync (and touching the connector afterwards)
-      // requires the knowledgeSourceAutoSync permission (admin role here).
+      // uses the ordinary connector update permission (admin role here).
       await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
@@ -2068,11 +2061,10 @@ describe("knowledge base routes", () => {
       ).toBe(true);
     });
 
-    test("rejects switching to auto-sync-permissions for a member without the dedicated permission", async ({
+    test("allows connector editors to enable permission sync", async ({
       makeMember,
     }) => {
-      // Default member role: knowledgeSource update, but no
-      // knowledgeSourceAutoSync grants.
+      // The member's ordinary connector update permission is sufficient.
       await MemberModel.updateRole(user.id, organizationId, "member");
       const connector = await KnowledgeBaseConnectorModel.create(
         {
@@ -2086,7 +2078,7 @@ describe("knowledge base routes", () => {
             authMethod: "pat",
           },
         },
-        // The member reaches the connector; only the auto-sync gate refuses.
+        // The member reaches the connector through its grants.
         accessGrants("org"),
       );
 
@@ -2096,10 +2088,8 @@ describe("knowledge base routes", () => {
         payload: { visibility: "auto-sync-permissions" },
       });
 
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error.message).toContain(
-        '"update" permission for auto-sync-permissions connectors',
-      );
+      expect(response.statusCode).toBe(200);
+      expect(response.json().syncPermissionsFromSource).toBe(true);
     });
 
     test("persists connector updates across reads", async () => {
@@ -3277,10 +3267,34 @@ describe("knowledge base routes", () => {
   });
 
   describe("POST /api/connectors/:id/permission-sync", () => {
-    // Auto-sync connector surfaces need the knowledgeSourceAutoSync
-    // permission (admin role here); everyone else gets 404/403.
+    // The admin has ordinary connector update permission and reach.
     beforeEach(async ({ makeMember }) => {
       await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+    });
+
+    test("allows a connector editor to trigger a permission sync", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, "editor");
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          syncPermissionsFromSource: true,
+          access: "org",
+        },
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/permission-sync`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().status).toBe("enqueued");
     });
 
     test("enqueues a permission_sync task for an auto-sync github connector", async ({
@@ -4115,89 +4129,6 @@ describe("knowledge base routes", () => {
         `acc-hidden -> alice@example.com (${alice.id})`,
       ]);
       expect(row?.after?.memberOverrides).toEqual([]);
-    });
-  });
-
-  describe("auto-sync permissions beta gate", () => {
-    beforeEach(async ({ makeMember }) => {
-      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
-    });
-
-    test("selecting the visibility and the permission-family routes are rejected when the flag is off", async ({
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const kb = await makeKnowledgeBase(organizationId);
-      // Pre-existing auto-sync connector (e.g. created while the beta was on).
-      const connector = await makeKnowledgeBaseConnector(
-        kb.id,
-        organizationId,
-        { connectorType: "jira", syncPermissionsFromSource: true },
-      );
-      config.kb.autoSyncPermissionsEnabled = false;
-
-      const create = await app.inject({
-        method: "POST",
-        url: "/api/connectors",
-        payload: {
-          name: "Auto-sync Connector",
-          connectorType: "jira",
-          syncPermissionsFromSource: true,
-          config: {
-            type: "jira",
-            jiraBaseUrl: "https://test.atlassian.net",
-            isCloud: true,
-            projectKey: "TEST",
-          },
-          credentials: { email: "user@example.com", apiToken: "token" },
-        },
-      });
-      expect(create.statusCode).toBe(403);
-      expect(create.json().error.message).toContain("beta feature");
-
-      for (const [method, url] of [
-        ["POST", `/api/connectors/${connector.id}/permission-sync`],
-        ["GET", `/api/connectors/${connector.id}/permission-coverage`],
-        ["GET", `/api/connectors/${connector.id}/user-groups`],
-        ["DELETE", `/api/connectors/${connector.id}/member-overrides/acc-1`],
-      ] as const) {
-        const response = await app.inject({ method, url });
-        expect(response.statusCode, `${method} ${url}`).toBe(403);
-      }
-      const upsert = await app.inject({
-        method: "PUT",
-        url: `/api/connectors/${connector.id}/member-overrides`,
-        payload: { externalAccountId: "acc-1", userId: user.id },
-      });
-      expect(upsert.statusCode).toBe(403);
-    });
-
-    test("an existing auto-sync connector still reads and updates normally with the flag off", async ({
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const kb = await makeKnowledgeBase(organizationId);
-      const connector = await makeKnowledgeBaseConnector(
-        kb.id,
-        organizationId,
-        { connectorType: "jira", syncPermissionsFromSource: true },
-      );
-      config.kb.autoSyncPermissionsEnabled = false;
-
-      const get = await app.inject({
-        method: "GET",
-        url: `/api/connectors/${connector.id}`,
-      });
-      expect(get.statusCode).toBe(200);
-
-      // Updating without switching INTO auto-sync stays allowed (including
-      // switching away from it).
-      const update = await app.inject({
-        method: "PUT",
-        url: `/api/connectors/${connector.id}`,
-        payload: { name: "renamed" },
-      });
-      expect(update.statusCode).toBe(200);
     });
   });
 });

@@ -80,6 +80,8 @@ function NewPluginWizard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSource = searchParams.get("source");
+  const activeSection =
+    searchParams.get("tab") === "permissions" ? "permissions" : "general";
   const [importState, setImportState] = useState<{
     repoUrl: string;
     autoDiscover: boolean;
@@ -91,7 +93,9 @@ function NewPluginWizard() {
   const [search, setSearch] = useState("");
 
   const [step, setStep] = useState<CreateStep>(
-    initialSource === "blank" ? "configure" : "source",
+    initialSource === "blank" || searchParams.has("tab")
+      ? "configure"
+      : "source",
   );
   const stepIndex = CREATE_STEPS.findIndex((s) => s.id === step);
 
@@ -148,6 +152,23 @@ function NewPluginWizard() {
         title="Add a new plugin"
         description={STEP_DESCRIPTIONS[step]}
         backLink={<PluginBackLink href="/plugins" label="Plugins" />}
+        tabs={
+          step === "configure"
+            ? [
+                {
+                  label: "General",
+                  href: "/plugins/new?source=blank",
+                  selected: activeSection === "general",
+                },
+                {
+                  label: "Permissions",
+                  href: "/plugins/new?source=blank&tab=permissions",
+                  selected: activeSection === "permissions",
+                },
+              ]
+            : []
+        }
+        mobileVisibleCount={2}
         actionButton={
           <WizardStepper
             compact
@@ -260,6 +281,7 @@ function NewPluginWizard() {
                 onChange={patchDraft}
                 labelsRef={labelsRef}
                 isCreate
+                activeSection={activeSection}
               />
               <WizardFooter>
                 <Button variant="outline" onClick={() => setStep("source")}>

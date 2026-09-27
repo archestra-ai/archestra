@@ -56,11 +56,6 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: () => ({ data: [], isPending: false }),
 }));
 
-const mockUseFeature = vi.fn();
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: (flag: string) => mockUseFeature(flag),
-}));
-
 // Heavy child dialogs/tables are out of scope for these behavior tests.
 vi.mock(
   "@/app/knowledge/connectors/_parts/connector-run-details-dialog",
@@ -148,8 +143,6 @@ beforeEach(() => {
     isPending: false,
   });
   mockUseConnectorPermissionCoverage.mockReturnValue({ data: null });
-  // Auto-sync permissions is beta-gated; default the suite to the flag on.
-  mockUseFeature.mockReturnValue(true);
 });
 
 describe("ConnectorDetailPage", () => {
@@ -261,28 +254,6 @@ describe("ConnectorDetailPage", () => {
       render(<ConnectorDetailPage connectorId={CONNECTOR_ID} />);
 
       expect(screen.getByText("members-table")).toBeInTheDocument();
-    });
-
-    it("hides the Users and Groups tabs for an auto-sync connector when the beta flag is off", () => {
-      mockUseFeature.mockReturnValue(false);
-      mockUseConnector.mockReturnValue({
-        data: makeConnector({
-          visibility: "auto-sync-permissions",
-          syncPermissionsFromSource: true,
-        }),
-        isPending: false,
-        isLoadingError: false,
-        refetch: vi.fn(),
-      });
-
-      render(<ConnectorDetailPage connectorId={CONNECTOR_ID} />);
-
-      expect(screen.queryAllByRole("link", { name: "Users" })).toHaveLength(0);
-      expect(screen.queryAllByRole("link", { name: "Groups" })).toHaveLength(0);
-      // The run-family filter is a permission-only affordance too.
-      expect(
-        screen.queryByRole("combobox", { name: "Filter runs" }),
-      ).not.toBeInTheDocument();
     });
 
     it("hides the permission tabs for non-auto-sync connectors", () => {

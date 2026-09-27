@@ -37,7 +37,6 @@ class KnowledgeBaseConnectorModel {
     viewerTeamIds?: string[];
     viewerUserId?: string;
     visibilityScope?: ConnectorVisibilityScope;
-    canManageAutoSync?: boolean;
     /**
      * When provided (including explicit `null` = Default), restrict to connectors
      * in that environment (environment isolation). Omit to return all
@@ -57,7 +56,6 @@ class KnowledgeBaseConnectorModel {
           ),
           buildVisibilityFilter({
             canReadAll: params.canReadAll,
-            canManageAutoSync: params.canManageAutoSync,
             userId: params.viewerUserId,
             teamIds: params.viewerTeamIds,
             scope: params.visibilityScope,
@@ -115,7 +113,6 @@ class KnowledgeBaseConnectorModel {
     viewerTeamIds?: string[];
     viewerUserId?: string;
     visibilityScope?: ConnectorVisibilityScope;
-    canManageAutoSync?: boolean;
     status?: "active" | "deleted";
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
     const {
@@ -143,7 +140,6 @@ class KnowledgeBaseConnectorModel {
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       buildVisibilityFilter({
         canReadAll,
-        canManageAutoSync: params.canManageAutoSync,
         userId: params.viewerUserId,
         teamIds: viewerTeamIds,
         scope: visibilityScope,
@@ -216,7 +212,6 @@ class KnowledgeBaseConnectorModel {
       viewerTeamIds?: string[];
       viewerUserId?: string;
       visibilityScope?: ConnectorVisibilityScope;
-      canManageAutoSync?: boolean;
       /** When provided (incl. `null` = Default), restrict to this environment. */
       environmentId?: string | null;
     },
@@ -275,7 +270,6 @@ class KnowledgeBaseConnectorModel {
           ),
           buildVisibilityFilter({
             canReadAll: params?.canReadAll,
-            canManageAutoSync: params?.canManageAutoSync,
             userId: params?.viewerUserId,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
@@ -295,7 +289,6 @@ class KnowledgeBaseConnectorModel {
       viewerTeamIds?: string[];
       viewerUserId?: string;
       visibilityScope?: ConnectorVisibilityScope;
-      canManageAutoSync?: boolean;
     },
   ): Promise<(KnowledgeBaseConnector & { knowledgeBaseId: string })[]> {
     if (knowledgeBaseIds.length === 0) return [];
@@ -355,7 +348,6 @@ class KnowledgeBaseConnectorModel {
           ),
           buildVisibilityFilter({
             canReadAll: params?.canReadAll,
-            canManageAutoSync: params?.canManageAutoSync,
             userId: params?.viewerUserId,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
@@ -1084,8 +1076,8 @@ export default KnowledgeBaseConnectorModel;
 
 /**
  * Which access notion a visibility-filtered read serves.
- * - `management` (default): the connector itself (lists, detail, config) —
- *   auto-sync-permissions connectors are visible to knowledgeSource admins only.
+ * - `management` (default): the connector itself (lists, detail, config),
+ *   filtered by the same grants for every connector type.
  * - `query`: which connectors a user's knowledge queries may span —
  *   auto-sync-permissions connectors stay in scope for everyone; their
  *   per-chunk ACLs enforce what the user actually retrieves.
@@ -1100,8 +1092,6 @@ function buildVisibilityFilter(params: {
   userId?: string;
   teamIds?: string[];
   scope?: ConnectorVisibilityScope;
-  /** Holds `knowledgeSourceAutoSync:read`; management lists need it for sync connectors. */
-  canManageAutoSync?: boolean;
 }) {
   if (params.canReadAll && !params.userId) return undefined;
 
@@ -1139,13 +1129,6 @@ function buildVisibilityFilter(params: {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  // Management lists show a permission-sync connector only to a holder of
-  // `knowledgeSourceAutoSync:read`, on top of its read grant: it exposes the
-  // upstream audience. Queries still span it (per-chunk ACLs decide).
-  if (params.scope !== "query" && !params.canManageAutoSync) {
-    return and(reach, eq(table.syncPermissionsFromSource, false));
-  }
-  // SPDX-SnippetEnd
   return reach;
 }
 // SPDX-SnippetEnd

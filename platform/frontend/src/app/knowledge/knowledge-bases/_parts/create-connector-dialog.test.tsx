@@ -747,6 +747,18 @@ describe("CreateConnectorDialog", () => {
       ).toBeChecked();
     });
 
+    it("places the Jira admin key directly below the permission sync switch", async () => {
+      await renderConfigureStep();
+      const toggle = screen.getByRole("switch", {
+        name: "Sync permissions from the source",
+      });
+      const adminKey = screen.getByLabelText(/Organization admin API key/);
+
+      expect(toggle.parentElement?.nextElementSibling).toBe(
+        adminKey.closest('[data-slot="form-item"]'),
+      );
+    });
+
     it("creates the connector with permission sync on when the switch is on", async () => {
       mockMutateAsync.mockResolvedValue({ id: "connector-1" });
       const user = userEvent.setup();
@@ -792,17 +804,14 @@ describe("CreateConnectorDialog", () => {
       ).not.toBeChecked();
     });
 
-    it("offers no permission sync when the feature flag is off", async () => {
-      mockUseFeature.mockImplementation(
-        (key) => key !== "kbAutoSyncPermissionsEnabled",
-      );
-
+    it("shows permission sync with all beta flags off", async () => {
+      mockUseFeature.mockImplementation(() => false);
       await renderConfigureStep();
       expect(
-        screen.queryByRole("switch", {
+        screen.getByRole("switch", {
           name: "Sync permissions from the source",
         }),
-      ).not.toBeInTheDocument();
+      ).toBeInTheDocument();
 
       mockUseFeature.mockImplementation(() => true);
     });

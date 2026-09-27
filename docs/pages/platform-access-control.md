@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-23
+lastUpdated: 2026-09-27
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -209,10 +209,6 @@ The following table lists all available permissions that can be assigned to cust
 | `knowledgeSource:update` | Modify Knowledge Bases and Connectors |
 | `knowledgeSource:delete` | Delete Knowledge Bases and Connectors, view the deleted ones, and restore them |
 | `knowledgeSource:query` | Query knowledge sources for information retrieval |
-| `knowledgeSourceAutoSync:read` | View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings |
-| `knowledgeSourceAutoSync:create` | Create connectors with auto-sync permissions (access mirrors the source system) |
-| `knowledgeSourceAutoSync:update` | Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs |
-| `knowledgeSourceAutoSync:delete` | Delete auto-sync-permissions connectors |
 | `llmCost:read` | View organization-wide LLM usage cost statistics and analytics |
 | `llmLimit:read` | View token usage limits |
 | `llmLimit:create` | Create new usage limits |
@@ -283,7 +279,7 @@ The following table lists all available permissions that can be assigned to cust
 | `serviceAccount:create` | Create service accounts |
 | `serviceAccount:update` | Modify service accounts |
 | `serviceAccount:delete` | Delete service accounts |
-| `simpleView:enable` | Sidebar is collapsed by default on page load |
+| `simpleView:enable` | Collapse the app sidebar by default |
 | `siteNotification:read` | View site-wide notifications |
 | `siteNotification:create` | Create new site notifications |
 | `siteNotification:update` | Modify site notifications |
@@ -332,7 +328,7 @@ Agents, MCP gateways, MCP registry entries, skills, apps, models, service accoun
 | Agent, MCP gateway, MCP registry entry, or skill detail page | Open the **Permissions** tab |
 | App settings | Open **Permissions** in the settings dialog |
 | Models list | Choose **Permissions** from the model's actions |
-| Service account detail page | Open **Permissions** |
+| Service accounts list | Open an account, then choose **Permissions** in its dialog |
 | Creating or editing an OAuth client | Use the **Permissions** section of the dialog |
 | All objects of a resource type | Open the resource list’s **More actions** menu beside **Create** or **Add**, then choose **Permissions** |
 

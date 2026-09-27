@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-09-22
+lastUpdated: 2026-09-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -389,11 +389,9 @@ Connectors can preserve document permissions from their source system. Those res
 
 ### Auto-Sync Permissions
 
-> **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED=true` (or the `ARCHESTRA_BETA` master switch) to enable source permission sync and its Users and Groups tabs. See [Deployment](/docs/platform-deployment).
-
 Auto-sync permissions mirrors the source system's access control into Archestra. Each query returns only documents allowed by the latest permission snapshot.
 
-The option appears when the beta flag and Knowledge enterprise feature are enabled. It also requires a supported connector and the applicable `knowledgeSourceAutoSync:create` or `update` action.
+The option appears for every connector. Enabling it requires the Knowledge enterprise feature, a supported connector, and permission to create or update knowledge connectors.
 
 Auto-sync permissions works with the connectors marked *Supported* below. *Limited* means the source's access control is mirrored with a coarser audience model — the row says which. The others do not support it yet.
 

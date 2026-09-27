@@ -40170,7 +40170,6 @@ export type GetConfigResponses = {
             openappaEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
-            kbAutoSyncPermissionsEnabled: boolean;
             kbMfilesConnectorEnabled: boolean;
             kbMfilesOauthEnabled: boolean;
             kbBm25DefaultK1: number;
@@ -66717,7 +66716,7 @@ export type CreateConnectorData = {
         name: string;
         description?: string | null;
         /**
-         * Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync permission and a connector type that supports it.
+         * Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs an enterprise license and a connector type that supports it.
          */
         syncPermissionsFromSource?: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';

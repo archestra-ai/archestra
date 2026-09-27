@@ -1,9 +1,15 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Bot, ListFilter, Plus, Power, PowerOff, Trash2 } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import {
+  Bot,
+  ListFilter,
+  Pencil,
+  Plus,
+  Power,
+  PowerOff,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
@@ -65,6 +71,7 @@ import {
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction } from "../layout";
+import { ServiceAccountDialog } from "./_parts/service-account-dialog";
 
 type ServiceAccountFormValues = {
   name: string;
@@ -93,7 +100,6 @@ const STATUS_FILTERS: AccountHealth[] = [
 
 export default function ServiceAccountsSettingsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
-  const router = useRouter();
   const setActionButton = useSetSettingsAction();
   const { data: canReadServiceAccounts, isPending: isCheckingPermissions } =
     useHasPermissions({ serviceAccount: ["read"] });
@@ -120,6 +126,9 @@ export default function ServiceAccountsSettingsPage() {
   const bulkSetDisabled = useBulkSetServiceAccountsDisabled();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [accountToEdit, setAccountToEdit] = useState<ServiceAccount | null>(
+    null,
+  );
   const [newLabels, setNewLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [accountToDelete, setAccountToDelete] = useState<ServiceAccount | null>(
@@ -211,6 +220,11 @@ export default function ServiceAccountsSettingsPage() {
           ...(canUpdateServiceAccounts
             ? [
                 {
+                  icon: <Pencil className="h-4 w-4" />,
+                  label: "Edit service account",
+                  onClick: () => setAccountToEdit(account),
+                },
+                {
                   icon: account.disabled ? (
                     <Power className="h-4 w-4" />
                   ) : (
@@ -257,16 +271,17 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "name",
         header: "Account",
-        size: 160,
+        size: 128,
         cell: ({ row }) => (
           <div className="flex min-w-0 items-center gap-1.5">
-            <Link
+            <button
+              type="button"
               className="truncate font-medium hover:underline"
-              href={`/settings/service-accounts/${row.original.id}`}
+              onClick={() => setAccountToEdit(row.original)}
               title={row.original.name}
             >
               {row.original.name}
-            </Link>
+            </button>
             <LabelTags labels={row.original.labels} />
           </div>
         ),
@@ -303,7 +318,7 @@ export default function ServiceAccountsSettingsPage() {
       // narrower column than a top-level page, and an eighth column pushed
       // Actions off-screen. For a machine identity "last used" is the
       // operational question; the creation date is archival and still shown on
-      // the account's own page.
+      // the account dialog.
     ];
 
     if (!canUpdateServiceAccounts && !canDeleteServiceAccounts) {
@@ -315,9 +330,8 @@ export default function ServiceAccountsSettingsPage() {
       {
         id: "actions",
         header: "Actions",
-        // Two icon-sm buttons with the table's px-4 inset on both sides, so
-        // the last icon sits 16px from the frame like every other cell edge.
-        size: 96,
+        // Three actions need their own width; the name column can give up space.
+        size: 128,
         cell: ({ row }) => renderRowActions(row.original),
       },
     ];
@@ -339,7 +353,7 @@ export default function ServiceAccountsSettingsPage() {
     if (!account) return;
 
     closeDialog();
-    router.push(`/settings/service-accounts/${account.id}`);
+    setAccountToEdit(account);
   });
 
   const handleDelete = async () => {
@@ -501,8 +515,8 @@ export default function ServiceAccountsSettingsPage() {
                   hideSelectedCount
                   onRowClick={(account, event) => {
                     const target = event.target as HTMLElement;
-                    if (target.closest("a,button")) return;
-                    router.push(`/settings/service-accounts/${account.id}`);
+                    if (target.closest("button")) return;
+                    setAccountToEdit(account);
                   }}
                   emptyIcon={Bot}
                   emptyMessage="No service accounts yet"
@@ -611,6 +625,16 @@ export default function ServiceAccountsSettingsPage() {
           </DialogStickyFooter>
         </DialogForm>
       </FormDialog>
+
+      {accountToEdit && (
+        <ServiceAccountDialog
+          key={accountToEdit.id}
+          account={accountToEdit}
+          onOpenChange={(open) => {
+            if (!open) setAccountToEdit(null);
+          }}
+        />
+      )}
 
       <DeleteConfirmDialog
         open={!!accountToDelete}

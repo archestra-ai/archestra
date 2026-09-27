@@ -30,6 +30,7 @@ interface TabbedDialogShellProps<TSection extends string> {
   contentOnly?: boolean;
   title: string;
   description?: string;
+  headerDescription?: ReactNode;
   sidebarLabel: string;
   sidebarDescription: string;
   sidebarIcon: ReactNode;
@@ -55,6 +56,7 @@ export function TabbedDialogShell<TSection extends string>({
   contentOnly = false,
   title,
   description,
+  headerDescription,
   sidebarLabel,
   sidebarDescription,
   sidebarIcon,
@@ -127,6 +129,11 @@ export function TabbedDialogShell<TSection extends string>({
         <div className="flex min-h-[72px] shrink-0 items-center justify-between gap-4 border-b px-4 py-4">
           <div className="min-w-0">
             <DialogTitle className="truncate">{title}</DialogTitle>
+            {headerDescription && (
+              <div className="mt-1 text-sm text-muted-foreground">
+                {headerDescription}
+              </div>
+            )}
           </div>
           <div className="flex min-w-0 items-center justify-end gap-3">
             {headerExtra}

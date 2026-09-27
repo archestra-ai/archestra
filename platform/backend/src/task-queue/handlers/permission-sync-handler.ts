@@ -23,13 +23,11 @@ export async function handlePermissionSync(
     );
   }
 
-  // Feature gate (beta flag + enterprise license): a task enqueued before
-  // either flipped off completes as a no-op instead of running a pass for a
-  // feature that is hidden or no longer licensed.
+  // A task enqueued before the enterprise license lapsed completes as a no-op.
   if (!isAutoSyncPermissionsActive()) {
     logger.info(
       { connectorId },
-      "Skipping permission_sync task: auto-sync permissions is disabled (beta flag or enterprise license)",
+      "Skipping permission_sync task: enterprise knowledge access is inactive",
     );
     return;
   }

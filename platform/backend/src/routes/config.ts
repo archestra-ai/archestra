@@ -155,7 +155,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               agentHooksEnabled: z.boolean(),
               chatopsTelegramEnabled: z.boolean(),
               /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
-              kbAutoSyncPermissionsEnabled: z.boolean(),
               kbMfilesConnectorEnabled: z.boolean(),
               kbMfilesOauthEnabled: z.boolean(),
               /**
@@ -290,7 +289,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           openappaEnabled: config.openappa.enabled,
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
-          kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
           kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
           kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
           kbBm25DefaultK1: config.kb.bm25K1,

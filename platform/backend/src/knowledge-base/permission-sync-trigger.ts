@@ -38,7 +38,7 @@ export async function enqueuePermissionSyncAfterContentSync(params: {
 }): Promise<void> {
   const { connector, documentsIngested } = params;
 
-  // Feature gate (beta flag + enterprise license): with the feature off no
+  // Enterprise license gate: with the feature off no
   // pass is ever enqueued, so existing auto-sync connectors go dormant
   // instead of syncing behind hidden or unlicensed UI.
   if (!isAutoSyncPermissionsActive()) return;

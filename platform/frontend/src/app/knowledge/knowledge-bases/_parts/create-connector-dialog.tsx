@@ -128,19 +128,17 @@ export function CreateConnectorDialog({
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  // Permission sync is the preferred mode: whenever the feature is enabled,
+  // Permission sync is the preferred mode: whenever
   // the chosen type supports it, and this user may turn it on, a NEW
   // connector defaults to it (any type in the allowlist, current or future).
   // The user can still switch it off.
-  const autoSyncBeta = useFeature("kbAutoSyncPermissionsEnabled") ?? false;
   const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
   const { data: hasAutoSyncCreate } = useHasPermissions({
-    knowledgeSourceAutoSync: ["create"],
+    knowledgeSource: ["create"],
   });
   const defaultSyncPermissionsFor = (type: ConnectorType): boolean =>
     Boolean(
-      autoSyncBeta &&
-        knowledgeBaseEnterprise &&
+      knowledgeBaseEnterprise &&
         hasAutoSyncCreate &&
         connectorSupportsAutoSync(type, orchestratorK8sRuntime),
     );
@@ -436,8 +434,13 @@ export function CreateConnectorDialog({
         setActiveSection("general"),
       )}
       wrapForm={(children) => <Form {...form}>{children}</Form>}
-      sidebarFooter={
-        <ExternalDocsLink href={connectorDocsUrl}>Learn more</ExternalDocsLink>
+      headerExtra={
+        <ExternalDocsLink
+          href={connectorDocsUrl}
+          className="shrink-0 text-sm text-muted-foreground"
+        >
+          Learn more
+        </ExternalDocsLink>
       }
       footer={
         <>
@@ -522,6 +525,37 @@ export function CreateConnectorDialog({
           <NotionAutoSyncPermissionsNote />
         )}
 
+        {syncPermissionsFromSource &&
+          connectorSupportsAdminApiKey(connectorType) && (
+            <FormField
+              control={form.control}
+              name="adminApiKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Organization admin API key (optional)</FormLabel>
+                  <FormDescription>
+                    <AdminApiKeyDescription type={connectorType} />
+                  </FormDescription>
+                  <FormControl>
+                    <SecretInput
+                      placeholder="Atlassian organization admin API key"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+        {syncPermissionsFromSource && connectorType === "perforce" && (
+          <PerforcePermissionSyncFields
+            form={form}
+            mode="create"
+            adminCredentialDescription={permissionSyncRequirement}
+          />
+        )}
+
         <div className="border-t" />
 
         {urlConfig && (
@@ -582,37 +616,6 @@ export function CreateConnectorDialog({
                 <FormMessage />
               </FormItem>
             )}
-          />
-        )}
-
-        {syncPermissionsFromSource &&
-          connectorSupportsAdminApiKey(connectorType) && (
-            <FormField
-              control={form.control}
-              name="adminApiKey"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Organization admin API key (optional)</FormLabel>
-                  <FormDescription>
-                    <AdminApiKeyDescription type={connectorType} />
-                  </FormDescription>
-                  <FormControl>
-                    <SecretInput
-                      placeholder="Atlassian organization admin API key"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-
-        {syncPermissionsFromSource && connectorType === "perforce" && (
-          <PerforcePermissionSyncFields
-            form={form}
-            mode="create"
-            adminCredentialDescription={permissionSyncRequirement}
           />
         )}
       </div>

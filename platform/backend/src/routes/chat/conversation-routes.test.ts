@@ -1,7 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
 import { BUILT_IN_AGENT_IDS, ChatErrorCode } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import client from "prom-client";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -9,7 +10,10 @@ import ActiveChatRunModel from "@/models/chat-active-run";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import MemberModel from "@/models/member";
 import MessageModel from "@/models/message";
+import ModelModel from "@/models/model";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import { initializeChatMetrics } from "@/observability/metrics/chat";
 import { projectService } from "@/services/project";
@@ -20,7 +24,6 @@ import type { User } from "@/types";
 import { uuidv7 } from "@/utils/uuid";
 
 describe("chat conversation and message routes", () => {
-  const originalOpenAppaEnabled = config.openappa.enabled;
   let app: FastifyInstanceWithZod;
   let currentUser: User;
   let organizationId: string;
@@ -46,8 +49,66 @@ describe("chat conversation and message routes", () => {
   });
 
   afterEach(async () => {
-    config.openappa.enabled = originalOpenAppaEnabled;
     await app.close();
+  });
+
+  test("upgrading policy chats keeps ordinary and former policy chats readable", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const normal = await ConversationModel.create({
+      organizationId,
+      userId: currentUser.id,
+      agentId: agent.id,
+    });
+    const policy = await ConversationModel.create({
+      organizationId,
+      userId: currentUser.id,
+      agentId: agent.id,
+    });
+    const trashed = await ConversationModel.create({
+      organizationId,
+      userId: currentUser.id,
+      agentId: agent.id,
+    });
+    await db.execute(
+      sql`UPDATE conversations SET origin = 'openappa' WHERE id IN (${policy.id}, ${trashed.id})`,
+    );
+    await db
+      .update(schema.conversationsTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.conversationsTable.id, trashed.id));
+    const migration = fs.readFileSync(
+      path.join(
+        __dirname,
+        "../../database/migrations/0490_normalize-openappa-chat-origin.sql",
+      ),
+      "utf8",
+    );
+    await db.execute(sql.raw(migration));
+    await db.execute(sql.raw(migration));
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: normal.id, origin: "user" }),
+        expect.objectContaining({ id: policy.id, origin: "user" }),
+      ]),
+    );
+    const [deleted] = await db
+      .select()
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, trashed.id));
+    expect(deleted.origin).toBe("user");
+    expect(deleted.deletedAt).not.toBeNull();
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${policy.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
   });
 
   test("lists scheduled chats with their own run context and leaves normal chats unchanged", async ({
@@ -130,129 +191,113 @@ describe("chat conversation and message routes", () => {
     });
   });
 
-  test("uses the protected OpenAPPA agent for a policy conversation", async ({
+  test("creates and manages a policy assistant conversation like any other chat", async ({
     makeAgent,
   }) => {
-    config.openappa.enabled = true;
-    const ordinaryAgent = await makeAgent({
+    const agent = await makeAgent({
       organizationId,
-      authorId: currentUser.id,
-      access: "personal",
-    });
-    const policyAgent = await makeAgent({
-      organizationId,
+      agentType: "agent",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+      name: "Policy assistant",
+      systemPrompt: "Help configure OpenAPPA policy.",
     });
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/chat/conversations",
-      payload: { agentId: ordinaryAgent.id, origin: "openappa" },
-    });
-    expect(response.statusCode).toBe(200);
-    const id = response.json().id;
-    expect(response.json().origin).toBe("openappa");
-    expect(response.json().agentId).toBe(policyAgent.id);
-
-    const read = await app.inject({
-      method: "GET",
-      url: `/api/chat/conversations/${id}`,
-    });
-    expect(read.statusCode).toBe(200);
-    expect(read.json().origin).toBe("openappa");
-
-    const override = await app.inject({
+    const created = await app.inject({
       method: "POST",
       url: "/api/chat/conversations",
       payload: {
-        origin: "openappa",
-        modelId: ordinaryAgent.id,
+        agentId: agent.id,
+        title: "Policy review",
+        thinkingEffort: "low",
       },
     });
-    expect(override.statusCode).toBe(400);
-  });
-
-  test("rejects a policy chat while OpenAPPA is unavailable", async ({
-    makeAgent,
-  }) => {
-    config.openappa.enabled = false;
-    const agent = await makeAgent({
-      organizationId,
-      authorId: currentUser.id,
-      access: "personal",
-    });
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/chat/conversations",
-      payload: { agentId: agent.id, origin: "openappa" },
-    });
-    expect(response.statusCode).toBe(400);
-  });
-
-  test("keeps policy conversation identity and model fixed while allowing automatic titles", async ({
-    makeAgent,
-  }) => {
-    const agent = await makeAgent({
-      organizationId,
-      authorId: currentUser.id,
-      access: "personal",
-    });
-    const conversation = await ConversationModel.create({
-      userId: currentUser.id,
-      organizationId,
+    expect(created.statusCode).toBe(200);
+    expect(created.json()).toMatchObject({
+      origin: "user",
       agentId: agent.id,
-      origin: "openappa",
+      title: "Policy review",
+      thinkingEffort: "low",
     });
-
-    for (const body of [
-      { agentId: agent.id },
-      { modelId: null },
-      { chatApiKeyId: null },
-      { projectId: null },
-      { title: "Manual title" },
-      { pinnedAt: new Date().toISOString() },
-      { thinkingEffort: "low" },
-    ]) {
-      const response = await app.inject({
-        method: "PATCH",
-        url: `/api/chat/conversations/${conversation.id}`,
-        payload: body,
-      });
-      expect(response.statusCode).toBe(400);
-    }
-
-    const regenerate = await app.inject({
+    const id = created.json().id;
+    const pinnedAt = new Date().toISOString();
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${id}`,
+      payload: { title: "Reviewed policy", pinnedAt, thinkingEffort: "high" },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      title: "Reviewed policy",
+      pinnedAt,
+      thinkingEffort: "high",
+    });
+    const fork = await app.inject({
       method: "POST",
-      url: `/api/chat/conversations/${conversation.id}/generate-title`,
-      payload: { regenerate: true },
-    });
-    expect(regenerate.statusCode).toBe(400);
-
-    const autoTitle = await app.inject({
-      method: "POST",
-      url: `/api/chat/conversations/${conversation.id}/generate-title`,
-      payload: {},
-    });
-    expect(autoTitle.statusCode).toBe(200);
-  });
-
-  test("does not fork a policy conversation", async ({ makeAgent }) => {
-    const agent = await makeAgent({
-      organizationId,
-      authorId: currentUser.id,
-      access: "personal",
-    });
-    const conversation = await ConversationModel.create({
-      userId: currentUser.id,
-      organizationId,
-      agentId: agent.id,
-      origin: "openappa",
-    });
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/chat/conversations/${conversation.id}/fork`,
+      url: `/api/chat/conversations/${id}/fork`,
       payload: { agentId: agent.id },
     });
-    expect(response.statusCode).toBe(400);
+    expect(fork.statusCode).toBe(200);
+    expect(fork.json()).toMatchObject({ agentId: agent.id, origin: "user" });
+    expect(fork.json().id).not.toBe(id);
+  });
+
+  test("honors member model preferences and explicit overrides for a policy assistant", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    const models = await Promise.all(
+      ["agent", "member", "explicit"].map((name) =>
+        ModelModel.create({
+          externalId: `openai/policy-chat-${name}`,
+          provider: "openai",
+          modelId: `policy-chat-${name}`,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: new Date(),
+        }),
+      ),
+    );
+    const [agentModel, memberModel, explicitModel] = models;
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+      key.id,
+      models.map((model) => model.id),
+    );
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      name: "Policy assistant",
+      modelId: agentModel.id,
+      llmApiKeyId: key.id,
+    });
+    await MemberModel.setDefaultModelSelection({
+      userId: currentUser.id,
+      organizationId,
+      modelId: memberModel.id,
+      apiKeyId: key.id,
+    });
+    for (const explicit of [false, true]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat/conversations",
+        payload: {
+          agentId: agent.id,
+          ...(explicit
+            ? { modelId: explicitModel.id, chatApiKeyId: key.id }
+            : {}),
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        agentId: agent.id,
+        modelId: explicit ? explicitModel.id : memberModel.id,
+        chatApiKeyId: key.id,
+      });
+    }
   });
 
   test("hides an app-opened chat from the list until the user writes into it", async ({

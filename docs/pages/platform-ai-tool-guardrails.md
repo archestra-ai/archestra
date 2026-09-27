@@ -3,7 +3,7 @@ title: OpenAPPA
 category: LLM Proxy
 order: 5
 description: Configure policy for agent tool calls and results
-lastUpdated: 2026-09-25
+lastUpdated: 2026-09-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,13 +32,15 @@ Each session acts for the signed-in user, identified by their email. Sessions st
 
 Open **OpenAPPA → Overview** to see MCP gateways and MCP servers with tools. Coverage counts tools with an enforced rule that applies without an argument condition. Conditional rules remain visible in the tool details. Follow a source link to the rule in your policy or an included battery.
 
-Choose a target's chat action to start a review focused on that gateway or server. Reopen a saved chat to continue with the same target.
+Choose a target's chat action to open a normal chat with the configuration agent selected. The first message includes the gateway or server name and ID.
+
+The configuration agent can inspect stored server metadata and policy coverage across environments. Your permissions still apply. Other agents with the inspection tool see metadata and coverage for tools they can access. Their assignments, exclusions, and environment boundaries still apply. Partial results do not describe the server's complete inventory. Inspection does not execute server tools or grant the agent access to them.
 
 ## Configure with the Agent
 
-Select **Configure with chat** on the OpenAPPA Policy tab and describe what you want to protect. The built-in agent reads the current policy and explains proposed changes before publishing. Ask for the diff when you want to inspect the policy text. You can also ask it to explain the policy without changing anything.
+Select **Configure with chat** on the OpenAPPA Policy tab to start a normal chat. The platform manages one configuration agent, shown with the other agents in the **Built-in** category and hidden from the regular Agents list. The agent reads the current policy and explains proposed changes before publishing. Ask for the diff when you want to inspect the policy text. You can also ask it to explain the policy without changing anything.
 
-The agent needs an available LLM provider key. If none is configured, the configuration chat offers provider setup. Configuration sessions appear in AI chat history. Reopen one there to continue the conversation with its agent and model fixed.
+The agent needs an available LLM provider key. Chat offers provider setup when no key is configured. Sessions appear in regular chat history with the usual model, sharing, and context controls.
 
 Ask the agent to identify the tools and data flows you want to govern. Review the proposed changes and validation warnings before publishing. A valid policy can still contain a battery that governs no tools.
 

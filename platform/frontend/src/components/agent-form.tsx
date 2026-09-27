@@ -339,8 +339,6 @@ function getBuiltInAgentConfigForSave(params: {
   maxRounds: number;
 }) {
   switch (params.builtInAgentName) {
-    case BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG:
-      return { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG };
     case BUILT_IN_AGENT_IDS.POLICY_CONFIG:
       return {
         name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
@@ -351,26 +349,13 @@ function getBuiltInAgentConfigForSave(params: {
         name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
         maxRounds: params.maxRounds,
       };
+    case BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG:
     case BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE:
-      return {
-        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-      };
     case BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION:
-      return {
-        name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
-      };
     case BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION:
-      return {
-        name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
-      };
     case BUILT_IN_AGENT_IDS.APP_RUNTIME:
-      return {
-        name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
-      };
     case BUILT_IN_AGENT_IDS.ADVISOR:
-      return {
-        name: BUILT_IN_AGENT_IDS.ADVISOR,
-      };
+      return { name: params.builtInAgentName };
     default: {
       // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
       const _exhaustive: never = params.builtInAgentName;

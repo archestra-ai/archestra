@@ -1,10 +1,8 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -23,9 +21,9 @@ import {
   type CoverageSummary,
   useCoverageSummary,
 } from "@/lib/openappa-coverage.query";
-import { openAppaChatHref } from "@/lib/openappa-routes";
 import { cn } from "@/lib/utils/tailwind";
 import { BatteriesCard, hasBatteries } from "./batteries-card";
+import { OpenAppaChatButton } from "./openappa-chat-button";
 import { RULE_BUCKETS } from "./rule-coverage-bar";
 
 type Totals = CoverageSummary["totals"];
@@ -89,12 +87,14 @@ function ToolCoverageCard({
       </CardContent>
       {totals && totals.tools > 0 && (
         <CardFooter className="px-5">
-          <Button size="sm" variant="outline" asChild>
-            <Link href={openAppaChatHref({ promptKey: "improveCoverage" })}>
-              <MessageCircle />
-              <span>Improve with chat</span>
-            </Link>
-          </Button>
+          <OpenAppaChatButton
+            size="sm"
+            variant="outline"
+            promptKey="improveCoverage"
+          >
+            <MessageCircle />
+            <span>Improve with chat</span>
+          </OpenAppaChatButton>
         </CardFooter>
       )}
     </Card>

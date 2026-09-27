@@ -378,7 +378,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .preprocess((val) => val === "true" || val === true, z.boolean())
             .optional()
             .describe(
-              "Exclude built-in agents from the results. Defaults to false.",
+              "Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.",
             ),
           includeAdvisor: z
             .preprocess((val) => val === "true" || val === true, z.boolean())
@@ -1907,15 +1907,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
       if (existingAgent.builtInAgentConfig) {
-        if (
-          existingAgent.builtInAgentConfig.name ===
-          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
-        ) {
-          throw new ApiError(
-            403,
-            "The OpenAPPA Configuration Agent is managed by the platform",
-          );
-        }
         // Validate builtInAgentConfig if provided
         if (body.builtInAgentConfig) {
           const parsed = BuiltInAgentConfigSchema.safeParse(

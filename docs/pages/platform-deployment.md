@@ -16,8 +16,10 @@ Select a published release from [GitHub Releases](https://github.com/archestra-a
 
 ### Release Channels
 
-- **Stable:** Docker tag `latest` and default Helm charts track the current stable release.
+- **Stable:** Default Helm charts track the current stable release.
 - **Release candidate (RC):** Version tags ending in `-rc.N` preview upcoming releases from the main branch. Earlier prereleases used `-beta.N`.
+
+The `archestra/platform:latest` Docker tag points to the newest release — usually an RC.
 
 Archestra maintains one active stable release line at a time. Bug fixes and security patches publish to the active stable line and the next RC release.
 

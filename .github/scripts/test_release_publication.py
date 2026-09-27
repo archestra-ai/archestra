@@ -208,8 +208,127 @@ gh() {
                     "helm push archestra-platform-1.4.0.tgz "
                     "oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts",
                     f"docker buildx imagetools create --tag registry.example.invalid/relocated/mcp:latest {mcp_image}",
-                    f"docker buildx imagetools create --tag archestra/platform:latest {platform_image}",
                 ])
+
+    PLATFORM_IMAGE = "archestra/platform@sha256:" + "b" * 64
+
+    def run_platform_latest(self, releases=(), *, version, api_status=0):
+        section = WORKFLOW.read_text().split(
+            "      - name: Move the platform latest tag\n", 1
+        )[1].split("      - name:", 1)[0]
+        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        # Use the workflow's actual --jq expression, not a duplicate of its filter.
+        stub = """
+gh() {
+  local query=
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = --jq ]; then query=$2; shift; fi
+    shift
+  done
+  printf '%s\\n' "$RELEASES" | jq -r "$query"
+  return "$API_STATUS"
+}
+docker() { printf 'docker %s\\n' "$*"; }
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            images = Path(directory) / "release-images"
+            images.mkdir()
+            (images / "platform").write_text(self.PLATFORM_IMAGE)
+            return subprocess.run(
+                ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", stub + script],
+                cwd=directory,
+                env={
+                    **os.environ,
+                    "RELEASES": json.dumps(releases),
+                    "API_STATUS": str(api_status),
+                    "VERSION": version,
+                    "GH_REPO": "fixture/repo",
+                },
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+    def test_platform_latest_follows_newest_published_release(self):
+        def published(*versions, draft=False):
+            return [{"tag_name": f"platform-v{v}", "draft": draft} for v in versions]
+
+        tagged = f"docker buildx imagetools create --tag archestra/platform:latest {self.PLATFORM_IMAGE}"
+        for releases, version, moves in (
+            ((), "1.4.0-rc.22", True),
+            (published("1.4.0-rc.22"), "1.4.0-rc.22", True),  # retry
+            (published("1.4.0-rc.22", "1.3.66"), "1.4.0-rc.23", True),
+            (published("1.4.0-rc.9"), "1.4.0-rc.10", True),
+            (published("1.4.0-beta.13"), "1.4.0-rc.14", True),
+            (published("1.4.0-rc.22"), "1.4.0", True),
+            (published("1.5.0-rc.1", draft=True), "1.4.0-rc.22", True),
+            ([{"tag_name": "other-v9.0.0", "draft": False}], "1.4.0-rc.22", True),
+            (published("1.4.0-rc.22", "1.3.66"), "1.3.67", False),
+            (published("1.10.0-rc.1"), "1.9.3", False),
+            (published("1.4.0"), "1.4.0-rc.23", False),
+            (published("1.4.0-rc.23"), "1.4.0-rc.22", False),
+        ):
+            with self.subTest(releases=releases, version=version):
+                result = self.run_platform_latest(releases, version=version)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                if moves:
+                    self.assertEqual(result.stdout.splitlines(), [tagged])
+                else:
+                    self.assertNotIn(tagged, result.stdout)
+
+    def test_previous_release_comes_from_the_same_branch(self):
+        section = WORKFLOW.read_text().split(
+            "      - name: Resolve previous release on this branch\n", 1
+        )[1].split("      - name:", 1)[0]
+        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
+
+        def git(root, *args):
+            return subprocess.run(
+                ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        def commit(root, tag=None):
+            git(root, "commit", "--allow-empty", "-q", "-m", tag or "change")
+            if tag:
+                git(root, "tag", tag)
+            return git(root, "rev-parse", "HEAD")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            git(root, "init", "-q", "-b", "main")
+            git(root, "config", "user.email", "ci@example.invalid")
+            git(root, "config", "user.name", "CI")
+            first = commit(root)
+            commit(root, "platform-v1.3.66")
+            git(root, "checkout", "-q", "-b", "release/1.3")
+            stable = commit(root, "platform-v1.3.67")
+            git(root, "checkout", "-q", "main")
+            commit(root, "platform-v1.4.0-rc.22")
+            commit(root, "other-v9.0.0")
+            candidate = commit(root, "platform-v1.4.0-rc.23")
+
+            for release_sha, previous in (
+                (candidate, "1.4.0-rc.22"),
+                (stable, "1.3.66"),
+                (first, ""),
+            ):
+                with self.subTest(previous=previous):
+                    output = root / "output"
+                    result = subprocess.run(
+                        ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", script],
+                        cwd=root,
+                        env={**os.environ, "RELEASE_SHA": release_sha, "GITHUB_OUTPUT": str(output)},
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(output.read_text().splitlines(), [f"version={previous}"])
+                    output.unlink()
+
+    def test_platform_latest_stays_when_release_list_fails(self):
+        result = self.run_platform_latest(version="1.4.0-rc.22", api_status=1)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("docker", result.stdout)
+        self.assertIn("Cannot list releases", result.stdout)
 
 
 if __name__ == "__main__":

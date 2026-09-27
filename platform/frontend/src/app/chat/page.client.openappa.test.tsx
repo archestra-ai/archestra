@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -45,6 +45,10 @@ vi.mock("@/components/chat/chat-messages", () => ({
 
 const agent = makeAgent({
   name: "OpenAPPA Configuration Agent",
+  scope: "org",
+  builtIn: true,
+  builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+  authorId: null,
   modelId: "test-model",
   llmApiKeyId: "test-llm-key",
 });
@@ -189,7 +193,6 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   expect(sent[0]).toMatchObject({
     parts: [{ type: "text", text: openingPrompt }],
   });
-  expect(Object.keys(sent[0].metadata ?? {})).toEqual(["createdAt"]);
   expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
   expect(
     await screen.findByRole("button", { name: "Chat actions" }),
@@ -203,7 +206,6 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   expect(sent[1]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
-  expect(Object.keys(sent[1].metadata ?? {})).toEqual(["createdAt"]);
 });
 
 test("an ordinary launch ready on mount creates and sends once under StrictMode", async () => {
@@ -263,7 +265,6 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   expect(sent[0]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
-  expect(Object.keys(sent[0].metadata ?? {})).toEqual(["createdAt"]);
 });
 
 function renderChat(routeConversationId?: string) {

@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
+import { resolveOpenAppaLaunchPrompt } from "@/lib/openappa-chat-prompts";
 import { makeAgent } from "@/mocks/data/agents";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 
@@ -63,8 +64,8 @@ test("launch resolves the system agent from the chat roster rather than a user-c
   const url = new URL(link.getAttribute("href") ?? "", api);
   expect([...url.searchParams.keys()]).toEqual(["agentId", "user_prompt"]);
   expect(url.searchParams.get("agentId")).toBe(agent.id);
-  expect(url.searchParams.get("user_prompt")).toContain(
-    "Set up OpenAPPA for me.",
+  expect(url.searchParams.get("user_prompt")).toBe(
+    resolveOpenAppaLaunchPrompt("setUpPolicy"),
   );
 });
 

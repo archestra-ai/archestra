@@ -1,10 +1,14 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
-import { describe, expect, test } from "@/test";
+import config from "@/config";
+import { beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import agentRoutes from "./agent";
 import chatRoutes from "./chat/routes";
 
 describe("system chat agent visibility", () => {
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
   const ctx = useRouteTestApp(async (app) => {
     await app.register(agentRoutes);
     await app.register(chatRoutes);
@@ -115,6 +119,53 @@ describe("system chat agent visibility", () => {
       title: "Policy review",
     });
   });
+  test("disabling OpenAPPA hides an existing assistant without discarding its saved preference", async ({
+    makeMember,
+    makeAgent,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    const policy = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    expect(
+      (
+        await ctx.app.inject({
+          method: "PUT",
+          url: "/api/members/default-agent",
+          payload: { defaultAgentId: policy.id },
+        })
+      ).statusCode,
+    ).toBe(200);
+    config.openappa.enabled = false;
+    const roster = await ctx.app.inject({ method: "GET", url: chatRosterUrl });
+    expect(roster.statusCode).toBe(200);
+    expect(roster.json()).toEqual([]);
+    expect(
+      (
+        await ctx.app.inject({
+          method: "PUT",
+          url: "/api/members/default-agent",
+          payload: { defaultAgentId: policy.id },
+        })
+      ).statusCode,
+    ).toBe(404);
+    const current = await ctx.app.inject({
+      method: "GET",
+      url: "/api/members/default-agent",
+    });
+    expect(current.json().defaultAgentId).toBe(policy.id);
+    config.openappa.enabled = true;
+    const restored = await ctx.app.inject({
+      method: "GET",
+      url: chatRosterUrl,
+    });
+    expect(restored.json()).toEqual([
+      expect.objectContaining({ id: policy.id }),
+    ]);
+  });
+
   test("the chat roster and default selection still reject an ungranted system assistant", async ({
     makeMember,
     makeAgent,

@@ -64,24 +64,61 @@ describe("syncBuiltInAgents", () => {
     config.openappa.enabled = false;
     await syncBuiltInAgents();
     await syncOpenAppaConfigAgentCapabilities();
+    const disabledAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    expect(disabledAgent).not.toBeNull();
     expect(
-      await AgentModel.getBuiltInAgent(
-        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-        organization.id,
-      ),
-    ).toBeNull();
+      await ResourcePermissionPolicyModel.find({
+        organizationId: organization.id,
+        resource: "agent",
+        scope: disabledAgent?.id ?? "",
+      }),
+    ).not.toBeNull();
     config.openappa.enabled = true;
     await syncBuiltInSkills();
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
     await syncBuiltInAgents();
     await syncOpenAppaConfigAgentCapabilities();
+    const seededTools = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, disabledAgent?.id ?? ""));
+    const seededPrompts = await db
+      .select()
+      .from(schema.agentSuggestedPromptsTable)
+      .where(
+        eq(schema.agentSuggestedPromptsTable.agentId, disabledAgent?.id ?? ""),
+      );
     await syncBuiltInAgents();
     await syncOpenAppaConfigAgentCapabilities();
+    expect(
+      await db
+        .select()
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.agentId, disabledAgent?.id ?? "")),
+    ).toEqual(seededTools);
+    expect(
+      await db
+        .select()
+        .from(schema.agentSuggestedPromptsTable)
+        .where(
+          eq(
+            schema.agentSuggestedPromptsTable.agentId,
+            disabledAgent?.id ?? "",
+          ),
+        ),
+    ).toEqual(seededPrompts);
     const agent = await AgentModel.getBuiltInAgent(
       BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
       organization.id,
     );
-    expect(agent).toMatchObject({ builtIn: true, scope: "org" });
+    expect(agent).toMatchObject({
+      id: disabledAgent?.id,
+      builtIn: true,
+      scope: "org",
+    });
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );

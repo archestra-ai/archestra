@@ -799,7 +799,7 @@ function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
   return undefined;
 }
 
-/** The concrete rows ordinary search/run dispatch can discover, before target filtering. */
+/** Assigned and Auto-discovered rows allowed by RBAC and conversation selection. */
 async function inspectableToolIds(
   context: ArchestraContext & { agentId: string },
 ): Promise<Set<string>> {

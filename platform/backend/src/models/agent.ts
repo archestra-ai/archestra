@@ -798,10 +798,10 @@ class AgentModel {
 
     // Sync suggested prompts if provided
     if (suggestedPrompts && suggestedPrompts.length > 0) {
-      await AgentSuggestedPromptModel.syncForAgent(
-        createdAgent.id,
-        suggestedPrompts,
-      );
+      await AgentSuggestedPromptModel.syncForAgent({
+        agentId: createdAgent.id,
+        prompts: suggestedPrompts,
+      });
     }
 
     // For internal agents, create a delegation tool so other agents can delegate to this one
@@ -1036,9 +1036,9 @@ class AgentModel {
     // platform subagents remain excluded from ordinary chat selection.
     if (options?.excludeBuiltIn || !isAgentAdmin || isChatView) {
       const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
-      if (isChatView) {
+      if (isChatView && config.openappa.enabled) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
-      } else if (options?.includeAdvisor) {
+      } else if (!isChatView && options?.includeAdvisor) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.ADVISOR));
       }
       whereConditions.push(or(...visibleAgents) as SQL);
@@ -3496,7 +3496,10 @@ class AgentModel {
 
     // Sync suggested prompts if provided
     if (suggestedPrompts !== undefined) {
-      await AgentSuggestedPromptModel.syncForAgent(id, suggestedPrompts);
+      await AgentSuggestedPromptModel.syncForAgent({
+        agentId: id,
+        prompts: suggestedPrompts,
+      });
     }
 
     // Any write above may have changed the canonical config — fork a version

@@ -271,6 +271,7 @@ describe("chat conversation and message routes", () => {
       organizationId,
       authorId: currentUser.id,
       name: "Policy assistant",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
       modelId: agentModel.id,
       llmApiKeyId: key.id,
     });

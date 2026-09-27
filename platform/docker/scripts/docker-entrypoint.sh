@@ -239,15 +239,26 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
                 echo "Container already connected to KinD network"
             else
                 echo "Connecting container to KinD network..."
-                # The KinD network is dual-stack, but our servers listen on IPv4
-                # only. With an IPv6 address on this interface, Docker runtimes
-                # such as OrbStack forward host `localhost` (::1) to it and the
-                # connection is reset. Join without IPv6; fall back to a plain
-                # connect on engines that reject per-endpoint sysctls.
-                if ! docker network connect \
-                        --driver-opt 'com.docker.network.endpoint.sysctls=net.ipv6.conf.IFNAME.disable_ipv6=1' \
-                        kind "$CONTAINER_ID" 2>/dev/null \
-                    && ! docker network connect kind "$CONTAINER_ID"; then
+                # When the KinD network is dual-stack, our IPv4-only servers get
+                # an IPv6 address on this interface too, and Docker runtimes
+                # such as OrbStack forward host `localhost` (::1) to it, where
+                # the connection is reset. Join such a network without IPv6.
+                # Engines that reject the per-endpoint sysctl can fail after
+                # they have already programmed the IPv4 address, so detach the
+                # half-made endpoint before falling back to a plain connect, or
+                # the retry collides with the route it left behind.
+                connected=false
+                if [ "$(docker network inspect kind -f '{{.EnableIPv6}}' 2>/dev/null)" = "true" ]; then
+                    if docker network connect \
+                            --driver-opt 'com.docker.network.endpoint.sysctls=net.ipv6.conf.IFNAME.disable_ipv6=1' \
+                            kind "$CONTAINER_ID"; then
+                        connected=true
+                    else
+                        echo "Could not join the KinD network with IPv6 disabled; retrying with defaults"
+                        docker network disconnect --force kind "$CONTAINER_ID" >/dev/null 2>&1 || true
+                    fi
+                fi
+                if [ "$connected" != "true" ] && ! docker network connect kind "$CONTAINER_ID"; then
                     echo "ERROR: Failed to connect container to KinD network"
                     exit 1
                 fi

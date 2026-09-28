@@ -12,13 +12,16 @@ import {
   isAlwaysExposedArchestraToolShortName,
   isArchestraMcpServerTool,
   isLikelyArchestraToolName,
+  legacyMcpClientServerNames,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseArchestraAppResourceUri,
   REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+  resolveMcpClientServerName,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_CREATE_AGENT_FULL_NAME,
 } from "./archestra-mcp-server";
+import { PERSONAL_MCP_GATEWAY_NAME } from "./consts";
 
 describe("archestra MCP tool names", () => {
   test("slugifies branded tool prefixes for non-alphanumeric app names", () => {
@@ -264,5 +267,87 @@ describe("parseArchestraAppResourceUri", () => {
     expect(
       parseArchestraAppResourceUri("ui://archestra-app/abc/extra"),
     ).toBeNull();
+  });
+});
+
+describe("resolveMcpClientServerName", () => {
+  test("gives a seeded personal gateway the deployment's name", () => {
+    expect(
+      resolveMcpClientServerName({
+        gatewayName: PERSONAL_MCP_GATEWAY_NAME,
+        appName: "Archestra",
+        isPersonalGateway: true,
+      }),
+    ).toBe("archestra");
+  });
+
+  test("uses the white-label app name when the deployment has one", () => {
+    expect(
+      resolveMcpClientServerName({
+        gatewayName: PERSONAL_MCP_GATEWAY_NAME,
+        appName: "Acme AI",
+        isPersonalGateway: true,
+      }),
+    ).toBe("acme_ai");
+  });
+
+  test("keeps the name of a personal gateway its owner renamed", () => {
+    expect(
+      resolveMcpClientServerName({
+        gatewayName: "Prod Gateway",
+        appName: "Acme AI",
+        isPersonalGateway: true,
+      }),
+    ).toBe("prod_gateway");
+  });
+
+  test("keeps the name of a shared gateway that is called My Gateway", () => {
+    expect(
+      resolveMcpClientServerName({
+        gatewayName: PERSONAL_MCP_GATEWAY_NAME,
+        appName: "Acme AI",
+        isPersonalGateway: false,
+      }),
+    ).toBe("my_gateway");
+  });
+
+  test("falls back to the app name for a nameless gateway", () => {
+    expect(
+      resolveMcpClientServerName({ gatewayName: "  ", appName: "Acme AI" }),
+    ).toBe("acme_ai");
+  });
+
+  test("falls back to archestra when the app name has no usable characters", () => {
+    expect(
+      resolveMcpClientServerName({ gatewayName: "", appName: "!!!" }),
+    ).toBe("archestra");
+  });
+});
+
+describe("legacyMcpClientServerNames", () => {
+  test("reports the old name of a seeded personal gateway", () => {
+    expect(
+      legacyMcpClientServerNames({
+        gatewayName: PERSONAL_MCP_GATEWAY_NAME,
+        appName: "Archestra",
+        isPersonalGateway: true,
+      }),
+    ).toEqual(["my_gateway"]);
+  });
+
+  test("reports nothing when the gateway keeps its own name", () => {
+    expect(
+      legacyMcpClientServerNames({
+        gatewayName: "Prod Gateway",
+        appName: "Acme AI",
+        isPersonalGateway: true,
+      }),
+    ).toEqual([]);
+  });
+
+  test("reports nothing for a gateway that never had a name", () => {
+    expect(
+      legacyMcpClientServerNames({ gatewayName: "", appName: "Acme AI" }),
+    ).toEqual([]);
   });
 });

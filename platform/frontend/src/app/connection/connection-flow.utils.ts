@@ -6,8 +6,6 @@ import {
   SupportedProviders,
 } from "@archestra/shared";
 
-const DEFAULT_MCP_SERVER_SLUG = "archestra";
-
 export type ConnectionBaseUrl = NonNullable<
   archestraApiTypes.GetOrganizationResponses["200"]["connectionBaseUrls"]
 >[number];
@@ -35,36 +33,6 @@ export function resolveAdminDefaultBaseUrl(
   metadata: readonly ConnectionBaseUrl[] | null | undefined,
 ): string | null {
   return metadata?.find((m) => m.isDefault)?.url ?? null;
-}
-
-/**
- * Slugify the org's app name for use as an MCP server key (e.g. the key in
- * `mcpServers` or the CLI arg for `claude mcp add`). White-label deployments
- * rely on this — a user of "Acme AI" should see `acme-ai` in their config,
- * not `archestra`.
- */
-export function toMcpServerSlug(appName: string): string {
-  const slug = appName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || DEFAULT_MCP_SERVER_SLUG;
-}
-
-/**
- * Gateway name → the server name the setup registers in the client (e.g. the
- * `claude mcp add` arg). Mirrors the backend's toServerName so the UI can
- * reference the exact name the user will see inside their client; falls back
- * to the app-name slug for unnamed gateways.
- */
-export function deriveMcpServerName(params: {
-  gatewayName: string;
-  appName: string;
-}): string {
-  const trimmed = params.gatewayName.trim();
-  return trimmed
-    ? trimmed.toLowerCase().replace(/\s+/g, "_")
-    : toMcpServerSlug(params.appName);
 }
 
 /**

@@ -3,6 +3,7 @@ import {
   COPILOT_CLI_CLIENT_ID,
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   EXTERNAL_AGENT_ID_HEADER,
+  PERSONAL_MCP_GATEWAY_NAME,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import JSZip from "jszip";
@@ -439,6 +440,58 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).toContain(
       "claude mcp add --scope user --transport http 'prod_gateway'",
     );
+  });
+
+  test("registers the seeded personal gateway under the app name, and drops its old entry", async ({
+    makeAgent,
+  }) => {
+    // Every member's gateway is seeded as "My Gateway". Registering that name
+    // verbatim put `my_gateway` in the client's server list, which says
+    // nothing about which platform serves it.
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: PERSONAL_MCP_GATEWAY_NAME,
+      isPersonalGateway: true,
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+
+    const script = (await fetchScript(rawToken)).body;
+    expect(script).toContain(
+      "claude mcp add --scope user --transport http 'archestra'",
+    );
+    expect(script).toContain(
+      "claude mcp remove --scope user 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).not.toContain("mcp add --scope user --transport http 'my_");
+  });
+
+  test("keeps the name of a personal gateway its owner renamed", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+      isPersonalGateway: true,
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+
+    const script = (await fetchScript(rawToken)).body;
+    expect(script).toContain(
+      "claude mcp add --scope user --transport http 'prod_gateway'",
+    );
+    expect(script).not.toContain("'archestra'");
   });
 
   test("default platform (omitted) renders bash", async ({ makeAgent }) => {

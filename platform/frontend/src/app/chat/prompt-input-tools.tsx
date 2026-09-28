@@ -852,7 +852,7 @@ function OpenappaStatusDisplay({
           aria-label={statusLabel}
           className={cn(
             "inline-flex h-8 min-w-0 items-center text-xs text-muted-foreground",
-            compact ? "gap-1 px-1" : "max-w-72 gap-3 border-l pl-3",
+            compact ? "gap-1 px-1" : "max-w-72 gap-3 pl-3",
           )}
         >
           <span className="inline-flex min-w-0 items-center gap-1">

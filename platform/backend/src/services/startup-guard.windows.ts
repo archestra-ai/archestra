@@ -79,6 +79,7 @@ export function renderStartupGuardPowerShell(
 # this script exits. Disable with ${client.disableEnvVar}=0.
 
 if ($env:${client.disableEnvVar} -eq '0') { return }
+if ($args.Count -gt 0 -and $args[0] -in @(${client.utilitySubcommands.map(psq).join(", ")}, '--help', '-h', '--version', '-v')) { return }
 $ErrorActionPreference = 'Continue'
 # Invoke-WebRequest paints its progress banner across the TOP console rows —
 # straight over the logo — on every request unless progress is silenced.
@@ -1014,14 +1015,17 @@ ${client.markerStart}
 ${refreshBlock}
 function ${client.binary} {
   $archGuard = Join-Path $env:USERPROFILE '${client.psScriptRelpath}'
-  if (Test-Path $archGuard) { try { & $archGuard @args } catch { } }
+  $archUtilityCommand = $args.Count -gt 0 -and $args[0] -in @(${client.utilitySubcommands.map(psq).join(", ")}, '--help', '-h', '--version', '-v')
+  if (-not $archUtilityCommand -and (Test-Path $archGuard)) { try { & $archGuard @args } catch { } }
   $archReal = Get-Command -Name ${client.binary} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $archReal) {
     $archReal = Get-Command -Name ${client.binary} -ErrorAction SilentlyContinue |
       Where-Object { $_.CommandType -in @('Application', 'ExternalScript') } |
       Select-Object -First 1
   }
-  if ($archReal) {${promptArgs}
+  if ($archReal) {
+    if ($archUtilityCommand) { & $archReal.Source @args; return }
+    ${promptArgs}
     ${
       handoffEnabled && client.clientId === "copilot-cli"
         ? `$archPreviousDirs = $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS

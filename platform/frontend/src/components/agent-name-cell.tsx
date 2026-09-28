@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { LabelTags } from "@/components/label-tags";
+import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 
 type AgentLabels =
   archestraApiTypes.GetAgentsResponses["200"]["data"][number]["labels"];
@@ -18,6 +19,7 @@ export function AgentNameCell({
   labels,
   extraBadges,
   icon,
+  owner,
 }: {
   name: string;
   /**
@@ -35,6 +37,14 @@ export function AgentNameCell({
    * spending a fixed slot of horizontal space on it.
    */
   icon?: ReactNode;
+  owner?: {
+    resource: {
+      scope: "personal" | "team" | "org";
+      authorId: string | null;
+      authorEmail?: string | null;
+    };
+    currentUserId: string | null | undefined;
+  };
 }) {
   const hasMetadata = !!extraBadges || !!labels?.length || builtIn;
 
@@ -69,6 +79,7 @@ export function AgentNameCell({
             </RowClickShield>
           )}
         </div>
+        {owner && <PersonalResourceOwner {...owner} />}
         {description && (
           <div className="text-xs text-muted-foreground line-clamp-2">
             {description}

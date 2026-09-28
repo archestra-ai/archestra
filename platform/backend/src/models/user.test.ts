@@ -102,6 +102,44 @@ describe("UserModel.findByEmail", () => {
 });
 
 describe("UserModel.delete", () => {
+  test("soft-deletes private agents before their author is removed", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const privateAgent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      agentType: "agent",
+      access: "personal",
+    });
+    const sharedAgent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      agentType: "agent",
+      access: "org",
+    });
+
+    await withDbTransaction(async (tx) => {
+      expect(await UserModel.delete(user.id, tx)).toBe(true);
+    });
+
+    const agents = await db
+      .select({
+        id: schema.agentsTable.id,
+        deletedAt: schema.agentsTable.deletedAt,
+      })
+      .from(schema.agentsTable);
+    expect(
+      agents.find((agent) => agent.id === privateAgent.id)?.deletedAt,
+    ).not.toBeNull();
+    expect(
+      agents.find((agent) => agent.id === sharedAgent.id)?.deletedAt,
+    ).toBeNull();
+  });
+
   test("should delete a user", async ({ makeUser }) => {
     const user = await makeUser({ email: "deleteme@test.com" });
 

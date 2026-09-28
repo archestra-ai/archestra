@@ -4119,6 +4119,36 @@ class AgentModel {
     );
   }
 
+  /** Soft-delete an author's private chat agents when their membership ends. */
+  static async deletePersonalAgentsForUser(params: {
+    userId: string;
+    organizationId?: string;
+    tx?: Transaction;
+  }): Promise<number> {
+    const table = schema.agentsTable;
+    return await softDelete(
+      params.tx ?? db,
+      table,
+      and(
+        eq(table.authorId, params.userId),
+        eq(table.agentType, "agent"),
+        params.organizationId
+          ? eq(table.organizationId, params.organizationId)
+          : undefined,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        ResourcePermissionPolicyModel.reachesOnlyOwner({
+          organizationId: table.organizationId,
+          resource: "agent",
+          scopeColumn: table.id,
+          ownerColumn: table.authorId,
+        }),
+        // SPDX-SnippetEnd
+      ),
+    );
+  }
+
   /**
    * Resolve a UUID or slug to an agent ID.
    * Checks both the id and slug columns in a single query.

@@ -9,14 +9,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to OpenAPPA v0.26.0, including hosted document validation (#479),
-# session-scoped receipts (#473), and organization-scoped receipt keys (#464;
-# needs migration 0490). The embedded reporting helper
-# currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cbb0fdfd5fe957655ed1c071580208a36e1a3610" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cbb0fdfd5fe957655ed1c071580208a36e1a3610" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cbb0fdfd5fe957655ed1c071580208a36e1a3610", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cbb0fdfd5fe957655ed1c071580208a36e1a3610" }
+# Pinned to OpenAPPA main at 05c04872, including the wildcard fallback fix (#515).
+# The embedded reporting helper currently requires upstream's daemon feature.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

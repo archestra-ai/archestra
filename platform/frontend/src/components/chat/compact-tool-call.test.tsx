@@ -102,7 +102,7 @@ describe("CompactToolGroup", () => {
       </QueryClientProvider>,
     );
     expect(
-      screen.getByRole("link", { name: "Back to OpenAPPA" }),
+      screen.getByRole("link", { name: "View Guardrails" }),
     ).toHaveAttribute("href", "/openappa");
     expect(
       screen.getByRole("button", { name: "update guardrails policy" }),

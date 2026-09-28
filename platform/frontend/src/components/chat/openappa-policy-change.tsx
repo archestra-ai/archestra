@@ -119,7 +119,7 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
         </InlineNoticeText>
         <Button variant="outline" size="sm" className="ml-auto" asChild>
           <Link href={active ? "/openappa" : "/openappa/policy"}>
-            <span>{active ? "Back to OpenAPPA" : "Check policy"}</span>
+            <span>{active ? "View Guardrails" : "Check policy"}</span>
           </Link>
         </Button>
       </InlineNotice>

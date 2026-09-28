@@ -538,6 +538,9 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       { catalog: ["gpt-5.4", "gpt-5"], expected: "gpt-5.4" },
       { catalog: ["gpt-5.5", "gpt-5.4"], expected: "gpt-5.5" },
       { catalog: ["gpt-5.5-pro", "gpt-5.5"], expected: "gpt-5.5-pro" },
+      { catalog: ["gpt-6-sol", "gpt-5.6-sol"], expected: "gpt-6-sol" },
+      { catalog: ["gpt-6-astra", "gpt-6-sol"], expected: "gpt-6-astra" },
+      { catalog: ["gpt-6-luna", "gpt-5.6-sol"], expected: "gpt-5.6-sol" },
     ])("marks $expected as best for $catalog", async ({ catalog, expected }, {
       makeOrganization,
       makeSecret,

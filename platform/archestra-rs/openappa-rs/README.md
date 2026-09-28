@@ -23,11 +23,11 @@ flowchart LR
 
 ## Build and run
 
-Cargo fetches the OpenAPPA runtime from its main branch, which includes the
-checked status read from OpenAPPA PR #509. The workspace lockfile records the
-resolved commit. A sibling checkout is not required. Update the lockfile when
-adopting a newer runtime commit. The lockfile also selects
-`rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
+Cargo fetches the OpenAPPA runtime pinned to commit `05c04872` from its main
+branch. This includes the checked status read from OpenAPPA PR #509 and the
+wildcard fallback fix from PR #515. A sibling checkout is not required. Update
+the manifest revision and lockfile when adopting a newer runtime commit.
+The lockfile also selects `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.
 
 From `archestra/platform`:

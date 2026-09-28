@@ -432,7 +432,6 @@ impl EvalClient {
         )
     }
 
-
     /// Create a project. Files produced in its conversations are owned by the project rather than the
     /// author; the bench creates one per rollout, so concurrent lanes and successive tasks never
     /// collide on identically named files, and a rollout's stages share one file namespace.

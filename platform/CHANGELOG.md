@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0-rc.25](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.24...platform-v1.4.0-rc.25) (2026-09-27)
+
+
+### Bug Fixes
+
+* **quickstart:** quiet startup logs so the banner and real problems stand out ([#8243](https://github.com/archestra-ai/archestra/issues/8243)) ([e341666](https://github.com/archestra-ai/archestra/commit/e3416669692151ccb510d0bd0f3d2fda1d2032dc))
+
+
+### Code Refactoring
+
+* **openappa:** reuse standard chat for policy configuration ([#8241](https://github.com/archestra-ai/archestra/issues/8241)) ([8a89d4b](https://github.com/archestra-ai/archestra/commit/8a89d4ba39fcefad3208428d12bf934dfcd0a16e))
+
 ## [1.4.0-rc.24](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.23...platform-v1.4.0-rc.24) (2026-09-27)
 
 

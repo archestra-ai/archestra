@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0-rc.26](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.25...platform-v1.4.0-rc.26) (2026-09-28)
+
+
+### Features
+
+* **openappa:** follow the beta flag and replace the legacy guardrails ([#8240](https://github.com/archestra-ai/archestra/issues/8240)) ([9a349c5](https://github.com/archestra-ai/archestra/commit/9a349c517eb4392937d957c86d016c5645d6cb05))
+
+
+### Miscellaneous Chores
+
+* **openappa:** update embedded runtime to v0.26.0 ([#8250](https://github.com/archestra-ai/archestra/issues/8250)) ([8f38f6f](https://github.com/archestra-ai/archestra/commit/8f38f6f40869ed728748d7723d36439cc39895e8))
+
 ## [1.4.0-rc.25](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.24...platform-v1.4.0-rc.25) (2026-09-27)
 
 

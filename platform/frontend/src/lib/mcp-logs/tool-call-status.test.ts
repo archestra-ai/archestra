@@ -34,6 +34,24 @@ describe("resolveMcpToolCallStatus", () => {
     ).toBe("error");
   });
 
+  it("reads the outcome a metadata-only row kept in place of its result", () => {
+    const notStored = { __redacted: "log_content_policy" } as const;
+
+    expect(resolveMcpToolCallStatus({ ...notStored, isError: false })).toBe(
+      "success",
+    );
+    expect(resolveMcpToolCallStatus({ ...notStored, isError: true })).toBe(
+      "error",
+    );
+    expect(
+      resolveMcpToolCallStatus({
+        ...notStored,
+        isError: true,
+        errorType: "cancelled",
+      }),
+    ).toBe("cancelled");
+  });
+
   it("treats malformed shapes as success rather than crashing", () => {
     expect(resolveMcpToolCallStatus(null)).toBe("success");
     expect(resolveMcpToolCallStatus("text")).toBe("success");

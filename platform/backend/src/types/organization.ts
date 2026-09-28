@@ -6,6 +6,7 @@ import {
   ContextualRetrievalModeSchema,
   EmbeddingDimensionsSchema,
   KnowledgeConnectorOverridesSchema,
+  LogContentModeSchema,
   MessagingChannelOverridesSchema,
   ModelProviderOverridesSchema,
   OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
@@ -324,6 +325,7 @@ const extendedFields = {
   embeddingModel: z.string().nullable(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   kbContextualRetrievalMode: ContextualRetrievalModeSchema.nullable(),
+  logContentMode: LogContentModeSchema,
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: SupportedProvidersSchema.nullable(),
   defaultUserLimitValue: z.number().int().positive().nullable(),
@@ -458,6 +460,10 @@ export const UpdateMcpSettingsSchema = z.object({
   // Enterprise-gated on the route: scaling idle MCP servers to zero replicas.
   mcpIdleHibernationEnabled: z.boolean().optional(),
   // SPDX-SnippetEnd
+});
+
+export const UpdateLogsSettingsSchema = z.object({
+  logContentMode: LogContentModeSchema.optional(),
 });
 
 export const UpdateSkillsSettingsSchema = z.object({

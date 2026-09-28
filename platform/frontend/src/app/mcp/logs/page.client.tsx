@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   extractMcpExecutedAs,
   isLockedChatUnavailableContent,
+  isLogContentNotStored,
   parseFullToolName,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -422,8 +423,12 @@ function McpToolCallsTable({
 
         // The status lives inside the result, so a locked-chat row has none to
         // report. Falling through to the "Success" badge below would assert an
-        // outcome the row does not record.
-        if (isLockedChatUnavailableContent(result)) {
+        // outcome the row does not record. A metadata-only row is different:
+        // its marker keeps the outcome, so it still gets a badge.
+        if (
+          isLockedChatUnavailableContent(result) &&
+          !isLogContentNotStored(result)
+        ) {
           return <LockedChatContentUnavailableLabel value={result} />;
         }
 
@@ -454,6 +459,11 @@ function McpToolCallsTable({
                   : "Success"}
             </Badge>
           );
+        }
+
+        // A metadata-only tools/call row that recorded no outcome.
+        if (method === "tools/call" && isLogContentNotStored(result)) {
+          return <LockedChatContentUnavailableLabel value={result} />;
         }
 
         // For other methods, just show success

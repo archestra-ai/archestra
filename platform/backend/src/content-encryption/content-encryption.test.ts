@@ -134,11 +134,14 @@ describe("content encryption", () => {
   });
 
   describe("model integration", () => {
-    test("interactions are encrypted at rest and transparent through the model", async () => {
+    test("interactions are encrypted at rest and transparent through the model", async ({
+      makeAgent,
+    }) => {
       setKeys(SECRET_A);
+      const agent = await makeAgent();
       const { InteractionModel } = await import("@/models");
       const created = await InteractionModel.create({
-        profileId: null,
+        profileId: agent.id,
         request,
         response,
         type: "anthropic:messages",
@@ -202,10 +205,14 @@ describe("content encryption", () => {
       expect(byContentId?.id).toBe(message.id);
     });
 
-    test("mcp tool calls are encrypted at rest, reads and search stay coherent", async () => {
+    test("mcp tool calls are encrypted at rest, reads and search stay coherent", async ({
+      makeAgent,
+    }) => {
       setKeys(SECRET_A);
+      const agent = await makeAgent();
       const { McpToolCallModel } = await import("@/models");
       const created = await McpToolCallModel.create({
+        agentId: agent.id,
         mcpServerName: "email-server",
         method: "tools/call",
         toolCall,

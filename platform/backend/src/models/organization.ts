@@ -2,6 +2,7 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_THEME_ID,
   type KnowledgeConnectorOverrides,
+  type LogContentMode,
   MEMBER_ROLE_NAME,
   type MessagingChannelOverrides,
   type ModelProviderOverrides,
@@ -9,7 +10,7 @@ import {
   type SupportedProvider,
   TimeInMs,
 } from "@archestra/shared";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -493,6 +494,62 @@ class OrganizationModel {
   }
 
   /**
+   * The Log Content mode of the organization that owns a log row, resolved
+   * through its agent, knowledge connector or app (log tables carry no
+   * organization id). Null when none of them resolves to an organization.
+   *
+   * Deliberately uncached: the setting must take effect on the very next
+   * write on every replica, and this is one primary-key lookup per logged
+   * call.
+   */
+  static async getLogContentModeForOwner(owner: {
+    agentId?: string | null;
+    connectorId?: string | null;
+    appId?: string | null;
+  }): Promise<LogContentMode | null> {
+    const ownerOrganizationIds: SQL[] = [];
+    if (owner.agentId) {
+      ownerOrganizationIds.push(
+        sql`(${db
+          .select({ id: schema.agentsTable.organizationId })
+          .from(schema.agentsTable)
+          .where(eq(schema.agentsTable.id, owner.agentId))})`,
+      );
+    }
+    if (owner.connectorId) {
+      ownerOrganizationIds.push(
+        sql`(${db
+          .select({ id: schema.knowledgeBaseConnectorsTable.organizationId })
+          .from(schema.knowledgeBaseConnectorsTable)
+          .where(
+            eq(schema.knowledgeBaseConnectorsTable.id, owner.connectorId),
+          )})`,
+      );
+    }
+    if (owner.appId) {
+      ownerOrganizationIds.push(
+        sql`(${db
+          .select({ id: schema.appsTable.organizationId })
+          .from(schema.appsTable)
+          .where(eq(schema.appsTable.id, owner.appId))})`,
+      );
+    }
+    if (ownerOrganizationIds.length === 0) return null;
+
+    const [row] = await db
+      .select({ mode: schema.organizationsTable.logContentMode })
+      .from(schema.organizationsTable)
+      .where(
+        eq(
+          schema.organizationsTable.id,
+          sql`coalesce(${sql.join(ownerOrganizationIds, sql`, `)})`,
+        ),
+      )
+      .limit(1);
+    return row?.mode ?? null;
+  }
+
+  /**
    * Get the slim chat error UI setting with a short-lived cache.
    */
   static async getSlimChatErrorUi(id: string): Promise<boolean> {
@@ -827,6 +884,7 @@ class OrganizationModel {
       // SPDX-SnippetEnd
       onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
+      logContentMode: org.logContentMode,
       appsHackathonRecorderEnabled: org.appsHackathonRecorderEnabled,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,

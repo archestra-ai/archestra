@@ -35,6 +35,7 @@ export * from "./knowledge-base";
 export * from "./labels";
 export * from "./linked-idp-auth";
 export * from "./locked-chat-content";
+export * from "./log-content";
 export * from "./mcp-alert-fingerprint";
 export * from "./mcp-config-redaction";
 export * from "./mcp-executed-as";

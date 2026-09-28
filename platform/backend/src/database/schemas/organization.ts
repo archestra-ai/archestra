@@ -1,6 +1,7 @@
 import type {
   ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
+  LogContentMode,
   MessagingChannelOverrides,
   ModelProviderOverrides,
   OrganizationCustomFont,
@@ -124,6 +125,17 @@ const organizationsTable = pgTable("organization", {
   allowChatFileUploads: boolean("allow_chat_file_uploads")
     .notNull()
     .default(true),
+
+  /**
+   * How much the in-app Logs record. `metadata_only` never writes prompts,
+   * responses, tool arguments, tool results or guardrail consult payloads —
+   * only who, when, which model or tool, usage, cost and the outcome. Applies
+   * at write time: switching it neither hides nor scrubs rows already stored.
+   */
+  logContentMode: varchar("log_content_mode")
+    .$type<LogContentMode>()
+    .notNull()
+    .default("full"),
 
   /**
    * @deprecated No longer consulted. Dynamic tool access is now gated solely

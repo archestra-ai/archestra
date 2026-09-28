@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "log_content_mode" varchar DEFAULT 'full' NOT NULL;

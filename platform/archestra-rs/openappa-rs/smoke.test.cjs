@@ -1007,6 +1007,34 @@ builtin = "hitl"
     assert.equal(Number(stored.rows[0].n), 0);
   });
 
+  await t.test('a consult under the Metadata only log setting keeps who and how, never what', async (st) => {
+    const organization_id = `smoke-org-${randomUUID()}`;
+    await client.query(
+      "INSERT INTO organization (id, name, slug, created_at, log_content_mode) VALUES ($1, $1, $1, now(), 'metadata_only')",
+      [organization_id],
+    );
+    st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
+    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID() };
+    assert.equal((await call(session, 'annotated-1', 'annotated_read', { a: 1 })).decision, 'allow_call');
+
+    const { rows } = await client.query('SELECT * FROM openappa_external_consults WHERE organization_id = $1', [organization_id]);
+    assert.equal(rows.length, 1);
+    const [row] = rows;
+    assert.deepEqual(
+      {
+        role: row.role, external_name: row.external_name, backend: row.backend, outcome: row.outcome,
+        http_status: row.http_status, answer: row.answer, raw_response: row.raw_response, diagnostics: row.diagnostics,
+      },
+      {
+        role: 'annotator', external_name: 'gatekeeper', backend: 'url', outcome: 'answered',
+        http_status: 200, answer: null, raw_response: null, diagnostics: null,
+      },
+    );
+    assert.equal(row.request.__redacted, 'log_content_policy');
+    assert.equal(row.request.kind, 'annotation');
+    assert.ok(!JSON.stringify(row.request).includes('"a":1'), 'the tool arguments are not stored');
+  });
+
   await t.test('a failed receipt completion leaves a durable pending recovery fence', async () => {
     const session = scope();
     const callId = `fault-${randomUUID()}`;

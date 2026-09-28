@@ -68,6 +68,11 @@ pub(crate) fn store(pg: &LeasedPostgres, attribution: Attribution, buffer: &Cons
     }
 }
 
+/// The organization's Log Content setting is read in the same statement, so a
+/// change applies to the very next dispatch. Under `metadata_only` the consult's
+/// content — the envelope sent to the external, its answer, raw response and
+/// diagnostics — is never written: the request keeps only its kind and the
+/// tool's name beside the not-stored marker the Logs pages recognize.
 fn insert(
     pg: &LeasedPostgres,
     attribution: Attribution,
@@ -76,10 +81,27 @@ fn insert(
     pg.with_client(move |client| {
         client
             .execute(
-                "INSERT INTO openappa_external_consults (id, organization_id, session_id, caller_id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest) \
-                 SELECT c.id::uuid, $2::text, $3::text, $4::text, c.started_at, c.duration_ms, c.role, c.external_name, c.backend, c.request, c.outcome, c.answer, c.raw_response, c.http_status, c.diagnostics, c.diagnostics_truncated, c.root, c.trajectory, c.call_id, c.offer_id, c.call_digest \
+                "WITH policy AS ( \
+                   SELECT COALESCE((SELECT log_content_mode FROM organization WHERE id = $2::text), 'metadata_only') = 'metadata_only' AS withheld \
+                 ) \
+                 INSERT INTO openappa_external_consults (id, organization_id, session_id, caller_id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest) \
+                 SELECT c.id::uuid, $2::text, $3::text, $4::text, c.started_at, c.duration_ms, c.role, c.external_name, c.backend, \
+                   CASE WHEN p.withheld THEN jsonb_strip_nulls(jsonb_build_object( \
+                     '__redacted', 'log_content_policy', \
+                     'kind', c.request -> 'kind', \
+                     'artifact', CASE WHEN c.request #> '{artifact,args,name}' IS NULL THEN NULL \
+                       ELSE jsonb_build_object('args', jsonb_build_object('name', c.request #> '{artifact,args,name}', 'arguments', jsonb_build_object('__redacted', 'log_content_policy'))) END \
+                   )) ELSE c.request END, \
+                   c.outcome, \
+                   CASE WHEN p.withheld THEN NULL ELSE c.answer END, \
+                   CASE WHEN p.withheld THEN NULL ELSE c.raw_response END, \
+                   c.http_status, \
+                   CASE WHEN p.withheld THEN NULL ELSE c.diagnostics END, \
+                   c.diagnostics_truncated AND NOT p.withheld, \
+                   c.root, c.trajectory, c.call_id, c.offer_id, c.call_digest \
                  FROM UNNEST($1::text[], $5::timestamptz[], $6::int8[], $7::text[], $8::text[], $9::text[], $10::jsonb[], $11::text[], $12::jsonb[], $13::bytea[], $14::int4[], $15::bytea[], $16::bool[], $17::text[], $18::text[], $19::text[], $20::text[], $21::text[]) \
-                 AS c(id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest)",
+                 AS c(id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest) \
+                 CROSS JOIN policy p",
                 &[
                     &columns.id,
                     &attribution.organization_id,

@@ -424,6 +424,12 @@ pub struct DispatchPolicy {
     pub credentials: HashMap<String, String>,
 }
 
+#[napi(object)]
+pub struct OpenappaStatus {
+    pub trust: String,
+    pub audience: String,
+}
+
 impl From<DispatchPolicy> for deployments::HostedPolicy {
     fn from(policy: DispatchPolicy) -> Self {
         deployments::HostedPolicy {
@@ -818,6 +824,59 @@ pub async fn dispatch_hook(input: String, policy: DispatchPolicy) -> napi::Resul
     let input: Input = serde_json::from_str(&input).map_err(error)?;
     validate(&input)?;
     run(input, policy.into()).await
+}
+
+/// Read the current label of a started session without mutating its trajectory.
+#[napi(js_name = "getOpenappaStatus")]
+pub async fn get_openappa_status(
+    organization_id: String,
+    session_id: String,
+) -> napi::Result<Option<OpenappaStatus>> {
+    if organization_id.is_empty()
+        || organization_id.len() > 512
+        || organization_id.chars().any(char::is_control)
+    {
+        return Err(error("invalid organization identity"));
+    }
+    if session_id.is_empty() || session_id.len() > 1024 || session_id.chars().any(char::is_control)
+    {
+        return Err(error("invalid session identity"));
+    }
+    let result = AssertUnwindSafe(async move {
+        let state = initialized().await?;
+        let leased = state.lease().await?;
+        tokio::task::spawn_blocking(move || {
+            let key = SessionKey::new(&organization_id, &session_id);
+            let root = postgres_store(&leased.state.store)?
+                .with_client(move |client| {
+                    Ok(client
+                        .query_opt(
+                            "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                            &[&key.organization_id, &key.actor],
+                        )?
+                        .map(|row| row.get::<_, String>(0)))
+                })
+                .map_err(error)?;
+            let Some(root) = root else { return Ok(None) };
+            let status = leased
+                .state
+                .runtime
+                .try_status(&TrajectoryId(root))
+                .map_err(error)?;
+            Ok(Some(OpenappaStatus {
+                trust: status.trust,
+                audience: status.audience,
+            }))
+        })
+        .await
+        .map_err(error)?
+    })
+    .catch_unwind()
+    .await;
+    match result {
+        Ok(result) => result,
+        Err(_) => Err(error("OpenAPPA panicked while reading status")),
+    }
 }
 
 /// Validates input fields and event requirements before processing.

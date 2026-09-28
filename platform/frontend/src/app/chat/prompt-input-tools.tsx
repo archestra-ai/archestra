@@ -8,7 +8,13 @@ import {
   subscriptionKindForProvider,
   type ThinkingEffortSetting,
 } from "@archestra/shared";
-import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
+import {
+  InfoIcon,
+  MoreVerticalIcon,
+  PaperclipIcon,
+  ShieldIcon,
+  XIcon,
+} from "lucide-react";
 import { memo, useCallback, useEffect } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -44,6 +50,7 @@ import {
   SHORTCUT_NEW_LOCKED_CHAT,
 } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useOpenappaStatus } from "@/lib/chat/chat.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
@@ -203,6 +210,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
   const providerCatalog = useModelProviderCatalog();
+  const { data: statusData, isError: statusReadFailed } = useOpenappaStatus(
+    runtimeMode ? undefined : conversationId,
+  );
+  const openappaStatus = statusReadFailed ? null : statusData;
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
@@ -538,6 +549,25 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </Popover>
         ))}
 
+      {isNarrow && openappaStatus && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-muted-foreground"
+              aria-label={`OpenAPPA status: trust ${openappaStatus.trust}, audience ${openappaStatus.audience}`}
+            >
+              <ShieldIcon className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <span>{`trust: ${openappaStatus.trust} · audience: ${openappaStatus.audience}`}</span>
+          </TooltipContent>
+        </Tooltip>
+      )}
+
       {/* Rendered beside whichever control the collapsed toolbar picked (the
           logo shortcut or the three-dots menu) and outside the RBAC gate: a
           warning that only exists inside a popover — or only for users who can
@@ -784,6 +814,21 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         </>
       )}
 
+      {!isNarrow && openappaStatus && (
+        <>
+          <OpenappaStatusInfoButton
+            label="trust"
+            value={openappaStatus.trust}
+            description="The current trust label of this protected conversation"
+          />
+          <OpenappaStatusInfoButton
+            label="audience"
+            value={openappaStatus.audience}
+            description="The current audience label of this protected conversation"
+          />
+        </>
+      )}
+
       {/* Apps Hackathon session recorder — a distinct cluster in the composer.
           It records the whole chat (from scratch, even before the first message)
           and opens the replay. Renders nothing when the feature is disabled. */}
@@ -793,3 +838,33 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 });
 
 export { ChatPromptInputTools };
+
+function OpenappaStatusInfoButton({
+  label,
+  value,
+  description,
+}: {
+  label: "trust" | "audience";
+  value: string;
+  description: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1 px-2 text-xs text-muted-foreground"
+          aria-label={`${label}: ${value}`}
+        >
+          <InfoIcon className="size-3" />
+          <span>{`${label}: ${value}`}</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <span>{description}</span>
+      </TooltipContent>
+    </Tooltip>
+  );
+}

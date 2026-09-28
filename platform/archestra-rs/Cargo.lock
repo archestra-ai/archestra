@@ -104,8 +104,8 @@ dependencies = [
 
 [[package]]
 name = "appa"
-version = "0.26.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=cbb0fdfd5fe957655ed1c071580208a36e1a3610#cbb0fdfd5fe957655ed1c071580208a36e1a3610"
+version = "0.27.0"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7525b6b710dc6abeef93af701aaeaecdeabdf2b#c7525b6b710dc6abeef93af701aaeaecdeabdf2b"
 dependencies = [
  "appa-adapter-claude-code",
  "appa-adapter-kagent",
@@ -156,8 +156,8 @@ dependencies = [
 
 [[package]]
 name = "appa-adapter-claude-code"
-version = "0.26.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=cbb0fdfd5fe957655ed1c071580208a36e1a3610#cbb0fdfd5fe957655ed1c071580208a36e1a3610"
+version = "0.27.0"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7525b6b710dc6abeef93af701aaeaecdeabdf2b#c7525b6b710dc6abeef93af701aaeaecdeabdf2b"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -167,16 +167,16 @@ dependencies = [
 
 [[package]]
 name = "appa-adapter-kagent"
-version = "0.26.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=cbb0fdfd5fe957655ed1c071580208a36e1a3610#cbb0fdfd5fe957655ed1c071580208a36e1a3610"
+version = "0.27.0"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7525b6b710dc6abeef93af701aaeaecdeabdf2b#c7525b6b710dc6abeef93af701aaeaecdeabdf2b"
 dependencies = [
  "appa-runtime-api",
 ]
 
 [[package]]
 name = "appa-builtin"
-version = "0.26.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=cbb0fdfd5fe957655ed1c071580208a36e1a3610#cbb0fdfd5fe957655ed1c071580208a36e1a3610"
+version = "0.27.0"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7525b6b710dc6abeef93af701aaeaecdeabdf2b#c7525b6b710dc6abeef93af701aaeaecdeabdf2b"
 dependencies = [
  "serde",
  "serde_json",
@@ -185,8 +185,8 @@ dependencies = [
 
 [[package]]
 name = "appa-engine"
-version = "0.26.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=cbb0fdfd5fe957655ed1c071580208a36e1a3610#cbb0fdfd5fe957655ed1c071580208a36e1a3610"
+version = "0.27.0"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7525b6b710dc6abeef93af701aaeaecdeabdf2b#c7525b6b710dc6abeef93af701aaeaecdeabdf2b"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -199,8 +199,8 @@ dependencies = [
 
 [[package]]
 name = "appa-eventlog"
-version = "0.26.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=cbb0fdfd5fe957655ed1c071580208a36e1a3610#cbb0fdfd5fe957655ed1c071580208a36e1a3610"
+version = "0.27.0"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7525b6b710dc6abeef93af701aaeaecdeabdf2b#c7525b6b710dc6abeef93af701aaeaecdeabdf2b"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -217,8 +217,8 @@ dependencies = [
 
 [[package]]
 name = "appa-package"
-version = "0.26.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=cbb0fdfd5fe957655ed1c071580208a36e1a3610#cbb0fdfd5fe957655ed1c071580208a36e1a3610"
+version = "0.27.0"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7525b6b710dc6abeef93af701aaeaecdeabdf2b#c7525b6b710dc6abeef93af701aaeaecdeabdf2b"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -230,8 +230,8 @@ dependencies = [
 
 [[package]]
 name = "appa-policy"
-version = "0.26.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=cbb0fdfd5fe957655ed1c071580208a36e1a3610#cbb0fdfd5fe957655ed1c071580208a36e1a3610"
+version = "0.27.0"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7525b6b710dc6abeef93af701aaeaecdeabdf2b#c7525b6b710dc6abeef93af701aaeaecdeabdf2b"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -243,8 +243,8 @@ dependencies = [
 
 [[package]]
 name = "appa-runtime-api"
-version = "0.26.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=cbb0fdfd5fe957655ed1c071580208a36e1a3610#cbb0fdfd5fe957655ed1c071580208a36e1a3610"
+version = "0.27.0"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7525b6b710dc6abeef93af701aaeaecdeabdf2b#c7525b6b710dc6abeef93af701aaeaecdeabdf2b"
 dependencies = [
  "serde",
  "serde_json",

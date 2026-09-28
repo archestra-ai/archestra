@@ -9,14 +9,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to OpenAPPA v0.26.0, including hosted document validation (#479),
-# session-scoped receipts (#473), and organization-scoped receipt keys (#464;
-# needs migration 0490). The embedded reporting helper
-# currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cbb0fdfd5fe957655ed1c071580208a36e1a3610" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cbb0fdfd5fe957655ed1c071580208a36e1a3610" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cbb0fdfd5fe957655ed1c071580208a36e1a3610", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cbb0fdfd5fe957655ed1c071580208a36e1a3610" }
+# Temporary merge of OpenAPPA PR #509 with upstream v0.27.0. Refresh this pin
+# after the upstream PR merges so the checked status read stays available.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7525b6b710dc6abeef93af701aaeaecdeabdf2b" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7525b6b710dc6abeef93af701aaeaecdeabdf2b" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7525b6b710dc6abeef93af701aaeaecdeabdf2b", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7525b6b710dc6abeef93af701aaeaecdeabdf2b" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

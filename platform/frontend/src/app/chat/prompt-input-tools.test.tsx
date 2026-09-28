@@ -13,8 +13,12 @@ import { E2eTestId } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { renderCounts } = vi.hoisted(() => ({
+const { renderCounts, statusState } = vi.hoisted(() => ({
   renderCounts: { modelSelector: 0, apiKeySelector: 0 },
+  statusState: {
+    data: null as { trust: string; audience: string } | null,
+    isError: false,
+  },
 }));
 
 // Used by Radix and the toolbar-collapse hook; jsdom reports 0 widths, so the
@@ -69,6 +73,7 @@ vi.mock("@/lib/agent.query", () => ({
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useConversation: () => ({ data: null }),
+  useOpenappaStatus: () => statusState,
   useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
@@ -102,6 +107,8 @@ describe("chat composer typing performance", () => {
     vi.clearAllMocks();
     renderCounts.modelSelector = 0;
     renderCounts.apiKeySelector = 0;
+    statusState.data = null;
+    statusState.isError = false;
     localStorage.clear();
     vi.mocked(useOrganization).mockReturnValue({
       data: null,
@@ -152,5 +159,75 @@ describe("chat composer typing performance", () => {
 
     expect(renderCounts.modelSelector).toBe(modelSelectorRendersAfterMount);
     expect(renderCounts.apiKeySelector).toBe(apiKeySelectorRendersAfterMount);
+  });
+
+  it("shows the current OpenAPPA labels as read-only info buttons", () => {
+    statusState.data = { trust: "suspicious", audience: "internal" };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "trust: suspicious" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "audience: internal" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides retained labels when a status refresh fails", () => {
+    statusState.data = { trust: "trusted", audience: "public" };
+    const { rerender } = render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "trust: trusted" }),
+    ).toBeInTheDocument();
+
+    // TanStack Query retains the previous data after a failed refetch.
+    statusState.isError = true;
+    rerender(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4o"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "trust: trusted" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "audience: public" }),
+    ).toBeNull();
+  });
+
+  it("shows no labels when the status endpoint returns null", () => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /^trust:/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^audience:/ })).toBeNull();
   });
 });

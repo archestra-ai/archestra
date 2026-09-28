@@ -1082,6 +1082,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatConversation]: {
     chat: ["read"],
   },
+  [RouteId.GetChatOpenappaStatus]: {
+    chat: ["read"],
+  },
   [RouteId.GetChatConversationFiles]: {
     chat: ["read"],
   },

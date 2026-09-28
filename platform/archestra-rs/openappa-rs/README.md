@@ -23,10 +23,12 @@ flowchart LR
 
 ## Build and run
 
-Cargo fetches the OpenAPPA v0.26.0 runtime at commit
-`cbb0fdfd5fe957655ed1c071580208a36e1a3610`, pinned in this package's
-manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
-and lockfile together when adopting a newer runtime. The lockfile also selects
+Cargo fetches the OpenAPPA v0.27.0 runtime with the checked status read from
+OpenAPPA PR #509. The temporary merge commit
+`c7525b6b710dc6abeef93af701aaeaecdeabdf2b` is pinned in this package's
+manifest and the workspace lockfile. Replace it with an upstream commit after
+the PR merges. A sibling checkout is not required. Update the revision and
+lockfile together when adopting a newer runtime. The lockfile also selects
 `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.
 

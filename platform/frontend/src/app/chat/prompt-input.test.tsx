@@ -333,6 +333,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
     error: null,
   }),
   useConversation: () => ({ data: mockConversationState.conversation }),
+  useOpenappaStatus: () => ({ data: null }),
   useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 

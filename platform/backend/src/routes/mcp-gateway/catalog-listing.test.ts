@@ -8,6 +8,7 @@ import {
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { McpServerModel, UserTokenModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -142,6 +143,35 @@ describe("MCP gateway catalog listing", () => {
       }
     }
 
+    // Hosted apps serve launch tools in-process and have no upstream transport.
+    for (let index = 0; index < 3; index++) {
+      const catalog = await makeInternalMcpCatalog({
+        name: `hosted-app-${index}`,
+        organizationId: org.id,
+        serverType: "app",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        serverType: "app",
+        scope: "personal",
+        ownerId: user.id,
+      });
+      const tool = await makeTool({
+        name: `hosted-app-${index}__open`,
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(agent.id, tool.id, {
+        mcpServerId: mode === "static" ? server.id : null,
+        credentialResolutionMode: mode,
+      });
+    }
+
+    // Observe, without replacing, the runtime boundary. App listings must not
+    // attempt deployment discovery, even when Kubernetes is configured.
+    const deploymentLookups = vi.spyOn(
+      McpServerRuntimeManager,
+      "getOrLoadDeployment",
+    );
     // Observe the real database boundary; all queries still execute.
     const queries = vi.spyOn(PGlite.prototype, "query");
     queries.mockClear();
@@ -157,6 +187,7 @@ describe("MCP gateway catalog listing", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(deploymentLookups).not.toHaveBeenCalled();
     expect(response.json().result[key]).toHaveLength(5);
     expect(listedCatalogs.sort()).toEqual([
       "catalog-0",

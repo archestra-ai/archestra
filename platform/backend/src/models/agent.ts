@@ -798,10 +798,10 @@ class AgentModel {
 
     // Sync suggested prompts if provided
     if (suggestedPrompts && suggestedPrompts.length > 0) {
-      await AgentSuggestedPromptModel.syncForAgent(
-        createdAgent.id,
-        suggestedPrompts,
-      );
+      await AgentSuggestedPromptModel.syncForAgent({
+        agentId: createdAgent.id,
+        prompts: suggestedPrompts,
+      });
     }
 
     // For internal agents, create a delegation tool so other agents can delegate to this one
@@ -1030,19 +1030,18 @@ class AgentModel {
       );
     }
 
-    // Exclude built-in agents when explicitly requested or when user is not an admin
-    if (options?.excludeBuiltIn || !isAgentAdmin) {
-      whereConditions.push(
-        options?.includeAdvisor
-          ? (or(
-              eq(schema.agentsTable.builtIn, false),
-              eq(
-                sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-                BUILT_IN_AGENT_IDS.ADVISOR,
-              ),
-            ) as SQL)
-          : eq(schema.agentsTable.builtIn, false),
-      );
+    const isChatView = options?.view === "chat";
+    const builtInName = sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`;
+    // Chat exposes its system assistant through the same authorized roster;
+    // platform subagents remain excluded from ordinary chat selection.
+    if (options?.excludeBuiltIn || !isAgentAdmin || isChatView) {
+      const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
+      if (isChatView && config.openappa.enabled) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
+      } else if (!isChatView && options?.includeAdvisor) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.ADVISOR));
+      }
+      whereConditions.push(or(...visibleAgents) as SQL);
     }
 
     // Filter by scope if specified
@@ -1089,8 +1088,6 @@ class AgentModel {
       suggestedPrompts: [],
     }));
     const agentIds = agents.map((agent) => agent.id);
-
-    const isChatView = options?.view === "chat";
 
     // Populate tools, teams, and labels for all agents with bulk queries to
     // avoid N+1. Chat starts from scalar configuration plus a few small
@@ -3499,7 +3496,10 @@ class AgentModel {
 
     // Sync suggested prompts if provided
     if (suggestedPrompts !== undefined) {
-      await AgentSuggestedPromptModel.syncForAgent(id, suggestedPrompts);
+      await AgentSuggestedPromptModel.syncForAgent({
+        agentId: id,
+        prompts: suggestedPrompts,
+      });
     }
 
     // Any write above may have changed the canonical config — fork a version
@@ -3849,7 +3849,7 @@ class AgentModel {
     // query_knowledge_sources) are assigned inside AgentModel.create along
     // with the rest of the creation-default set.
 
-    logger.info(
+    logger.debug(
       { userId, organizationId, agentId: agent.id },
       "Created personal chat agent",
     );
@@ -3981,7 +3981,7 @@ class AgentModel {
         userId,
       );
 
-      logger.info(
+      logger.debug(
         { userId, organizationId, agentId: gateway.id },
         "Created personal MCP gateway",
       );

@@ -111,7 +111,6 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
-import { openappaEnabled } from "@/openappa/service";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -209,7 +208,6 @@ import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
 import { buildOpenAiThinkingProviderOptions } from "./openai-provider-options";
 import { buildOpenRouterProviderOptions } from "./openrouter-provider-options";
 import { buildModelMessages } from "./prepare-model-messages";
-import { readOpenAppaPolicyTargetContext } from "./read-openappa-policy-target-context";
 import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
   detectSandboxCommand,
@@ -867,13 +865,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             })
           : Promise.resolve(undefined);
 
-        // Resolve an OpenAPPA conversation's target from its full history before
-        // model-message compaction. Only its validated kind and UUID enter the
-        // prompt; policy tools check access when resolving the exact target.
-        const openAppaPolicyTargetContext = readOpenAppaPolicyTargetContext(
-          messages as ChatMessage[],
-        );
-
         // A project chat also lists the project's shared files in the system
         // prompt: they are attached to the project rather than to any message,
         // so nothing else ever tells the model they exist, and it answers "you
@@ -941,7 +932,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               buildChatContext({
                 conversationId,
                 agentId,
-                conversationOrigin: conversation.origin,
                 // The conversation came from findById, which selects the agent's
                 // prompt (only list reads omit it) — pin the optional field to
                 // the concrete `string | null` contract the builder declares.
@@ -954,7 +944,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 projectInstructions,
                 openedApp,
                 projectFileNames,
-                openAppaPolicyTargetContext,
                 hookRunCollector,
                 kbChunksCollector,
                 elicitation: chatMcpElicitation,
@@ -2753,9 +2742,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (sourceConversation.lockedChat) {
         throw new ApiError(400, "Locked chats cannot be forked");
       }
-      if (sourceConversation.origin === "openappa") {
-        throw new ApiError(400, "Policy conversations cannot be forked");
-      }
 
       const forked = await forkConversation({
         sourceConversation,
@@ -2844,20 +2830,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           projectId: true,
           lockedChat: true,
           thinkingEffort: true,
-          origin: true,
         })
           .required({ agentId: true })
           .partial({
-            agentId: true,
             title: true,
             modelId: true,
             chatApiKeyId: true,
             projectId: true,
             lockedChat: true,
             thinkingEffort: true,
-            origin: true,
-          })
-          .extend({ origin: z.literal("openappa").optional() }),
+          }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
@@ -2871,26 +2853,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           projectId,
           lockedChat,
           thinkingEffort,
-          origin,
         },
         user,
         organizationId,
       } = request;
-      if (origin === "openappa" && !openappaEnabled()) {
-        throw new ApiError(400, "OpenAPPA is unavailable");
-      }
-      if (
-        origin === "openappa" &&
-        (modelId !== undefined ||
-          chatApiKeyId !== undefined ||
-          projectId !== undefined ||
-          title !== undefined)
-      ) {
-        throw new ApiError(
-          400,
-          "Policy conversations use their configured agent and model",
-        );
-      }
       // Locked chats stay out of projects: a project lists its chats to
       // everyone it is shared with, so a locked one would sit in a shared
       // space advertising a conversation none of them can open.
@@ -2922,25 +2888,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate that the agent exists and the user has access to it. Only the
       // LLM-selection fields are read below, so skip findById's full hydration.
-      const policyAgent =
-        origin === "openappa"
-          ? await AgentModel.getBuiltInAgent(
-              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-              organizationId,
-            )
-          : null;
-      const resolvedAgentId = origin === "openappa" ? policyAgent?.id : agentId;
-      const agent =
-        policyAgent ??
-        (resolvedAgentId
-          ? await AgentModel.findLlmSelectionFieldsById(
-              resolvedAgentId,
-              user.id,
-              isAgentAdmin,
-            )
-          : null);
+      const agent = await AgentModel.findLlmSelectionFieldsById(
+        agentId,
+        user.id,
+        isAgentAdmin,
+      );
 
-      if (!agent || !resolvedAgentId) {
+      if (!agent) {
         throw new ApiError(404, "Agent not found");
       }
 
@@ -2960,12 +2914,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         explicitModelId: modelId,
         explicitApiKeyId: chatApiKeyId,
-        includeMemberChatDefault: origin !== "openappa",
       });
 
       logger.info(
         {
-          agentId: resolvedAgentId,
+          agentId,
           organizationId,
           explicitModelId: modelId,
           resolvedModelId: llmSelection.modelId,
@@ -3002,12 +2955,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : { title }),
           userId: user.id,
           organizationId,
-          agentId: resolvedAgentId,
+          agentId,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
           projectId: projectId ?? null,
           thinkingEffort,
-          origin: origin === "openappa" ? origin : undefined,
         }),
       );
     },
@@ -3034,21 +2986,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (!currentConversation) {
         throw new ApiError(404, "Conversation not found");
-      }
-      if (
-        currentConversation.origin === "openappa" &&
-        (body.agentId !== undefined ||
-          body.projectId !== undefined ||
-          body.modelId !== undefined ||
-          body.chatApiKeyId !== undefined ||
-          body.title !== undefined ||
-          body.pinnedAt !== undefined ||
-          body.thinkingEffort !== undefined)
-      ) {
-        throw new ApiError(
-          400,
-          "Policy conversations can only be resumed or deleted",
-        );
       }
       if (body.projectId) {
         const project = await ProjectModel.findById(body.projectId);
@@ -3471,17 +3408,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // plaintext derived title; locked chats keep their static title.
         return reply.send(conversation);
       }
-      if (
-        conversation.origin === "openappa" &&
-        regenerate &&
-        !conversation.titleIsPlaceholder
-      ) {
-        throw new ApiError(
-          400,
-          "Policy conversation titles cannot be regenerated",
-        );
-      }
-
       // Skip if title is already set (unless regenerating). A placeholder title
       // — an app's name, seeded so an app chat isn't blank before its first
       // exchange — doesn't count as set. The write below clears the flag, so

@@ -2,7 +2,6 @@
 
 import {
   type archestraApiTypes,
-  BUILT_IN_AGENT_IDS,
   E2eTestId,
   MAX_BULK_IDS,
 } from "@archestra/shared";
@@ -62,7 +61,6 @@ import {
 } from "@/components/filter-bar";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LabelTags } from "@/components/label-tags";
-import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -637,16 +635,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   }, [updateQueryParams]);
 
   const renderAgentActions = (agent: AgentData) => {
-    const canModify =
-      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG &&
-      computeCanModifyAgent({
-        scopedGrants: scopedCapabilities.data ?? [],
-        agent,
-        isAdmin: !!isAgentAdmin,
-        isTeamAdmin: false,
-        currentUserId,
-        userTeamIds: userTeamIdSet,
-      });
+    const canModify = computeCanModifyAgent({
+      scopedGrants: scopedCapabilities.data ?? [],
+      agent,
+      isAdmin: !!isAgentAdmin,
+      isTeamAdmin: false,
+      currentUserId,
+      userTeamIds: userTeamIdSet,
+    });
     return (
       <AgentActions
         agent={agent}
@@ -766,14 +762,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     return (
       <TableCard
         key={getAgentListRowId(row)}
-        icon={
-          agent.builtInAgentConfig?.name ===
-          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG ? (
-            <OpenAppaSolidIcon className="size-5" />
-          ) : (
-            <AgentIcon icon={agent.icon} size={20} />
-          )
-        }
+        icon={<AgentIcon icon={agent.icon} size={20} />}
         title={
           <span className="flex min-w-0 items-center gap-1.5">
             <Link
@@ -866,14 +855,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
-            icon={
-              agent.builtInAgentConfig?.name ===
-              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG ? (
-                <OpenAppaSolidIcon className="size-5" />
-              ) : (
-                <AgentIcon icon={agent.icon} size={20} />
-              )
-            }
+            icon={<AgentIcon icon={agent.icon} size={20} />}
             // A trashed agent has no detail page: `GET /api/agents/:id`
             // filters deleted rows, so the link would land on "not found".
             href={

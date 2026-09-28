@@ -414,7 +414,7 @@ describe("ChatSidebarSection", () => {
 
   it("opens an OpenAPPA configuration session in chat", () => {
     mockConversations = [
-      { ...makeConv("policy-session", "Review policy"), origin: "openappa" },
+      { ...makeConv("policy-session", "Review policy"), origin: "user" },
     ];
     render(<ChatSidebarSection fadeIn={fadeIn} />);
     fireEvent.click(screen.getByText("Review policy"));

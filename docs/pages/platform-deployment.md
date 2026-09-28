@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-25
+lastUpdated: 2026-09-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,8 +16,10 @@ Select a published release from [GitHub Releases](https://github.com/archestra-a
 
 ### Release Channels
 
-- **Stable:** Docker tag `latest` and default Helm charts track the current stable release.
+- **Stable:** Default Helm charts track the current stable release.
 - **Release candidate (RC):** Version tags ending in `-rc.N` preview upcoming releases from the main branch. Earlier prereleases used `-beta.N`.
+
+The `archestra/platform:latest` Docker tag points to the newest release — usually an RC.
 
 Archestra maintains one active stable release line at a time. Bug fixes and security patches publish to the active stable line and the next RC release.
 
@@ -124,7 +126,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.22" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.25" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -1984,7 +1986,7 @@ For local development, the path can point to an installed Chrome executable.
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
 
-- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge#embedding-configuration) and [Search Ranking Configuration](/docs/platform-knowledge#search-ranking-configuration) for how to pick the key and model.
+- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Model](/docs/platform-knowledge#embedding-model) and [Search Ranking](/docs/platform-knowledge#search-ranking) for how to pick the key and model.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Max wall-clock time a single connector sync run works before it checkpoints and yields.
   - Default: `3300` (55 minutes)
@@ -2019,11 +2021,11 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_BM25_K1`** - Deployment default for the BM25 Term Saturation (`k1`), from `0` to `10`.
   - Default: `1.2`
-  - Keyword ranking in knowledge search is BM25, computed in plain SQL from statistics tables — no PostgreSQL extension, no extra index, so it runs on managed PostgreSQL such as RDS, Aurora, Neon, and Cloud SQL. This factor is how much repeating a word keeps helping a passage: higher lets repetition keep adding weight, `0` counts a word the same whether it appears once or fifty times. Lucene's default. An organization can override it under **Settings > Knowledge > Search Ranking Configuration**; this value applies where that is left empty.
+  - Keyword ranking in knowledge search is BM25, computed in plain SQL from statistics tables — no PostgreSQL extension, no extra index, so it runs on managed PostgreSQL such as RDS, Aurora, Neon, and Cloud SQL. This factor is how much repeating a word keeps helping a passage: higher lets repetition keep adding weight, `0` counts a word the same whether it appears once or fifty times. Lucene's default. An organization can override it under **Settings > Knowledge > Search ranking > Advanced options**; this value applies where that is left empty.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_BM25_B`** - Deployment default for the BM25 Length Normalization (`b`), from `0` to `1`.
   - Default: `0.75`
-  - How much long passages are held back: `0` means length does not matter, `1` means short, focused passages pull well ahead of long ones that mention the same words. Lucene's default. An organization can override it under **Settings > Knowledge > Search Ranking Configuration**; this value applies where that is left empty.
+  - How much long passages are held back: `0` means length does not matter, `1` means short, focused passages pull well ahead of long ones that mention the same words. Lucene's default. An organization can override it under **Settings > Knowledge > Search ranking > Advanced options**; this value applies where that is left empty.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_BM25_RECALL_CAP`** - How many candidate chunks BM25 rescores per query.
   - Default: `2000`
@@ -2068,9 +2070,6 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 
 Permission sync for connectors using [auto-sync permissions](/docs/platform-knowledge#auto-sync-permissions) runs in its own worker lane, independent of content sync. Its cadence is not an environment variable: each connector's permission sync interval is set in the connector form, and a pass also runs automatically after a content sync ingests new documents or when triggered manually.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`** - Beta gate for the whole auto-sync-permissions feature: the connector visibility option, its permission passes, and the Users and Groups tabs.
-  - Default: `false`
-  - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing auto-sync connectors go dormant while it is off — no passes run and the Permissions APIs return 403.
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`** - Beta gate for the [M-Files connector](/docs/platform-knowledge#m-files): the connector type in the create dialog, creating connectors of the type, and the VAF Add On distribution endpoints.
   - Default: `false`
   - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing M-Files connectors keep syncing while it is off.

@@ -6,7 +6,7 @@ export async function handleAuditLogCleanup(): Promise<void> {
   const { retentionDays } = config.auditLog;
 
   if (retentionDays === 0) {
-    logger.info(
+    logger.debug(
       { retentionDays },
       "audit-log retention sweep: disabled (retentionDays=0)",
     );

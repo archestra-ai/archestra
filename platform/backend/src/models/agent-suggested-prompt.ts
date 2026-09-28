@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { SuggestedPromptInput } from "@/types";
 
@@ -8,11 +8,13 @@ class AgentSuggestedPromptModel {
    * Replace all suggested prompts for an agent with the given list.
    * Preserves ordering via sortOrder based on array index.
    */
-  static async syncForAgent(
-    agentId: string,
-    prompts: SuggestedPromptInput[],
-  ): Promise<void> {
-    await withDbTransaction(async (tx) => {
+  static async syncForAgent(params: {
+    agentId: string;
+    prompts: SuggestedPromptInput[];
+    tx?: Transaction;
+  }): Promise<void> {
+    const { agentId, prompts } = params;
+    const sync = async (tx: Transaction) => {
       await tx
         .delete(schema.agentSuggestedPromptsTable)
         .where(eq(schema.agentSuggestedPromptsTable.agentId, agentId));
@@ -27,14 +29,19 @@ class AgentSuggestedPromptModel {
           sortOrder: index,
         })),
       );
-    });
+    };
+    if (params.tx) await sync(params.tx);
+    else await withDbTransaction(sync);
   }
 
   /**
    * Get all suggested prompts for an agent, ordered by sortOrder.
    */
-  static async getForAgent(agentId: string): Promise<SuggestedPromptInput[]> {
-    const rows = await db
+  static async getForAgent(
+    agentId: string,
+    tx?: Transaction,
+  ): Promise<SuggestedPromptInput[]> {
+    const rows = await (tx ?? db)
       .select({
         summaryTitle: schema.agentSuggestedPromptsTable.summaryTitle,
         prompt: schema.agentSuggestedPromptsTable.prompt,

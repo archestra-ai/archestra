@@ -286,6 +286,18 @@ describe("EditConnectorDialog - Jira admin API key", () => {
     );
   });
 
+  it("places the Jira admin key directly below the permission sync switch", () => {
+    renderDialog(makeJiraAutoSyncConnector());
+    const toggle = screen.getByRole("switch", {
+      name: "Sync permissions from the source",
+    });
+    const adminKey = screen.getByLabelText(/Organization admin API key/);
+
+    expect(toggle.parentElement?.nextElementSibling).toBe(
+      adminKey.closest('[data-slot="form-item"]'),
+    );
+  });
+
   it("submits a corrected email alone, without re-entering the token", async () => {
     mockMutateAsync.mockResolvedValue({ id: "conn-jira-1" });
     const user = userEvent.setup();

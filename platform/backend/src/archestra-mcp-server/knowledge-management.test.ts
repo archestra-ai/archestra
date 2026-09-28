@@ -1723,14 +1723,13 @@ describe("knowledge-management tool execution", () => {
     });
   });
 
-  // --- Auto-sync-permissions admin gating ---
+  // --- Permission-sync connector grants ---
 
-  describe("auto-sync-permissions admin gating", () => {
+  describe("permission-sync connector grants", () => {
     let org: { id: string };
     let memberContext: ArchestraContext;
     let kb: KnowledgeBase;
     let autoSyncConnector: KnowledgeBaseConnector;
-    let originalAutoSyncFlag: boolean;
 
     beforeEach(
       async ({
@@ -1742,13 +1741,10 @@ describe("knowledge-management tool execution", () => {
         makeOrganization,
         makeUser,
       }) => {
-        originalAutoSyncFlag = config.kb.autoSyncPermissionsEnabled;
-        config.kb.autoSyncPermissionsEnabled = true;
         org = await makeOrganization();
         const member = await makeUser();
-        // Full knowledgeSource WRITE access but no knowledgeSourceAutoSync
-        // grants — proves the auto-sync gates bind on the dedicated
-        // permission, not on the generic write permissions.
+        // Role actions permit connector CRUD; object grants decide which
+        // existing connectors the member can reach.
         const role = await makeCustomRole(org.id, {
           permission: {
             knowledgeSource: ["read", "create", "update", "delete", "query"],
@@ -1768,15 +1764,12 @@ describe("knowledge-management tool execution", () => {
         autoSyncConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
           connectorType: "github",
           syncPermissionsFromSource: true,
+          access: "personal",
         });
       },
     );
 
-    afterEach(() => {
-      config.kb.autoSyncPermissionsEnabled = originalAutoSyncFlag;
-    });
-
-    test("members cannot see auto-sync connectors in the list or get tools", async () => {
+    test("members cannot see a permission-sync connector without its grant", async () => {
       const listResult = await executeArchestraTool(
         t("get_knowledge_connectors"),
         {},
@@ -1798,7 +1791,7 @@ describe("knowledge-management tool execution", () => {
       );
     });
 
-    test("members cannot update, delete, or assign an auto-sync connector", async () => {
+    test("members cannot update, delete, or assign a connector without its grant", async () => {
       const updateResult = await executeArchestraTool(
         t("update_knowledge_connector"),
         { id: autoSyncConnector.id, name: "renamed" },
@@ -1830,7 +1823,7 @@ describe("knowledge-management tool execution", () => {
       );
     });
 
-    test("members cannot create an auto-sync connector or switch one into auto-sync", async ({
+    test("connector creators and editors can enable permission sync", async ({
       makeKnowledgeBaseConnector,
     }) => {
       const createResult = await executeArchestraTool(
@@ -1847,12 +1840,12 @@ describe("knowledge-management tool execution", () => {
         },
         memberContext,
       );
-      expect(createResult.isError).toBe(true);
+      expect(createResult.isError).toBe(false);
       expect((createResult.content[0] as any).text).toContain(
-        '"create" permission for auto-sync-permissions connectors',
+        "Knowledge connector created successfully",
       );
 
-      // The member may edit this connector, so only the auto-sync gate refuses.
+      // The member can edit this connector through its object grant.
       const orgWide = await makeKnowledgeBaseConnector(kb.id, org.id, {
         connectorType: "github",
         access: { users: [memberContext.userId ?? ""], preset: "edit" },
@@ -1862,9 +1855,9 @@ describe("knowledge-management tool execution", () => {
         { id: orgWide.id, visibility: "auto-sync-permissions" },
         memberContext,
       );
-      expect(updateResult.isError).toBe(true);
+      expect(updateResult.isError).toBe(false);
       expect((updateResult.content[0] as any).text).toContain(
-        '"update" permission for auto-sync-permissions connectors',
+        "Knowledge connector updated",
       );
     });
 

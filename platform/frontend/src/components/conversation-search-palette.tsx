@@ -11,7 +11,6 @@ import {
 } from "@/app/_parts/studio-nav";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
-import { OpenAppaIcon } from "@/components/openappa-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -363,7 +362,7 @@ export function ConversationSearchPalette({
   const handlePinConversation = useCallback(
     (conversationId: string) => {
       const conv = conversations.find((c) => c.id === conversationId);
-      if (!conv || conv.origin === "openappa") return;
+      if (!conv) return;
       pinMutation.mutate({ id: conversationId, pinned: !conv.pinnedAt });
     },
     [pinMutation, conversations],
@@ -511,12 +510,7 @@ export function ConversationSearchPalette({
       ? getPreviewText(conv.messages, debouncedSearch)
       : "";
     const isPending = isPendingDeletion === conv.id;
-    const IconComponent =
-      conv.origin === "openappa"
-        ? OpenAppaIcon
-        : showPinIcon
-          ? Pin
-          : MessageCircle;
+    const IconComponent = showPinIcon ? Pin : MessageCircle;
 
     return (
       <CommandItem

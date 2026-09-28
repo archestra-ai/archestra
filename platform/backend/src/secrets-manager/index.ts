@@ -140,7 +140,7 @@ export async function createSecretManager(
     return new ReadonlyVaultSecretManager(vaultConfig);
   }
 
-  logger.info("createSecretManager: using DbSecretsManager");
+  logger.debug("createSecretManager: using DbSecretsManager");
   return new DbSecretsManager();
 }
 

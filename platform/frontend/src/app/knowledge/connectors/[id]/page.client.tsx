@@ -90,7 +90,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useDialogFlagUrlParam,
@@ -183,15 +182,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     refetch,
   } = useConnector(connectorId);
 
-  // BETA: every permission-family surface on this page (Users/Groups tabs,
-  // coverage, sync action, runs filter) keys off isAutoSync, so gating it on
-  // the flag hides them all at once when the beta is off.
-  const autoSyncBeta = useFeature("kbAutoSyncPermissionsEnabled") ?? false;
   // Content and permission runs share the one Sync Runs tab (a Type column
   // tells them apart, a filter narrows to one family); permission-only views
   // live behind the in-tab filter rather than a separate tab.
-  const isAutoSync =
-    Boolean(connector?.syncPermissionsFromSource) && autoSyncBeta;
+  const isAutoSync = Boolean(connector?.syncPermissionsFromSource);
   // Notion's one roster row per connector IS the workspace, so its page says
   // "Workspace(s)" wherever the group snapshot would say "Group(s)".
   const rosterNoun =

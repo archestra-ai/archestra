@@ -1,7 +1,5 @@
 import { hasScopedPermission, type ScopedPermission } from "@archestra/shared";
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
-import { userHasPermission } from "@/auth/utils";
-import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import {
@@ -51,7 +49,6 @@ interface KnowledgeSourceAccessControlContext {
   grants?: ScopedPermission[];
   userId?: string;
   canReadAll: boolean;
-  canManageAutoSync: boolean;
   teamIds: string[];
 }
 
@@ -145,47 +142,33 @@ export function isTeamScopedWithoutTeams(params: {
   return params.visibility === "team-scoped" && params.teamIds.length === 0;
 }
 
-export const AUTO_SYNC_PERMISSIONS_DISABLED_ERROR =
-  "Auto-sync permissions is a beta feature that is not enabled on this deployment (set ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED=true to enable it)";
-
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Runtime gate for the whole permission-sync family (scheduler, worker,
- * content-sync trigger, manual trigger): beta flag AND enterprise
+ * content-sync trigger, manual trigger): enterprise
  * knowledge-base tier. Enforced at runtime — not only when the visibility is
  * set — so a lapsed license makes existing auto-sync connectors go dormant
  * instead of continuing to sync ACLs.
  */
 export function isAutoSyncPermissionsActive(): boolean {
-  return (
-    config.kb.autoSyncPermissionsEnabled &&
-    enterpriseTier.isKnowledgeBaseActive()
-  );
+  return enterpriseTier.isKnowledgeBaseActive();
 }
 
 /**
  * Gate for selecting the `auto-sync-permissions` visibility on a connector —
  * every path that can set it (REST create/update and the MCP connector tools)
- * must pass: beta flag on, enterprise knowledge-base tier active, connector
- * type supports permission sync, and the caller holds the matching
- * `knowledgeSourceAutoSync` permission ("create" when creating a connector
- * with the visibility, "update" when switching an existing one into it).
- * By default only the Admin role carries these permissions.
+ * must pass: enterprise knowledge-base tier active and connector type support.
+ * The ordinary connector create/update permission is enforced at the route or
+ * MCP tool boundary.
  *
  * Returns the violation instead of throwing so MCP tool handlers can surface
  * the message (their catch-all deliberately genericizes thrown errors).
  */
 export async function checkCanSetAutoSyncPermissionsVisibility(params: {
-  userId: string;
-  organizationId: string;
   connectorType: ConnectorType;
-  action: "create" | "update";
 }): Promise<ApiError | null> {
-  if (!config.kb.autoSyncPermissionsEnabled) {
-    return new ApiError(403, AUTO_SYNC_PERMISSIONS_DISABLED_ERROR);
-  }
   if (!enterpriseTier.isKnowledgeBaseActive()) {
     return new ApiError(
       403,
@@ -197,34 +180,6 @@ export async function checkCanSetAutoSyncPermissionsVisibility(params: {
   );
   if (unsupported) {
     return unsupported;
-  }
-  return checkHasAutoSyncConnectorPermission(params);
-}
-
-/**
- * Whether the caller holds the given `knowledgeSourceAutoSync` action —
- * the permission family gating auto-sync-permissions connector management
- * (view/create/edit/delete), granted by default to the Admin role only.
- * Standalone (also the last step of `checkCanSetAutoSyncPermissionsVisibility`)
- * so mutations of a connector that ALREADY carries the auto-sync visibility
- * can enforce the action without re-running the transition-only gates.
- */
-export async function checkHasAutoSyncConnectorPermission(params: {
-  userId: string;
-  organizationId: string;
-  action: "create" | "update" | "delete";
-}): Promise<ApiError | null> {
-  const hasAutoSyncPermission = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "knowledgeSourceAutoSync",
-    params.action,
-  );
-  if (!hasAutoSyncPermission) {
-    return new ApiError(
-      403,
-      `You do not have the "${params.action}" permission for auto-sync-permissions connectors`,
-    );
   }
   return null;
 }
@@ -253,7 +208,7 @@ class KnowledgeSourceAccessControlService {
     userId: string;
     organizationId: string;
   }): Promise<KnowledgeSourceAccessControlContext> {
-    const [canReadAll, canManageAutoSync, teamIds, grants] = await Promise.all([
+    const [canReadAll, teamIds, grants] = await Promise.all([
       ResourcePermissions.allows({
         userId: params.userId,
         organizationId: params.organizationId,
@@ -261,12 +216,6 @@ class KnowledgeSourceAccessControlService {
         scope: "*",
         action: "update",
       }),
-      userHasPermission(
-        params.userId,
-        params.organizationId,
-        "knowledgeSourceAutoSync",
-        "read",
-      ),
       TeamModel.getUserTeamIds(params.userId),
       ResourcePermissions.resolveAll(params),
     ]);
@@ -276,7 +225,6 @@ class KnowledgeSourceAccessControlService {
       organizationId: params.organizationId,
       grants,
       canReadAll,
-      canManageAutoSync,
       teamIds,
     };
   }
@@ -300,18 +248,8 @@ class KnowledgeSourceAccessControlService {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // A permission-sync connector mirrors upstream ACLs and exposes audience
-    // and membership details, so managing it also takes the dedicated
-    // `knowledgeSourceAutoSync:read` permission (admin-only by default), on
-    // top of the connector's own read grant. Members still QUERY its
-    // documents (`filterQueryableConnectors`); the per-chunk ACL decides what
-    // each of them retrieves.
-    if (
-      connector.syncPermissionsFromSource &&
-      !accessControl.canManageAutoSync
-    ) {
-      return false;
-    }
+    // Permission-sync connectors use the same management grants as other
+    // connectors. Their documents still use upstream ACLs for queries.
     // SPDX-SnippetEnd
     return this.hasScopedAccess({
       accessControl,

@@ -22,7 +22,7 @@ import { withinResumeBudget } from "./connector-resume-budget";
  * content-run recovery is never overloaded with permission work.
  */
 export async function handleCheckDuePermissionSyncs(): Promise<void> {
-  // Feature gate (beta flag + enterprise license): nothing is scheduled,
+  // Enterprise license gate: nothing is scheduled,
   // reaped, or requeued while the feature is off — the whole permission
   // family is dormant.
   if (!isAutoSyncPermissionsActive()) return;

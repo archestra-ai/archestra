@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -19,7 +19,6 @@ import {
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { ConnectivityProvider } from "@/lib/config/connectivity";
-import { resolveOpenAppaLaunchPrompt } from "@/lib/openappa-chat-prompts";
 import { makeAgent } from "@/mocks/data/agents";
 import { adminPermissionsSeed, makeSession } from "@/mocks/data/auth";
 import { configSeed } from "@/mocks/data/config";
@@ -44,21 +43,40 @@ vi.mock("@/components/chat/chat-messages", () => ({
   ChatMessages: () => null,
 }));
 
-const targetId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
+const agent = makeAgent({
+  name: "OpenAPPA Configuration Agent",
+  scope: "org",
+  builtIn: true,
+  builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+  authorId: null,
+  modelId: "test-model",
+  llmApiKeyId: "test-llm-key",
+});
 const conversation = {
-  id: "policy-conversation-1",
-  origin: "openappa",
-  agentId: "openappa-agent",
-  agent: { id: "openappa-agent", name: "OpenAPPA Configuration Agent" },
+  id: "configuration-conversation",
+  origin: "user",
+  agentId: agent.id,
+  agent,
   userId: makeSession().user.id,
-  modelId: null,
-  title: null,
+  modelId: "test-model",
+  chatApiKeyId: "test-llm-key",
+  title: "Review policy",
   messages: [],
 };
+const openingPrompt =
+  "Review how my policy governs Research gateway (mcp_gateway e8340e76-19fc-444d-ac4e-a817c1e78c3c).";
 const createBodies: unknown[] = [];
 const sent: UIMessage[] = [];
 
 const server = setupServer(
+  http.get("/health", () => HttpResponse.json({ status: "ok" })),
+  http.get("/api/llm-provider-api-keys/available", () => HttpResponse.json([])),
+  http.get("/api/agents/:id/tools", () => HttpResponse.json([])),
+  http.get("/api/internal_mcp_catalog", () => HttpResponse.json([])),
+  http.get("/api/mcp_server", () => HttpResponse.json([])),
+  http.get("/api/resource-permissions/conversation/:id", () =>
+    HttpResponse.json({ grants: [], inheritedGrants: [] }),
+  ),
   http.get("/ready", () => HttpResponse.json({ status: "ok" })),
   http.get("/api/user/permissions", () =>
     HttpResponse.json(adminPermissionsSeed),
@@ -71,12 +89,24 @@ const server = setupServer(
   http.get("/api/llm-provider-api-keys", () =>
     HttpResponse.json([makeLlmProviderApiKey()]),
   ),
-  http.get("/api/llm-models/available", () => HttpResponse.json([])),
+  http.get("/api/llm-models/available", () =>
+    HttpResponse.json([
+      {
+        id: "test-model",
+        dbId: "test-model",
+        displayName: "Test model",
+        provider: "anthropic",
+        isBest: true,
+      },
+    ]),
+  ),
   http.get("/api/members/default-agent", () =>
     HttpResponse.json({ defaultAgentId: null }),
   ),
   http.get("/api/members/default-model", () => HttpResponse.json(null)),
-  http.get("/api/agents/all", () => HttpResponse.json([])),
+  http.get("/api/agents/all", () => HttpResponse.json([agent])),
+  http.get(`/api/agents/${agent.id}`, () => HttpResponse.json(agent)),
+  http.get("/api/agents/credential-readiness", () => HttpResponse.json([])),
   http.get("/api/chat/conversations", () => HttpResponse.json([])),
   http.get("/api/chat/conversations/:id/files", () => HttpResponse.json([])),
   http.get("/api/config", () =>
@@ -92,39 +122,6 @@ const server = setupServer(
   http.get("/api/chat/conversations/:id", () =>
     HttpResponse.json(conversation),
   ),
-  http.get("/api/openappa/coverage/entities", () =>
-    HttpResponse.json({
-      data: [
-        {
-          id: targetId,
-          name: "Research gateway",
-          type: "mcp_gateway",
-          scope: "org",
-          icon: null,
-          toolCount: 3,
-          governedCount: 2,
-          fallbackCount: 1,
-          builtInCount: 1,
-          rules: {
-            root: 1,
-            battery: 1,
-            notEnforced: 0,
-            catchAll: 1,
-            builtInFallback: 0,
-          },
-          autoMode: true,
-        },
-      ],
-      pagination: {
-        currentPage: 1,
-        limit: 1,
-        total: 1,
-        totalPages: 1,
-        hasNext: false,
-        hasPrev: false,
-      },
-    }),
-  ),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -133,14 +130,11 @@ beforeEach(() => {
   sent.length = 0;
   archestraApiClient.setConfig({ baseUrl: window.location.origin });
   vi.mocked(usePathname).mockReturnValue("/chat");
-  window.history.replaceState(null, "", "/chat?openappa=1&from=openappa");
+  window.history.replaceState(null, "", "/chat");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams({
-      openappa: "1",
-      targetType: "mcp_gateway",
-      targetId,
-      openappaPrompt: "reviewCoverage",
-      from: "openappa",
+      agentId: agent.id,
+      user_prompt: openingPrompt,
     }) as unknown as ReturnType<typeof useSearchParams>,
   );
   vi.mocked(useRouter).mockReturnValue({
@@ -180,58 +174,45 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-test("an OpenAPPA launch starts a scoped policy chat and sends follow-ups without repeating its scope", async () => {
+test("a configuration agent launch uses ordinary creation and chat controls", async () => {
   const user = userEvent.setup();
   renderChat();
 
   await waitFor(() => expect(sent).toHaveLength(1));
-  expect(createBodies).toEqual([{ origin: "openappa" }]);
+  expect(createBodies).toEqual([
+    expect.objectContaining({
+      agentId: agent.id,
+      modelId: "test-model",
+      chatApiKeyId: "test-llm-key",
+    }),
+  ]);
+  expect(createBodies[0]).not.toHaveProperty("origin");
   expect(`${window.location.pathname}${window.location.search}`).toBe(
-    "/chat/policy-conversation-1?from=openappa",
+    "/chat/configuration-conversation",
   );
-  const target = { kind: "mcp_gateway", id: targetId };
   expect(sent[0]).toMatchObject({
-    parts: [
-      {
-        type: "text",
-        text: resolveOpenAppaLaunchPrompt("reviewCoverage", {
-          kind: "mcp_gateway",
-          name: "Research gateway",
-        }),
-      },
-    ],
-    metadata: { openAppaPolicyTarget: target },
+    parts: [{ type: "text", text: openingPrompt }],
   });
+  expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("button", { name: "Chat actions" }),
+  ).toBeInTheDocument();
 
   await user.type(
-    await screen.findByPlaceholderText("Ask about or change your policy…"),
+    await screen.findByPlaceholderText("Ask a follow-up..."),
     "Now tighten it{Enter}",
   );
   await waitFor(() => expect(sent).toHaveLength(2));
   expect(sent[1]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
-  expect(sent[1].metadata).not.toHaveProperty("openAppaPolicyTarget");
 });
 
-test("a launch that is ready on mount still opens the conversation under StrictMode", async () => {
-  // The real click: config is already cached and an untargeted prompt needs
-  // no fetch, so the create fires from the mount effect that StrictMode
-  // replays.
-  vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams({
-      openappa: "1",
-      openappaPrompt: "explainPolicy",
-      from: "openappa",
-    }) as unknown as ReturnType<typeof useSearchParams>,
-  );
+test("an ordinary launch ready on mount creates and sends once under StrictMode", async () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  queryClient.setQueryData(["config"], {
-    ...configSeed,
-    features: { ...configSeed.features, openappaEnabled: true },
-  });
+  queryClient.setQueryData(["config"], configSeed);
   render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
@@ -241,20 +222,16 @@ test("a launch that is ready on mount still opens the conversation under StrictM
       </QueryClientProvider>
     </StrictMode>,
   );
-
   await waitFor(() => expect(sent).toHaveLength(1));
-  expect(createBodies).toEqual([{ origin: "openappa" }]);
-  expect(`${window.location.pathname}${window.location.search}`).toBe(
-    "/chat/policy-conversation-1?from=openappa",
-  );
-  expect(sent[0]).toMatchObject({
-    parts: [
-      { type: "text", text: resolveOpenAppaLaunchPrompt("explainPolicy") },
-    ],
+  expect(createBodies).toHaveLength(1);
+  expect(createBodies[0]).toMatchObject({
+    agentId: agent.id,
+    modelId: "test-model",
   });
+  expect(window.location.pathname).toBe("/chat/configuration-conversation");
 });
 
-test("a saved scoped chat opens without target query parameters and accepts a follow-up", async () => {
+test("a saved configuration-agent conversation accepts a normal follow-up without a launch URL", async () => {
   const user = userEvent.setup();
   vi.mocked(usePathname).mockReturnValue(`/chat/${conversation.id}`);
   vi.mocked(useSearchParams).mockReturnValue(
@@ -268,10 +245,7 @@ test("a saved scoped chat opens without target query parameters and accepts a fo
           {
             id: "saved-user",
             role: "user",
-            parts: [{ type: "text", text: "Review this gateway" }],
-            metadata: {
-              openAppaPolicyTarget: { kind: "mcp_gateway", id: targetId },
-            },
+            parts: [{ type: "text", text: openingPrompt }],
           },
           {
             id: "saved-assistant",
@@ -283,10 +257,7 @@ test("a saved scoped chat opens without target query parameters and accepts a fo
     ),
   );
   renderChat(conversation.id);
-
-  const composer = await screen.findByPlaceholderText(
-    "Ask about or change your policy…",
-  );
+  const composer = await screen.findByPlaceholderText("Ask a follow-up...");
   expect(sent).toHaveLength(0);
   await user.type(composer, "Now tighten it{Enter}");
   await waitFor(() => expect(sent).toHaveLength(1));
@@ -294,67 +265,6 @@ test("a saved scoped chat opens without target query parameters and accepts a fo
   expect(sent[0]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
-  expect(sent[0].metadata).not.toHaveProperty("openAppaPolicyTarget");
-});
-
-test("ordinary chat creation opens the new conversation and delivers the initial message", async () => {
-  const agent = makeAgent({
-    modelId: "test-model",
-    llmApiKeyId: "test-llm-key",
-  });
-  const ordinaryConversation = {
-    ...conversation,
-    id: "ordinary-conversation",
-    origin: "user",
-    agentId: agent.id,
-    agent,
-    modelId: "test-model",
-  };
-  vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams({
-      agentId: agent.id,
-      user_prompt: "Help me plan my day",
-    }) as unknown as ReturnType<typeof useSearchParams>,
-  );
-  server.use(
-    http.get("/api/agents/all", () => HttpResponse.json([agent])),
-    http.get(`/api/agents/${agent.id}`, () => HttpResponse.json(agent)),
-    http.get("/api/agents/credential-readiness", () => HttpResponse.json([])),
-    http.get("/api/llm-models/available", () =>
-      HttpResponse.json([
-        {
-          id: "test-model",
-          dbId: "test-model",
-          displayName: "Test model",
-          provider: "anthropic",
-          isBest: true,
-        },
-      ]),
-    ),
-    http.post("/api/chat/conversations", async ({ request }) => {
-      createBodies.push(await request.json());
-      return HttpResponse.json(ordinaryConversation);
-    }),
-    http.get("/api/chat/conversations/:id", () =>
-      HttpResponse.json(ordinaryConversation),
-    ),
-  );
-  renderChat();
-
-  await waitFor(() => expect(sent).toHaveLength(1));
-  expect(createBodies).toEqual([
-    expect.objectContaining({
-      agentId: agent.id,
-      modelId: "test-model",
-      chatApiKeyId: "test-llm-key",
-    }),
-  ]);
-  expect(createBodies[0]).not.toHaveProperty("origin", "openappa");
-  expect(window.location.pathname).toBe("/chat/ordinary-conversation");
-  expect(sent[0]).toMatchObject({
-    parts: [{ type: "text", text: "Help me plan my day" }],
-  });
-  expect(sent[0].metadata).not.toHaveProperty("openAppaPolicyTarget");
 });
 
 function renderChat(routeConversationId?: string) {

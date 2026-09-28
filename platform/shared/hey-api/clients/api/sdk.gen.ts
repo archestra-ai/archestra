@@ -5557,7 +5557,7 @@ export const syncConnector = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `knowledgeSourceAutoSync:update`: Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs
+ * `knowledgeSource:update`: Modify Knowledge Bases and Connectors
  */
 export const triggerPermissionSync = <ThrowOnError extends boolean = false>(options: Options<TriggerPermissionSyncData, ThrowOnError>) => (options.client ?? client).post<TriggerPermissionSyncResponses, TriggerPermissionSyncErrors, ThrowOnError>({ url: '/api/connectors/{id}/permission-sync', ...options });
 
@@ -5570,7 +5570,7 @@ export const triggerPermissionSync = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `knowledgeSourceAutoSync:read`: View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings
+ * `knowledgeSource:read`: View Knowledge Bases and Connectors
  */
 export const getPermissionSyncCoverage = <ThrowOnError extends boolean = false>(options: Options<GetPermissionSyncCoverageData, ThrowOnError>) => (options.client ?? client).get<GetPermissionSyncCoverageResponses, GetPermissionSyncCoverageErrors, ThrowOnError>({ url: '/api/connectors/{id}/permission-coverage', ...options });
 
@@ -5583,7 +5583,7 @@ export const getPermissionSyncCoverage = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `knowledgeSourceAutoSync:read`: View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings
+ * `knowledgeSource:read`: View Knowledge Bases and Connectors
  */
 export const getConnectorUserGroups = <ThrowOnError extends boolean = false>(options: Options<GetConnectorUserGroupsData, ThrowOnError>) => (options.client ?? client).get<GetConnectorUserGroupsResponses, GetConnectorUserGroupsErrors, ThrowOnError>({ url: '/api/connectors/{id}/user-groups', ...options });
 
@@ -5596,7 +5596,7 @@ export const getConnectorUserGroups = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `knowledgeSourceAutoSync:update`: Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs
+ * `knowledgeSource:update`: Modify Knowledge Bases and Connectors
  */
 export const upsertConnectorMemberOverride = <ThrowOnError extends boolean = false>(options: Options<UpsertConnectorMemberOverrideData, ThrowOnError>) => (options.client ?? client).put<UpsertConnectorMemberOverrideResponses, UpsertConnectorMemberOverrideErrors, ThrowOnError>({
     url: '/api/connectors/{id}/member-overrides',
@@ -5616,7 +5616,7 @@ export const upsertConnectorMemberOverride = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `knowledgeSourceAutoSync:update`: Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs
+ * `knowledgeSource:update`: Modify Knowledge Bases and Connectors
  */
 export const deleteConnectorMemberOverride = <ThrowOnError extends boolean = false>(options: Options<DeleteConnectorMemberOverrideData, ThrowOnError>) => (options.client ?? client).delete<DeleteConnectorMemberOverrideResponses, DeleteConnectorMemberOverrideErrors, ThrowOnError>({ url: '/api/connectors/{id}/member-overrides/{externalAccountId}', ...options });
 

@@ -430,7 +430,7 @@ export class McpServerRuntimeManager {
     try {
       this.status = "initializing";
       this.egressBaselineByNamespace.clear();
-      logger.info("Initializing Kubernetes MCP Server Runtime...");
+      logger.debug("Initializing Kubernetes MCP Server Runtime...");
 
       // Verify K8s connectivity
       await this.verifyK8sConnection();
@@ -460,7 +460,7 @@ export class McpServerRuntimeManager {
         }
       }
 
-      logger.info(`Found ${localServers.length} local MCP servers to start`);
+      logger.debug(`Found ${localServers.length} local MCP servers to start`);
 
       // Freeze deployment identity BEFORE anything touches K8s: the
       // startServer loop below redeploys every install, so a pre-upgrade row
@@ -531,7 +531,7 @@ export class McpServerRuntimeManager {
         cache: networkPolicyResolutionCache,
       });
 
-      logger.info("MCP Server Runtime initialization complete");
+      logger.debug("MCP Server Runtime initialization complete");
       this.onRuntimeStartupSuccess();
 
       // Fire-and-forget: backfill team-id labels on existing regcred secrets
@@ -654,7 +654,7 @@ export class McpServerRuntimeManager {
       return;
     }
 
-    logger.info(
+    logger.debug(
       `Reconciling egress policies for ${params.localServers.length} MCP server(s)`,
     );
 
@@ -816,7 +816,7 @@ export class McpServerRuntimeManager {
     }
 
     try {
-      logger.info(`Verifying K8s connection to namespace: ${this.namespace}`);
+      logger.debug(`Verifying K8s connection to namespace: ${this.namespace}`);
 
       // Try to list pods in the namespace to verify K8s API connectivity
       await this.k8sApi.listNamespacedPod({ namespace: this.namespace });
@@ -857,7 +857,7 @@ export class McpServerRuntimeManager {
     }
 
     const { id, name } = mcpServer;
-    logger.info(`Starting MCP server deployment: id="${id}", name="${name}"`);
+    logger.debug(`Starting MCP server deployment: id="${id}", name="${name}"`);
 
     try {
       // Fetch catalog item (needed for conditional env var logic).
@@ -1040,7 +1040,7 @@ export class McpServerRuntimeManager {
 
       // Register the deployment BEFORE starting it
       this.mcpServerIdToDeploymentMap.set(id, k8sDeployment);
-      logger.info(`Registered MCP server deployment ${id} in map`);
+      logger.debug(`Registered MCP server deployment ${id} in map`);
 
       const imagePullSecrets = catalogItem?.localConfig?.imagePullSecrets;
       const regcredSecretData: Record<string, string> = {};
@@ -1120,7 +1120,9 @@ export class McpServerRuntimeManager {
           start,
         );
       }
-      logger.info(`Successfully started MCP server deployment ${id} (${name})`);
+      logger.debug(
+        `Successfully started MCP server deployment ${id} (${name})`,
+      );
 
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

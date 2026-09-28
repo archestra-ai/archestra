@@ -3,6 +3,7 @@ import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
 import config from "@/config";
+import { isK8sNotFoundError } from "@/k8s/shared";
 import logger from "@/logging";
 import {
   A2ATaskModel,
@@ -356,7 +357,11 @@ export async function cleanupAgentRun(
     (task?.state === "TASK_STATE_CANCELED" ||
       task?.state === "TASK_STATE_FAILED")
   ) {
-    suspended = (await backend.stopRun(session)) === "suspended";
+    suspended =
+      (await backend.stopRun(session).catch((error) => {
+        if (!isK8sNotFoundError(error)) throw error;
+        return undefined;
+      })) === "suspended";
   }
   const output = new AgentRuntimeOutputCapture({
     backend,
@@ -368,7 +373,13 @@ export async function cleanupAgentRun(
   const capture = output.follow(stopCapture.signal);
   await Promise.race([capture, delayMs(LOG_DRAIN_GRACE_MS)]);
   stopCapture.abort();
-  await output.recoverSnapshot(AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS));
+  await output
+    .recoverSnapshot(AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS))
+    .catch((error) => {
+      // The workspace and its retained volume are already gone. There is no
+      // transcript left to recover, so close the run and clear its credentials.
+      if (!isK8sNotFoundError(error)) throw error;
+    });
   await persistTranscript({
     session,
     output,

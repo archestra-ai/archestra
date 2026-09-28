@@ -190,11 +190,12 @@ describe("PluginDetailPage", () => {
     expect(file).toHaveValue("{}");
     expect(file).not.toHaveAttribute("readonly");
 
-    // Who can reach it is the end of the same page, not a second route. A
-    // saved plugin answers that from its own grants, so the page shows the
-    // permission editor rather than the retired visibility selector, whose
-    // columns no read path consults once the plugin has converted.
-    expect(screen.getByTestId("plugin-permissions")).toBeVisible();
+    // The canonical page-header links select configuration and permissions.
+    expect(screen.queryByTestId("plugin-permissions")).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Permissions" })[0],
+    ).toHaveAttribute("href", "/plugins/plugin-1?tab=permissions");
+    expect(screen.getByLabelText("Display name")).toBeVisible();
     expect(
       screen.queryByText("Who can discover this plugin"),
     ).not.toBeInTheDocument();
@@ -221,6 +222,20 @@ describe("PluginDetailPage", () => {
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: "Session sentry" }),
     );
+  });
+
+  it("shows permissions from the page-header URL", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    renderPage(BASE_PLUGIN);
+    expect(screen.getByTestId("plugin-permissions")).toBeVisible();
+    expect(screen.queryByLabelText("Display name")).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Permissions" })[0],
+    ).toHaveAttribute("aria-current", "page");
   });
 
   it("locks a repository-owned plugin and says where to change it instead", async () => {

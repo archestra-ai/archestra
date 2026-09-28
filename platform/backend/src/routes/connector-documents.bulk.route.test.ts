@@ -1,4 +1,3 @@
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -14,7 +13,6 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
   let connectorId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    config.kb.autoSyncPermissionsEnabled = true;
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
     // An admin's organization-wide grant reaches every connector.

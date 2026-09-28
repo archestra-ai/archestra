@@ -27,7 +27,7 @@ export function initializeChatMetrics(): void {
     labelNames: ["feedback"],
   });
 
-  logger.info("Chat metrics initialized");
+  logger.debug("Chat metrics initialized");
 }
 
 export function reportChatMessageFeedback(

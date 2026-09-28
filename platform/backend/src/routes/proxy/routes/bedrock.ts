@@ -17,7 +17,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const INVOKE_SUFFIX = "/invoke";
   const INVOKE_STREAM_SUFFIX = "/invoke-with-response-stream";
 
-  logger.info("[UnifiedProxy] Registering unified Amazon Bedrock routes");
+  logger.debug("[UnifiedProxy] Registering unified Amazon Bedrock routes");
 
   /**
    * Bedrock Converse API (default agent)

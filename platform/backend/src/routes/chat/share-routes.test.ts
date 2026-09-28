@@ -1,4 +1,7 @@
-import type { ResourcePermissionGrant } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  type ResourcePermissionGrant,
+} from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import ConversationModel from "@/models/conversation";
@@ -60,17 +63,25 @@ describe("shared chats", () => {
     actions: ["read"],
   };
 
-  test("refuses to share or fork a policy conversation", async ({
+  test("shares a policy assistant chat through the normal permission policy", async ({
     makeAgent,
     makeMember,
+    makeUser,
   }) => {
     await makeMember(currentUser.id, organizationId);
-    const agent = await makeAgent({ organizationId });
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId);
+    const agent = await makeAgent({
+      organizationId,
+      name: "Policy assistant",
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+      systemPrompt: "Help configure OpenAPPA policy.",
+    });
     const conversation = await ConversationModel.create({
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      origin: "openappa",
     });
     const key = {
       userId: currentUser.id,
@@ -79,20 +90,18 @@ describe("shared chats", () => {
       scope: conversation.id,
     };
     const policy = await ResourcePermissionPolicyModel.find(key);
-    await expect(
-      ResourcePermissions.updatePolicy({
-        ...key,
-        revision: policy?.revision ?? 0,
-        grants: [...(policy?.grants ?? []), everyone],
-      }),
-    ).rejects.toThrow("Policy conversations cannot be shared");
-
-    const fork = await app.inject({
-      method: "POST",
-      url: `/api/chat/conversations/${conversation.id}/fork`,
-      payload: { agentId: agent.id },
+    await ResourcePermissions.updatePolicy({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [...(policy?.grants ?? []), everyone],
     });
-    expect(fork.statusCode).toBe(400);
+    currentUser = reader;
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().share).toEqual({ visibility: "organization" });
   });
 
   test("a chat shared with named people stays hidden from everyone else", async ({

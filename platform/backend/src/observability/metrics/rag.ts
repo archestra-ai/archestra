@@ -193,7 +193,7 @@ export function initializeRagMetrics(): void {
     help: "query_knowledge_sources calls where the caller's identity could not be resolved to an email, so only org-wide chunks were returned (fail-closed)",
   });
 
-  logger.info("RAG metrics initialized");
+  logger.debug("RAG metrics initialized");
 }
 
 /**

@@ -129,9 +129,6 @@ export default class ResourcePermissionTargetModel {
           enabled: conversation
             ? sql<boolean>`NOT ${schema.conversationsTable.lockedChat}`
             : sql<boolean>`true`,
-          policyConversation: conversation
-            ? sql<boolean>`${schema.conversationsTable.origin} = 'openappa'`
-            : sql<boolean>`false`,
         })
         .from(table)
         .where(
@@ -395,6 +392,4 @@ type Target = {
   name: string;
   authorId: string | null;
   enabled?: boolean;
-  /** An OpenAPPA policy chat, which may never be shared. */
-  policyConversation?: boolean;
 };

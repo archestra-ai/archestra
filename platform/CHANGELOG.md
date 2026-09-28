@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.4.0-rc.25](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.24...platform-v1.4.0-rc.25) (2026-09-27)
+
+
+### Bug Fixes
+
+* **quickstart:** quiet startup logs so the banner and real problems stand out ([#8243](https://github.com/archestra-ai/archestra/issues/8243)) ([e341666](https://github.com/archestra-ai/archestra/commit/e3416669692151ccb510d0bd0f3d2fda1d2032dc))
+
+
+### Code Refactoring
+
+* **openappa:** reuse standard chat for policy configuration ([#8241](https://github.com/archestra-ai/archestra/issues/8241)) ([8a89d4b](https://github.com/archestra-ai/archestra/commit/8a89d4ba39fcefad3208428d12bf934dfcd0a16e))
+
+## [1.4.0-rc.24](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.23...platform-v1.4.0-rc.24) (2026-09-27)
+
+
+### Features
+
+* **frontend:** simplify Knowledge settings ([#8236](https://github.com/archestra-ai/archestra/issues/8236)) ([f9e158f](https://github.com/archestra-ai/archestra/commit/f9e158f013ccb7ce1c17fca6715c9d9d3fa4f1e7))
+
+## [1.4.0-rc.23](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.22...platform-v1.4.0-rc.23) (2026-09-27)
+
+
+### Bug Fixes
+
+* resolve reported settings, grants, and runtime issues ([#8234](https://github.com/archestra-ai/archestra/issues/8234)) ([eb2049d](https://github.com/archestra-ai/archestra/commit/eb2049db2d955c291ef11125de6f72a1681efa0d))
+
 ## [1.4.0-rc.22](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.21...platform-v1.4.0-rc.22) (2026-09-27)
 
 

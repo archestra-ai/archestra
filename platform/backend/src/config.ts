@@ -3557,13 +3557,6 @@ const config = {
     crawlerChromiumPath:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CRAWLER_CHROMIUM_PATH?.trim() ||
       undefined,
-    // BETA gate for the auto-sync-permissions connector visibility: the
-    // permission-sync passes, the connector Permissions tab APIs, and manual
-    // member overrides. Off by default; a blank value falls back to the
-    // ARCHESTRA_BETA master switch (see betaFeatureEnabled).
-    autoSyncPermissionsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
-    ),
     // BETA gate for the M-Files connector: hides the connector type in the
     // frontend, rejects creating connectors of the type, and disables the VAF
     // Add On distribution endpoints. Off by default; a blank value falls back

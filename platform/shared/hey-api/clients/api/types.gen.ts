@@ -15271,7 +15271,7 @@ export type GetAllAgentsData = {
          */
         agentTypes?: Array<'profile' | 'mcp_gateway' | 'agent'>;
         /**
-         * Exclude built-in agents from the results. Defaults to false.
+         * Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.
          */
         excludeBuiltIn?: boolean;
         /**
@@ -35195,7 +35195,7 @@ export type GetChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35271,14 +35271,13 @@ export type GetChatConversationsResponse = GetChatConversationsResponses[keyof G
 
 export type CreateChatConversationData = {
     body: {
-        agentId?: string;
+        agentId: string;
         title?: string | null;
         modelId?: string | null;
         chatApiKeyId?: string | null;
         projectId?: string | null;
         lockedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
-        origin?: 'openappa';
     };
     path?: never;
     query?: never;
@@ -35372,7 +35371,7 @@ export type CreateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35533,7 +35532,7 @@ export type GetDeletedChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35781,7 +35780,7 @@ export type GetChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -35953,7 +35952,7 @@ export type UpdateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -36556,7 +36555,7 @@ export type ForkChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -36808,7 +36807,7 @@ export type RestoreChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -37071,7 +37070,7 @@ export type CompactChatConversationResponses = {
             } | Array<unknown> | null;
             artifact: string | null;
             projectId: string | null;
-            origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+            origin: 'user' | 'schedule_trigger' | 'app_open';
             titleIsPlaceholder: boolean;
             lockedChat: boolean;
             pinnedAt: string | null;
@@ -37240,7 +37239,7 @@ export type GenerateChatConversationTitleResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -37408,7 +37407,7 @@ export type UpdateChatMessageResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;
@@ -40170,7 +40169,6 @@ export type GetConfigResponses = {
             openappaEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
-            kbAutoSyncPermissionsEnabled: boolean;
             kbMfilesConnectorEnabled: boolean;
             kbMfilesOauthEnabled: boolean;
             kbBm25DefaultK1: number;
@@ -66717,7 +66715,7 @@ export type CreateConnectorData = {
         name: string;
         description?: string | null;
         /**
-         * Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs the auto-sync permission and a connector type that supports it.
+         * Mirror each document's access control from the source, so a query only returns what the caller could open there. Needs an enterprise license and a connector type that supports it.
          */
         syncPermissionsFromSource?: boolean;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
@@ -95365,7 +95363,7 @@ export type GetProjectConversationsResponses = {
         title: string | null;
         authorUserId: string;
         authorName: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         lastMessageAt: string;
         createdAt: string;
         readOnly: boolean;
@@ -97852,7 +97850,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger' | 'app_open' | 'openappa';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
         lockedChat: boolean;
         pinnedAt: string | null;

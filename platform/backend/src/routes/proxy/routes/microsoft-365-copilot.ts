@@ -29,7 +29,7 @@ const microsoft365CopilotProxyRoutes: FastifyPluginAsyncZod = async (
   const API_PREFIX = `${PROXY_API_PREFIX}/microsoft-365-copilot`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info(
+  logger.debug(
     "[UnifiedProxy] Registering unified Microsoft 365 Copilot routes",
   );
 

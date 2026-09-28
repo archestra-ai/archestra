@@ -108,14 +108,35 @@ export function EnvironmentSelector(props: EnvironmentSelectorProps) {
         : environments.find((environment) => environment.id === selectedValue)
             ?.description
       : null;
+  const onlyDefaultAvailable =
+    !hasCustomEnvironments && !scope && !multiple && props.mode !== "default";
 
   return (
     <div className={cn("grid min-w-0 content-start gap-2", props.className)}>
       {showLabel && <Label htmlFor={id}>{label}</Label>}
-      {(props.helpText || (multiple && canManageEnvironments)) &&
+      {(props.helpText ||
+        onlyDefaultAvailable ||
+        (multiple && canManageEnvironments)) &&
       props.mode !== "default" ? (
         <FieldDescription>
           {props.helpText}
+          {onlyDefaultAvailable ? (
+            <>
+              {props.helpText ? <span> </span> : null}
+              <span>Only the default environment is available.</span>
+              {canManageEnvironments ? (
+                <>
+                  {" "}
+                  <Link
+                    href="/settings/environments"
+                    className="underline underline-offset-2"
+                  >
+                    Manage environments
+                  </Link>
+                </>
+              ) : null}
+            </>
+          ) : null}
           {multiple && canManageEnvironments ? (
             <>
               <span> </span>
@@ -132,25 +153,6 @@ export function EnvironmentSelector(props: EnvironmentSelectorProps) {
       ) : null}
       {selectedDescription ? (
         <FieldDescription>{selectedDescription}</FieldDescription>
-      ) : null}
-      {!hasCustomEnvironments &&
-      !scope &&
-      !multiple &&
-      props.mode !== "default" ? (
-        <FieldDescription>
-          Only the default environment is available.
-          {canManageEnvironments ? (
-            <>
-              <span> </span>
-              <Link
-                href="/settings/environments"
-                className="underline underline-offset-2"
-              >
-                Manage environments
-              </Link>
-            </>
-          ) : null}
-        </FieldDescription>
       ) : null}
       {props.mode === "multiple" ? (
         <MultiSelectCombobox

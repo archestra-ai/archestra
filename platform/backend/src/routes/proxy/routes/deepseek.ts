@@ -14,7 +14,7 @@ const deepseekProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/deepseek`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified DeepSeek routes");
+  logger.debug("[UnifiedProxy] Registering unified DeepSeek routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.deepseek.baseUrl,

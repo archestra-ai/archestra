@@ -34,7 +34,7 @@ const perplexityProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const RESPONSES_SUFFIX = "/responses";
 
-  logger.info("[UnifiedProxy] Registering unified Perplexity routes");
+  logger.debug("[UnifiedProxy] Registering unified Perplexity routes");
 
   // Registered before the handlers below and matching the whole prefix;
   // `endpointSuffix` is what makes it stand aside for them. Without it, a

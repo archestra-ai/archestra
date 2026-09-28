@@ -737,7 +737,7 @@ describe("ConversationSearchPalette", () => {
         {
           id: "policy-1",
           title: "Review policy",
-          origin: "openappa",
+          origin: "user",
           updatedAt: new Date().toISOString(),
           lastMessageAt: new Date().toISOString(),
           messages: [],

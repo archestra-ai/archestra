@@ -271,7 +271,7 @@ async function autoSetupSubscriptionWithRetry(
 export async function initializeEmailProvider(): Promise<void> {
   const provider = getEmailProvider();
   if (!provider) {
-    logger.info(
+    logger.debug(
       "[IncomingEmail] No email provider configured, skipping initialization",
     );
     return;

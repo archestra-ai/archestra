@@ -2,7 +2,6 @@
 
 import { ChevronRight, MessageCircle } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -19,13 +18,13 @@ import {
 } from "@/components/ui/tooltip";
 import { useBatteries } from "@/lib/openappa-batteries.query";
 import type { CoverageSummary } from "@/lib/openappa-coverage.query";
-import { openAppaChatHref } from "@/lib/openappa-routes";
 import { batteryDisplayName } from "./battery-display-name";
 import {
   BATTERY_STATUS,
   type BatteryStatusGroup,
   batteriesHref,
 } from "./battery-status";
+import { OpenAppaChatButton } from "./openappa-chat-button";
 import { RULE_BUCKETS } from "./rule-coverage-bar";
 
 type Batteries = CoverageSummary["batteries"];
@@ -173,12 +172,14 @@ function BatteriesContent({ summary }: { summary: CoverageSummary }) {
       </CardContent>
       {actionable && (
         <CardFooter className="mt-auto px-5">
-          <Button size="sm" variant="outline" asChild>
-            <Link href={openAppaChatHref({ promptKey: "configureBatteries" })}>
-              <MessageCircle />
-              <span>Configure with chat</span>
-            </Link>
-          </Button>
+          <OpenAppaChatButton
+            size="sm"
+            variant="outline"
+            promptKey="configureBatteries"
+          >
+            <MessageCircle />
+            <span>Configure with chat</span>
+          </OpenAppaChatButton>
         </CardFooter>
       )}
     </>

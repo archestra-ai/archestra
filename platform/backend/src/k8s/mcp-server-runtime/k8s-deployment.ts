@@ -966,7 +966,7 @@ export default class K8sDeployment {
           namespace: this.namespace,
           body: ownedPolicy,
         });
-        logger.info(
+        logger.debug(
           {
             mcpServerId: this.mcpServer.id,
             networkPolicyName: policyName,
@@ -984,7 +984,7 @@ export default class K8sDeployment {
           namespace: this.namespace,
           body: ownedPolicy,
         });
-        logger.info(
+        logger.debug(
           {
             mcpServerId: this.mcpServer.id,
             networkPolicyName: policyName,
@@ -2950,7 +2950,7 @@ export default class K8sDeployment {
     // Set the endpoint URL
     this.httpEndpointUrl = `${baseUrl}${httpPath}`;
 
-    logger.info(
+    logger.debug(
       `HTTP endpoint URL for ${this.deploymentName}: ${this.httpEndpointUrl}`,
     );
   }
@@ -3209,7 +3209,7 @@ export default class K8sDeployment {
       }
 
       // Create new deployment
-      logger.info(
+      logger.debug(
         `Creating deployment ${this.deploymentName} for MCP server ${this.mcpServer.name}`,
       );
 
@@ -3218,7 +3218,7 @@ export default class K8sDeployment {
       // Use custom Docker image if provided
       const dockerImage =
         catalogItem.localConfig.dockerImage || mcpServerBaseImage;
-      logger.info(`Using Docker image: ${dockerImage}`);
+      logger.debug(`Using Docker image: ${dockerImage}`);
 
       // Check if HTTP port is needed
       const needsHttp = await this.needsHttpPort();
@@ -3291,7 +3291,7 @@ export default class K8sDeployment {
             body: deploymentSpec,
           }),
         );
-        logger.info(`Deployment ${this.deploymentName} created`);
+        logger.debug(`Deployment ${this.deploymentName} created`);
       } catch (createError) {
         // A concurrent reconcile (e.g. another orchestrator replica that also saw
         // the deployment absent) may have created it between our 404 read and this
@@ -3319,7 +3319,7 @@ export default class K8sDeployment {
       // Note: assignedHttpPort is set asynchronously in findPodForDeployment during status checks
       // State is "pending" until waitForDeploymentReady confirms the deployment has available replicas
       this.observeState("pending");
-      logger.info(`Deployment ${this.deploymentName} initiated`);
+      logger.debug(`Deployment ${this.deploymentName} initiated`);
     } catch (error: unknown) {
       // A throttled/unavailable API server (429/5xx) says nothing about the
       // workload — an already-running pod is most likely still healthy. Stay
@@ -4417,7 +4417,7 @@ export default class K8sDeployment {
         body: serviceSpec,
       });
 
-      logger.info(
+      logger.debug(
         `Created service ${serviceName} for deployment ${this.deploymentName}`,
       );
     } catch (error) {
@@ -4458,7 +4458,7 @@ export default class K8sDeployment {
       const httpPort = catalogItem?.localConfig?.httpPort || 8080;
       // Use the container port directly with pod IP
       this.assignedHttpPort = httpPort;
-      logger.info(
+      logger.debug(
         `Assigned HTTP port ${this.assignedHttpPort} for deployment ${this.deploymentName}`,
       );
     }

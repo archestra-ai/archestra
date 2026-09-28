@@ -20,7 +20,7 @@ const xaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/xai`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified xAI routes");
+  logger.debug("[UnifiedProxy] Registering unified xAI routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.xai.baseUrl,

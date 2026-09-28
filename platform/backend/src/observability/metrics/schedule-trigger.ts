@@ -28,7 +28,7 @@ export function initializeScheduleTriggerMetrics(): void {
     labelNames: ["agent_name", "status"],
   });
 
-  logger.info("Schedule trigger metrics initialized");
+  logger.debug("Schedule trigger metrics initialized");
 }
 
 export function reportScheduleTriggerRun(

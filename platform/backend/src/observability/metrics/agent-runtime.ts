@@ -69,7 +69,7 @@ export function initializeAgentRuntimeMetrics(): void {
     labelNames: ["interface", "outcome"],
   });
 
-  logger.info("Agent Runtime metrics initialized");
+  logger.debug("Agent Runtime metrics initialized");
 }
 
 export function reportAgentRuntimeStarted(): void {

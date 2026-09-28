@@ -1,5 +1,6 @@
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
+import config from "@/config";
 import { isK8sConflictError, isK8sNotFoundError } from "@/k8s/shared";
 import logger from "@/logging";
 import type { K8sNetworkPolicyCapabilities } from "@/types";
@@ -47,7 +48,9 @@ export async function ensureEgressBaselineNetworkPolicy(params: {
   } = params;
 
   if (capabilities.provider === "none") {
-    logger.warn(
+    // Expected on the quickstart's embedded KinD cluster, whose default CNI
+    // has no NetworkPolicy support; anywhere else it is a real gap.
+    logger[config.isQuickstart ? "info" : "warn"](
       { provider: capabilities.provider, message: capabilities.message },
       "NetworkPolicy enforcement unavailable on this cluster; MCP egress controls (off/restricted modes and the SSRF floor) are created but NOT enforced",
     );

@@ -129,7 +129,7 @@ Agents, MCP gateways, MCP registry entries, skills, apps, models, service accoun
 | Agent, MCP gateway, MCP registry entry, or skill detail page | Open the **Permissions** tab |
 | App settings | Open **Permissions** in the settings dialog |
 | Models list | Choose **Permissions** from the model's actions |
-| Service account detail page | Open **Permissions** |
+| Service accounts list | Open an account, then choose **Permissions** in its dialog |
 | Creating or editing an OAuth client | Use the **Permissions** section of the dialog |
 | All objects of a resource type | Open the resource list’s **More actions** menu beside **Create** or **Add**, then choose **Permissions** |
 

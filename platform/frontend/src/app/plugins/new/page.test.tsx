@@ -50,11 +50,20 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <NewPluginPage />
     </QueryClientProvider>,
   );
+  return {
+    ...view,
+    rerenderPage: () =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <NewPluginPage />
+        </QueryClientProvider>,
+      ),
+  };
 }
 
 const discoverMock = vi.fn();
@@ -501,9 +510,15 @@ describe("NewPluginPage", () => {
       isPending: false,
     } as unknown as ReturnType<typeof useCreatePlugin>);
     const user = userEvent.setup();
-    renderPage();
+    const view = renderPage();
     await user.click(screen.getByRole("button", { name: /Blank template/ }));
     await user.type(screen.getByLabelText("Display name"), "Shared plugin");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank&tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    view.rerenderPage();
     await user.click(screen.getByRole("button", { name: "Add access" }));
     const dialog = screen.getByRole("dialog", { name: "Add access" });
     await user.click(within(dialog).getByRole("button", { name: /^Roles/ }));
@@ -536,7 +551,7 @@ describe("NewPluginPage", () => {
 
   it("fills one page — content and access together — from the blank template", async () => {
     const user = userEvent.setup();
-    renderPage();
+    const view = renderPage();
 
     await user.click(screen.getByRole("button", { name: /Blank template/ }));
 
@@ -552,15 +567,30 @@ describe("NewPluginPage", () => {
       screen.queryByRole("switch", { name: /Enabled/ }),
     ).not.toBeInTheDocument();
 
-    // Access is the end of the same page, not a step after it — the same
-    // shape the plugin's own page uses once it exists.
+    // Access is available on its own tab during creation.
+    expect(
+      screen.queryByRole("button", { name: "Add access" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Permissions" })[0],
+    ).toHaveAttribute("href", "/plugins/new?source=blank&tab=permissions");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank&tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    view.rerenderPage();
     expect(screen.getByRole("button", { name: "Add access" })).toBeVisible();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    view.rerenderPage();
 
     const create = screen.getByRole("button", { name: /Create plugin/ });
     // An unnamed plugin is not creatable, whatever else is filled in.
     expect(create).toBeDisabled();
 
-    await user.type(displayName, "Session guard");
+    await user.type(screen.getByLabelText("Display name"), "Session guard");
     expect(create).toBeEnabled();
   });
 });

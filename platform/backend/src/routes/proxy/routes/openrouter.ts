@@ -21,7 +21,7 @@ const openrouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openrouter`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified OpenRouter routes");
+  logger.debug("[UnifiedProxy] Registering unified OpenRouter routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.openrouter.baseUrl,

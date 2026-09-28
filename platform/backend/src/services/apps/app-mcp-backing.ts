@@ -105,7 +105,7 @@ export async function createAppBacking(params: {
     }
 
     await AppModel.setMcpServerId(app.id, server.id);
-    logger.info(
+    logger.debug(
       { appId: app.id, mcpServerId: server.id, catalogId: catalog.id },
       "Created MCP backing for app",
     );

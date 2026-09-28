@@ -6,10 +6,13 @@ test("syncForAgent creates suggested prompts", async ({
 }) => {
   const agent = await makeInternalAgent();
 
-  await AgentSuggestedPromptModel.syncForAgent(agent.id, [
-    { summaryTitle: "First", prompt: "Do the first thing" },
-    { summaryTitle: "Second", prompt: "Do the second thing" },
-  ]);
+  await AgentSuggestedPromptModel.syncForAgent({
+    agentId: agent.id,
+    prompts: [
+      { summaryTitle: "First", prompt: "Do the first thing" },
+      { summaryTitle: "Second", prompt: "Do the second thing" },
+    ],
+  });
 
   const prompts = await AgentSuggestedPromptModel.getForAgent(agent.id);
   expect(prompts).toHaveLength(2);
@@ -28,14 +31,18 @@ test("syncForAgent replaces existing prompts", async ({
 }) => {
   const agent = await makeInternalAgent();
 
-  await AgentSuggestedPromptModel.syncForAgent(agent.id, [
-    { summaryTitle: "Old", prompt: "Old prompt" },
-  ]);
+  await AgentSuggestedPromptModel.syncForAgent({
+    agentId: agent.id,
+    prompts: [{ summaryTitle: "Old", prompt: "Old prompt" }],
+  });
 
-  await AgentSuggestedPromptModel.syncForAgent(agent.id, [
-    { summaryTitle: "New A", prompt: "New prompt A" },
-    { summaryTitle: "New B", prompt: "New prompt B" },
-  ]);
+  await AgentSuggestedPromptModel.syncForAgent({
+    agentId: agent.id,
+    prompts: [
+      { summaryTitle: "New A", prompt: "New prompt A" },
+      { summaryTitle: "New B", prompt: "New prompt B" },
+    ],
+  });
 
   const prompts = await AgentSuggestedPromptModel.getForAgent(agent.id);
   expect(prompts).toHaveLength(2);
@@ -48,11 +55,15 @@ test("syncForAgent with empty array removes all prompts", async ({
 }) => {
   const agent = await makeInternalAgent();
 
-  await AgentSuggestedPromptModel.syncForAgent(agent.id, [
-    { summaryTitle: "Temp", prompt: "Temp prompt" },
-  ]);
+  await AgentSuggestedPromptModel.syncForAgent({
+    agentId: agent.id,
+    prompts: [{ summaryTitle: "Temp", prompt: "Temp prompt" }],
+  });
 
-  await AgentSuggestedPromptModel.syncForAgent(agent.id, []);
+  await AgentSuggestedPromptModel.syncForAgent({
+    agentId: agent.id,
+    prompts: [],
+  });
 
   const prompts = await AgentSuggestedPromptModel.getForAgent(agent.id);
   expect(prompts).toHaveLength(0);
@@ -64,13 +75,17 @@ test("getForAgents returns prompts for multiple agents", async ({
   const agent1 = await makeInternalAgent();
   const agent2 = await makeInternalAgent();
 
-  await AgentSuggestedPromptModel.syncForAgent(agent1.id, [
-    { summaryTitle: "A1", prompt: "Agent 1 prompt" },
-  ]);
-  await AgentSuggestedPromptModel.syncForAgent(agent2.id, [
-    { summaryTitle: "B1", prompt: "Agent 2 prompt 1" },
-    { summaryTitle: "B2", prompt: "Agent 2 prompt 2" },
-  ]);
+  await AgentSuggestedPromptModel.syncForAgent({
+    agentId: agent1.id,
+    prompts: [{ summaryTitle: "A1", prompt: "Agent 1 prompt" }],
+  });
+  await AgentSuggestedPromptModel.syncForAgent({
+    agentId: agent2.id,
+    prompts: [
+      { summaryTitle: "B1", prompt: "Agent 2 prompt 1" },
+      { summaryTitle: "B2", prompt: "Agent 2 prompt 2" },
+    ],
+  });
 
   const map = await AgentSuggestedPromptModel.getForAgents([
     agent1.id,
@@ -92,7 +107,10 @@ test("preserves sort order from array index", async ({ makeInternalAgent }) => {
     { summaryTitle: "Second", prompt: "2" },
   ];
 
-  await AgentSuggestedPromptModel.syncForAgent(agent.id, prompts);
+  await AgentSuggestedPromptModel.syncForAgent({
+    agentId: agent.id,
+    prompts: prompts,
+  });
 
   const result = await AgentSuggestedPromptModel.getForAgent(agent.id);
   expect(result.map((r) => r.summaryTitle)).toEqual([

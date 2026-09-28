@@ -29,7 +29,7 @@ const zhipuaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const EMBEDDINGS_SUFFIX = "/embeddings";
 
-  logger.info("[UnifiedProxy] Registering unified Zhipu AI routes");
+  logger.debug("[UnifiedProxy] Registering unified Zhipu AI routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.zhipuai.baseUrl,

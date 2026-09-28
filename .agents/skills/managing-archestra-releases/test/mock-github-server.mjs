@@ -256,7 +256,7 @@ function advanceMergedPr(state, pr) {
   } else if (pr.type === "beta-release") {
     state.phase = "beta-published";
     state.releases.push({ tag: "platform-v1.5.0-beta.1", draft: false, prerelease: true });
-    event(state, "beta-published", { latestMoved: false });
+    event(state, "beta-published", { platformLatestMoved: true, companionLatestMoved: false });
   } else if (pr.type === "beta-cleanup") {
     state.phase = "done";
     event(state, "rolling-beta-resumed", { next: "1.5.0-beta.2" });

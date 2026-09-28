@@ -895,6 +895,10 @@ const startWebServer = async () => {
     // Initialize database connection first
     await initializeDatabase();
 
+    // Start the cache manager before seeding: seeding invalidates cached
+    // entries, and against an unstarted manager those deletes are skipped.
+    cacheManager.start();
+
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -928,9 +932,6 @@ const startWebServer = async () => {
         );
       });
     }
-
-    // Start cache manager's background cleanup interval
-    cacheManager.start();
 
     // Start the enterprise tier service so it has a fresh user count
     // before the first request hits a license-gated route.
@@ -967,12 +968,12 @@ const startWebServer = async () => {
     // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
     registerSandboxRoute(fastify);
 
-    logger.info(
+    logger.debug(
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
 
     instanceAnalyticsService.start().catch((error) => {
-      logger.warn({ err: error }, "Failed to track instance analytics");
+      logger.debug({ err: error }, "Failed to track instance analytics");
     });
 
     rumExporter.initialize();
@@ -1138,7 +1139,7 @@ const startWebServer = async () => {
       }),
     );
 
-    logger.info(
+    logger.debug(
       {
         corsOrigins: corsOrigins.map((o) =>
           o instanceof RegExp ? o.toString() : o,
@@ -1204,7 +1205,7 @@ const startWebServer = async () => {
 
     // Start WebSocket server using the same HTTP server
     websocketService.start(fastify.server);
-    fastify.log.info("WebSocket service started");
+    fastify.log.debug("WebSocket service started");
 
     // Fetch the browser that renders session videos, if this deployment turned
     // the recorder on. Deliberately not awaited: it is a large download and

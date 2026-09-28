@@ -24,7 +24,7 @@ const archestraProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/archestra`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified Archestra routes");
+  logger.debug("[UnifiedProxy] Registering unified Archestra routes");
 
   // Only register the raw passthrough proxy when a global base URL is
   // configured. Routes below are always registered for OpenAPI schema
@@ -43,7 +43,7 @@ const archestraProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }),
     });
   } else {
-    logger.info(
+    logger.debug(
       "[UnifiedProxy] Archestra base URL not configured, HTTP proxy disabled",
     );
   }

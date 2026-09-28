@@ -202,6 +202,65 @@ test("expiry retains the workspace until final transcript capture succeeds", asy
   ).toBe("deleted");
 });
 
+test("expiry closes a failed run when its sandbox and transcript are already gone", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: user.id,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_FAILED",
+  });
+  const run = await AgentRunModel.create({
+    organizationId: organization.id,
+    agentId: agent.id,
+    taskId: task.id,
+    actorKind: "user",
+    actorId: user.id,
+    actorUserId: user.id,
+    backend: "kubernetes",
+    runtimeScope: "local",
+    workloadName: `missing-${task.id}`,
+  });
+  await AgentWorkspaceModel.create({
+    organizationId: organization.id,
+    agentId: agent.id,
+    actorKind: "user",
+    actorId: user.id,
+    backend: "kubernetes",
+    runtimeScope: "local",
+    workloadName: run.workloadName,
+    activeTaskId: task.id,
+    lastTaskId: task.id,
+    expiresAt: new Date(Date.now() - 1000),
+  });
+  vi.spyOn(backend, "stopRun").mockRejectedValue({ code: 404 });
+  vi.spyOn(backend, "streamOutput").mockImplementation(
+    async ({ destination }) => {
+      destination.end();
+    },
+  );
+  vi.spyOn(backend, "snapshotOutput").mockRejectedValue({ code: 404 });
+  vi.spyOn(backend, "releaseRun").mockResolvedValue();
+  const deletion = vi.spyOn(backend, "deleteWorkspace").mockResolvedValue();
+
+  await agentRunReconciler.reconcile();
+
+  expect(deletion).toHaveBeenCalledOnce();
+  expect((await AgentRunModel.findByTaskId(task.id))?.endedAt).not.toBeNull();
+  expect(
+    (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
+  ).toBe("deleted");
+});
+
 test.for([
   { state: "TASK_STATE_COMPLETED", suspended: false },
   { state: "TASK_STATE_FAILED", suspended: false },

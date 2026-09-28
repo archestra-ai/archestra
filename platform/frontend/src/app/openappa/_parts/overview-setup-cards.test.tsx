@@ -21,7 +21,21 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
 }));
 vi.mock("sonner");
 const api = "http://localhost:9000/api";
-const server = setupServer();
+const server = setupServer(
+  http.get("http://localhost:9000/api/agents/all", () =>
+    HttpResponse.json([
+      {
+        id: "appa-agent",
+        name: "OpenAPPA Configuration Agent",
+        scope: "org",
+        builtIn: true,
+        builtInAgentConfig: { name: "openappa-configuration-agent" },
+        authorId: null,
+        labels: [],
+      },
+    ]),
+  ),
+);
 let enabled: boolean;
 let revision: number;
 let sync: archestraApiTypes.GetAppaGithubSyncResponses["200"];
@@ -90,12 +104,10 @@ test("a fresh instance shows only the policy step", async () => {
     await screen.findByRole("heading", { name: "Turn on the guardrail" }),
   ).toBeInTheDocument();
   expect(
-    screen.getByRole("link", { name: "Create my policy" }),
+    await screen.findByRole("link", { name: "Create my policy" }),
   ).toHaveAttribute(
     "href",
-    expect.stringMatching(
-      /^\/chat\?openappa=1&openappaPrompt=setUpPolicy&from=openappa$/,
-    ),
+    expect.stringContaining("/chat?agentId=appa-agent&user_prompt="),
   );
   expect(
     screen.getByText(/frontier deterministic guardrail/),
@@ -197,9 +209,7 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
     screen.getByRole("link", { name: "Ask about the policy" }),
   ).toHaveAttribute(
     "href",
-    expect.stringMatching(
-      /^\/chat\?openappa=1&openappaPrompt=explainPolicy&from=openappa$/,
-    ),
+    expect.stringContaining("/chat?agentId=appa-agent&user_prompt="),
   );
   expect(
     screen.getByRole("switch", { name: "Enforce the policy" }),

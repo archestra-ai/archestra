@@ -20,7 +20,7 @@ const groqProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/groq`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified Groq routes");
+  logger.debug("[UnifiedProxy] Registering unified Groq routes");
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.groq.baseUrl,

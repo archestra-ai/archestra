@@ -12,8 +12,8 @@ This is an execution skill, not only a guide. Use `git`, `gh`, and the GitHub AP
 
 ## Publication Paths
 
-- **Beta (`main`):** Merging a release PR on `main` automatically publishes a beta release. It does not move the Docker `latest` tag.
-- **Stable (`release/X.Y`):** Merging a release PR on `release/X.Y` builds stable artifacts. Publication pauses for manual `stable-release` environment approval. Once approved, the workflow publishes the release and updates `latest`.
+- **Beta (`main`):** Merging a release PR on `main` automatically publishes a beta release. It moves only `archestra/platform:latest`; companion and agent images keep `latest` on the stable line.
+- **Stable (`release/X.Y`):** Merging a release PR on `release/X.Y` builds stable artifacts. Publication pauses for manual `stable-release` environment approval. Once approved, the workflow publishes the release and updates the companion and agent images' `latest`. It moves `archestra/platform:latest` only when no newer release is published.
 
 Starting a new stable branch adds configuration steps. It uses the same stable publication pipeline.
 
@@ -71,7 +71,7 @@ Only continue after the candidate artifacts pass qualification. The old line sta
 1. Confirm no previous-line release workflow is running or waiting for approval. Close its remaining PRs with an EOL explanation, including its generated release PR.
 2. Remove `release/A.B` from `stable-release` deployment policies. Delete its exact merge-queue ruleset, then create an active exact-branch EOL ruleset with an `update` rule, no bypass actors, and `update_allows_fetch_and_merge: false`. Keep the branch, tags, releases, images, and charts for reproducibility.
 3. Read everything back. Verify `release/A.B` rejects all updates, `release/X.Y` has its queue, and only `release/X.Y` can enter `stable-release`.
-4. A different eligible maintainer approves the waiting `stable-release` deployment after reviewing the sanitized test summary. Confirm publication completed: the GitHub release is stable and latest, the chart exists, every image version exists, and all `latest` image tags resolve to the approved digests.
+4. A different eligible maintainer approves the waiting `stable-release` deployment after reviewing the sanitized test summary. Confirm publication completed: the GitHub release is stable and latest, the chart exists, every image version exists, and the companion and agent `latest` tags resolve to the approved digests. `archestra/platform:latest` stays on a newer RC if one is published.
 5. Open and queue a PR on `release/X.Y` that removes only the temporary `release-as`. Leave `always-bump-patch`, `prerelease: false`, and `draft: true`. Future fixes now produce `X.Y.1`, `X.Y.2`, and so on.
 6. Report that `X.Y` is the sole supported stable line.
 
@@ -83,7 +83,7 @@ After authorization:
 
 1. Open a PR to `main` setting `packages.platform` to `versioning: prerelease`, `prerelease: true`, `prerelease-type: beta`, temporary `release-as: X.(Y+1).0-beta.1`, and `draft: true`.
 2. Merge it through the `main` queue. Wait for and verify the generated `X.(Y+1).0-beta.1` release PR, then merge it through the queue.
-3. Confirm the beta release and versioned artifacts published and Docker `latest` did not move.
+3. Confirm the beta release and versioned artifacts published, `archestra/platform:latest` moved to it, and the companion and agent `latest` tags did not move.
 4. Open and queue a cleanup PR on `main` removing only `release-as`. Confirm Release Please resumes its rolling beta PR for `.2` and later.
 
 The initial migration from stable `1.3.x` started `1.4.0-beta.1`; do not use that historical exception when deriving later versions.

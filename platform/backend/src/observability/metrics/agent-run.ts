@@ -50,7 +50,7 @@ export function initializeAgentRunMetrics(labelKeys: string[]): void {
     labelNames: [...baseLabelNames, ...nextLabelKeys],
   });
 
-  logger.info(
+  logger.debug(
     `Agent run metrics initialized with ${nextLabelKeys.length} label keys: ${nextLabelKeys.join(", ")}`,
   );
 }

@@ -41,7 +41,7 @@ export async function runScopedResourcePermissionCutover(
   };
   if (transaction) await run(transaction);
   else await db.transaction(run);
-  logger.info(
+  logger.debug(
     { durationMs: Date.now() - started },
     "[ResourcePermissions] Scoped permission conversion applied",
   );

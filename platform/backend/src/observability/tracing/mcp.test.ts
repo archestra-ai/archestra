@@ -24,6 +24,7 @@ beforeAll(() => {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
   originalProvider = trace.getTracerProvider();
+  trace.disable();
   trace.setGlobalTracerProvider(provider);
 });
 
@@ -31,9 +32,10 @@ afterEach(() => {
   exporter.reset();
 });
 
-afterAll(() => {
-  provider.shutdown();
+afterAll(async () => {
+  await provider.shutdown();
   // Restore original provider
+  trace.disable();
   trace.setGlobalTracerProvider(originalProvider);
 });
 

@@ -28,7 +28,7 @@ export function initializeFileStorageMetrics(): void {
     labelNames: ["provider", "scope"],
   });
 
-  logger.info("File storage metrics initialized");
+  logger.debug("File storage metrics initialized");
 }
 
 export function reportOrphanedObject(params: {

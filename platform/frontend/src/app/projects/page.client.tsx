@@ -347,7 +347,7 @@ function ProjectsList() {
               }
             />
           ) : (
-            <>
+            <div className="space-y-6">
               {pinnedProjects.length > 0 && (
                 <ProjectSection
                   title="Pinned"
@@ -364,7 +364,7 @@ function ProjectsList() {
                 onEdit={openEditDialog}
                 onDelete={setDeletingProject}
               />
-            </>
+            </div>
           )}
         </div>
       </TableCardView>

@@ -163,8 +163,8 @@ export function EditVirtualKeyDialog({
             ]
           : [
               { id: "general", label: "General" },
-              { id: "permissions", label: "Permissions" },
               { id: "connect", label: "Connect" },
+              { id: "permissions", label: "Permissions" },
             ]
       }
       onActiveSectionChange={setActiveSection}

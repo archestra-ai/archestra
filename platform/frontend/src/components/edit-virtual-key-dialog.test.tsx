@@ -83,6 +83,14 @@ describe("EditVirtualKeyDialog", () => {
     const user = userEvent.setup();
     renderDialog();
 
+    expect(
+      screen
+        .getByRole("button", { name: "Connect" })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: "Permissions" }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(screen.getByText("Use your saved key")).toBeVisible();

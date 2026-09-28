@@ -13,14 +13,17 @@ import { E2eTestId } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { renderCounts, statusState, deploymentState } = vi.hoisted(() => ({
-  renderCounts: { modelSelector: 0, apiKeySelector: 0 },
-  statusState: {
-    data: null as { trust: string; audience: string } | null,
-    isError: false,
-  },
-  deploymentState: { active: true },
-}));
+const { renderCounts, statusState, deploymentState, layoutState } = vi.hoisted(
+  () => ({
+    renderCounts: { modelSelector: 0, apiKeySelector: 0 },
+    statusState: {
+      data: null as { trust: string; audience: string } | null,
+      isError: false,
+    },
+    deploymentState: { active: true },
+    layoutState: { isNarrow: false },
+  }),
+);
 
 // Used by Radix and the toolbar-collapse hook; jsdom reports 0 widths, so the
 // toolbar stays in its full (expanded) layout, which renders the selectors.
@@ -82,6 +85,10 @@ vi.mock("@/lib/guardrails-deployment.query", () => ({
   useGuardrailsDeployment: () => ({ data: deploymentState }),
 }));
 
+vi.mock("@/lib/hooks/use-toolbar-collapse", () => ({
+  useToolbarCollapse: () => layoutState.isNarrow,
+}));
+
 vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: () => ({
     placeholder: "placeholder",
@@ -115,6 +122,7 @@ describe("chat composer typing performance", () => {
     statusState.data = null;
     statusState.isError = false;
     deploymentState.active = true;
+    layoutState.isNarrow = false;
     localStorage.clear();
     vi.mocked(useOrganization).mockReturnValue({
       data: null,
@@ -281,5 +289,28 @@ describe("chat composer typing performance", () => {
       />,
     );
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("shows trust and audience inside the narrow toolbar popup", () => {
+    layoutState.isNarrow = true;
+    statusState.data = { trust: "trusted", audience: "public" };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    const status = screen.getByRole("status", {
+      name: "Trust: trusted; audience: public",
+    });
+    expect(status).toHaveTextContent("Trust: trusted");
+    expect(status).toHaveTextContent("Audience: public");
   });
 });

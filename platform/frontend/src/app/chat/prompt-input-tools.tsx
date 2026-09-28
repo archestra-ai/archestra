@@ -375,7 +375,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         )}
       {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
       {isNarrow &&
-        (showDefaultLogo &&
+        (!showOpenappaStatus &&
+        showDefaultLogo &&
         logoProvider &&
         !subscriptionConnectRequired &&
         (modelSource === "agent" || modelSource === "organization") ? (
@@ -551,14 +552,18 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     </ContextWindowDialog>
                   </div>
                 )}
+                {showOpenappaStatus && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                      Trust &amp; audience
+                    </p>
+                    <OpenappaStatusDisplay status={openappaStatus} inPopover />
+                  </div>
+                )}
               </div>
             </PopoverContent>
           </Popover>
         ))}
-
-      {isNarrow && showOpenappaStatus && (
-        <OpenappaStatusDisplay status={openappaStatus} compact />
-      )}
 
       {/* Rendered beside whichever control the collapsed toolbar picked (the
           logo shortcut or the three-dots menu) and outside the RBAC gate: a
@@ -822,10 +827,10 @@ export { ChatPromptInputTools };
 
 function OpenappaStatusDisplay({
   status,
-  compact = false,
+  inPopover = false,
 }: {
   status: { trust: string; audience: string } | null | undefined;
-  compact?: boolean;
+  inPopover?: boolean;
 }) {
   const TrustIcon =
     status?.trust === "trusted"
@@ -845,37 +850,47 @@ function OpenappaStatusDisplay({
     ? `Trust: ${status.trust}; audience: ${status.audience}`
     : "Trust and audience status unavailable";
 
+  const content = (
+    <output
+      aria-label={statusLabel}
+      className={cn(
+        "inline-flex min-w-0 text-muted-foreground",
+        inPopover
+          ? "max-w-64 flex-col gap-1 text-sm [overflow-wrap:anywhere]"
+          : "h-8 max-w-72 items-center gap-3 pl-3 text-xs",
+      )}
+    >
+      <span className="inline-flex min-w-0 items-center gap-1">
+        <TrustIcon
+          aria-hidden="true"
+          className={cn(
+            "size-3.5 shrink-0",
+            status?.trust === "suspicious" &&
+              "text-amber-600 dark:text-amber-400",
+          )}
+        />
+        {inPopover ? (
+          <span>{`Trust: ${status?.trust ?? "unavailable"}`}</span>
+        ) : (
+          status && <span className="truncate">{status.trust}</span>
+        )}
+      </span>
+      <span className="inline-flex min-w-0 items-center gap-1">
+        <AudienceIcon aria-hidden="true" className="size-3.5 shrink-0" />
+        {inPopover ? (
+          <span>{`Audience: ${status?.audience ?? "unavailable"}`}</span>
+        ) : (
+          status && <span className="truncate">{status.audience}</span>
+        )}
+      </span>
+    </output>
+  );
+
+  if (inPopover) return content;
+
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <output
-          aria-label={statusLabel}
-          className={cn(
-            "inline-flex h-8 min-w-0 items-center text-xs text-muted-foreground",
-            compact ? "gap-1 px-1" : "max-w-72 gap-3 pl-3",
-          )}
-        >
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <TrustIcon
-              aria-hidden="true"
-              className={cn(
-                "size-3.5 shrink-0",
-                status?.trust === "suspicious" &&
-                  "text-amber-600 dark:text-amber-400",
-              )}
-            />
-            {!compact && status && (
-              <span className="truncate">{status.trust}</span>
-            )}
-          </span>
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <AudienceIcon aria-hidden="true" className="size-3.5 shrink-0" />
-            {!compact && status && (
-              <span className="truncate">{status.audience}</span>
-            )}
-          </span>
-        </output>
-      </TooltipTrigger>
+      <TooltipTrigger asChild>{content}</TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs break-words">
         <span>
           {status

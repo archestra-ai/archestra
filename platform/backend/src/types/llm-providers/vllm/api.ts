@@ -48,7 +48,7 @@ const ChoiceSchema = z
           })
           .nullable()
           .optional(),
-        tool_calls: z.array(ToolCallSchema).optional(),
+        tool_calls: z.array(ToolCallSchema).nullable().optional(),
         // vLLM-specific: reasoning field for models that support it
         reasoning: z.string().nullable().optional(),
         // DeepSeek-style reasoning models return thinking in `reasoning_content`

@@ -533,7 +533,7 @@ async fn keepalive_loop<F, Fut>(
 /// crosses the generic API). The host is set on the spawned CLI child only, so
 /// distinct environments connect concurrently with no process-global env mutation.
 pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
-    tracing::info!(target = ?target, "spawning dagger session");
+    tracing::debug!(target = ?target, "spawning dagger session");
     let (msg_tx, msg_rx) = mpsc::channel::<SessionMsg>(CHANNEL_CAPACITY);
     let (ready_tx, ready_rx) = oneshot::channel::<()>();
     let (fail_tx, fail_rx) = oneshot::channel::<SandboxError>();
@@ -574,7 +574,7 @@ pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
     let outcome = tokio::select! {
         ready = ready_rx => match ready {
             Ok(()) => {
-                tracing::info!("dagger session ready");
+                tracing::debug!("dagger session ready");
                 Ok(Arc::new(SessionHandle::new(msg_tx)))
             }
             Err(_) => Err(SandboxError::EngineUnreachable {
@@ -666,7 +666,7 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     // (no network), so a cold restricted engine works without warming first.
     let prebuilt = base_prebuilt_from_env(env::var("ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT").ok());
     tracing::Span::current().record("image", image.as_str());
-    tracing::info!(%image, prebuilt, "building warm base image");
+    tracing::debug!(%image, prebuilt, "building warm base image");
 
     let mut container = client
         .container()
@@ -704,7 +704,7 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
         .await
         .map_err(engine)
         .map(|id| client.load_container_from_id(id))
-        .inspect(|_| tracing::info!("warm base image ready"))
+        .inspect(|_| tracing::debug!("warm base image ready"))
         .inspect_err(|err| tracing::warn!(error = %err, "warm base image build failed"))
 }
 

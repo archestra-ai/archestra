@@ -109,6 +109,8 @@ Caller identity provides audit attribution. For external clients, it scopes the 
 
 The native actor ID hashes the session ID, and a new root ID hashes the organization and session IDs. A session keeps the root its row records. Authorized users share guardrail state within one organization. An organization change is refused.
 
+Chat reads the current trust and audience through an authenticated status endpoint. The native binding resolves the root recorded for the conversation and reads its persisted trajectory without dispatching a hook. The endpoint returns no status for a locked chat, even when the browser has its key; it does not read OpenAPPA for that chat.
+
 The proxy scopes external session IDs to the authenticated credential. Another credential cannot join a personal session by repeating its ID. The remedy gateway resolves the recorded owner and ignores caller-supplied session headers. A changed parent is refused.
 
 `SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Detached MCP tasks remain disabled while OpenAPPA is enabled.

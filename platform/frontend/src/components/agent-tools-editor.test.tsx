@@ -6,11 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 import { ToolChecklist, type ToolChecklistProps } from "./agent-tools-editor";
 
 // Mock ResizeObserver which is used by UI components
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+global.ResizeObserver = class {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+};
 
 // Helper to create mock tools
 function createMockTools(count: number) {
@@ -122,6 +122,38 @@ describe("ToolChecklist", () => {
       screen.getByRole("button", { name: "Reset to defaults" }),
     ).toBeDisabled();
   });
+
+  it("explains why OpenAPPA recovery and reporting tools stay available", async () => {
+    const user = userEvent.setup();
+    render(
+      <ToolChecklistWrapper
+        catalogId={ARCHESTRA_MCP_CATALOG_ID}
+        tools={[
+          createMockTool("remedies", "archestra__get_remedy_plans", "Remedies"),
+          createMockTool("report", "archestra__yell", "Report"),
+        ]}
+      />,
+    );
+
+    const remedies = screen.getByRole("checkbox", {
+      name: /get_remedy_plans/i,
+    });
+    await user.hover(
+      within(remedies.closest("label") as HTMLElement).getByText("Required"),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "find remedies for blocked calls",
+    );
+
+    const report = screen.getByRole("checkbox", { name: /yell/i });
+    await user.hover(
+      within(report.closest("label") as HTMLElement).getByText("Required"),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "report confusing OpenAPPA decisions",
+    );
+  });
+
   describe("search bar visibility", () => {
     it("should not show search bar when there are 5 or fewer tools", () => {
       const tools = createMockTools(5);

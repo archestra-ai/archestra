@@ -40,6 +40,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useBulkUpdateAgentTools } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
@@ -1399,7 +1404,21 @@ function ToolRow({
               Disabled
             </Badge>
           )}
-          {locked && <Badge variant="secondary">Required</Badge>}
+          {locked && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="secondary"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Required: ${requiredToolReason(toolName)}`}
+                >
+                  Required
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>{requiredToolReason(toolName)}</TooltipContent>
+            </Tooltip>
+          )}
         </div>
         {tool.description && (
           <ExpandableDescription description={tool.description} />
@@ -1407,6 +1426,19 @@ function ToolRow({
       </div>
     </label>
   );
+}
+
+function requiredToolReason(toolName: string) {
+  switch (toolName) {
+    case "get_remedy_plans":
+      return "Always available so agents can find remedies for blocked calls.";
+    case "execute_remedy_plan":
+      return "Always available so agents can apply an offered remedy.";
+    case "yell":
+      return "Always available so agents can report confusing OpenAPPA decisions.";
+    default:
+      return "Always available for OpenAPPA recovery.";
+  }
 }
 
 const OTHER_GROUP_ID = "__other__";

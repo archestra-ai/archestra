@@ -23,3 +23,24 @@ test.each([
   expect(await navigator.clipboard.readText()).toBe(prompt);
   expect(screen.getByRole("button", { name: "Copied" })).toBeVisible();
 });
+
+test("Cursor explains how to opt into proxy inference", () => {
+  const cursor = CONNECT_CLIENTS.find((entry) => entry.id === "cursor");
+  const claudeCode = CONNECT_CLIENTS.find(
+    (entry) => entry.id === "claude-code",
+  );
+  if (!cursor || !claudeCode) throw new Error("Missing client");
+
+  const view = render(<ConnectWithAi client={cursor} />);
+  const notice = screen.getByRole("alert");
+  expect(notice).toHaveTextContent("Cursor inference needs separate setup");
+  expect(notice).toHaveTextContent(
+    "Cursor keeps using its current models unless you change its model settings.",
+  );
+  expect(notice).toHaveTextContent("Customize setup");
+  expect(notice).toHaveTextContent("Override OpenAI Base URL");
+  expect(notice).toHaveTextContent("virtual key or your own OpenAI API key");
+
+  view.rerender(<ConnectWithAi client={claudeCode} />);
+  expect(screen.queryByRole("alert")).toBeNull();
+});

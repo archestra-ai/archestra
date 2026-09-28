@@ -51,7 +51,7 @@ Verify that the gateway can list tools before considering the connection complet
 
 For OpenCode, the connection agent checks `opencode mcp list` after installation. If the gateway is already connected, it skips OAuth. Otherwise, it starts the gateway's native OAuth sign-in. Restart OpenCode after setup.
 
-Cursor still requires native gateway OAuth and model settings inside the app.
+Cursor still requires native gateway OAuth. Connecting its gateway does not route inference through the LLM Proxy. To route supported OpenAI chat models, select the proxy under **Customize setup**, then apply the printed key and base URL in Cursor's model settings.
 The installer places shared skills in Cursor's skills folder; reload Cursor to see them.
 See [Supported Clients](#supported-clients) for each client's remaining steps.
 This flow does not automate those UI-only settings.

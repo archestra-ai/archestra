@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
 import type { ConnectClient } from "./clients";
@@ -56,6 +57,28 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
       <p className="text-xs text-muted-foreground">
         Requires Node.js 18+ and terminal access in {client.label}.
       </p>
+      {client.id === "cursor" && (
+        <Alert variant="warning">
+          <TriangleAlert />
+          <AlertTitle>Cursor inference needs separate setup</AlertTitle>
+          <AlertDescription>
+            <p>
+              Connecting the gateway gives Cursor access to tools. Cursor keeps
+              using its current models unless you change its model settings.
+            </p>
+            <p>
+              To route supported OpenAI chat models through the LLM Proxy,
+              select it under Customize setup when approving the connection.
+              After installation, open Cursor Settings → Models → API Keys.
+              Paste the printed proxy URL under Override OpenAI Base URL, enter
+              the printed virtual key or your own OpenAI API key, and turn on
+              Use OpenAI API Key. Then select an OpenAI model and send a test
+              prompt. Your Cursor subscription cannot authenticate proxy
+              requests.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

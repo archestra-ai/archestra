@@ -209,14 +209,15 @@ export function handleServerError(
     });
   }
 
-  // The passthrough proxy can wrap a provider connect timeout in its
-  // generic 500 error, losing the original network error code. Keep the
-  // response retryable and point the caller at the configured upstream.
+  // The passthrough proxy returns 500 for connect timeouts, either preserving
+  // undici's code or wrapping it in a generic error in older versions. Keep
+  // both responses retryable and point the caller at the configured upstream.
+  const providerErrorCode = (error as { code?: string }).code;
   if (
     request.url.startsWith("/v1/") &&
-    (error as { code?: string }).code ===
-      "FST_REPLY_FROM_INTERNAL_SERVER_ERROR" &&
-    error.message === "Connect Timeout Error"
+    (providerErrorCode === "UND_ERR_CONNECT_TIMEOUT" ||
+      (providerErrorCode === "FST_REPLY_FROM_INTERNAL_SERVER_ERROR" &&
+        error.message === "Connect Timeout Error"))
   ) {
     this.log.warn(
       { ...requestContext, statusCode: 503 },

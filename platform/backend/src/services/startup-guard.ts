@@ -158,6 +158,8 @@ export interface StartupGuardClient {
    * of the way instead of drawing the pre-loader (Claude: `-p|--print`).
    */
   nonInteractiveArgPatterns: string[];
+  /** First-argument CLI commands that do not start an inference session. */
+  utilitySubcommands: string[];
   /**
    * Reverse-of-connect commands for the `mcp)` disconnect case — may reference
    * `$MCP_SERVER_NAME` and must run silenced (`command <binary> ...`). Only
@@ -317,6 +319,11 @@ export function renderStartupGuardScript(
 # everything that is down in one keypress (the reverse of connect). It never
 # blocks the launch: the shell wrapper runs \`command ${client.binary}\` no matter how
 # this script exits. Disable with ${client.disableEnvVar}=0.
+
+# Utility commands never need remote health checks or a terminal screen.
+case "\${1:-}" in
+  ${client.utilitySubcommands.join("|")}|--help|-h|--version|-v) exit 0 ;;
+esac
 set -u
 
 [ "\${${client.disableEnvVar}:-1}" = "0" ] && exit 0
@@ -1239,6 +1246,9 @@ ${client.markerStart}
 # Remove this block and ~/${client.scriptRelpath} to uninstall.
 ${refreshBlock}
 ${client.binary}() {
+  case "\${1:-}" in
+    ${client.utilitySubcommands.join("|")}|--help|-h|--version|-v) command ${client.binary} "$@"; return $? ;;
+  esac
   if [ -x "$HOME/${client.scriptRelpath}" ]; then
     "$HOME/${client.scriptRelpath}" "$@" || true
   fi${promptArgs}

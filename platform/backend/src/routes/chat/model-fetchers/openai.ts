@@ -13,9 +13,9 @@ import {
   modelFetchError,
 } from "./types";
 
-// Codex uses client_version to gate models that require a newer client. Keep
-// this at least as recent as the catalog fields parsed below.
-const CODEX_MODELS_CLIENT_VERSION = "0.158.0";
+// Codex filters models by minimum CLI version. Archestra needs the full
+// account-visible catalog, so use the high version from Codex's catalog sync.
+const CODEX_UNFILTERED_MODELS_CLIENT_VERSION = "99.99.99";
 
 const CodexModelsResponseSchema = z.object({
   models: z.array(
@@ -91,7 +91,7 @@ export async function fetchOpenAiModels(
     });
     const url = joinBaseUrl(
       config.llm.openai.codex.apiBaseUrl,
-      `/models?client_version=${CODEX_MODELS_CLIENT_VERSION}`,
+      `/models?client_version=${CODEX_UNFILTERED_MODELS_CLIENT_VERSION}`,
     );
     const response = await codexFetch(url, { redirect: "error" });
     if (response.status === 401) {

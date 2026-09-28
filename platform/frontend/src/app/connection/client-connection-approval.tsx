@@ -13,23 +13,54 @@ export function ClientConnectionApproval({
   setupId,
   clientId,
   platform,
+  gatewaySelected,
+  proxySelected,
+  skillsSelected,
 }: {
   requestId: string;
   setupId?: string;
   clientId: string;
   platform: string;
+  gatewaySelected: boolean;
+  proxySelected: boolean;
+  skillsSelected: boolean;
 }) {
   const request = useClientConnection(requestId);
   const decision = useDecideClientConnection(requestId);
   const [confirmed, setConfirmed] = useState(false);
   if (decision.data)
     return (
-      <output className="block p-5">
-        <span>
-          {decision.data.status === "approved"
-            ? "Connection approved. Return to your terminal to finish setup."
-            : "Connection denied. The installer cannot apply this setup."}
-        </span>
+      <output className="block space-y-3 p-5 text-sm">
+        {decision.data.status === "approved" ? (
+          <>
+            <p>Connection approved. Return to your terminal to finish setup.</p>
+            {clientId === "cursor" && (
+              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                {gatewaySelected && (
+                  <li>
+                    In Cursor, open Customize → MCPs and authenticate the
+                    gateway.
+                  </li>
+                )}
+                {skillsSelected && <li>Reload Cursor to see shared skills.</li>}
+                {proxySelected && (
+                  <li>
+                    To route OpenAI model requests, enter the proxy URL and key
+                    in Cursor Settings → Models → API Keys.
+                  </li>
+                )}
+              </ul>
+            )}
+            {clientId === "claude-desktop" && gatewaySelected && (
+              <p className="text-muted-foreground">
+                After Claude Desktop restarts, connect the gateway in Settings →
+                Connectors and enable it in your conversation.
+              </p>
+            )}
+          </>
+        ) : (
+          <p>Connection denied. The installer cannot apply this setup.</p>
+        )}
       </output>
     );
   if (request.isError)

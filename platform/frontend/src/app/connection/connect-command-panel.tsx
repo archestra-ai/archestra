@@ -1201,6 +1201,17 @@ export function ConnectCommandPanel({
               </AlertDescription>
             </Alert>
           )}
+          {connectRequest && client.id === "cursor" && proxyActive && (
+            <Alert variant="warning">
+              <TriangleAlert />
+              <AlertTitle>Cursor model setup needs a separate step</AlertTitle>
+              <AlertDescription>
+                Approving prepares the proxy settings. After installation, enter
+                the URL and key in Cursor Settings → Models → API Keys. Your
+                Cursor subscription cannot supply the key.
+              </AlertDescription>
+            </Alert>
+          )}
           <output
             className="sr-only"
             aria-live="polite"
@@ -1267,6 +1278,9 @@ export function ConnectCommandPanel({
                 setupId={result?.id}
                 clientId={client.id}
                 platform={setupPlatform}
+                gatewaySelected={!!gateway}
+                proxySelected={proxyActive}
+                skillsSelected={skillsEligible && includeSkills}
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (
               <div className="space-y-3 p-5 text-foreground">

@@ -59,7 +59,14 @@ beforeEach(() => {
     ),
   );
 });
-function show(clientId = "cursor") {
+function show(
+  clientId = "cursor",
+  resources = {
+    gatewaySelected: true,
+    proxySelected: true,
+    skillsSelected: true,
+  },
+) {
   render(
     <QueryClientProvider
       client={
@@ -76,6 +83,7 @@ function show(clientId = "cursor") {
         setupId="setup"
         clientId={clientId}
         platform="linux"
+        {...resources}
       />
     </QueryClientProvider>,
   );
@@ -92,10 +100,62 @@ test("approval requires matching the terminal code, then submits the reviewed se
   await screen.findByText(
     "Connection approved. Return to your terminal to finish setup.",
   );
+  expect(
+    screen.getByText(
+      "In Cursor, open Customize → MCPs and authenticate the gateway.",
+    ),
+  ).toBeVisible();
+  expect(screen.getByText("Reload Cursor to see shared skills.")).toBeVisible();
+  expect(
+    screen.getByText(/enter the proxy URL and key in Cursor Settings/),
+  ).toBeVisible();
   expect(requests).toEqual([{ decision: "approve", setupId: "setup" }]);
   expect(
     screen.queryByRole("button", { name: "Approve connection" }),
   ).not.toBeInTheDocument();
+});
+
+test("approval only shows steps for selected Cursor resources", async () => {
+  show("cursor", {
+    gatewaySelected: true,
+    proxySelected: false,
+    skillsSelected: false,
+  });
+  await screen.findByText("ABCD-1234");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Approve connection" }));
+  await screen.findByText(
+    "Connection approved. Return to your terminal to finish setup.",
+  );
+  expect(
+    screen.getByText(
+      "In Cursor, open Customize → MCPs and authenticate the gateway.",
+    ),
+  ).toBeVisible();
+  expect(screen.queryByText(/proxy URL and key/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Reload Cursor/)).not.toBeInTheDocument();
+});
+
+test("Claude Desktop approval points to its connector step", async () => {
+  server.use(
+    http.get(`${origin}/api/client-connections/request`, () =>
+      HttpResponse.json({
+        clientId: "claude-desktop",
+        platform: "linux",
+        userCode: "ABCD-1234",
+        expiresAt: "2099-01-01T00:00:00Z",
+      }),
+    ),
+  );
+  show("claude-desktop");
+  await screen.findByText("ABCD-1234");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Approve connection" }));
+  expect(
+    await screen.findByText(
+      /After Claude Desktop restarts, connect the gateway/,
+    ),
+  ).toBeVisible();
 });
 
 test("a mismatched client cannot be approved but can be denied", async () => {

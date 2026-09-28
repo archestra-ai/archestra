@@ -211,7 +211,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   );
   const openappaStatus = statusReadFailed ? null : statusData;
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
-  const showOpenappaStatus = guardrailsDeployment?.active === true;
+  const openappaEnabled = useFeature("openappaEnabled") === true;
+  const showOpenappaStatus =
+    openappaEnabled && guardrailsDeployment?.active === true;
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =

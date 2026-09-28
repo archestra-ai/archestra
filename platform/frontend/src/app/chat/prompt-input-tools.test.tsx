@@ -108,6 +108,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 }));
 
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
   useOrganization,
@@ -117,6 +118,9 @@ import ArchestraPromptInput from "./prompt-input";
 describe("chat composer typing performance", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "openappaEnabled" ? true : undefined,
+    );
     renderCounts.modelSelector = 0;
     renderCounts.apiKeySelector = 0;
     statusState.data = null;
@@ -292,6 +296,27 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
+    expect(
+      screen.queryByRole("button", { name: "OpenAPPA status" }),
+    ).toBeNull();
+  });
+
+  it("hides the OpenAPPA icon when beta is disabled, even with stale active deployment data", () => {
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "openappaEnabled" ? false : undefined,
+    );
+    statusState.data = { trust: "trusted", audience: "public" };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
     expect(
       screen.queryByRole("button", { name: "OpenAPPA status" }),
     ).toBeNull();

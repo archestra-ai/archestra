@@ -1,6 +1,8 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useUpdateVirtualApiKey } from "@/lib/virtual-api-keys.query";
 import {
   type EditableVirtualKey,
@@ -9,6 +11,13 @@ import {
 
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useUpdateVirtualApiKey: vi.fn(),
+}));
+vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModels: vi.fn(),
+  useModelsWithApiKeys: vi.fn(),
+}));
+vi.mock("@/components/virtual-key-connection-base-url", () => ({
+  useConnectionBaseUrl: () => "https://proxy.example.com",
 }));
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useLlmProviderApiKeys: () => ({ data: [] }),
@@ -47,13 +56,79 @@ beforeEach(() => {
     isPending: false,
     mutateAsync,
   } as unknown as ReturnType<typeof useUpdateVirtualApiKey>);
+  vi.mocked(useLlmModels).mockReturnValue({
+    isPending: false,
+    data: [],
+  } as unknown as ReturnType<typeof useLlmModels>);
+  vi.mocked(useModelsWithApiKeys).mockReturnValue({
+    isPending: false,
+    data: [
+      {
+        modelId: "gpt-5.6-sol",
+        provider: "openai",
+        isBest: true,
+        apiKeys: [{ id: "pak-1" }],
+        ignored: false,
+        embeddingDimensions: null,
+        inputModalities: null,
+        outputModalities: null,
+        supportedEndpoints: null,
+      },
+    ],
+  } as unknown as ReturnType<typeof useModelsWithApiKeys>);
 });
 
 describe("EditVirtualKeyDialog", () => {
+  it("shows reusable connection instructions without revealing the saved key", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    expect(
+      screen
+        .getByRole("button", { name: "Connect" })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: "Permissions" }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(screen.getByText("Use your saved key")).toBeVisible();
+    expect(
+      screen.getByText(/full key was shown only when it was created/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Copy key" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Authorization: Bearer \$ARCHESTRA_LLM_VIRTUAL_KEY/),
+    ).toBeVisible();
+    expect(
+      screen.getByText("https://proxy.example.com/model-router"),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Save Changes" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps personal passthrough keys to General and Connect", async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      ...virtualKey,
+      keyType: "passthrough",
+      providerApiKeys: [],
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(screen.getByText("Use your saved key")).toBeVisible();
+    expect(screen.getByText(/X-Archestra-Virtual-Key/)).toBeVisible();
+  });
+
   it("edits access through the key's own permission policy", () => {
-    render(
-      <EditVirtualKeyDialog virtualKey={virtualKey} onOpenChange={vi.fn()} />,
-    );
+    renderDialog();
 
     const section = screen.getByTestId("resource-access");
     expect(section).toHaveAttribute("data-resource", "llmVirtualKey");
@@ -65,9 +140,7 @@ describe("EditVirtualKeyDialog", () => {
     // a scope here would write columns no read path consults, and would tell
     // the person their change took effect when it did not.
     const user = userEvent.setup();
-    render(
-      <EditVirtualKeyDialog virtualKey={virtualKey} onOpenChange={vi.fn()} />,
-    );
+    renderDialog();
 
     await user.clear(screen.getByLabelText("Name"));
     await user.type(screen.getByLabelText("Name"), "Renamed key");
@@ -84,3 +157,11 @@ describe("EditVirtualKeyDialog", () => {
     expect(payload.data).not.toHaveProperty("teams");
   });
 });
+
+function renderDialog(key: EditableVirtualKey = virtualKey) {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <EditVirtualKeyDialog virtualKey={key} onOpenChange={vi.fn()} />
+    </QueryClientProvider>,
+  );
+}

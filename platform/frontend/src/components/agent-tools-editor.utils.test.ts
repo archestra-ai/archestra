@@ -7,6 +7,7 @@ import {
   getCreationDefaultArchestraToolShortNames,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
@@ -204,6 +205,7 @@ describe("filterDefaultArchestraToolIds", () => {
   it("adds only the skill tools when skillsEnabled alone is set", () => {
     const tools = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
       ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
       ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
       ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -213,11 +215,15 @@ describe("filterDefaultArchestraToolIds", () => {
     );
 
     expect(
-      filterDefaultArchestraToolIds(tools, { skillsEnabled: true }),
+      filterDefaultArchestraToolIds(tools, {
+        skillsEnabled: true,
+        openappaEnabled: true,
+      }),
     ).toEqual(
       new Set(
         [
           ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
           ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
           ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
         ].map((shortName) => `tool-${shortName}`),
@@ -228,6 +234,7 @@ describe("filterDefaultArchestraToolIds", () => {
   it("composes the set from the feature flags", () => {
     const groupShortNames = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
       ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
       ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
       ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -236,7 +243,11 @@ describe("filterDefaultArchestraToolIds", () => {
     const tools = groupShortNames.map((shortName) =>
       makeTool(`tool-${shortName}`, `archestra__${shortName}`),
     );
-    const flags = { skillsEnabled: true, sandboxEnabled: true };
+    const flags = {
+      skillsEnabled: true,
+      sandboxEnabled: true,
+      openappaEnabled: true,
+    };
 
     const result = filterDefaultArchestraToolIds(tools, flags);
 

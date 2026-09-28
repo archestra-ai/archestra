@@ -74,6 +74,43 @@ describe("POST /api/openai-codex-auth/device/poll", () => {
     expect(response.json()).toEqual({ status: "pending" });
   });
 
+  test.each([
+    "poll",
+    "exchange",
+  ])("reports an unreachable HTTP service during %s without blaming the database", async (step) => {
+    const failure = new TypeError("fetch failed", {
+      cause: new AggregateError([
+        Object.assign(new Error("connection timed out"), {
+          code: "ETIMEDOUT",
+        }),
+      ]),
+    });
+    const fetchMock = vi.fn();
+    if (step === "exchange") {
+      fetchMock.mockResolvedValueOnce(
+        Response.json({
+          authorization_code: "synthetic-code",
+          code_verifier: "synthetic-verifier",
+        }),
+      );
+    }
+    fetchMock.mockRejectedValueOnce(failure);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openai-codex-auth/device/poll",
+      payload: { deviceAuthId: "synthetic-device", userCode: "TEST-1234" },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toEqual({
+      message:
+        "Could not connect to an upstream service. Check the service URL and network access, then retry.",
+      type: "api_service_unavailable_error",
+    });
+  });
+
   test("exchanges the authorization code and returns an encoded credential", async () => {
     const fetchMock = vi
       .fn()

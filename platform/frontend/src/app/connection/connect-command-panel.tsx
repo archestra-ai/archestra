@@ -1157,8 +1157,11 @@ export function ConnectCommandPanel({
               <AlertDescription>
                 <p>
                   Connecting the LLM Proxy switches Desktop to third-party mode.
-                  Your existing Claude conversations won&apos;t appear in that
-                  mode. The installer does not delete them.
+                  After setup, open Settings → Import in Desktop to bring over
+                  your Claude.ai conversations. Import is a one-time copy —
+                  rerun it later to add newer conversations. Conversations
+                  started in this mode stay on this computer. Nothing is
+                  deleted.
                 </p>
                 {desktopRevertDocsUrl ? (
                   <ExternalDocsLink href={desktopRevertDocsUrl}>

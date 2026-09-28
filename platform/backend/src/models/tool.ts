@@ -2178,6 +2178,7 @@ class ToolModel {
         ? ([
             "get_remedy_plans",
             "execute_remedy_plan",
+            "yell",
           ] as ArchestraToolShortName[])
         : []),
     ];

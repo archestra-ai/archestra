@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-25
+lastUpdated: 2026-09-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -127,7 +127,7 @@ You can also read the generator. A deterministic renderer builds the script with
 
 ## Startup Guard
 
-For Claude Code, Codex, Copilot CLI, and OpenCode, the script installs a startup guard. It checks your Archestra remotes each time you launch `claude`, `codex`, `copilot`, or `opencode`. It makes one health request for the LLM proxy, MCP gateway, and skills origin. When everything is healthy, the CLI starts in about a second.
+For Claude Code, Codex, Copilot CLI, and OpenCode, the script installs a startup guard. It checks your Archestra remotes when you start an inference session with `claude`, `codex`, `copilot`, or `opencode`. It makes one health request for the LLM proxy, MCP gateway, and skills origin. When everything is healthy, the CLI starts in about a second. Utility commands such as `claude login`, `claude stop`, and `codex upgrade` run directly, with their arguments unchanged.
 
 A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote — "Disconnect MCP gateway (name) from Codex now? (Y/n)", naming your client, or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the exact reverse of the connect steps; plugins are uninstalled before their marketplace is removed. `n` keeps them. The guard reads the client's config back to confirm each removal landed. A removal it cannot confirm gets a ✗ line with the command to run by hand, and the guard stays installed to try again. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with the CLI starting; the guard never blocks a launch. Non-interactive runs, `codex exec` or `claude -p` for example, only get a warning on stderr.
 
@@ -211,7 +211,7 @@ The `copilot` CLI must be on your `PATH`.
 
 Download the setup helper and open it in normal Claude Desktop. Confirm its native installation prompt to start the reviewed setup. For an existing third-party profile, use the terminal option. The setup script supports macOS, Windows, and Linux. Choose subscription authentication or an API key in the review step. The script checks inference, saves a gateway profile, and restarts Desktop. It preserves manually created profiles and backs up changed files. Rerunning setup replaces the managed connection; a different deployment takes precedence over the previous one.
 
-Connecting the LLM Proxy switches Desktop to third-party mode with separate conversation history. Existing Claude conversations do not appear there. The installer does not delete or migrate them. Tools-only setup does not require this mode switch.
+Connecting the LLM Proxy switches Desktop to third-party mode with separate conversation history. After restart, open **Settings → Import** in Desktop to copy your Claude.ai conversations. Import is a one-time copy; rerun it to add newer conversations. See [Import Conversations](/docs/platform-claude-desktop-example#import-conversations). Tools-only setup does not require this mode switch.
 
 Subscription setup opens Claude sign-in through the helper's browser flow. API-key setup uses a personal virtual key backed by your configured Anthropic key. The download uses Desktop's built-in runtime. Only the terminal option requires Python and Claude Code for subscription sign-in.
 

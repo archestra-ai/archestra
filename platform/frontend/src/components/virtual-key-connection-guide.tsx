@@ -8,7 +8,14 @@ import {
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
-import { AlertTriangle, Check, Copy, Plug, Waypoints } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Info,
+  Plug,
+  Waypoints,
+} from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructions";
@@ -40,8 +47,8 @@ import { cn } from "@/lib/utils/tailwind";
 type Endpoint = "model-router" | "provider";
 
 /**
- * Post-create handoff for a virtual key: copy the key, pick an endpoint the key
- * actually works on, then copy a curl request that runs as-is.
+ * Connect a virtual key to a client. The full value is available only in the
+ * post-create view; later visits use an environment variable in examples.
  */
 export function VirtualKeyConnectionGuide({
   keyValue,
@@ -52,7 +59,7 @@ export function VirtualKeyConnectionGuide({
   expiration,
   visibleTo,
 }: {
-  keyValue: string;
+  keyValue?: string;
   keyType: "standard" | "passthrough";
   /** The provider keys a standard key maps to (empty for passthrough). */
   mappedProviderKeys: Array<{
@@ -101,7 +108,10 @@ export function VirtualKeyConnectionGuide({
 
   return (
     <ol>
-      <Step number={1} title="Copy your key">
+      <Step
+        number={1}
+        title={keyValue ? "Copy your key" : "Use your saved key"}
+      >
         <p className="text-sm text-muted-foreground">
           {isPassthrough
             ? "Send it alongside your own provider key so requests are attributed to you."
@@ -109,19 +119,32 @@ export function VirtualKeyConnectionGuide({
         </p>
         {/* Same no-wrap layout as agent-form's notices: the icon stays beside
             the text instead of wrapping onto its own line. */}
-        <InlineNotice className="flex-nowrap items-start">
-          <AlertTriangle className="mt-px" />
-          <InlineNoticeText>
-            This is the only time the full key is shown. Store it in a secret
-            manager or your app&apos;s environment.
-          </InlineNoticeText>
-        </InlineNotice>
-        <CopyField
-          value={keyValue}
-          copyLabel="Copy key"
-          primary
-          data-testid={E2eTestId.VirtualKeyValue}
-        />
+        {keyValue ? (
+          <>
+            <InlineNotice className="flex-nowrap items-start">
+              <AlertTriangle className="mt-px" />
+              <InlineNoticeText>
+                This is the only time the full key is shown. Store it in a
+                secret manager or your app&apos;s environment.
+              </InlineNoticeText>
+            </InlineNotice>
+            <CopyField
+              value={keyValue}
+              copyLabel="Copy key"
+              primary
+              data-testid={E2eTestId.VirtualKeyValue}
+            />
+          </>
+        ) : (
+          <InlineNotice className="flex-nowrap items-start" variant="info">
+            <Info className="mt-px" />
+            <InlineNoticeText>
+              The full key was shown only when it was created. Set your saved
+              key as <InlineCode>ARCHESTRA_LLM_VIRTUAL_KEY</InlineCode> before
+              running the example below.
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
         <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <KeyFact label="Name" value={name} />
           <KeyFact label="Expires" value={expiration} />
@@ -352,7 +375,7 @@ function RequestExample({
   connectionBaseUrl: string;
   target: RequestTarget;
   keyType: "standard" | "passthrough";
-  keyValue: string;
+  keyValue?: string;
   routerProviders: SupportedProvider[];
   mappedProviderKeys: Array<{
     provider: SupportedProvider;
@@ -438,7 +461,7 @@ function RequestExample({
       connectionBaseUrl,
       target,
       keyType,
-      keyValue,
+      keyValue: keyValue ?? "$ARCHESTRA_LLM_VIRTUAL_KEY",
       model,
       supportedEndpoints: selectedModel?.supportedEndpoints,
     });
@@ -466,7 +489,19 @@ function RequestExample({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        {isPassthrough && target.kind === "provider" ? (
+        {!keyValue ? (
+          <span>
+            Set <InlineCode>ARCHESTRA_LLM_VIRTUAL_KEY</InlineCode> to your saved
+            key before running this example.
+            {isPassthrough && target.kind === "provider" && (
+              <span>
+                {" "}
+                Your {providerLabel} key is read from{" "}
+                <InlineCode>{providerKeyEnvVar(target.provider)}</InlineCode>.
+              </span>
+            )}
+          </span>
+        ) : isPassthrough && target.kind === "provider" ? (
           <span>
             Your key, base URL and model are filled in. Your {providerLabel} key
             is read from{" "}

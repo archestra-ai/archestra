@@ -221,7 +221,7 @@ export function PageLayout({
               className={cn(
                 "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 sm:gap-x-6",
                 maxWidthKey === "wizard" ? "mb-4 sm:mb-6" : "mb-6",
-                maxWidthKey === "wizard" && "sm:min-h-[3.75rem]",
+                maxWidthKey === "wizard" && description && "sm:min-h-[3.75rem]",
               )}
             >
               {backLink && (
@@ -236,7 +236,9 @@ export function PageLayout({
                     : "col-span-2 min-w-0 sm:col-span-1",
                   backLink ? "row-start-2" : "row-start-1",
                   maxWidthKey === "wizard" &&
+                    description &&
                     "min-h-10 sm:relative sm:h-[3.75rem] sm:min-h-0",
+                  maxWidthKey === "wizard" && !description && "min-h-10",
                 )}
               >
                 {/* Sibling pages of a tabbed section render PageLayout at the

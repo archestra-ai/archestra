@@ -1987,9 +1987,9 @@ ${script.slice(start, end)}
     expect(script).toContain("Cursor Customize → MCPs");
     expect(script).toContain('turn on "Use OpenAI API Key"');
     expect(script).not.toContain("click Verify");
-    expect(script).toContain("cursor-agent plugin marketplace add");
-    expect(script).toContain("In Cursor Agent chat, type /add-plugin");
-    expect(script).toContain(`search for "${SKILLS.marketplaceName}"`);
+    expect(script).toContain(".cursor/skills/");
+    expect(script).toContain("git clone");
+    expect(script).toContain("Customize > Skills");
     expect(script).not.toContain("command palette");
   });
 
@@ -2005,17 +2005,37 @@ ${script.slice(start, end)}
     expect(script).toContain("A Cursor subscription cannot be used");
   });
 
-  test("cursor: setup runs with an isolated home, preserves existing MCP servers, and prints the plugin picker steps", async () => {
+  test("cursor: setup preserves MCP servers and installs discoverable skills from a Git repository", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "cursor-connect-"));
     try {
       await mkdir(path.join(home, ".cursor"));
-      await mkdir(path.join(home, "bin"));
-      const cursorAgent = path.join(home, "bin/cursor-agent");
+      const source = path.join(home, "source");
+      await mkdir(path.join(source, "plugins", "skills", "skills", "example"), {
+        recursive: true,
+      });
       await writeFile(
-        cursorAgent,
-        `#!/bin/sh\nprintf '%s\\n' "$*" > '${path.join(home, "cursor-agent-args")}'\n`,
+        path.join(source, "plugins", "skills", "skills", "example", "SKILL.md"),
+        "---\nname: example\ndescription: Example skill\n---\n",
       );
-      await chmod(cursorAgent, 0o755);
+      await execFileAsync("git", [
+        "-C",
+        source,
+        "init",
+        "-q",
+        "--initial-branch=main",
+      ]);
+      await execFileAsync("git", ["-C", source, "add", "."]);
+      await execFileAsync("git", [
+        "-C",
+        source,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.test",
+        "commit",
+        "-qm",
+        "Initial skills",
+      ]);
       await writeFile(
         path.join(home, ".cursor/mcp.json"),
         JSON.stringify({
@@ -2023,12 +2043,19 @@ ${script.slice(start, end)}
         }),
       );
       const scriptPath = path.join(home, "connect.sh");
-      await writeFile(scriptPath, renderSetupScript(fullContext("cursor")));
+      const context = fullContext("cursor");
+      if (!context.skills) throw new Error("Missing skills");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...context,
+          skills: { ...context.skills, cloneUrl: source },
+        }),
+      );
       const { stdout } = await execFileAsync("bash", [scriptPath], {
         env: {
           ...process.env,
           HOME: home,
-          PATH: `${path.join(home, "bin")}:${process.env.PATH}`,
           NO_COLOR: "1",
         },
       });
@@ -2039,12 +2066,51 @@ ${script.slice(start, end)}
         existing: { url: "https://example.test/mcp" },
         [MCP.serverName]: { url: MCP.url },
       });
-      expect(stdout).toContain("In Cursor Agent chat, type /add-plugin");
+      expect(stdout).toContain("Reload Cursor and open Customize > Skills");
       expect(stdout).toContain('turn on "Use OpenAI API Key"');
-      expect(stdout).not.toContain(SKILLS.cloneUrl);
-      expect(await readFile(path.join(home, "cursor-agent-args"), "utf8")).toBe(
-        `plugin marketplace add ${SKILLS.cloneUrl}\n`,
+      expect(stdout).not.toContain(source);
+      expect(
+        await readFile(
+          path.join(
+            home,
+            ".cursor/skills",
+            SKILLS.marketplaceName,
+            "plugins/skills/skills/example/SKILL.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("name: example");
+
+      await writeFile(
+        path.join(source, "plugins", "skills", "skills", "example", "SKILL.md"),
+        "---\nname: example\ndescription: Updated skill\n---\n",
       );
+      await execFileAsync("git", ["-C", source, "add", "."]);
+      await execFileAsync("git", [
+        "-C",
+        source,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.test",
+        "commit",
+        "-qm",
+        "Update skill",
+      ]);
+      await execFileAsync("bash", [scriptPath], {
+        env: { ...process.env, HOME: home, NO_COLOR: "1" },
+      });
+      expect(
+        await readFile(
+          path.join(
+            home,
+            ".cursor/skills",
+            SKILLS.marketplaceName,
+            "plugins/skills/skills/example/SKILL.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("Updated skill");
     } finally {
       await rm(home, { recursive: true, force: true });
     }
@@ -2361,7 +2427,7 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain(".cursor\\mcp.json");
     expect(script).toContain("mcpServers");
     expect(script).toContain("Override OpenAI Base URL");
-    expect(script).toContain("/add-plugin");
+    expect(script).toContain("Customize > Skills");
   });
 
   test("github-copilot passthrough without device-flow config throws", () => {

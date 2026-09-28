@@ -243,6 +243,33 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
+  it("waits for shared skills before generating an approvable setup", async () => {
+    allSkillsMock.mockReturnValue({ data: undefined, isPending: true });
+    const view = renderPanel({ client: findClient("cursor") });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+
+    allSkillsMock.mockReturnValue({
+      data: [
+        { id: "shared-skill", name: "Shared skill", scope: "org", teams: [] },
+      ],
+      isPending: false,
+    });
+    view.rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({ client: findClient("cursor") })}
+      />,
+    );
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skills: { skillIds: ["shared-skill"], ttlDays: null },
+        }),
+      ),
+    );
+  });
+
   it("switches between coding prompts and Desktop setup without preparing coding-client scripts", async () => {
     vi.mocked(useRouter).mockReturnValue({
       replace: vi.fn(),

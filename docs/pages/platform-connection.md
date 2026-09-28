@@ -190,7 +190,7 @@ Cursor is a desktop app, so the script edits its files directly and prints the r
 
 - **MCP gateway** — merges the server into `~/.cursor/mcp.json`. Authenticate it in Cursor under Customize → MCPs.
 - **LLM proxy** — prints the values to paste under Settings → Models → API Keys. Enter an OpenAI API key or personal virtual key, then turn on **Use OpenAI API Key**. Cursor subscriptions cannot authenticate proxy requests.
-- **Skills** — the script registers the marketplace with Cursor CLI when it is installed. Then select `/add-plugin` in Cursor Agent chat, search for the skills plugin, and install it. If Cursor CLI is unavailable, the script prints the registration command.
+- **Skills** — the script clones the shared skills into `~/.cursor/skills/<marketplace-name>`. Cursor discovers the nested skills after a reload; confirm them under Customize → Skills. The script updates the clone when run again.
 - **Plugins** — advertises Cursor plugins in the same marketplace and prints the plugin names to install manually. Cursor delivery is not automated.
 - **Backup** — `~/.cursor/mcp.json.archestra-backup`.
 - **Revert** — restore the backup, or remove the server entry from `mcp.json`; clear the model override in Settings.

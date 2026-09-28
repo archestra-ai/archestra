@@ -67,9 +67,8 @@ under Settings > Plugins. Send a message to make sure that inference works.
    user to /mcp here. OpenCode's separate CLI can read the updated config now.
    Claude Code: in the new session, open /mcp, select the configured server, and authenticate.
    Cursor: open Customize > MCPs to connect/authenticate the configured server.
-   If the setup output registered a skills marketplace, open Cursor Agent chat,
-   run /add-plugin, and search for the plugin by name. Do not paste the
-   marketplace URL into Agent chat or the plugin picker.
+   If the setup installed shared skills, reload Cursor and verify them under
+   Customize > Skills. Cursor reads nested skills from ~/.cursor/skills/.
    To use the proxy for models, configure an OpenAI API key and base URL under
    Settings > Models > API Keys and enable Use OpenAI API Key and Override OpenAI Base URL.
    A Cursor subscription cannot authenticate the proxy. Send a test prompt in

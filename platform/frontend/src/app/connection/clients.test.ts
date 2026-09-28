@@ -16,7 +16,7 @@ import {
 import { SKILL_MARKETPLACE_CLIENTS } from "./skills-marketplace-clients";
 
 describe("Cursor connection instructions", () => {
-  it("registers the marketplace before searching for its plugin", () => {
+  it("installs shared skills in Cursor's discovered skills folder", () => {
     const client = SKILL_MARKETPLACE_CLIENTS.find(
       (candidate) => candidate.id === "cursor",
     );
@@ -26,10 +26,10 @@ describe("Cursor connection instructions", () => {
       marketplaceName: "example-skills",
     });
     expect(steps[0].code).toBe(
-      "cursor-agent plugin marketplace add 'https://example.test/skills/repo.git'",
+      "git clone 'https://example.test/skills/repo.git' \"$HOME/.cursor/skills/example-skills\"",
     );
-    expect(steps[1].body).toContain("Cursor Agent chat");
-    expect(steps[1].body).toContain('search for "example-skills"');
+    expect(steps[1].code).toContain("git -C");
+    expect(steps[1].body).toContain("Customize → Skills");
   });
 
   it("enables the custom OpenAI key in the current Cursor settings flow", () => {

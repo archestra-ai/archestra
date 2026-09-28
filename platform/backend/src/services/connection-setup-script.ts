@@ -539,7 +539,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills) {
         steps.push(
-          `In Cursor Agent chat, select \`/add-plugin\`, search for "${ctx.skills.marketplaceName}", and install the skills plugin.`,
+          "Reload Cursor, then open Customize → Skills to confirm the shared skills are available.",
         );
         if (ctx.skills.pluginNames?.length) {
           steps.push(
@@ -1498,28 +1498,38 @@ ARCHESTRA_CURSOR`);
   }
 
   if (ctx.skills) {
-    sections.push(`say ${sh(`Registering ${describeMarketplaceContents(ctx.skills).label} in Cursor`)}
-cursor_marketplace_registered=0
-if command -v cursor-agent >/dev/null 2>&1; then
-  if cursor-agent plugin marketplace add ${sh(ctx.skills.cloneUrl)} >/dev/null 2>&1; then
-    cursor_marketplace_registered=1
-    ok ${sh(`Cursor marketplace "${ctx.skills.marketplaceName}" registered.`)}
+    sections.push(`say ${sh(`Installing ${describeMarketplaceContents(ctx.skills).label} for Cursor`)}
+CURSOR_SKILLS_DIR="$HOME/.cursor/skills/${ctx.skills.marketplaceName}"
+cursor_skills_installed=0
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$CURSOR_SKILLS_DIR/.git" ]; then
+    if git -C "$CURSOR_SKILLS_DIR" remote set-url origin ${sh(ctx.skills.cloneUrl)} && git -C "$CURSOR_SKILLS_DIR" pull --ff-only -q; then
+      cursor_skills_installed=1
+    fi
+  elif [ ! -e "$CURSOR_SKILLS_DIR" ]; then
+    mkdir -p "$(dirname "$CURSOR_SKILLS_DIR")"
+    if git clone -q ${sh(ctx.skills.cloneUrl)} "$CURSOR_SKILLS_DIR"; then
+      cursor_skills_installed=1
+    fi
   else
-    warn ${sh("Cursor marketplace registration failed. Check that cursor-agent is signed in and can reach the marketplace.")}
+    warn ${sh("Cursor skills folder already exists and is not a Git repository.")}
   fi
 else
-  warn ${sh("Cursor CLI is not installed. Install cursor-agent, then register the marketplace manually.")}
+  warn ${sh("git is not installed. Install git to fetch shared skills for Cursor.")}
 fi
-if [ "$cursor_marketplace_registered" -eq 0 ]; then
+if [ "$cursor_skills_installed" -eq 1 ]; then
+  ok ${sh(`Cursor skills installed in ~/.cursor/skills/${ctx.skills.marketplaceName}.`)}
+else
+  warn ${sh("Cursor skills installation failed. Retry after checking git access to the marketplace.")}
 cat <<'ARCHESTRA_CURSOR_SKILLS'
 
-After installing or signing in to cursor-agent, run:
-  cursor-agent plugin marketplace add ${sh(ctx.skills.cloneUrl)}
+Clone the marketplace into ~/.cursor/skills/${ctx.skills.marketplaceName}:
+  git clone ${sh(ctx.skills.cloneUrl)} "$HOME/.cursor/skills/${ctx.skills.marketplaceName}"
 ARCHESTRA_CURSOR_SKILLS
 fi
 cat <<'ARCHESTRA_CURSOR_SKILLS'
 
-In Cursor Agent chat, type /add-plugin, search for "${ctx.skills.marketplaceName}", and install it.
+Reload Cursor and open Customize > Skills to confirm the shared skills are available.
 ARCHESTRA_CURSOR_SKILLS`);
   }
 

@@ -134,9 +134,10 @@ const CONNECT_SKILLS_DEFER_MS = 750;
 function useConnectSkills(enabled: boolean): {
   eligible: boolean;
   skills: ConnectSkill[];
+  loading: boolean;
 } {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  const { data: skills } = useAllSkills({
+  const { data: skills, isPending } = useAllSkills({
     enabled: enabled && canReadSkills === true,
     // Step 2's content, not step 1's: let the part of the page the user acts
     // on first render before walking the catalogue.
@@ -145,6 +146,9 @@ function useConnectSkills(enabled: boolean): {
   return {
     eligible: enabled && canReadSkills === true && (skills ?? []).length > 0,
     skills: skills ?? [],
+    loading:
+      enabled &&
+      (canReadSkills === undefined || (canReadSkills && isPending === true)),
   };
 }
 
@@ -199,8 +203,11 @@ export function ConnectCommandPanel({
   const [customizing, setCustomizing] = useState(false);
   const compact = !!connectRequest && !customizing;
   const requestedPlatform = searchParams.get("platform");
-  const { eligible: skillsEligible, skills: allSkills } =
-    useConnectSkills(skillsEnabled);
+  const {
+    eligible: skillsEligible,
+    skills: allSkills,
+    loading: skillsLoading,
+  } = useConnectSkills(skillsEnabled);
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
@@ -555,6 +562,7 @@ export function ConnectCommandPanel({
     // (or the script would silently drop the proxy).
     if (
       !hasRunnableAnything ||
+      skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
       virtualKeyUnbacked
@@ -568,6 +576,7 @@ export function ConnectCommandPanel({
   }, [
     inputsKey,
     hasRunnableAnything,
+    skillsLoading,
     pluginsLoading,
     needsPerUserConnect,
     virtualKeyUnbacked,

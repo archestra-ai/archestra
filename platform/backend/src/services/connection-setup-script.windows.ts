@@ -375,7 +375,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills) {
         steps.push(
-          `In Cursor Agent chat, select \`/add-plugin\`, search for "${ctx.skills.marketplaceName}", and install the skills plugin.`,
+          "Reload Cursor, then open Customize → Skills to confirm the shared skills are available.",
         );
       }
       break;
@@ -1201,29 +1201,39 @@ In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
 
   if (ctx.skills) {
     const pluginNames = ctx.skills.pluginNames ?? [];
-    sections.push(`Say ${psq(`Registering ${describeMarketplaceContents(ctx.skills).label} in Cursor`)}
-$cursorMarketplaceRegistered = $false
-if (Get-Command cursor-agent -ErrorAction SilentlyContinue) {
-  & cursor-agent plugin marketplace add ${psq(ctx.skills.cloneUrl)} *> $null
-  if ($LASTEXITCODE -eq 0) {
-    $cursorMarketplaceRegistered = $true
-    Ok ${psq(`Cursor marketplace "${ctx.skills.marketplaceName}" registered.`)}
+    sections.push(`Say ${psq(`Installing ${describeMarketplaceContents(ctx.skills).label} for Cursor`)}
+$cursorSkillsDir = Join-Path $env:USERPROFILE ${psq(`.cursor/skills/${ctx.skills.marketplaceName}`)}
+$cursorSkillsInstalled = $false
+if (Get-Command git -ErrorAction SilentlyContinue) {
+  if (Test-Path (Join-Path $cursorSkillsDir '.git')) {
+    & git -C $cursorSkillsDir remote set-url origin ${psq(ctx.skills.cloneUrl)} *> $null
+    if ($LASTEXITCODE -eq 0) {
+      & git -C $cursorSkillsDir pull --ff-only -q *> $null
+      $cursorSkillsInstalled = $LASTEXITCODE -eq 0
+    }
+  } elseif (-not (Test-Path $cursorSkillsDir)) {
+    $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $cursorSkillsDir)
+    & git clone -q ${psq(ctx.skills.cloneUrl)} $cursorSkillsDir *> $null
+    $cursorSkillsInstalled = $LASTEXITCODE -eq 0
   } else {
-    Warn ${psq("Cursor marketplace registration failed. Check that cursor-agent is signed in and can reach the marketplace.")}
+    Warn ${psq("Cursor skills folder already exists and is not a Git repository.")}
   }
 } else {
-  Warn ${psq("Cursor CLI is not installed. Install cursor-agent, then register the marketplace manually.")}
+  Warn ${psq("git is not installed. Install git to fetch shared skills for Cursor.")}
 }
-if (-not $cursorMarketplaceRegistered) {
+if ($cursorSkillsInstalled) {
+  Ok ${psq(`Cursor skills installed in ~/.cursor/skills/${ctx.skills.marketplaceName}.`)}
+} else {
+  Warn ${psq("Cursor skills installation failed. Retry after checking git access to the marketplace.")}
 Write-Host @'
 
-After installing or signing in to cursor-agent, run:
-  cursor-agent plugin marketplace add ${psq(ctx.skills.cloneUrl)}
+Clone the marketplace into ~/.cursor/skills/${ctx.skills.marketplaceName}:
+  git clone ${psq(ctx.skills.cloneUrl)} "$HOME/.cursor/skills/${ctx.skills.marketplaceName}"
 '@
 }
 Write-Host @'
 
-In Cursor Agent chat, type /add-plugin, search for "${ctx.skills.marketplaceName}", and install it.
+Reload Cursor and open Customize > Skills to confirm the shared skills are available.
 ${
   pluginNames.length > 0
     ? `

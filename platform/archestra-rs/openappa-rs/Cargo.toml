@@ -9,12 +9,10 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Temporary merge of OpenAPPA PR #509 with upstream v0.27.0. Refresh this pin
-# after the upstream PR merges so the checked status read stays available.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7525b6b710dc6abeef93af701aaeaecdeabdf2b" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7525b6b710dc6abeef93af701aaeaecdeabdf2b" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7525b6b710dc6abeef93af701aaeaecdeabdf2b", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7525b6b710dc6abeef93af701aaeaecdeabdf2b" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", branch = "main" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", branch = "main" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", branch = "main", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", branch = "main" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

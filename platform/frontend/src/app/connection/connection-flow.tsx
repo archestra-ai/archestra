@@ -251,7 +251,7 @@ export function ConnectionFlow({
     <div className="flex flex-col">
       {/* Step 1 — Client */}
       {!searchParams.get("connectRequest") && (
-        <WizardStep n={1} title="Select your client" last={!client}>
+        <WizardStep n={1} title="Choose an AI app" last={!client}>
           <ClientPicker
             clients={visibleClients}
             selected={clientId}

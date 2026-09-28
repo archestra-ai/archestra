@@ -78,7 +78,7 @@ export default function ConnectionPage() {
             </span>
           </>
         ) : (
-          "Connect your client"
+          "Connect your AI app"
         )
       }
       documentTitle={

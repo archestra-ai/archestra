@@ -88,15 +88,12 @@ impl From<ContractError> for ClientError {
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentCreate {
     pub name: String,
-    pub scope: String,
     #[serde(rename = "agentType")]
     pub agent_type: String,
     #[serde(rename = "systemPrompt", skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
     #[serde(rename = "toolExposureMode")]
     pub tool_exposure_mode: ToolExposureMode,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub teams: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -104,7 +101,6 @@ pub struct CatalogCreate {
     pub name: String,
     #[serde(rename = "serverType")]
     pub server_type: String,
-    pub scope: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(rename = "serverUrl", skip_serializing_if = "Option::is_none")]
@@ -114,7 +110,6 @@ pub struct CatalogCreate {
 #[derive(Debug, Clone, Serialize)]
 pub struct LlmKeyCreate {
     pub provider: String,
-    pub scope: String,
     #[serde(rename = "apiKey")]
     pub api_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -437,19 +432,6 @@ impl EvalClient {
         )
     }
 
-    pub async fn create_team(&self, name: &str) -> Result<String, ClientError> {
-        let body = require_dict(
-            self.request(
-                Method::POST,
-                "/api/teams",
-                None,
-                Some(&serde_json::json!({"name": name})),
-            )
-            .await?,
-            "POST /api/teams",
-        )?;
-        require_str_field(&body, "id", "POST /api/teams")
-    }
 
     /// Create a project. Files produced in its conversations are owned by the project rather than the
     /// author; the bench creates one per rollout, so concurrent lanes and successive tasks never
@@ -996,7 +978,6 @@ impl EvalClient {
         &self,
         repo_url: &str,
         skill_paths: &[String],
-        scope: &str,
         ref_: Option<&str>,
     ) -> Result<HashMap<String, JsonValue>, ClientError> {
         let mut body = serde_json::Map::new();
@@ -1005,7 +986,6 @@ impl EvalClient {
             "skillPaths".to_string(),
             JsonValue::Array(skill_paths.iter().map(|s| JsonValue::String(s.clone())).collect()),
         );
-        body.insert("scope".to_string(), JsonValue::String(scope.to_string()));
         with_github_token(&mut body);
 
         let prev_timeout = self.timeout();
@@ -1283,7 +1263,6 @@ mod tests {
         let v = serde_json::to_value(CatalogCreate {
             name: "bench".into(),
             server_type: "remote".into(),
-            scope: "org".into(),
             description: None,
             server_url: Some("http://127.0.0.1:1/mcp".into()),
         })
@@ -1297,11 +1276,9 @@ mod tests {
     fn test_agent_create_serializes_tool_exposure_mode_wire_value() {
         let agent = AgentCreate {
             name: "a".into(),
-            scope: "org".into(),
             agent_type: "agent".into(),
             system_prompt: None,
             tool_exposure_mode: ToolExposureMode::SearchAndRunOnly,
-            teams: vec![],
         };
         let v = serde_json::to_value(&agent).unwrap();
         assert_eq!(v["toolExposureMode"], "search_and_run_only");
@@ -1319,7 +1296,6 @@ mod tests {
     fn test_llm_key_create_serializes_camelcase_wire_keys() {
         let v = serde_json::to_value(LlmKeyCreate {
             provider: "anthropic".into(),
-            scope: "org".into(),
             api_key: "sk".into(),
             name: Some("bench".into()),
             base_url: Some("https://api.kimi.com/coding/".into()),

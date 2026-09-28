@@ -92,7 +92,13 @@ under Settings > Plugins. Send a message to make sure that inference works.
    error; do not pipe a confirmation answer or start another auth. Then run
    opencode mcp list and confirm the gateway is connected.
    Let the user complete any browser consent or client execution approval.
-   Then close with one short, imperative user instruction and nothing else, e.g.:
+   Cursor: installation alone is not a complete connection. If native OAuth,
+   the skills check, or proxy inference remain unverified, say so explicitly.
+   List the remaining steps from the setup output, including any manual User
+   Rules and model settings. Ask the user to enter their provider key in Cursor
+   Settings; never ask for the key in chat. Do not claim the proxy is configured
+   merely because the installer printed its settings.
+   For other clients, close with one short, imperative user instruction, e.g.:
    "Open a new terminal, then run claude /mcp and select <server> to sign in."
    OpenCode: "Close every OpenCode process, then start opencode again."
 6. Verify the configured gateway can list tools before reporting a working connection —

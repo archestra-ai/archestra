@@ -5,6 +5,7 @@ import {
 } from "@/guardrails/trusted-data";
 import { AgentTeamModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
+import { isGuardrailsV2Active } from "@/services/guardrails-mode";
 import type { CommonMessage, UnsafeContextBoundary } from "@/types";
 import { extractCommonToolCallArguments } from "@/types";
 
@@ -21,6 +22,8 @@ export async function evaluateToolExecutionContextTrust(params: {
   contextIsTrusted: boolean;
   unsafeContextBoundary?: UnsafeContextBoundary;
 }> {
+  if (await isGuardrailsV2Active()) return { contextIsTrusted: true };
+
   // This caller discards the result-policy redactions the evaluator computes,
   // so with the verdict and boundary already settled there is nothing left to
   // learn — and evaluating would cost a team lookup plus a policy pass over the

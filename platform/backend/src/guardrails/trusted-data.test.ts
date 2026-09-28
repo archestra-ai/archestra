@@ -10,7 +10,9 @@ import {
 } from "@/agents/subagents/dual-llm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { cacheManager } from "@/cache-manager";
+import config from "@/config";
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { CommonMessage, Tool } from "@/types";
@@ -19,6 +21,57 @@ import {
   evaluateIfContextIsTrusted,
   sensitiveContextOriginFromBoundary,
 } from "./trusted-data";
+
+test("v2 bypasses result policies and disabling it restores v1 redaction", async ({
+  makeAgent,
+  makeTool,
+  makeTrustedDataPolicy,
+}) => {
+  const agent = await makeAgent();
+  const tool = await makeTool({ name: "read_document", agentId: agent.id });
+  await makeTrustedDataPolicy(tool.id, {
+    action: "block_always",
+    conditions: [{ key: "source", operator: "equal", value: "external" }],
+    description: "Blocked by v1",
+  });
+  for (const [featureEnabled, enabled] of [
+    [false, true],
+    [true, true],
+    [true, false],
+  ]) {
+    config.openappa.enabled = featureEnabled;
+    await GuardrailsDeploymentModel.setEnabled(enabled);
+    const result = await evaluateIfContextIsTrusted({
+      messages: [
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "result",
+              name: tool.name,
+              content: { source: "external" },
+              isError: false,
+            },
+          ],
+        },
+      ],
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: true,
+      policyContext: { teamIds: [] },
+    });
+    if (featureEnabled && enabled) {
+      expect(result).toEqual({
+        contextIsTrusted: true,
+        toolResultUpdates: {},
+        dualLlmAnalyses: [],
+      });
+    } else {
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates.result).toContain("Blocked by v1");
+    }
+  }
+});
 
 describe("sensitiveContextOriginFromBoundary", () => {
   test("maps a tool-result boundary to a tool_result origin", () => {

@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-27
+lastUpdated: 2026-09-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -2151,7 +2151,7 @@ Policies are stored in PostgreSQL and changed through the configuration agent on
 
 Reporting sends the agent’s message verbatim, plus filtered policy diagnostics. Reports identify Archestra and the hostname from `ARCHESTRA_FRONTEND_URL`. Agents can include their session’s policy decisions. Diagnostics exclude raw prompts, tool arguments, tool outputs, and session identifiers. Policy names remain visible. Messages must not contain secrets, personal data, or task content. Reporting does not change policies or grant tool permissions. The active policy must permit the `yell` tool, directly or through a matching wildcard. Restart the backend after changing the reporting flag.
 
-With OpenAPPA disabled, existing Tool Guardrails run unchanged. When enabled, OpenAPPA replaces proxy tool-call and tool-result checks. Errors fail closed. A blocked call returns as a `get_remedy_plans` notice tool call. The model inspects the ruling, selects a remedy with `execute_remedy_plan`, and retries. The proxy injects missing notice or control tool declarations. Calls that need human approval stay blocked. See the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+OpenAPPA enforcement requires both the feature flag and the deployment switch. While enforcement is active, v1 Tool Guardrails invocation, approval, and result policies are inactive. Turning enforcement off restores the saved v1 policies. Tool access permissions apply in both modes. Errors fail closed. A blocked call returns as a `get_remedy_plans` notice tool call. The model inspects the ruling, selects a remedy with `execute_remedy_plan`, and retries. The proxy injects missing notice or control tool declarations. Calls that need human approval stay blocked. See the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
 
 Notice restoration supports Anthropic Messages, OpenAI Responses, and OpenAI Chat Completions. Bedrock InvokeModel uses Anthropic restoration. Other protocols evaluate calls and results, but notices stay in history.
 

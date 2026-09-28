@@ -13,6 +13,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
+import { isGuardrailsV2Active } from "@/services/guardrails-mode";
 import type { AutonomyPolicyOperator, ToolInvocation } from "@/types";
 import ToolModel from "./tool";
 
@@ -234,6 +235,9 @@ class ToolInvocationPolicyModel {
     // name lookup so approval is decided against the row that actually runs.
     resolvedToolId?: string,
   ): Promise<boolean> {
+    // Approval rules belong to v1, including chat and autonomous execution.
+    if (await isGuardrailsV2Active()) return false;
+
     // Archestra tools always bypass policies (consistent with evaluateBatch),
     // except policy-evaluated built-ins like query_knowledge_sources
     if (archestraMcpBranding.isPolicyBypassedToolName(toolName)) {
@@ -435,6 +439,10 @@ class ToolInvocationPolicyModel {
     isContextTrusted: boolean,
     resolvedToolIdByName?: Map<string, string>,
   ): Promise<EvaluationResult & { toolCallName?: string; toolId?: string }> {
+    // Shared by the proxy, gateway, run_tool, delegation, and app execution.
+    // Availability and access checks remain the caller's responsibility.
+    if (await isGuardrailsV2Active()) return { isAllowed: true, reason: "" };
+
     // Filter out policy-bypassing Archestra tools and local agent delegation
     // tools. A caller-provided resolved ID means the name identifies an exact
     // policy-bearing row (for example an outbound A2A delegation), so it must

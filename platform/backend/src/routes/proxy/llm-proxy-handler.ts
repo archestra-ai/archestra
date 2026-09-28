@@ -1782,8 +1782,8 @@ export async function handleLLMProxy<
         // request and the tool results are built from it.
         // Unsupported declarations are rejected; proxy-only clients without
         // gateway remedies are still governed and receive text refusals.
-        // The ordinary invocation policies still run: they are evaluated inside
-        // the plugin pass, before APPA reserves a call.
+        // The plugin pass still checks tool availability before APPA reserves
+        // a call. V1 invocation and result policies are inactive in v2 mode.
         const appaRequest = prepareAppaRequest({
           body,
           interactionType: provider.interactionType,

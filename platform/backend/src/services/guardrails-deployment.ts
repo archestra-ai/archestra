@@ -8,12 +8,7 @@ import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
 
-/** Read shared state at request boundaries so all replicas see the same switch. */
-export async function isGuardrailsV2Active(): Promise<boolean> {
-  return (
-    config.openappa.enabled && (await GuardrailsDeploymentModel.isEnabled())
-  );
-}
+export { isGuardrailsV2Active } from "./guardrails-mode";
 export async function getGuardrailsDeployment() {
   const enabled = await GuardrailsDeploymentModel.isEnabled();
   return {

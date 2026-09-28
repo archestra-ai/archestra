@@ -10,7 +10,10 @@ import {
   TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import config from "@/config";
 import { ToolModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { describe, expect, test } from "@/test";
 import {
   evaluatePolicies,
@@ -693,6 +696,63 @@ describe("evaluatePolicies", () => {
 // evaluateSingleMcpToolInvocationPolicy (MCP Gateway / run_tool execution path)
 // ---------------------------------------------------------------------------
 describe("evaluateSingleMcpToolInvocationPolicy", () => {
+  for (const action of ["block_always", "require_approval"] as const) {
+    test(`switches ${action} enforcement off only while v2 is active`, async ({
+      makeAgent,
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({ name: "guarded_tool", agentId: agent.id });
+      await makeToolPolicy(tool.id, { action, conditions: [] });
+
+      for (const [featureEnabled, enabled] of [
+        [false, false],
+        [false, true],
+        [true, false],
+        [true, true],
+        [true, false],
+      ]) {
+        config.openappa.enabled = featureEnabled;
+        await GuardrailsDeploymentModel.setEnabled(enabled);
+        const active = featureEnabled && enabled;
+        const block = await evaluateSingleMcpToolInvocationPolicy({
+          agentId: agent.id,
+          toolName: tool.name,
+          toolInput: {},
+          contextIsTrusted: true,
+        });
+        expect(block === null).toBe(active);
+        expect(
+          await ToolInvocationPolicyModel.checkApprovalRequired(
+            tool.name,
+            {},
+            { teamIds: [] },
+            tool.id,
+          ),
+        ).toBe(!active && action === "require_approval");
+      }
+    });
+  }
+
+  test("v2 does not bypass gateway tool availability", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const block = await evaluateSingleMcpToolInvocationPolicy({
+      agentId: agent.id,
+      toolName: "disabled_tool",
+      toolInput: {},
+      contextIsTrusted: true,
+      enabledToolNames: new Set(["allowed_tool"]),
+    });
+    expect(block?.reason).toBe(
+      TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
+    );
+  });
+
   // An agent shared with a team by grant alone (no retired team row) is that
   // team's agent for a team-conditioned policy. Reading the retired rows made
   // this block silently not match: fails open.

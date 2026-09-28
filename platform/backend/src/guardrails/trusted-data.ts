@@ -22,6 +22,7 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { TrustedDataPolicyModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
+import { isGuardrailsV2Active } from "@/services/guardrails-mode";
 import type {
   CommonMessage,
   DualLlmAnalysis,
@@ -138,6 +139,15 @@ export async function evaluateIfContextIsTrusted(params: {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
 }> {
+  // OpenAPPA owns result handling and context labels while v2 is active.
+  if (await isGuardrailsV2Active()) {
+    return {
+      toolResultUpdates: {},
+      contextIsTrusted: true,
+      dualLlmAnalyses: [],
+    };
+  }
+
   const {
     messages,
     agentId,

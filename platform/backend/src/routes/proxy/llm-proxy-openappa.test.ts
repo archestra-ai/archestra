@@ -2701,7 +2701,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   for (const stream of [true, false]) {
-    test(`existing invocation policies remain enforced alongside APPA (stream=${stream})`, async ({
+    test(`v2 replaces invocation policies and disabling it restores v1 (stream=${stream})`, async ({
       makeTool,
       makeToolPolicy,
     }) => {
@@ -2720,13 +2720,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         payload: payload(stream),
       };
 
-      const denied = await app.inject(request);
-      expect(denied.statusCode, denied.body).toBe(200);
-      expect(denied.body).toContain(
+      const allowed = await app.inject(request);
+      expect(allowed.statusCode, allowed.body).toBe(200);
+      expect(allowed.body).not.toContain(
         "Platform weather policy refused this call",
       );
-      expect(denied.body).not.toContain('"type":"tool_use"');
-      expect(events.some((event) => event.event === "tool_call")).toBe(false);
+      expect(allowed.body).toContain('"type":"tool_use"');
+      expect(events.some((event) => event.event === "tool_call")).toBe(true);
       expect(evaluatePolicies).toHaveBeenCalledOnce();
       evaluatePolicies.mockClear();
 
@@ -2750,11 +2750,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(blocked.body).not.toContain('"type":"tool_use"');
         expect(evaluatePolicies).toHaveBeenCalledOnce();
         expect(events).toHaveLength(nativeCalls);
-        // A refusal is a terminal answer on both paths: the turn ends, so
-        // the offers of this turn do not outlive it.
-        expect(events).toContainEqual(
-          expect.objectContaining({ event: "turn_end" }),
-        );
       } finally {
         unregisterObserver();
       }
@@ -2786,7 +2781,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events).toEqual([]);
     });
 
-    test(`legacy policies check plugin rewrites before APPA reserves a call (stream=${stream})`, async ({
+    test(`v2 evaluates plugin rewrites without v1 blocking them (stream=${stream})`, async ({
       makeTool,
       makeToolPolicy,
     }) => {
@@ -2820,9 +2815,15 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           payload: payload(stream),
         });
         expect(response.statusCode, response.body).toBe(200);
-        expect(response.body).toContain("Rewritten target blocked");
-        expect(response.body).not.toContain('"type":"tool_use"');
-        expect(events.some((event) => event.event === "tool_call")).toBe(false);
+        expect(response.body).not.toContain("Rewritten target blocked");
+        expect(response.body).toContain('"type":"tool_use"');
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            event: "tool_call",
+            tool: "get_weather",
+            arguments: { location: "blocked" },
+          }),
+        );
       } finally {
         unregisterRewriter();
       }
@@ -2972,7 +2973,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(evaluateTrustedData).toHaveBeenCalledTimes(2);
   });
 
-  test("existing result blocking reaches APPA and stays untrusted for invocation checks", async ({
+  test("v2 receives raw results without v1 blocking or tainting the context", async ({
     makeTool,
     makeToolPolicy,
     makeTrustedDataPolicy,
@@ -3023,14 +3024,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "tool_result",
-        output: expect.stringContaining("Unsafe result"),
+        output: JSON.stringify({ secret: "RAW SECRET" }),
       }),
     );
-    expect(events.some((event) => event.event === "tool_call")).toBe(false);
+    expect(events.some((event) => event.event === "tool_call")).toBe(true);
     expect(JSON.stringify(providerRequests)).toContain("APPROVED REPLACEMENT");
     expect(JSON.stringify(providerRequests)).not.toContain("RAW SECRET");
-    expect(response.body).toContain("this session contains sensitive data");
-    expect(response.body).not.toContain('"type":"tool_use"');
+    expect(response.body).not.toContain("this session contains sensitive data");
+    expect(response.body).toContain('"type":"tool_use"');
   });
 
   test("Claude Code compact stays on the root and a new session opens a fresh root with no parent id", async () => {

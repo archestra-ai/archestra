@@ -38,11 +38,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="$(gh api repos/openai/codex/releases/latest --jq .tag_name)"
-          if [[ ! "$tag" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Unexpected Codex stable release tag: $tag"
-            exit 1
-          fi
+          page=1
+          while :; do
+            tag="$(gh api "repos/openai/codex/releases?per_page=30&page=$page" --jq '
+              if length == 0 then "END"
+              else ([.[] | select(.draft == false and .prerelease == false and
+                (.tag_name | test("^rust-v[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tag_name] | first // "")
+              end')"
+            if [[ "$tag" == "END" ]]; then
+              echo "::error::No stable Codex CLI release found"
+              exit 1
+            fi
+            [[ -n "$tag" ]] && break
+            ((page += 1))
+          done
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#rust-v}" >> "$GITHUB_OUTPUT"
 

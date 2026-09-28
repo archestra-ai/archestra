@@ -11,6 +11,7 @@ import {
   isDbStatementTimeoutError,
 } from "@/database/retry";
 import { ApiError } from "@/types";
+import { isFetchConnectivityError } from "@/utils/network-errors";
 import { captureServerException } from "./exception-capture";
 
 export function handleServerError(
@@ -141,6 +142,22 @@ export function handleServerError(
     );
     return reply.status(coerced.statusCode).send({
       error: { message: coerced.message, type: coerced.type },
+    });
+  }
+
+  // Native HTTP fetch errors share socket codes with database connections.
+  // Preserve their known origin before the broader database errno matching.
+  if (isFetchConnectivityError(error)) {
+    this.log.warn(
+      { ...requestContext, statusCode: 503 },
+      "HTTP 503 upstream service unavailable",
+    );
+    return reply.status(503).send({
+      error: {
+        message:
+          "Could not connect to an upstream service. Check the service URL and network access, then retry.",
+        type: "api_service_unavailable_error",
+      },
     });
   }
 

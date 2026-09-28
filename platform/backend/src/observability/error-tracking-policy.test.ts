@@ -115,6 +115,22 @@ describe("classifyErrorForTracking", () => {
     expect(refusedDecision.fingerprint?.[0]).toBe("db-transient");
   });
 
+  test("does not group native HTTP fetch failures as database outages", () => {
+    const cause = new AggregateError([
+      Object.assign(new Error("connection timed out"), { code: "ETIMEDOUT" }),
+    ]);
+    expect(
+      classifyErrorForTracking(new TypeError("fetch failed", { cause })),
+    ).toEqual({ report: false });
+    // The same network failure from a database operation must still report.
+    expect(
+      classifyErrorForTracking(new Error("Failed query", { cause })),
+    ).toMatchObject({
+      report: true,
+      fingerprint: ["db-transient", "ETIMEDOUT"],
+    });
+  });
+
   test("drops reply-from upstream failures from the passthrough routes", () => {
     // @fastify/reply-from's ServiceUnavailableError shape (code + 503),
     // raised when a provider passthrough cannot reach its upstream.

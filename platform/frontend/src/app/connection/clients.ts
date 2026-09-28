@@ -376,8 +376,8 @@ claude`,
       language: "json",
       steps: [
         {
-          title: "Open Cursor settings",
-          body: "Cmd ⌘ + , → MCP → Edit mcp.json.",
+          title: "Open Cursor Customize",
+          body: "Open Customize → MCPs → New MCP Server to edit mcp.json.",
         },
         {
           title: "Paste the config",
@@ -385,7 +385,7 @@ claude`,
         },
         {
           title: "Enable the server",
-          body: "Toggle the server on under MCP Servers. Tools appear in the @-mention menu.",
+          body: "Authenticate the server under Customize → MCPs. Its tools appear after sign-in.",
         },
       ],
       cta: {
@@ -420,8 +420,8 @@ claude`,
             body: `Turn on "Override OpenAI Base URL" and paste ${url} into the field.`,
           },
           {
-            title: "Paste your key and verify",
-            body: `Paste ${tokenPlaceholder} into the API Key field, then click Verify. Cursor now routes every OpenAI-compatible model through ${appName}.`,
+            title: "Enable the OpenAI API key",
+            body: `Paste ${tokenPlaceholder} into the API Key field and turn on "Use OpenAI API Key". Supported OpenAI models then use ${appName}. A Cursor subscription cannot be used as a provider credential.`,
           },
         ],
       }),

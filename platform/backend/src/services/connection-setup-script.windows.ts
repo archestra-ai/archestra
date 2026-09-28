@@ -365,7 +365,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
     case "cursor":
       if (ctx.mcp) {
         steps.push(
-          `Open Cursor settings → MCP and toggle on "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
+          `Open Cursor Customize → MCPs and authenticate "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
         );
       }
       if (ctx.proxy) {
@@ -375,7 +375,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills) {
         steps.push(
-          "Run /add-plugin in Cursor's command palette and paste the clone URL printed above.",
+          `In Cursor Agent chat, select \`/add-plugin\`, search for "${ctx.skills.marketplaceName}", and install the skills plugin.`,
         );
       }
       break;
@@ -1192,20 +1192,38 @@ In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
   1. Turn on "Override OpenAI Base URL" and paste: ${ctx.proxy.url}
   2. ${
     ctx.proxy.virtualKey
-      ? `Paste this key into the API Key field and click Verify:
+      ? `Paste this key into the API Key field and turn on "Use OpenAI API Key":
      ${ctx.proxy.virtualKey}`
-      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and click Verify.`
+      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and turn on "Use OpenAI API Key". A Cursor subscription cannot be used as a provider credential.`
   }
 '@`);
   }
 
   if (ctx.skills) {
     const pluginNames = ctx.skills.pluginNames ?? [];
-    sections.push(`Say ${psq(`${describeMarketplaceContents(ctx.skills).label} (manual step)`)}
+    sections.push(`Say ${psq(`Registering ${describeMarketplaceContents(ctx.skills).label} in Cursor`)}
+$cursorMarketplaceRegistered = $false
+if (Get-Command cursor-agent -ErrorAction SilentlyContinue) {
+  & cursor-agent plugin marketplace add ${psq(ctx.skills.cloneUrl)} *> $null
+  if ($LASTEXITCODE -eq 0) {
+    $cursorMarketplaceRegistered = $true
+    Ok ${psq(`Cursor marketplace "${ctx.skills.marketplaceName}" registered.`)}
+  } else {
+    Warn ${psq("Cursor marketplace registration failed. Check that cursor-agent is signed in and can reach the marketplace.")}
+  }
+} else {
+  Warn ${psq("Cursor CLI is not installed. Install cursor-agent, then register the marketplace manually.")}
+}
+if (-not $cursorMarketplaceRegistered) {
 Write-Host @'
 
-In Cursor's command palette run /add-plugin and paste:
-  ${ctx.skills.cloneUrl}
+After installing or signing in to cursor-agent, run:
+  cursor-agent plugin marketplace add ${psq(ctx.skills.cloneUrl)}
+'@
+}
+Write-Host @'
+
+In Cursor Agent chat, type /add-plugin, search for "${ctx.skills.marketplaceName}", and install it.
 ${
   pluginNames.length > 0
     ? `

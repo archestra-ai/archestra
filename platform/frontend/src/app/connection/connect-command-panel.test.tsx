@@ -1318,6 +1318,18 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
   });
 
+  it("explains Cursor needs an API key for proxy passthrough", async () => {
+    renderPanel({ client: findClient("cursor") });
+    await screen.findByText(COMMAND);
+
+    await userEvent.setup().click(screen.getByTestId("connect-change-proxy"));
+    expect(
+      screen.getByText(
+        /Its subscription cannot authenticate requests through the proxy/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("gates step 3 and hides the OAuth step when virtual-key auth has no backing key", async () => {
     availableKeysMock.mockReturnValue({ data: [] });
     const user = userEvent.setup();

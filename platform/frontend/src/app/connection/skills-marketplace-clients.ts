@@ -76,13 +76,13 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
     getInstallSteps: ({ cloneUrl, marketplaceName }) => [
       {
         label: "Register the marketplace",
-        body: "Open Cursor's command palette and run /add-plugin, then paste the clone URL.",
-        code: `/add-plugin ${cloneUrl}`,
+        body: "Run this in a terminal with Cursor CLI installed and signed in. A repository URL does not resolve in Cursor's /add-plugin search.",
+        code: `cursor-agent plugin marketplace add '${cloneUrl.replaceAll("'", "'\\''")}'`,
         language: "bash",
       },
       {
         label: "Install the skills plugin",
-        body: `The included skills appear under the "${marketplaceName}" plugin entry; install it from the marketplace view.`,
+        body: `In Cursor Agent chat, select /add-plugin and search for "${marketplaceName}". Install the skills plugin from the picker.`,
         language: "text",
       },
     ],

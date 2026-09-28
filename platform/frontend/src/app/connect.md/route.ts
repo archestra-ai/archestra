@@ -66,9 +66,16 @@ under Settings > Plugins. Send a message to make sure that inference works.
    Claude Code only registers the gateway in a NEW session, so never send the
    user to /mcp here. OpenCode's separate CLI can read the updated config now.
    Claude Code: in the new session, open /mcp, select the configured server, and authenticate.
-   Cursor: use its MCP settings to connect/authenticate the configured server.
+   Cursor: open Customize > MCPs to connect/authenticate the configured server.
+   If the setup output registered a skills marketplace, open Cursor Agent chat,
+   run /add-plugin, and search for the plugin by name. Do not paste the
+   marketplace URL into Agent chat or the plugin picker.
+   To use the proxy for models, configure an OpenAI API key and base URL under
+   Settings > Models > API Keys and enable Use OpenAI API Key and Override OpenAI Base URL.
+   A Cursor subscription cannot authenticate the proxy. Send a test prompt in
+   Cursor and confirm the request appears in this deployment before reporting success.
    Codex: use codex mcp login SERVER_NAME. Open a new terminal and run codex.
-   The setup script selects the proxy as the default provider.
+   Codex: the setup script selects the proxy as the default provider.
    OpenCode: run opencode mcp list first. If SERVER_NAME is connected (OAuth),
    skip authentication; do not re-authenticate a working connection. Otherwise
    run opencode mcp auth list. If SERVER_NAME is authenticated but not connected,

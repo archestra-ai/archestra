@@ -722,6 +722,11 @@ export function ConnectCommandPanel({
                   credentials. Only their base URLs change, and a personal
                   passthrough key attributes requests to you.
                 </span>
+              ) : client.id === "cursor" ? (
+                <span>
+                  Cursor needs your OpenAI API key for this option. Its
+                  subscription cannot authenticate requests through the proxy.
+                </span>
               ) : passthroughAttributes ? (
                 <span>
                   Only the base URL changes: requests keep using your own API

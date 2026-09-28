@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-25
+lastUpdated: 2026-09-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -186,11 +186,11 @@ The `codex` CLI must be on your `PATH`.
 
 ### Cursor
 
-Cursor is a desktop app, so the script edits its files directly and prints the UI-only steps.
+Cursor is a desktop app, so the script edits its files directly and prints the remaining UI steps.
 
-- **MCP gateway** — merges the server into `~/.cursor/mcp.json`. Turn it on in Cursor under Settings → MCP.
-- **LLM proxy** — prints the values to paste under Settings → Models: the base URL to override and the API key to verify.
-- **Skills** — prints the clone URL to paste into `/add-plugin` from the command palette.
+- **MCP gateway** — merges the server into `~/.cursor/mcp.json`. Authenticate it in Cursor under Customize → MCPs.
+- **LLM proxy** — prints the values to paste under Settings → Models → API Keys. Enter an OpenAI API key or personal virtual key, then turn on **Use OpenAI API Key**. Cursor subscriptions cannot authenticate proxy requests.
+- **Skills** — the script registers the marketplace with Cursor CLI when it is installed. Then select `/add-plugin` in Cursor Agent chat, search for the skills plugin, and install it. If Cursor CLI is unavailable, the script prints the registration command.
 - **Plugins** — advertises Cursor plugins in the same marketplace and prints the plugin names to install manually. Cursor delivery is not automated.
 - **Backup** — `~/.cursor/mcp.json.archestra-backup`.
 - **Revert** — restore the backup, or remove the server entry from `mcp.json`; clear the model override in Settings.

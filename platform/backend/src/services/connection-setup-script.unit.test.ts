@@ -1972,12 +1972,82 @@ ${script.slice(start, end)}
     expect(script).not.toMatch(/<<[ \t]*ARCHESTRA/);
   });
 
-  test("cursor: merges mcp.json without auth headers (OAuth) and prints manual proxy steps", () => {
-    const script = renderSetupScript(fullContext("cursor"));
-    expect(script).toContain("ARCHESTRA_MCP_SERVER_NAME");
+  test.each([
+    "macos",
+    "windows",
+  ] as const)("cursor (%s): prints the working plugin and model setup steps", (platform) => {
+    const script = renderSetupScript(fullContext("cursor", platform));
+    expect(script).toContain(
+      platform === "windows"
+        ? "$arch_server_name"
+        : "ARCHESTRA_MCP_SERVER_NAME",
+    );
     expect(script).not.toContain("Authorization");
     expect(script).toContain("Override OpenAI Base URL");
-    expect(script).toContain("/add-plugin");
+    expect(script).toContain("Cursor Customize → MCPs");
+    expect(script).toContain('turn on "Use OpenAI API Key"');
+    expect(script).not.toContain("click Verify");
+    expect(script).toContain("cursor-agent plugin marketplace add");
+    expect(script).toContain("In Cursor Agent chat, type /add-plugin");
+    expect(script).toContain(`search for "${SKILLS.marketplaceName}"`);
+    expect(script).not.toContain("command palette");
+  });
+
+  test.each([
+    "macos",
+    "windows",
+  ] as const)("cursor (%s): requires an API key for passthrough", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("cursor", platform),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+    expect(script).toContain("Paste your own OpenAI API key");
+    expect(script).toContain("A Cursor subscription cannot be used");
+  });
+
+  test("cursor: setup runs with an isolated home, preserves existing MCP servers, and prints the plugin picker steps", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-connect-"));
+    try {
+      await mkdir(path.join(home, ".cursor"));
+      await mkdir(path.join(home, "bin"));
+      const cursorAgent = path.join(home, "bin/cursor-agent");
+      await writeFile(
+        cursorAgent,
+        `#!/bin/sh\nprintf '%s\\n' "$*" > '${path.join(home, "cursor-agent-args")}'\n`,
+      );
+      await chmod(cursorAgent, 0o755);
+      await writeFile(
+        path.join(home, ".cursor/mcp.json"),
+        JSON.stringify({
+          mcpServers: { existing: { url: "https://example.test/mcp" } },
+        }),
+      );
+      const scriptPath = path.join(home, "connect.sh");
+      await writeFile(scriptPath, renderSetupScript(fullContext("cursor")));
+      const { stdout } = await execFileAsync("bash", [scriptPath], {
+        env: {
+          ...process.env,
+          HOME: home,
+          PATH: `${path.join(home, "bin")}:${process.env.PATH}`,
+          NO_COLOR: "1",
+        },
+      });
+      const mcp = JSON.parse(
+        await readFile(path.join(home, ".cursor/mcp.json"), "utf8"),
+      );
+      expect(mcp.mcpServers).toMatchObject({
+        existing: { url: "https://example.test/mcp" },
+        [MCP.serverName]: { url: MCP.url },
+      });
+      expect(stdout).toContain("In Cursor Agent chat, type /add-plugin");
+      expect(stdout).toContain('turn on "Use OpenAI API Key"');
+      expect(stdout).not.toContain(SKILLS.cloneUrl);
+      expect(await readFile(path.join(home, "cursor-agent-args"), "utf8")).toBe(
+        `plugin marketplace add ${SKILLS.cloneUrl}\n`,
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });
 

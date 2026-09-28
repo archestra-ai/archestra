@@ -3212,6 +3212,8 @@ export type {
   LockAppResponses,
   LogContentMode,
   LogContentModeInput,
+  LogContentNotStored,
+  LogContentNotStoredInput,
   MarkChatConversationReadData,
   MarkChatConversationReadError,
   MarkChatConversationReadErrors,

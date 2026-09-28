@@ -1,5 +1,6 @@
 "use client";
 
+import { isLogContentNotStored } from "@archestra/shared";
 import { Check, ChevronRight, EyeOff } from "lucide-react";
 import type { ReactNode } from "react";
 import { JsonCodeBlock } from "@/components/json-code-block";
@@ -50,6 +51,9 @@ function ConsultDetail({ view }: { view: ConsultView }) {
   // The server nulls the request of an audience-source consult for callers
   // without member:read.
   const withheld = consult.request === null;
+  // Under the Metadata only Log Content setting the request is a marker that
+  // keeps only the tool's name, and the answer and diagnostics are null.
+  const notStored = isLogContentNotStored(consult.request);
 
   return (
     <>
@@ -84,6 +88,17 @@ function ConsultDetail({ view }: { view: ConsultView }) {
               This consult names people; viewing it requires member access.
             </InlineNoticeText>
           </InlineNotice>
+        ) : notStored ? (
+          <Section title={toolCall ? `Tool: ${toolCall.name}` : "Request"}>
+            <InlineNotice variant="neutral" className="mt-2">
+              <EyeOff className="size-4" />
+              <span className="font-medium">Content not stored</span>
+              <InlineNoticeText>
+                This was logged while the organization's Log Content setting was
+                Metadata only, so the content was never stored.
+              </InlineNoticeText>
+            </InlineNotice>
+          </Section>
         ) : (
           <>
             <Section title={toolCall ? `Tool: ${toolCall.name}` : "Request"}>

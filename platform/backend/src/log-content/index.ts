@@ -7,6 +7,9 @@ import {
   McpExecutedAsSchema,
 } from "@archestra/shared";
 import logger from "@/logging";
+import AgentModel from "@/models/agent";
+import AppModel from "@/models/app";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import OrganizationModel from "@/models/organization";
 import type {
   InsertInteraction,
@@ -17,10 +20,12 @@ import type {
 import { InteractionErrorResponseSchema } from "@/types/interaction";
 
 /**
- * The agent, knowledge connector or app a log row is written for. Log tables
- * carry no organization id, so the owner is how a row finds its organization.
+ * The organization a log row is written for, or the agent, knowledge connector
+ * or app that owns it. Log tables carry no organization id, so without one the
+ * owner is how a row finds its organization.
  */
 type LogContentOwner = {
+  organizationId?: string | null;
   agentId?: string | null;
   connectorId?: string | null;
   appId?: string | null;
@@ -30,24 +35,23 @@ type LogContentOwner = {
  * The Log Content mode for a row written on behalf of this owner. The single
  * place the decision is made, so a later per-agent or per-team override (which
  * may only ever be stricter) has one spot to land.
- *
- * Fails closed: when the organization cannot be resolved, the row stores
- * metadata only. Losing a prompt from the logs is recoverable; writing one an
- * administrator asked never to be stored is not.
  */
 export async function resolveLogContentMode(
   owner: LogContentOwner,
 ): Promise<LogContentMode> {
   try {
-    const mode = await OrganizationModel.getLogContentModeForOwner(owner);
+    const organizationId =
+      owner.organizationId ?? (await findOwnerOrganizationId(owner));
+    const mode = organizationId
+      ? await OrganizationModel.getLogContentMode(organizationId)
+      : null;
     if (mode === null) {
       logger.warn(
         owner,
         "No organization found for a log row's owner; storing metadata only",
       );
-      return "metadata_only";
     }
-    return mode;
+    return effectiveLogContentMode(mode);
   } catch (error) {
     logger.warn(
       { err: error, ...owner },
@@ -55,6 +59,18 @@ export async function resolveLogContentMode(
     );
     return "metadata_only";
   }
+}
+
+/**
+ * The mode to write under, given the organization's setting as the caller
+ * already has it. Fails closed: when the organization could not be resolved,
+ * the row stores metadata only. Losing a prompt from the logs is recoverable;
+ * writing one an administrator asked never to be stored is not.
+ */
+function effectiveLogContentMode(
+  organizationSetting: LogContentMode | null | undefined,
+): LogContentMode {
+  return organizationSetting ?? "metadata_only";
 }
 
 /**
@@ -106,6 +122,20 @@ export function withholdToolCallContent(
 }
 
 // === Internal helpers ===
+
+async function findOwnerOrganizationId(
+  owner: LogContentOwner,
+): Promise<string | null> {
+  return (
+    (owner.agentId && (await AgentModel.findOrganizationId(owner.agentId))) ||
+    (owner.connectorId &&
+      (await KnowledgeBaseConnectorModel.findOrganizationId(
+        owner.connectorId,
+      ))) ||
+    (owner.appId && (await AppModel.findOrganizationId(owner.appId))) ||
+    null
+  );
+}
 
 /**
  * What a Logs page needs to show a tool call's status and identity: whether

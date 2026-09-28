@@ -2366,6 +2366,23 @@ class AgentModel {
     return result?.environmentId ?? null;
   }
 
+  /** Both in one row read, for the interaction write that needs each. */
+  static async findEnvironmentAndOrganizationId(id: string): Promise<{
+    environmentId: string | null;
+    organizationId: string;
+  } | null> {
+    const [result] = await db
+      .select({
+        environmentId: schema.agentsTable.environmentId,
+        organizationId: schema.agentsTable.organizationId,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result ?? null;
+  }
+
   /**
    * The two fields that decide whether a caller missing an MCP connection is
    * warned, blocked, or left alone. Kept narrow so the chat turn's pre-flight

@@ -12,6 +12,35 @@ export type EmbeddingDimensionsInput = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LogContentModeInput = 'full' | 'metadata_only';
 
+export type LogContentNotStoredInput = {
+    __redacted: 'log_content_policy';
+    isError?: boolean;
+    errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
+    archestraExecutedAs?: {
+        kind: 'personal';
+        ownerUserId: string | null;
+        ownerName: string | null;
+    } | {
+        kind: 'team';
+        teamId: string;
+        teamName: string | null;
+    } | {
+        kind: 'org';
+    } | {
+        kind: 'idp_exchange';
+        callerUserId: string | null;
+    } | {
+        kind: 'idp_passthrough';
+        callerUserId: string | null;
+    } | {
+        kind: 'caller_headers';
+        callerUserId: string | null;
+    } | {
+        kind: 'platform';
+        callerUserId: string | null;
+    };
+};
+
 export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
 
 export type OpenAiChatCompletionRequestInput = {
@@ -6319,6 +6348,35 @@ export type ContextualRetrievalMode = 'disabled' | 'document' | 'chunk';
 export type EmbeddingDimensions = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LogContentMode = 'full' | 'metadata_only';
+
+export type LogContentNotStored = {
+    __redacted: 'log_content_policy';
+    isError?: boolean;
+    errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
+    archestraExecutedAs?: {
+        kind: 'personal';
+        ownerUserId: string | null;
+        ownerName: string | null;
+    } | {
+        kind: 'team';
+        teamId: string;
+        teamName: string | null;
+    } | {
+        kind: 'org';
+    } | {
+        kind: 'idp_exchange';
+        callerUserId: string | null;
+    } | {
+        kind: 'idp_passthrough';
+        callerUserId: string | null;
+    } | {
+        kind: 'caller_headers';
+        callerUserId: string | null;
+    } | {
+        kind: 'platform';
+        callerUserId: string | null;
+    };
+};
 
 export type LocalConfigEnvironmentDefault = string | number | boolean;
 
@@ -47133,34 +47191,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: OpenAiChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -47405,34 +47436,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -47552,34 +47556,7 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -47697,34 +47674,7 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -47842,34 +47792,7 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -47987,34 +47910,7 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -48109,34 +48005,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: GeminiGenerateContentResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -48233,34 +48102,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: AnthropicMessagesResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -48798,34 +48640,7 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -49414,34 +49229,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: AnthropicMessagesResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -49538,34 +49326,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: CerebrasChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -49662,34 +49423,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: MistralChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -49786,34 +49520,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: PerplexityChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -49910,34 +49617,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: GroqChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -50034,34 +49714,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: XaiChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -50158,34 +49811,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: OpenrouterChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -50282,34 +49908,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: VllmChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -50406,34 +50005,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: OllamaChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -50530,34 +50102,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: OllamaNativeChatResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -50654,34 +50199,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: CohereChatResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -50778,34 +50296,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: ZhipuaiChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -50902,34 +50393,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: DeepSeekChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -51740,34 +51204,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -52578,34 +52015,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -53416,34 +52826,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -53540,34 +52923,7 @@ export type GetInteractionsResponses = {
             } | null;
             response: MinimaxChatCompletionResponse | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -53732,34 +53088,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -53963,34 +53292,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -54194,34 +53496,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -54425,34 +53700,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
-                __redacted: 'log_content_policy';
-                isError?: boolean;
-                errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-                executedAs?: {
-                    kind: 'personal';
-                    ownerUserId: string | null;
-                    ownerName: string | null;
-                } | {
-                    kind: 'team';
-                    teamId: string;
-                    teamName: string | null;
-                } | {
-                    kind: 'org';
-                } | {
-                    kind: 'idp_exchange';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'idp_passthrough';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'caller_headers';
-                    callerUserId: string | null;
-                } | {
-                    kind: 'platform';
-                    callerUserId: string | null;
-                };
-            } | {
+            } | LogContentNotStored | {
                 __lockedChatSealed: string;
             } | {
                 __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -55176,34 +54424,7 @@ export type GetInteractionResponses = {
         } | null;
         response: OpenAiChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -55448,34 +54669,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -55595,34 +54789,7 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -55740,34 +54907,7 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -55885,34 +55025,7 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -56030,34 +55143,7 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -56152,34 +55238,7 @@ export type GetInteractionResponses = {
         } | null;
         response: GeminiGenerateContentResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -56276,34 +55335,7 @@ export type GetInteractionResponses = {
         } | null;
         response: AnthropicMessagesResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -56841,34 +55873,7 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -57457,34 +56462,7 @@ export type GetInteractionResponses = {
         } | null;
         response: AnthropicMessagesResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -57581,34 +56559,7 @@ export type GetInteractionResponses = {
         } | null;
         response: CerebrasChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -57705,34 +56656,7 @@ export type GetInteractionResponses = {
         } | null;
         response: MistralChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -57829,34 +56753,7 @@ export type GetInteractionResponses = {
         } | null;
         response: PerplexityChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -57953,34 +56850,7 @@ export type GetInteractionResponses = {
         } | null;
         response: GroqChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -58077,34 +56947,7 @@ export type GetInteractionResponses = {
         } | null;
         response: XaiChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -58201,34 +57044,7 @@ export type GetInteractionResponses = {
         } | null;
         response: OpenrouterChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -58325,34 +57141,7 @@ export type GetInteractionResponses = {
         } | null;
         response: VllmChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -58449,34 +57238,7 @@ export type GetInteractionResponses = {
         } | null;
         response: OllamaChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -58573,34 +57335,7 @@ export type GetInteractionResponses = {
         } | null;
         response: OllamaNativeChatResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -58697,34 +57432,7 @@ export type GetInteractionResponses = {
         } | null;
         response: CohereChatResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -58821,34 +57529,7 @@ export type GetInteractionResponses = {
         } | null;
         response: ZhipuaiChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -58945,34 +57626,7 @@ export type GetInteractionResponses = {
         } | null;
         response: DeepSeekChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -59783,34 +58437,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -60621,34 +59248,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -61459,34 +60059,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -61583,34 +60156,7 @@ export type GetInteractionResponses = {
         } | null;
         response: MinimaxChatCompletionResponse | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -61775,34 +60321,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -62006,34 +60525,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -62237,34 +60729,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';
@@ -62468,34 +60933,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
-            __redacted: 'log_content_policy';
-            isError?: boolean;
-            errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
-            executedAs?: {
-                kind: 'personal';
-                ownerUserId: string | null;
-                ownerName: string | null;
-            } | {
-                kind: 'team';
-                teamId: string;
-                teamName: string | null;
-            } | {
-                kind: 'org';
-            } | {
-                kind: 'idp_exchange';
-                callerUserId: string | null;
-            } | {
-                kind: 'idp_passthrough';
-                callerUserId: string | null;
-            } | {
-                kind: 'caller_headers';
-                callerUserId: string | null;
-            } | {
-                kind: 'platform';
-                callerUserId: string | null;
-            };
-        } | {
+        } | LogContentNotStored | {
             __lockedChatSealed: string;
         } | {
             __redacted: 'locked_chat' | 'incognito' | 'log_content_policy';

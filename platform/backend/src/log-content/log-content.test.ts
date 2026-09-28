@@ -10,12 +10,19 @@ import {
   platformExecutedAs,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
+import { vi } from "vitest";
 import db from "@/database";
+import { resolveLogContentMode } from "@/log-content";
 import InteractionModel from "@/models/interaction";
 import McpToolCallModel from "@/models/mcp-tool-call";
 import OrganizationModel from "@/models/organization";
 import { describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
+
+// The setting is read through the org-settings cache, which is not started in
+// tests; the canonical Map-backed fake stands in so a write that skipped
+// invalidation would be served the previous mode.
+vi.mock("@/cache-manager");
 
 const PRIVATE = "the-private-quarterly-numbers";
 
@@ -270,6 +277,22 @@ describe("MCP tool calls", () => {
 
     const raw = await rawRow("mcp_tool_calls", created.id);
     expect(raw.tool_result).toEqual({ __redacted: "log_content_policy" });
+  });
+});
+
+describe("resolveLogContentMode", () => {
+  test("a writer that knows its organization gets that organization's setting", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    expect(await resolveLogContentMode({ organizationId: org.id })).toBe(
+      "full",
+    );
+    await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
+    expect(await resolveLogContentMode({ organizationId: org.id })).toBe(
+      "metadata_only",
+    );
   });
 });
 

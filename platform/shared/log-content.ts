@@ -37,18 +37,22 @@ export const LOG_CONTENT_POLICY_REDACTED_VALUE = "log_content_policy";
  * Logs page shows as a status badge, never any text: an error message or tool
  * result can quote the content the setting withholds.
  */
-export const LogContentNotStoredSchema = z.object({
-  __redacted: z.literal(LOG_CONTENT_POLICY_REDACTED_VALUE),
-  /** The LLM request or tool call failed. */
-  isError: z.boolean().optional(),
-  /** Archestra's own category for a failed tool call (e.g. `cancelled`). */
-  errorType: McpToolErrorTypeSchema.optional(),
-  /**
-   * Which identity a tool call ran as — who, never what. Under the same key
-   * `extractMcpExecutedAs` reads, so the "Called as" displays need no change.
-   */
-  [MCP_EXECUTED_AS_META_KEY]: McpExecutedAsSchema.optional(),
-});
+export const LogContentNotStoredSchema = z
+  .object({
+    __redacted: z.literal(LOG_CONTENT_POLICY_REDACTED_VALUE),
+    /** The LLM request or tool call failed. */
+    isError: z.boolean().optional(),
+    /** Archestra's own category for a failed tool call (e.g. `cancelled`). */
+    errorType: McpToolErrorTypeSchema.optional(),
+    /**
+     * Which identity a tool call ran as — who, never what. Under the same key
+     * `extractMcpExecutedAs` reads, so the "Called as" displays need no change.
+     */
+    [MCP_EXECUTED_AS_META_KEY]: McpExecutedAsSchema.optional(),
+  })
+  // Named so the OpenAPI spec and generated client reference it once instead
+  // of inlining it into every interaction request/response union arm.
+  .meta({ id: "LogContentNotStored" });
 
 export type LogContentNotStored = z.infer<typeof LogContentNotStoredSchema>;
 

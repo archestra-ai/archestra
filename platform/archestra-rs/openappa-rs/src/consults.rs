@@ -4,7 +4,7 @@ use appa_eventlog::postgres::{LeasedPostgres, PostgresError};
 use appa_runtime::api::{
     ConsultBackend, ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, NoAnswerClass,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::{
     sync::{Mutex, PoisonError},
     time::SystemTime,
@@ -48,6 +48,21 @@ pub(crate) struct Attribution {
     pub organization_id: String,
     pub session_id: String,
     pub caller_id: Option<String>,
+    /// The organization's Log Content setting is Metadata only, as the host
+    /// resolved it for this dispatch.
+    pub withhold_content: bool,
+}
+
+impl Attribution {
+    /// `records` as this attribution may store them.
+    fn columns(&self, records: Vec<ConsultRecord>) -> Columns {
+        let records = records.into_iter();
+        if self.withhold_content {
+            records.map(without_content).collect()
+        } else {
+            records.collect()
+        }
+    }
 }
 
 /// Stores what `buffer` holds on the dispatch's leased connection. A failure is
@@ -63,16 +78,12 @@ pub(crate) fn store(pg: &LeasedPostgres, attribution: Attribution, buffer: &Cons
         return;
     }
     let count = records.len();
-    if let Err(error) = insert(pg, attribution, records.into_iter().collect()) {
+    let columns = attribution.columns(records);
+    if let Err(error) = insert(pg, attribution, columns) {
         eprintln!("OpenAPPA: {count} external consult records were not stored: {error}");
     }
 }
 
-/// The organization's Log Content setting is read in the same statement, so a
-/// change applies to the very next dispatch. Under `metadata_only` the consult's
-/// content — the envelope sent to the external, its answer, raw response and
-/// diagnostics — is never written: the request keeps only its kind and the
-/// tool's name beside the not-stored marker the Logs pages recognize.
 fn insert(
     pg: &LeasedPostgres,
     attribution: Attribution,
@@ -81,27 +92,10 @@ fn insert(
     pg.with_client(move |client| {
         client
             .execute(
-                "WITH policy AS ( \
-                   SELECT COALESCE((SELECT log_content_mode FROM organization WHERE id = $2::text), 'metadata_only') = 'metadata_only' AS withheld \
-                 ) \
-                 INSERT INTO openappa_external_consults (id, organization_id, session_id, caller_id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest) \
-                 SELECT c.id::uuid, $2::text, $3::text, $4::text, c.started_at, c.duration_ms, c.role, c.external_name, c.backend, \
-                   CASE WHEN p.withheld THEN jsonb_strip_nulls(jsonb_build_object( \
-                     '__redacted', 'log_content_policy', \
-                     'kind', c.request -> 'kind', \
-                     'artifact', CASE WHEN c.request #> '{artifact,args,name}' IS NULL THEN NULL \
-                       ELSE jsonb_build_object('args', jsonb_build_object('name', c.request #> '{artifact,args,name}', 'arguments', jsonb_build_object('__redacted', 'log_content_policy'))) END \
-                   )) ELSE c.request END, \
-                   c.outcome, \
-                   CASE WHEN p.withheld THEN NULL ELSE c.answer END, \
-                   CASE WHEN p.withheld THEN NULL ELSE c.raw_response END, \
-                   c.http_status, \
-                   CASE WHEN p.withheld THEN NULL ELSE c.diagnostics END, \
-                   c.diagnostics_truncated AND NOT p.withheld, \
-                   c.root, c.trajectory, c.call_id, c.offer_id, c.call_digest \
+                "INSERT INTO openappa_external_consults (id, organization_id, session_id, caller_id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest) \
+                 SELECT c.id::uuid, $2::text, $3::text, $4::text, c.started_at, c.duration_ms, c.role, c.external_name, c.backend, c.request, c.outcome, c.answer, c.raw_response, c.http_status, c.diagnostics, c.diagnostics_truncated, c.root, c.trajectory, c.call_id, c.offer_id, c.call_digest \
                  FROM UNNEST($1::text[], $5::timestamptz[], $6::int8[], $7::text[], $8::text[], $9::text[], $10::jsonb[], $11::text[], $12::jsonb[], $13::bytea[], $14::int4[], $15::bytea[], $16::bool[], $17::text[], $18::text[], $19::text[], $20::text[], $21::text[]) \
-                 AS c(id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest) \
-                 CROSS JOIN policy p",
+                 AS c(id, started_at, duration_ms, role, external_name, backend, request, outcome, answer, raw_response, http_status, diagnostics, diagnostics_truncated, root, trajectory, call_id, offer_id, call_digest)",
                 &[
                     &columns.id,
                     &attribution.organization_id,
@@ -196,6 +190,33 @@ impl FromIterator<ConsultRecord> for Columns {
     }
 }
 
+/// The `__redacted` value the Logs pages recognize as content the Log Content
+/// setting kept out of storage. `platform/shared/log-content.ts` is the source
+/// of truth.
+const LOG_CONTENT_POLICY_REDACTED_VALUE: &str = "log_content_policy";
+
+/// `record` with its content dropped: the envelope sent to the external, its
+/// answer, raw response and diagnostics. The request keeps only its kind and the
+/// governed tool's name beside the not-stored marker; who consulted which
+/// external, when, how and with what outcome stays.
+fn without_content(record: ConsultRecord) -> ConsultRecord {
+    let not_stored = || json!({ "__redacted": LOG_CONTENT_POLICY_REDACTED_VALUE });
+    let mut request = not_stored();
+    if let Some(kind) = record.request.get("kind") {
+        request["kind"] = kind.clone();
+    }
+    if let Some(name) = record.request.pointer("/artifact/args/name") {
+        request["artifact"] = json!({ "args": { "name": name, "arguments": not_stored() } });
+    }
+    ConsultRecord {
+        request,
+        answer: None,
+        raw_response: None,
+        diagnostics: None,
+        ..record
+    }
+}
+
 // The stored names are the runtime's own serde names. The backend's zod enums
 // list the same strings.
 fn role_name(role: ExternalRole) -> &'static str {
@@ -243,10 +264,10 @@ fn outcome_name(outcome: ExternalOutcome) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{BUFFER_CAP, ConsultBuffer, backend_name, outcome_name, role_name};
+    use super::{Attribution, BUFFER_CAP, ConsultBuffer, backend_name, outcome_name, role_name};
     use appa_runtime::api::{
-        ConsultBackend, ConsultContext, ConsultRecord, ConsultRecorder, ExternalOutcome,
-        ExternalRole, NoAnswerClass,
+        ConsultBackend, ConsultContext, ConsultRecord, ConsultRecorder, Diagnostics,
+        ExternalOutcome, ExternalRole, NoAnswerClass,
     };
     use serde_json::{Value, json};
 
@@ -344,5 +365,95 @@ mod tests {
             };
             assert_eq!(outcome_name(ExternalOutcome::NoAnswer(class)), class_name);
         }
+    }
+
+    fn attribution(withhold_content: bool) -> Attribution {
+        Attribution {
+            organization_id: "organization".into(),
+            session_id: "session".into(),
+            caller_id: None,
+            withhold_content,
+        }
+    }
+
+    /// A consult that carries content in every column that can hold it.
+    fn consulted(request: Value) -> ConsultRecord {
+        ConsultRecord {
+            request,
+            answer: Some(json!({ "labels": ["secret"] })),
+            raw_response: Some(b"raw".to_vec()),
+            diagnostics: Some(Diagnostics {
+                bytes: b"model=m1".to_vec(),
+                truncated: true,
+            }),
+            context: ConsultContext {
+                root: "root".into(),
+                trajectory: "child".into(),
+                call_id: Some("call:1".into()),
+                offer_id: Some("offer".into()),
+                call_digest: Some("digest".into()),
+            },
+            ..record()
+        }
+    }
+
+    #[test]
+    fn a_withheld_consult_keeps_who_and_how_never_what() {
+        let request = json!({
+            "kind": "annotation",
+            "name": "gatekeeper",
+            "declaration": { "hint": "Review this post." },
+            "artifact": { "args": { "name": "annotated_read", "arguments": { "a": 1 } } },
+        });
+        let columns = attribution(true).columns(vec![consulted(request)]);
+
+        assert_eq!(
+            columns.request,
+            [json!({
+                "__redacted": "log_content_policy",
+                "kind": "annotation",
+                "artifact": { "args": {
+                    "name": "annotated_read",
+                    "arguments": { "__redacted": "log_content_policy" },
+                } },
+            })]
+        );
+        assert_eq!(columns.answer, [None]);
+        assert_eq!(columns.raw_response, [None]);
+        assert_eq!(columns.diagnostics, [None]);
+        assert_eq!(columns.diagnostics_truncated, [false]);
+        assert_eq!(columns.role, ["annotator"]);
+        assert_eq!(columns.external_name, ["scan"]);
+        assert_eq!(columns.backend, ["url"]);
+        assert_eq!(columns.outcome, ["answered"]);
+        assert_eq!(columns.http_status, [Some(200)]);
+        assert_eq!(columns.trajectory, ["child"]);
+        assert_eq!(columns.call_id, [Some("call:1".to_owned())]);
+        assert_eq!(columns.offer_id, [Some("offer".to_owned())]);
+        assert_eq!(columns.call_digest, [Some("digest".to_owned())]);
+    }
+
+    #[test]
+    fn a_withheld_request_without_a_named_artifact_keeps_only_its_kind() {
+        let request = json!({ "kind": "authority", "artifact": { "subject": "x" } });
+        let columns = attribution(true).columns(vec![consulted(request)]);
+        assert_eq!(
+            columns.request,
+            [json!({ "__redacted": "log_content_policy", "kind": "authority" })]
+        );
+    }
+
+    #[test]
+    fn a_consult_stored_with_content_is_untouched() {
+        let request = json!({
+            "kind": "annotation",
+            "artifact": { "args": { "name": "t", "arguments": { "a": 1 } } },
+        });
+        let columns = attribution(false).columns(vec![consulted(request.clone())]);
+        assert_eq!(columns.request, [request]);
+        assert_eq!(columns.answer, [Some(json!({ "labels": ["secret"] }))]);
+        assert_eq!(columns.raw_response, [Some(b"raw".to_vec())]);
+        assert_eq!(columns.diagnostics, [Some(b"model=m1".to_vec())]);
+        assert_eq!(columns.diagnostics_truncated, [true]);
     }
 }

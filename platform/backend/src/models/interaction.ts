@@ -468,19 +468,21 @@ class InteractionModel {
     // profile is present its current environment wins over any caller-supplied
     // value. Only profile-less system interactions may set it explicitly, and
     // only the proxy's verified advisor-delegation path may override it.
-    const [environmentId, logContentMode] = await Promise.all([
+    const agent = data.profileId
+      ? await AgentModel.findEnvironmentAndOrganizationId(data.profileId)
+      : null;
+    const environmentId =
       opts?.environmentIdOverride ??
-        (data.profileId
-          ? AgentModel.findEnvironmentId(data.profileId)
-          : (data.environmentId ?? null)),
-      // Enforced here, in the single funnel, so no writer can store content
-      // the organization's Log Content setting withholds.
-      resolveLogContentMode({
-        agentId: data.profileId,
-        connectorId: data.connectorId,
-        appId: data.appId,
-      }),
-    ]);
+      (data.profileId
+        ? (agent?.environmentId ?? null)
+        : (data.environmentId ?? null));
+    // Enforced here, in the single funnel, so no writer can store content
+    // the organization's Log Content setting withholds.
+    const logContentMode = await resolveLogContentMode({
+      organizationId: agent?.organizationId,
+      connectorId: data.connectorId,
+      appId: data.appId,
+    });
     const withheld = logContentMode === "metadata_only";
     const record = withheld ? withholdInteractionContent(data) : data;
     // A withheld row holds no content to encrypt under a conversation key, so

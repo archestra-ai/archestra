@@ -32,7 +32,10 @@ import {
   formatCallerIdentity,
   useMcpToolCall,
 } from "@/lib/mcp/mcp-tool-call.query";
-import { resolveMcpToolCallStatus } from "@/lib/mcp-logs/tool-call-status";
+import {
+  canShowMcpToolCallStatus,
+  resolveMcpToolCallStatus,
+} from "@/lib/mcp-logs/tool-call-status";
 import { formatDate } from "@/lib/utils/date-time";
 
 export function McpToolCallDetailPage({
@@ -144,13 +147,6 @@ function McpToolCallDetail({
     ? mcpToolCall.toolResult
     : null;
   const outcome = toolResult ?? notStoredResult;
-  // Without an outcome, the header says "Not stored" rather than asserting one.
-  const outcomeUnknown =
-    lockedToolResult !== null &&
-    !(
-      notStoredResult &&
-      (method !== "tools/call" || notStoredResult.isError !== undefined)
-    );
 
   // Whose credential served the call upstream, recorded with the result.
   const executedAs = extractMcpExecutedAs(outcome);
@@ -251,9 +247,11 @@ function McpToolCallDetail({
           <PageBackLink href="/mcp/logs">Back to MCP Logs</PageBackLink>
         }
         // Whether the call succeeded is the one live fact about this record,
-        // which is exactly what the header's status slot is for.
+        // which is exactly what the header's status slot is for. Without an
+        // outcome, it says "Not stored" rather than asserting one.
         status={
-          outcomeUnknown && lockedToolResult ? (
+          lockedToolResult &&
+          !canShowMcpToolCallStatus(method, lockedToolResult) ? (
             <LockedChatContentUnavailableLabel value={lockedToolResult} />
           ) : (
             <Badge

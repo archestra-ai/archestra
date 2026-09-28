@@ -1,4 +1,8 @@
-import { extractMcpToolError, isLogContentNotStored } from "@archestra/shared";
+import {
+  extractMcpToolError,
+  isLockedChatUnavailableContent,
+  isLogContentNotStored,
+} from "@archestra/shared";
 
 /**
  * Status of a logged MCP tool call, as the log surfaces render it.
@@ -23,6 +27,29 @@ export function resolveMcpToolCallStatus(result: unknown): McpToolCallStatus {
     result !== null &&
     Boolean((result as { isError?: unknown }).isError);
   return isError ? "error" : "success";
+}
+
+/**
+ * Whether a logged result backs a status badge, or the row has to say its
+ * content is unavailable instead.
+ *
+ * A locked chat's result is encrypted or missing, and the status lives inside
+ * it, so painting a badge would assert an outcome the row does not record. A
+ * Metadata only marker is different: other methods never read their status
+ * from the result, and a `tools/call` marker keeps it whenever it carries
+ * `isError`.
+ */
+export function canShowMcpToolCallStatus(
+  method: string,
+  result: unknown,
+): boolean {
+  if (!isLockedChatUnavailableContent(result)) {
+    return true;
+  }
+  return (
+    isLogContentNotStored(result) &&
+    (method !== "tools/call" || result.isError !== undefined)
+  );
 }
 
 type McpToolCallStatus = "success" | "error" | "cancelled";

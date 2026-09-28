@@ -1205,11 +1205,14 @@ export async function handleLLMProxy<
   // Content never reaches spans or logs for a locked-chat session, whether it
   // ends up encrypted or redacted — nor for an organization whose Log Content
   // setting is Metadata only (its rows are withheld in InteractionModel.create).
+  // Resolved here, outside the lifecycle try below, because it never throws:
+  // an unreadable setting suppresses content rather than failing the request.
   const isLockedChatSession = lockedChat.kind !== "none";
   const suppressContent =
     isLockedChatSession ||
-    (await resolveLogContentMode({ agentId: resolvedAgent.id })) ===
-      "metadata_only";
+    (await resolveLogContentMode({
+      organizationId: resolvedAgent.organizationId,
+    })) === "metadata_only";
   const appaActive = await isGuardrailsV2Active();
   if (appaActive && isLockedChatSession) {
     throw new ApiError(

@@ -1009,12 +1009,10 @@ builtin = "hitl"
 
   await t.test('a consult under the Metadata only log setting keeps who and how, never what', async (st) => {
     const organization_id = `smoke-org-${randomUUID()}`;
-    await client.query(
-      "INSERT INTO organization (id, name, slug, created_at, log_content_mode) VALUES ($1, $1, $1, now(), 'metadata_only')",
-      [organization_id],
-    );
+    await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
     st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
-    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID() };
+    // The host resolves the setting and says so on the dispatch.
+    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID(), withhold_consult_content: true };
     assert.equal((await call(session, 'annotated-1', 'annotated_read', { a: 1 })).decision, 'allow_call');
 
     const { rows } = await client.query('SELECT * FROM openappa_external_consults WHERE organization_id = $1', [organization_id]);
@@ -1033,6 +1031,11 @@ builtin = "hitl"
     assert.equal(row.request.__redacted, 'log_content_policy');
     assert.equal(row.request.kind, 'annotation');
     assert.ok(!JSON.stringify(row.request).includes('"a":1'), 'the tool arguments are not stored');
+    assert.deepEqual(row.request, {
+      __redacted: 'log_content_policy',
+      kind: 'annotation',
+      artifact: { args: { name: 'host/archestra/annotated_read', arguments: { __redacted: 'log_content_policy' } } },
+    });
   });
 
   await t.test('a failed receipt completion leaves a durable pending recovery fence', async () => {

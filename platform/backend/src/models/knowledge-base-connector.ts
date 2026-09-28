@@ -370,6 +370,23 @@ class KnowledgeBaseConnectorModel {
     return result ?? null;
   }
 
+  static async findOrganizationId(id: string): Promise<string | null> {
+    const [result] = await db
+      .select({
+        organizationId: schema.knowledgeBaseConnectorsTable.organizationId,
+      })
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      )
+      .limit(1);
+
+    return result?.organizationId ?? null;
+  }
+
   static async findByIds(ids: string[]): Promise<KnowledgeBaseConnector[]> {
     if (ids.length === 0) return [];
 

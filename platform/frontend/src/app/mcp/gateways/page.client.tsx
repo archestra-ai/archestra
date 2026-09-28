@@ -42,6 +42,7 @@ import {
 import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
+import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
@@ -470,6 +471,7 @@ function McpGateways({
                 : agentDetailHref("mcp_gateway", agent.id)
             }
             description={agent.description}
+            owner={{ resource: agent, currentUserId }}
             extraBadges={
               agent.agentType === "profile" ? (
                 <TooltipProvider>
@@ -762,7 +764,17 @@ function McpGateways({
                             <LabelTags labels={agent.labels} />
                           </span>
                         }
-                        description={agent.description}
+                        description={
+                          <>
+                            <PersonalResourceOwner
+                              resource={agent}
+                              currentUserId={currentUserId}
+                            />
+                            {agent.description && (
+                              <span className="block">{agent.description}</span>
+                            )}
+                          </>
+                        }
                         actions={renderGatewayActions(agent)}
                         onNavigate={
                           isDeletedView

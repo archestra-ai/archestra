@@ -20,6 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
+import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
+import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useUpdateVirtualApiKey } from "@/lib/virtual-api-keys.query";
 
@@ -34,6 +36,7 @@ export function EditVirtualKeyDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateMutation = useUpdateVirtualApiKey();
+  const connectionBaseUrl = useConnectionBaseUrl();
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   const [name, setName] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
@@ -55,9 +58,9 @@ export function EditVirtualKeyDialog({
   // Permission edits live outside this dialog's own snapshot, so the unsaved
   // guard and the Save button need to hear about them separately.
   const [permissionsDirty, setPermissionsDirty] = useState(false);
-  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
-    "general",
-  );
+  const [activeSection, setActiveSection] = useState<
+    "general" | "permissions" | "connect"
+  >("general");
 
   useEffect(() => {
     if (!virtualKey) return;
@@ -154,9 +157,13 @@ export function EditVirtualKeyDialog({
       activeSection={activeSection}
       navItems={
         isPassthrough
-          ? [{ id: "general", label: "General" }]
+          ? [
+              { id: "general", label: "General" },
+              { id: "connect", label: "Connect" },
+            ]
           : [
               { id: "general", label: "General" },
+              { id: "connect", label: "Connect" },
               { id: "permissions", label: "Permissions" },
             ]
       }
@@ -171,15 +178,19 @@ export function EditVirtualKeyDialog({
         )
       }
       footer={
-        <>
-          <DialogCancelButton>Cancel</DialogCancelButton>
-          <Button type="submit" disabled={!canSubmit}>
-            {updateMutation.isPending && (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
-            <span>Save Changes</span>
-          </Button>
-        </>
+        activeSection === "connect" && !isDirty ? (
+          <DialogCancelButton>Close</DialogCancelButton>
+        ) : (
+          <>
+            <DialogCancelButton>Cancel</DialogCancelButton>
+            <Button type="submit" disabled={!canSubmit}>
+              {updateMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              <span>Save Changes</span>
+            </Button>
+          </>
+        )
       }
     >
       <div hidden={activeSection !== "general"} className="space-y-4">
@@ -229,6 +240,16 @@ export function EditVirtualKeyDialog({
             standalone
           />
         </div>
+      )}
+      {activeSection === "connect" && (
+        <VirtualKeyConnectionGuide
+          keyType={virtualKey.keyType}
+          mappedProviderKeys={virtualKey.providerApiKeys}
+          connectionBaseUrl={connectionBaseUrl}
+          name={virtualKey.name}
+          expiration={formatExpiration(virtualKey.expiresAt)}
+          visibleTo={null}
+        />
       )}
     </TabbedDialogShell>
   );

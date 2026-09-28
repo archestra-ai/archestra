@@ -21,7 +21,7 @@ On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `i
 The terminal on the Connection page provides a prompt for your deployment.
 You can also give your coding agent this prompt, replacing the example hostname:
 
-> Read https://ai.example.com/connect.md and connect this client.
+> Read https://ai.example.com/connect.md?client=cursor and connect Cursor.
 
 The public instructions need no installed skill or platform login.
 They support Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
@@ -49,7 +49,8 @@ Verify that the gateway can list tools before considering the connection complet
 
 For OpenCode, the connection agent checks `opencode mcp list` after installation. If the gateway is already connected, it skips OAuth. Otherwise, it starts the gateway's native OAuth sign-in. Restart OpenCode after setup.
 
-Cursor still requires its model settings and marketplace steps inside the app.
+Cursor still requires native gateway OAuth. Connecting its gateway does not route inference through the LLM Proxy. To route supported OpenAI chat models, select the proxy under **Customize setup**, then apply the printed key and base URL in Cursor's model settings.
+The installer places shared skills in Cursor's skills folder; reload Cursor to see them.
 See [Supported Clients](#supported-clients) for each client's remaining steps.
 This flow does not automate those UI-only settings.
 
@@ -186,11 +187,11 @@ The `codex` CLI must be on your `PATH`.
 
 ### Cursor
 
-Cursor is a desktop app, so the script edits its files directly and prints the UI-only steps.
+Cursor is a desktop app, so the script edits its files directly and prints the remaining UI steps.
 
-- **MCP gateway** — merges the server into `~/.cursor/mcp.json`. Turn it on in Cursor under Settings → MCP.
-- **LLM proxy** — prints the values to paste under Settings → Models: the base URL to override and the API key to verify.
-- **Skills** — prints the clone URL to paste into `/add-plugin` from the command palette.
+- **MCP gateway** — merges the server into `~/.cursor/mcp.json`. Authenticate it in Cursor under Customize → MCPs.
+- **LLM proxy** — prints the values to paste under Settings → Models → API Keys. Enter an OpenAI API key or personal virtual key, then turn on **Use OpenAI API Key**. Cursor subscriptions cannot authenticate proxy requests.
+- **Skills** — the script clones the shared skills into `~/.cursor/skills/<marketplace-name>`. Cursor discovers the nested skills after a reload; confirm them under Customize → Skills. The script updates the clone when run again.
 - **Plugins** — advertises Cursor plugins in the same marketplace and prints the plugin names to install manually. Cursor delivery is not automated.
 - **Backup** — `~/.cursor/mcp.json.archestra-backup`.
 - **Revert** — restore the backup, or remove the server entry from `mcp.json`; clear the model override in Settings.

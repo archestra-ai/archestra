@@ -243,6 +243,33 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
+  it("waits for shared skills before generating an approvable setup", async () => {
+    allSkillsMock.mockReturnValue({ data: undefined, isPending: true });
+    const view = renderPanel({ client: findClient("cursor") });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+
+    allSkillsMock.mockReturnValue({
+      data: [
+        { id: "shared-skill", name: "Shared skill", scope: "org", teams: [] },
+      ],
+      isPending: false,
+    });
+    view.rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({ client: findClient("cursor") })}
+      />,
+    );
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skills: { skillIds: ["shared-skill"], ttlDays: null },
+        }),
+      ),
+    );
+  });
+
   it("switches between coding prompts and Desktop setup without preparing coding-client scripts", async () => {
     vi.mocked(useRouter).mockReturnValue({
       replace: vi.fn(),
@@ -269,6 +296,10 @@ describe("ConnectCommandPanel", () => {
         screen.getByRole("heading", { name: "Connect Claude Code" }),
       ).toBeVisible();
       for (const label of ["Cursor", "Codex", "OpenCode", "Copilot CLI"]) {
+        const selectedClient = CONNECT_CLIENTS.find(
+          (entry) => entry.label === label,
+        );
+        if (!selectedClient) throw new Error(`Missing client: ${label}`);
         await user.click(
           screen.getByRole("button", {
             name: new RegExp(`${label} logo ${label}`),
@@ -279,7 +310,7 @@ describe("ConnectCommandPanel", () => {
         ).toBeVisible();
         expect(
           screen.getByText(
-            `Read ${window.location.origin}/connect.md and connect ${label}.`,
+            `Read ${window.location.origin}/connect.md?client=${selectedClient.id} and connect ${label}.`,
           ),
         ).toBeVisible();
       }
@@ -1316,6 +1347,24 @@ describe("ConnectCommandPanel", () => {
     await user.click(screen.getByTestId("connect-auth-add-provider-key"));
 
     expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
+  });
+
+  it("explains Cursor needs an API key for proxy passthrough", async () => {
+    renderPanel({ client: findClient("cursor") });
+    await screen.findByText(COMMAND);
+
+    expect(
+      screen.getByTestId("connect-change-proxy").closest("li"),
+    ).toHaveTextContent(
+      "Prepare OpenAI proxy settings for Cursor; finish setup in Cursor Settings",
+    );
+
+    await userEvent.setup().click(screen.getByTestId("connect-change-proxy"));
+    expect(
+      screen.getByText(
+        /Its subscription cannot authenticate requests through the proxy/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("gates step 3 and hides the OAuth step when virtual-key auth has no backing key", async () => {

@@ -365,7 +365,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
     case "cursor":
       if (ctx.mcp) {
         steps.push(
-          `Open Cursor settings → MCP and toggle on "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
+          `Open Cursor Customize → MCPs and authenticate "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
         );
       }
       if (ctx.proxy) {
@@ -375,7 +375,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills) {
         steps.push(
-          "Run /add-plugin in Cursor's command palette and paste the clone URL printed above.",
+          "Reload Cursor, then open Customize → Skills to confirm the shared skills are available.",
         );
       }
       break;
@@ -1192,20 +1192,48 @@ In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
   1. Turn on "Override OpenAI Base URL" and paste: ${ctx.proxy.url}
   2. ${
     ctx.proxy.virtualKey
-      ? `Paste this key into the API Key field and click Verify:
+      ? `Paste this key into the API Key field and turn on "Use OpenAI API Key":
      ${ctx.proxy.virtualKey}`
-      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and click Verify.`
+      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and turn on "Use OpenAI API Key". A Cursor subscription cannot be used as a provider credential.`
   }
 '@`);
   }
 
   if (ctx.skills) {
     const pluginNames = ctx.skills.pluginNames ?? [];
-    sections.push(`Say ${psq(`${describeMarketplaceContents(ctx.skills).label} (manual step)`)}
+    sections.push(`Say ${psq(`Installing ${describeMarketplaceContents(ctx.skills).label} for Cursor`)}
+$cursorSkillsDir = Join-Path $env:USERPROFILE ${psq(`.cursor/skills/${ctx.skills.marketplaceName}`)}
+$cursorSkillsInstalled = $false
+if (Get-Command git -ErrorAction SilentlyContinue) {
+  if (Test-Path (Join-Path $cursorSkillsDir '.git')) {
+    & git -C $cursorSkillsDir remote set-url origin ${psq(ctx.skills.cloneUrl)} *> $null
+    if ($LASTEXITCODE -eq 0) {
+      & git -C $cursorSkillsDir pull --ff-only -q *> $null
+      $cursorSkillsInstalled = $LASTEXITCODE -eq 0
+    }
+  } elseif (-not (Test-Path $cursorSkillsDir)) {
+    $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $cursorSkillsDir)
+    & git clone -q ${psq(ctx.skills.cloneUrl)} $cursorSkillsDir *> $null
+    $cursorSkillsInstalled = $LASTEXITCODE -eq 0
+  } else {
+    Warn ${psq("Cursor skills folder already exists and is not a Git repository.")}
+  }
+} else {
+  Warn ${psq("git is not installed. Install git to fetch shared skills for Cursor.")}
+}
+if ($cursorSkillsInstalled) {
+  Ok ${psq(`Cursor skills installed in ~/.cursor/skills/${ctx.skills.marketplaceName}.`)}
+} else {
+  Warn ${psq("Cursor skills installation failed. Retry after checking git access to the marketplace.")}
 Write-Host @'
 
-In Cursor's command palette run /add-plugin and paste:
-  ${ctx.skills.cloneUrl}
+Clone the marketplace into ~/.cursor/skills/${ctx.skills.marketplaceName}:
+  git clone ${psq(ctx.skills.cloneUrl)} "$HOME/.cursor/skills/${ctx.skills.marketplaceName}"
+'@
+}
+Write-Host @'
+
+Reload Cursor and open Customize > Skills to confirm the shared skills are available.
 ${
   pluginNames.length > 0
     ? `

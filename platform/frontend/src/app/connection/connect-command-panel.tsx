@@ -59,6 +59,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils/tailwind";
+import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientConnectionApproval } from "./client-connection-approval";
 import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
 import {
@@ -134,9 +135,10 @@ const CONNECT_SKILLS_DEFER_MS = 750;
 function useConnectSkills(enabled: boolean): {
   eligible: boolean;
   skills: ConnectSkill[];
+  loading: boolean;
 } {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  const { data: skills } = useAllSkills({
+  const { data: skills, isPending } = useAllSkills({
     enabled: enabled && canReadSkills === true,
     // Step 2's content, not step 1's: let the part of the page the user acts
     // on first render before walking the catalogue.
@@ -145,6 +147,9 @@ function useConnectSkills(enabled: boolean): {
   return {
     eligible: enabled && canReadSkills === true && (skills ?? []).length > 0,
     skills: skills ?? [],
+    loading:
+      enabled &&
+      (canReadSkills === undefined || (canReadSkills && isPending === true)),
   };
 }
 
@@ -199,8 +204,11 @@ export function ConnectCommandPanel({
   const [customizing, setCustomizing] = useState(false);
   const compact = !!connectRequest && !customizing;
   const requestedPlatform = searchParams.get("platform");
-  const { eligible: skillsEligible, skills: allSkills } =
-    useConnectSkills(skillsEnabled);
+  const {
+    eligible: skillsEligible,
+    skills: allSkills,
+    loading: skillsLoading,
+  } = useConnectSkills(skillsEnabled);
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
@@ -416,7 +424,8 @@ export function ConnectCommandPanel({
     client.id === "claude-code" &&
     !!gateway &&
     !virtualKeyUnbacked;
-  const showDesktopGatewayStep = client.id === "claude-desktop" && !!gateway;
+  const showDesktopGatewayStep =
+    !connectRequest && client.id === "claude-desktop" && !!gateway;
   // The script installs skills itself for everyone who can read them, so the
   // wizard never grows an extra step here. The marketplace step appears only
   // when there is no script to carry them: nothing to connect at all (below),
@@ -555,6 +564,7 @@ export function ConnectCommandPanel({
     // (or the script would silently drop the proxy).
     if (
       !hasRunnableAnything ||
+      skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
       virtualKeyUnbacked
@@ -568,6 +578,7 @@ export function ConnectCommandPanel({
   }, [
     inputsKey,
     hasRunnableAnything,
+    skillsLoading,
     pluginsLoading,
     needsPerUserConnect,
     virtualKeyUnbacked,
@@ -721,6 +732,11 @@ export function ConnectCommandPanel({
                   Supported OpenCode providers keep their model IDs and local
                   credentials. Only their base URLs change, and a personal
                   passthrough key attributes requests to you.
+                </span>
+              ) : client.id === "cursor" ? (
+                <span>
+                  Cursor needs your OpenAI API key for this option. Its
+                  subscription cannot authenticate requests through the proxy.
                 </span>
               ) : passthroughAttributes ? (
                 <span>
@@ -948,7 +964,7 @@ export function ConnectCommandPanel({
           {hasProxy && (
             <SetupSummaryRow
               compact={compact}
-              done={proxyActive}
+              done={proxyActive && client.id !== "cursor"}
               editable
               isEditing={editing === "proxy"}
               onToggle={() => toggleEdit("proxy")}
@@ -957,6 +973,11 @@ export function ConnectCommandPanel({
             >
               {!provider ? (
                 noVirtualKeyMessage
+              ) : client.id === "cursor" ? (
+                <span>
+                  Prepare {providerCatalog.label(provider)} proxy settings for
+                  Cursor; finish setup in Cursor Settings
+                </span>
               ) : effectiveProxyAuth === "virtual-key" ? (
                 <>
                   Route{" "}
@@ -1119,8 +1140,8 @@ export function ConnectCommandPanel({
         </ul>
         {connectRequest && (
           <Button
-            variant="ghost"
-            className="mt-3"
+            variant="link"
+            className="mt-3 h-auto cursor-pointer p-0 underline underline-offset-4"
             aria-expanded={customizing}
             onClick={() => setCustomizing(!customizing)}
           >
@@ -1182,6 +1203,31 @@ export function ConnectCommandPanel({
                     .
                   </p>
                 )}
+              </AlertDescription>
+            </Alert>
+          )}
+          {connectRequest && client.id === "cursor" && proxyActive && (
+            <Alert variant="warning">
+              <TriangleAlert />
+              <AlertTitle>Cursor model setup needs a separate step</AlertTitle>
+              <AlertDescription>
+                {effectiveProxyAuth === "virtual-key" ? (
+                  <p>
+                    After approval, look in the output of the setup command
+                    Cursor runs. The “Cursor model settings (manual step)”
+                    section prints the proxy URL and virtual key.
+                  </p>
+                ) : (
+                  <p>
+                    After approval, look in the output of the setup command
+                    Cursor runs. The “Cursor model settings (manual step)”
+                    section prints the proxy URL. Use your own OpenAI API key; a
+                    Cursor subscription cannot supply one.
+                  </p>
+                )}
+                <p>
+                  Enter these values in Cursor Settings → Models → API Keys.
+                </p>
               </AlertDescription>
             </Alert>
           )}
@@ -1251,6 +1297,11 @@ export function ConnectCommandPanel({
                 setupId={result?.id}
                 clientId={client.id}
                 platform={setupPlatform}
+                gatewaySelected={!!gateway}
+                gatewayName={oauthServerName}
+                proxySelected={proxyActive}
+                proxyUsesVirtualKey={effectiveProxyAuth === "virtual-key"}
+                skillsSelected={skillsEligible && includeSkills}
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (
               <div className="space-y-3 p-5 text-foreground">
@@ -1334,28 +1385,7 @@ export function ConnectCommandPanel({
 
       {showDesktopGatewayStep && (
         <WizardStep n={4} title="Enable your gateway in Claude Desktop" last>
-          <div className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              The installer registers your gateway. Claude Desktop does not let
-              installers enable connectors automatically, so you need to enable
-              the gateway in your conversation.
-            </p>
-            <ol className="list-decimal space-y-3 pl-5">
-              <li>
-                After Desktop restarts, open{" "}
-                <strong>Settings → Connectors</strong>. Select{" "}
-                <strong>{oauthServerName}</strong> and connect it if needed.
-                Complete sign-in and approve access in your browser.
-              </li>
-              <li>
-                In your conversation, open <strong>+ → Connectors</strong> and
-                enable <strong>{oauthServerName}</strong> if it is off. A
-                connected checkmark in Settings does not confirm it is enabled
-                for that conversation.
-              </li>
-              <li>Ask Claude to list the tools available from your gateway.</li>
-            </ol>
-          </div>
+          <ClaudeDesktopGatewaySteps gatewayName={oauthServerName} />
         </WizardStep>
       )}
 

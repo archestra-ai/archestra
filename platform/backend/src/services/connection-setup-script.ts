@@ -529,7 +529,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
     case "cursor":
       if (ctx.mcp) {
         steps.push(
-          `Open Cursor settings → MCP and toggle on "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
+          `Open Cursor Customize → MCPs and authenticate "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
         );
       }
       if (ctx.proxy) {
@@ -539,7 +539,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills) {
         steps.push(
-          "Run /add-plugin in Cursor's command palette and paste the clone URL printed above.",
+          "Reload Cursor, then open Customize → Skills to confirm the shared skills are available.",
         );
         if (ctx.skills.pluginNames?.length) {
           steps.push(
@@ -1490,19 +1490,46 @@ In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
   1. Turn on "Override OpenAI Base URL" and paste: ${ctx.proxy.url}
   2. ${
     ctx.proxy.virtualKey
-      ? `Paste this key into the API Key field and click Verify:
+      ? `Paste this key into the API Key field and turn on "Use OpenAI API Key":
      ${ctx.proxy.virtualKey}`
-      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and click Verify.`
+      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and turn on "Use OpenAI API Key". A Cursor subscription cannot be used as a provider credential.`
   }
 ARCHESTRA_CURSOR`);
   }
 
   if (ctx.skills) {
-    sections.push(`say ${sh(`${describeMarketplaceContents(ctx.skills).label} (manual step)`)}
+    sections.push(`say ${sh(`Installing ${describeMarketplaceContents(ctx.skills).label} for Cursor`)}
+CURSOR_SKILLS_DIR="$HOME/.cursor/skills/${ctx.skills.marketplaceName}"
+cursor_skills_installed=0
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$CURSOR_SKILLS_DIR/.git" ]; then
+    if git -C "$CURSOR_SKILLS_DIR" remote set-url origin ${sh(ctx.skills.cloneUrl)} && git -C "$CURSOR_SKILLS_DIR" pull --ff-only -q; then
+      cursor_skills_installed=1
+    fi
+  elif [ ! -e "$CURSOR_SKILLS_DIR" ]; then
+    mkdir -p "$(dirname "$CURSOR_SKILLS_DIR")"
+    if git clone -q ${sh(ctx.skills.cloneUrl)} "$CURSOR_SKILLS_DIR"; then
+      cursor_skills_installed=1
+    fi
+  else
+    warn ${sh("Cursor skills folder already exists and is not a Git repository.")}
+  fi
+else
+  warn ${sh("git is not installed. Install git to fetch shared skills for Cursor.")}
+fi
+if [ "$cursor_skills_installed" -eq 1 ]; then
+  ok ${sh(`Cursor skills installed in ~/.cursor/skills/${ctx.skills.marketplaceName}.`)}
+else
+  warn ${sh("Cursor skills installation failed. Retry after checking git access to the marketplace.")}
 cat <<'ARCHESTRA_CURSOR_SKILLS'
 
-In Cursor's command palette run /add-plugin and paste:
-  ${ctx.skills.cloneUrl}
+Clone the marketplace into ~/.cursor/skills/${ctx.skills.marketplaceName}:
+  git clone ${sh(ctx.skills.cloneUrl)} "$HOME/.cursor/skills/${ctx.skills.marketplaceName}"
+ARCHESTRA_CURSOR_SKILLS
+fi
+cat <<'ARCHESTRA_CURSOR_SKILLS'
+
+Reload Cursor and open Customize > Skills to confirm the shared skills are available.
 ARCHESTRA_CURSOR_SKILLS`);
   }
 

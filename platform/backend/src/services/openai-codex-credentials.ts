@@ -125,34 +125,6 @@ export function extractChatgptAccountId(jwt: string): string | undefined {
 }
 
 /**
- * The set of models Archestra surfaces for a ChatGPT-subscription credential.
- * The Codex backend has a subscription-authenticated `/models` endpoint, but
- * this Archestra model-picker list is maintained here rather than synced per account.
- * These are subscription-billed, so their token price is treated as zero.
- *
- * Manually curated — update when OpenAI adds or removes Codex models.
- * Last synchronized: 2026-09 (Codex CLI model set).
- */
-/**
- * Its source of truth is the Codex CLI's own model catalog
- * (`codex-rs/models-manager/models.json` in openai/codex), cross-checked
- * against the backend itself: retired slugs are rejected with 400 "The
- * '<model>' model is not supported when using Codex with a ChatGPT account"
- * (e.g. gpt-5.5-codex, gpt-5.2, gpt-5.1-codex, codex-mini-latest as of the
- * GPT-5.6 launch), so only currently-served models belong here. Listed
- * newest-first; the picker shows them in this order.
- */
-export const OPENAI_CODEX_MODELS = [
-  { id: "gpt-6-astra", displayName: "GPT-6 Astra" },
-  { id: "gpt-5.6-sol", displayName: "GPT-5.6 Sol" },
-  { id: "gpt-5.6-terra", displayName: "GPT-5.6 Terra" },
-  { id: "gpt-5.6-luna", displayName: "GPT-5.6 Luna" },
-  { id: "gpt-5.5", displayName: "GPT-5.5" },
-  { id: "gpt-5.4", displayName: "GPT-5.4" },
-  { id: "gpt-5.4-mini", displayName: "GPT-5.4 Mini" },
-] as const;
-
-/**
  * Base system instructions sent as the Responses `instructions` field on every
  * Codex request. The Codex backend expects the Codex persona here (an arbitrary
  * caller system prompt belongs in the conversation input, not this field), so

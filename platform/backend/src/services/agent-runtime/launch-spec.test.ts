@@ -992,6 +992,18 @@ describe("buildAgentRunLaunchSpec", () => {
             });
           }
           if (url === "https://models.dev/api.json") return Response.json({});
+          if (new URL(url).pathname === "/backend-api/codex/models") {
+            return Response.json({
+              models: [
+                {
+                  slug: "gpt-6-astra",
+                  display_name: "GPT-6 Astra",
+                  visibility: "list",
+                  priority: 0,
+                },
+              ],
+            });
+          }
           throw new Error(`Unexpected request: ${url}`);
         }),
       );

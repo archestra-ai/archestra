@@ -299,7 +299,7 @@ class WebSocketService {
         const clientContext = await this.authenticateConnection(request);
 
         if (!clientContext) {
-          logger.warn(
+          logger.debug(
             {
               clientAddress:
                 request.socket.remoteAddress ?? "unknown_websocket_client",

@@ -4,6 +4,7 @@ import {
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
   getArchestraAppResourceUri,
+  isLogContentNotStored,
   isPlaywrightCatalogItem,
   LINKED_IDP_SSO_MODE,
   LOCKED_CHAT_REDACTED_MARKER,
@@ -3722,9 +3723,12 @@ class McpClient {
       };
 
       // The app log stays content-free for every locked-chat call, encrypted
-      // rows included: the row is protected at rest, the log line is not.
+      // rows included: the row is protected at rest, the log line is not. The
+      // same goes for a call the Log Content setting kept out of the row.
       if (isLockedChat) {
         logData.resultContent = "[redacted: locked chat]";
+      } else if (isLogContentNotStored(savedToolCall.toolResult)) {
+        logData.resultContent = "[not stored: log content setting]";
       } else if (toolResult.isError) {
         // Tool errors routinely echo request/response payloads — cap them
         // the same way as the success-path content preview.

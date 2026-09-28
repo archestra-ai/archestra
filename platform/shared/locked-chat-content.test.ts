@@ -6,6 +6,7 @@ import {
   LOCKED_CHAT_REDACTED_MARKER,
   lockedChatSealedContent,
 } from "./locked-chat-content";
+import { logContentNotStored } from "./log-content";
 
 describe("redacted content", () => {
   it("recognizes the marker it writes", () => {
@@ -20,6 +21,16 @@ describe("redacted content", () => {
     expect(isLockedChatUnavailableContent({ __redacted: "incognito" })).toBe(
       true,
     );
+  });
+
+  it("recognizes content the Log Content setting kept out of storage", () => {
+    // Outside any locked chat, but it means the same to a reader: never
+    // stored. Missing it would render the marker as a provider payload.
+    const marker = logContentNotStored({ isError: true });
+
+    expect(isLockedChatRedactedContent(marker)).toBe(true);
+    expect(isLockedChatUnavailableContent(marker)).toBe(true);
+    expect(isLockedChatSealedContent(marker)).toBe(false);
   });
 
   it("does not treat other redaction markers as its own", () => {

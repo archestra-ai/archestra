@@ -14,6 +14,7 @@ import {
   MessagesSquare,
   Palette,
   Plug,
+  ScrollText,
   ShieldCheck,
   ShieldUser,
   UserCog,
@@ -88,6 +89,9 @@ export function useSettingsTabs() {
       : []),
     ...(openappaEnabled && permissionMap?.["/settings/openappa"]
       ? [{ label: "OpenAPPA", href: "/settings/openappa", Icon: OpenAppaIcon }]
+      : []),
+    ...(permissionMap?.["/settings/logs"]
+      ? [{ label: "Logs", href: "/settings/logs", Icon: ScrollText }]
       : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge", Icon: Library }]

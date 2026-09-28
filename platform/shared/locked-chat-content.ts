@@ -1,3 +1,5 @@
+import { LOG_CONTENT_POLICY_REDACTED_VALUE } from "./log-content";
+
 /**
  * The two ways a locked chat's audit content can be unavailable to a
  * reader, as stable shapes both the backend writer and the UI reader agree on.
@@ -36,10 +38,14 @@ const LEGACY_LOCKED_CHAT_REDACTED_VALUE = "incognito";
  * Every `__redacted` value a stored row may carry, current spelling first.
  * Read schemas validate persisted content, so they have to admit the legacy
  * value as well — hence a shared list rather than a literal at each site.
+ *
+ * The Log Content setting's marker is here too: it also means "never
+ * stored", outside any locked chat, so the same readers have to recognize it.
  */
 export const LOCKED_CHAT_REDACTED_VALUES = [
   LOCKED_CHAT_REDACTED_MARKER.__redacted,
   LEGACY_LOCKED_CHAT_REDACTED_VALUE,
+  LOG_CONTENT_POLICY_REDACTED_VALUE,
 ] as const;
 
 /**
@@ -81,10 +87,7 @@ export function isLockedChatRedactedContent(
 ): value is LockedChatRedactedContent {
   if (typeof value !== "object" || value === null) return false;
   const marker = (value as LockedChatRedactedContent).__redacted;
-  return (
-    marker === LOCKED_CHAT_REDACTED_MARKER.__redacted ||
-    marker === LEGACY_LOCKED_CHAT_REDACTED_VALUE
-  );
+  return (LOCKED_CHAT_REDACTED_VALUES as readonly unknown[]).includes(marker);
 }
 
 /** True for either unavailable-content shape. */

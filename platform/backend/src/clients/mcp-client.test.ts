@@ -264,16 +264,20 @@ const OWNERLESS_PERSONAL_CONNECTION = {
 };
 
 describe("McpClient", () => {
+  let organizationId: string;
   let agentId: string;
   let mcpServerId: string;
   let catalogId: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeOrganization }) => {
     await mcpClient.disconnectAll();
 
-    // Create test agent
+    // Create test agent, in an organization so its tool calls are logged
+    // under that organization's Log Content setting.
+    organizationId = (await makeOrganization()).id;
     const agent = await AgentModel.create({
       name: "Test Agent",
+      organizationId,
       scope: "org",
       teams: [],
     });
@@ -2428,7 +2432,7 @@ describe("McpClient", () => {
       let localCatalogId: string;
       let localOwner: { id: string; name: string };
 
-      beforeEach(async ({ makeUser, makeOrganization }) => {
+      beforeEach(async ({ makeUser }) => {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2437,7 +2441,9 @@ describe("McpClient", () => {
         // on, an organization that has opted into it, and the process-local
         // mirror the synchronous stamp path reads primed from that row.
         config.orchestrator.mcpIdleHibernation.betaEnabled = true;
-        await makeOrganization({ mcpIdleHibernationEnabled: true });
+        await OrganizationModel.patch(organizationId, {
+          mcpIdleHibernationEnabled: true,
+        });
         await OrganizationModel.getMcpIdleHibernationEnabled();
         // SPDX-SnippetEnd
 

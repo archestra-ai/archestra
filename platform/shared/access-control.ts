@@ -1314,6 +1314,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkillsSettings]: {
     skillsSettings: ["update"],
   },
+  [RouteId.UpdateLogsSettings]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.UpdateAgentSettings]: {
     agentSettings: ["update"],
   },
@@ -2099,6 +2102,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/messaging-channels/email": { agentTrigger: ["read"] },
   "/settings/apps": { agentSettings: ["read"] },
   "/settings/security": { agentSettings: ["read"] },
+  "/settings/logs": { organizationSettings: ["read"] },
   "/settings/environments": { environment: ["update"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },

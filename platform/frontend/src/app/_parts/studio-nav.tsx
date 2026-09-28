@@ -328,6 +328,7 @@ export const contentNavGroups: NavGroup[] = [
           "/settings/service-accounts",
           "/settings/agents",
           "/settings/security",
+          "/settings/logs",
           "/settings/llm",
           "/settings/mcp",
           "/settings/skills",

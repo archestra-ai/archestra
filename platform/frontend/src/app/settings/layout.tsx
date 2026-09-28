@@ -82,6 +82,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     title: "Skills",
     description: "Configure how skills are discovered and added.",
   },
+  "/settings/logs": {
+    title: "Logs",
+    description:
+      "Configure what the LLM Logs, MCP Logs, and Guardrail consults pages record.",
+  },
   "/settings/appearance": {
     title: "Appearance",
     description:

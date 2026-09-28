@@ -610,6 +610,7 @@ export const RouteId = {
 
   // Skills Settings Routes (organization-level)
   UpdateSkillsSettings: "updateSkillsSettings",
+  UpdateLogsSettings: "updateLogsSettings",
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",

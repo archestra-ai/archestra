@@ -44,6 +44,10 @@ import {
   encodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import {
+  resolveLogContentMode,
+  withholdInteractionContent,
+} from "@/log-content";
 import logger from "@/logging";
 import type {
   InsertInteraction,
@@ -458,26 +462,40 @@ class InteractionModel {
       environmentIdOverride?: string;
     },
   ) {
-    const audit = auditContext ?? null;
     // Snapshot the environment from the agent at creation time (single funnel
     // for all interaction writes) so per-environment cost-limit usage stays
     // stable under later agent reassignment. The agent is authoritative: when a
     // profile is present its current environment wins over any caller-supplied
     // value. Only profile-less system interactions may set it explicitly, and
     // only the proxy's verified advisor-delegation path may override it.
+    const agent = data.profileId
+      ? await AgentModel.findEnvironmentAndOrganizationId(data.profileId)
+      : null;
     const environmentId =
       opts?.environmentIdOverride ??
       (data.profileId
-        ? await AgentModel.findEnvironmentId(data.profileId)
+        ? (agent?.environmentId ?? null)
         : (data.environmentId ?? null));
+    // Enforced here, in the single funnel, so no writer can store content
+    // the organization's Log Content setting withholds.
+    const logContentMode = await resolveLogContentMode({
+      organizationId: agent?.organizationId,
+      connectorId: data.connectorId,
+      appId: data.appId,
+    });
+    const withheld = logContentMode === "metadata_only";
+    const record = withheld ? withholdInteractionContent(data) : data;
+    // A withheld row holds no content to encrypt under a conversation key, so
+    // it is written like the locked-chat fallback: unkeyed, marker in place.
+    const audit = withheld ? null : (auditContext ?? null);
 
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
-      ...data,
+      ...record,
       environmentId,
-      request: stripUnstorableChars(data.request),
-      processedRequest: stripUnstorableChars(data.processedRequest),
-      response: stripUnstorableChars(data.response),
+      request: stripUnstorableChars(record.request),
+      processedRequest: stripUnstorableChars(record.processedRequest),
+      response: stripUnstorableChars(record.response),
     };
 
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
@@ -491,9 +509,14 @@ class InteractionModel {
     // but relying on that coincidence would be fragile: a delta chain mixes rows
     // across requests and only the request that created a row carries its key,
     // so a chain spanning keys could not be reconstructed by any reader.
-    const { values, tip } = audit
-      ? { values: sanitized, tip: null }
-      : await InteractionDeltaManager.encodeOnWrite(sanitized);
+    //
+    // Withheld rows are excluded too: there is no conversation to share with
+    // a parent, and leaving their hash columns empty keeps a later full-content
+    // row from chaining onto a request that was never stored.
+    const { values, tip } =
+      audit || withheld
+        ? { values: sanitized, tip: null }
+        : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
     const [interaction] = await db
       .insert(schema.interactionsTable)

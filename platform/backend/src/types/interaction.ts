@@ -3,6 +3,7 @@ import {
   InteractionSourceSchema,
   isLockedChatUnavailableContent,
   LOCKED_CHAT_REDACTED_VALUES,
+  LogContentNotStoredSchema,
   SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -237,13 +238,16 @@ export const InteractionResponseSchema = z.union([
 ]);
 
 /**
- * The two shapes a locked chat's content takes when it is not
- * available to the reader: encrypted under the browser key (locked), or never
- * stored (redacted). Neither resembles a provider payload, so every read arm
+ * The shapes content takes when it is not available to the reader: a locked
+ * chat's, encrypted under the browser key (locked) or never stored (redacted),
+ * and content the Log Content setting kept out of storage. Neither resembles a provider payload, so every read arm
  * has to accept them explicitly — otherwise one locked-chat row 500s the whole
  * interactions list rather than rendering as unavailable.
  */
 const LockedChatUnavailableContentSchema = z.union([
+  // First, so the outcome it carries is not stripped by the generic
+  // `__redacted` arm below, which also admits its value.
+  LogContentNotStoredSchema,
   z.object({ __lockedChatSealed: z.string() }),
   z.object({ __redacted: z.enum(LOCKED_CHAT_REDACTED_VALUES) }),
 ]);

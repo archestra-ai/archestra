@@ -49,6 +49,7 @@ import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
 } from "@/guardrails/dual-llm-progress-bus";
+import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import {
   AgentTeamModel,
@@ -1202,10 +1203,18 @@ export async function handleLLMProxy<
     dek: readLockedChatDek(request),
   });
   // Content never reaches spans or logs for a locked-chat session, whether it
-  // ends up encrypted or redacted.
-  const suppressContent = lockedChat.kind !== "none";
+  // ends up encrypted or redacted — nor for an organization whose Log Content
+  // setting is Metadata only (its rows are withheld in InteractionModel.create).
+  // Resolved here, outside the lifecycle try below, because it never throws:
+  // an unreadable setting suppresses content rather than failing the request.
+  const isLockedChatSession = lockedChat.kind !== "none";
+  const suppressContent =
+    isLockedChatSession ||
+    (await resolveLogContentMode({
+      organizationId: resolvedAgent.organizationId,
+    })) === "metadata_only";
   const appaActive = await isGuardrailsV2Active();
-  if (appaActive && suppressContent) {
+  if (appaActive && isLockedChatSession) {
     throw new ApiError(
       409,
       "OpenAPPA does not yet support encrypted policy storage for locked chats",
@@ -2148,8 +2157,12 @@ export async function handleLLMProxy<
     // Persist failed interactions so they appear in LLM logs
     try {
       const errorMessage = provider.extractErrorMessage(lifecycleError);
+      // Provider errors routinely echo the prompt back.
       logger.info(
-        { profileId: resolvedAgent.id, errorMessage },
+        {
+          profileId: resolvedAgent.id,
+          ...(suppressContent ? {} : { errorMessage }),
+        },
         "Persisting error interaction record",
       );
       const record: InsertInteraction = {
@@ -2878,8 +2891,9 @@ async function handleStreaming<
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
       const errorMessage = provider.extractErrorMessage(lifecycleError);
+      // Provider errors routinely echo the prompt back.
       logger.info(
-        { profileId: agent.id, errorMessage },
+        { profileId: agent.id, ...(suppressContent ? {} : { errorMessage }) },
         "Persisting error interaction record for failed stream",
       );
       await recordUsagelessInteraction({ error: errorMessage });

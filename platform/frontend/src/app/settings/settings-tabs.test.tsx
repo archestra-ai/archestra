@@ -394,6 +394,7 @@ describe("useSettingsTabs", () => {
         "Connect Page",
         "Apps",
         "Security",
+        "Logs",
         "Users",
         "Teams",
         "Roles",

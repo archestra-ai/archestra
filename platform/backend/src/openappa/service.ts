@@ -15,6 +15,7 @@ import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
+import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -280,16 +281,36 @@ async function dispatch(
   /** A policy the caller already read, shared across a batch of dispatches. */
   policy?: DispatchPolicy,
 ) {
-  const principal = await sessionPrincipal(session);
+  const [principal, withholdContent] = await Promise.all([
+    sessionPrincipal(session),
+    withholdConsultContent(session.organization_id),
+  ]);
   return withRuntime(
     session.organization_id,
     (module, policy) =>
       module.dispatchHook(
-        JSON.stringify({ ...session, ...event, ...principal }),
+        JSON.stringify({
+          ...session,
+          ...event,
+          ...principal,
+          // Last, so nothing spread above can override the host's reading.
+          withhold_consult_content: withholdContent,
+        }),
         policy,
       ),
     policy,
   );
+}
+
+/**
+ * Whether the organization's Log Content setting keeps content out of the
+ * consult rows a dispatch writes. Resolved here and passed on each dispatch, so
+ * the native runtime never reads the organization table.
+ */
+async function withholdConsultContent(
+  organizationId: string,
+): Promise<boolean> {
+  return (await resolveLogContentMode({ organizationId })) === "metadata_only";
 }
 
 /**
@@ -1109,6 +1130,7 @@ export async function executeRemedyByOffer(params: {
   /** Authorized owner lookup, not proof that the offer remains spendable. */
   known: boolean;
 }> {
+  const withholdContent = await withholdConsultContent(params.organizationId);
   const decision = await withRuntime(params.organizationId, (module, policy) =>
     module.executeRemedyByOffer(
       JSON.stringify({
@@ -1131,6 +1153,7 @@ export async function executeRemedyByOffer(params: {
         ...(params.precheckRefusal
           ? { precheck_refusal: params.precheckRefusal }
           : {}),
+        withhold_consult_content: withholdContent,
       }),
       policy,
     ),

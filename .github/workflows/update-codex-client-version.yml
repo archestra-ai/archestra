@@ -18,6 +18,8 @@ jobs:
     if: github.repository == 'archestra-ai/archestra'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      pull_request_url: ${{ steps.pr.outputs.url }}
     defaults:
       run:
         working-directory: ./platform
@@ -125,6 +127,7 @@ jobs:
 
       # Also recovers a branch pushed by an earlier run whose PR creation failed.
       - name: Open or update pull request
+        id: pr
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -162,3 +165,33 @@ jobs:
           if [[ "$auto_merge_enabled" == "false" ]]; then
             gh pr merge "$pr" --repo "$GH_REPO" --auto
           fi
+          gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
+
+  notify:
+    name: Report update result
+    needs: update
+    if: ${{ always() && github.repository == 'archestra-ai/archestra' && (needs.update.result == 'failure' || needs.update.outputs.pull_request_url != '') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Post result to alerting
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTING_WEBHOOK_URL }}
+          UPDATE_RESULT: ${{ needs.update.result }}
+          PULL_REQUEST_URL: ${{ needs.update.outputs.pull_request_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
+            echo "::warning::SLACK_ALERTING_WEBHOOK_URL not set; skipping Slack notification."
+            exit 0
+          fi
+
+          if [[ "$UPDATE_RESULT" == "failure" ]]; then
+            message=":rotating_light: Codex client version update failed. <$RUN_URL|View workflow run>"
+          else
+            message="Codex client version update proposed: <$PULL_REQUEST_URL|View pull request>"
+          fi
+          jq -n --arg text "$message" '{text: $text}' |
+            curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"

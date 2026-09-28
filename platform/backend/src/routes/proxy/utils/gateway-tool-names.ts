@@ -1,5 +1,6 @@
 import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  resolveMcpClientServerName,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   toMcpClientServerName,
@@ -12,7 +13,7 @@ import {
 } from "@/archestra-mcp-server/tool-attestation";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { AgentModel, ToolModel } from "@/models";
+import { AgentModel, OrganizationModel, ToolModel } from "@/models";
 import type { DeclaredToolSpelling } from "@/openappa/wire";
 import type { GatewayToolDeclaration } from "./gateway-tool-declarations";
 
@@ -657,10 +658,23 @@ async function getGatewayServerNames(
   if (cached) {
     return cached;
   }
-  const gatewayNames =
-    await AgentModel.findGatewayNamesByOrganizationId(organizationId);
+  const [gateways, appName] = await Promise.all([
+    AgentModel.findGatewayNamesByOrganizationId(organizationId),
+    OrganizationModel.getAppName(),
+  ]);
+  // Both spellings: the name a client registers today, and the gateway's own
+  // name, which clients connected before the app-name change still send.
   const serverNames = new Set(
-    gatewayNames.map(toMcpClientServerName).filter(Boolean),
+    gateways
+      .flatMap((gateway) => [
+        resolveMcpClientServerName({
+          gatewayName: gateway.name,
+          appName,
+          isPersonalGateway: gateway.isPersonalGateway,
+        }),
+        toMcpClientServerName(gateway.name),
+      ])
+      .filter(Boolean),
   );
   gatewayServerNamesCache.set(organizationId, serverNames);
   return serverNames;

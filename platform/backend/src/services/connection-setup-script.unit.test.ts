@@ -141,6 +141,16 @@ function fullContext(
   };
 }
 
+/**
+ * The same gateway as {@link MCP}, as a client that connected before the
+ * app-name change still holds it: registered under the gateway's own name.
+ */
+const MCP_WITH_LEGACY_NAME = {
+  ...MCP,
+  serverName: "archestra",
+  legacyServerNames: ["my_gateway"],
+};
+
 /** Every rendered variant must be parseable bash. */
 async function expectValidBash(script: string): Promise<void> {
   const dir = await mkdtemp(path.join(tmpdir(), "archestra-script-"));
@@ -2643,5 +2653,120 @@ describe("buildSetupCommand / proxyBaseUrlToOrigin", () => {
     ).toBe(
       "irm 'https://host.example.com/api/connection-setups/script/archestra_con_abc' | iex",
     );
+  });
+});
+
+describe("migrating a gateway registered under an older name", () => {
+  // Every member's gateway is seeded as "My Gateway", so clients connected
+  // before this change hold it as `my_gateway`. A re-run must move that entry
+  // rather than leave the user with the same gateway listed twice.
+  test("claude-code drops the old entry from both scopes", async () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "cli claude mcp remove --scope local 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      "cli claude mcp remove --scope user 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      `cli claude mcp add --scope user --transport http 'archestra' '${MCP.url}'`,
+    );
+    // The removals must precede the add, or the add is undone immediately.
+    expect(script.indexOf("mcp remove --scope user 'my_gateway'")).toBeLessThan(
+      script.indexOf("mcp add --scope user"),
+    );
+    await expectValidBash(script);
+  });
+
+  test("codex drops the old entry", async () => {
+    const script = renderSetupScript({
+      ...fullContext("codex"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "cli codex mcp remove 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      `cli codex mcp add 'archestra' --url '${MCP.url}'`,
+    );
+    await expectValidBash(script);
+  });
+
+  test("copilot drops the old entry", async () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "cli copilot mcp remove 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    await expectValidBash(script);
+  });
+
+  test("cursor moves the mcp.json entry onto the new name", async () => {
+    const script = renderSetupScript({
+      ...fullContext("cursor"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain("ARCHESTRA_MCP_LEGACY_NAMES='[\"my_gateway\"]'");
+    expect(script).toContain("ARCHESTRA_MCP_SERVER_NAME='archestra'");
+    await expectValidBash(script);
+  });
+
+  test("opencode moves the config entry onto the new name", async () => {
+    const script = renderSetupScript({
+      ...fullContext("opencode"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "ARCHESTRA_OC_MCP_LEGACY_NAMES='[\"my_gateway\"]'",
+    );
+    expect(script).toContain("ARCHESTRA_OC_MCP_NAME='archestra'");
+    await expectValidBash(script);
+  });
+
+  test("windows claude-code drops the old entry from both scopes", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code", "windows"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "try { claude mcp remove --scope local 'my_gateway' 2>$null | Out-Null } catch { }",
+    );
+    expect(script).toContain(
+      "try { claude mcp remove --scope user 'my_gateway' 2>$null | Out-Null } catch { }",
+    );
+    expect(script).toContain(
+      `claude mcp add --scope user --transport http 'archestra' '${MCP.url}'`,
+    );
+  });
+
+  test("windows cursor and opencode drop the old config entry", () => {
+    const cursor = renderSetupScript({
+      ...fullContext("cursor", "windows"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+    const opencode = renderSetupScript({
+      ...fullContext("opencode", "windows"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(cursor).toContain("foreach ($arch_legacy in @('my_gateway'))");
+    expect(opencode).toContain("foreach ($archLegacy in @('my_gateway'))");
+  });
+
+  test("emits no migration when the gateway keeps its own name", () => {
+    const script = renderSetupScript(fullContext("claude-code"));
+
+    expect(script).not.toContain("my_gateway");
   });
 });

@@ -54,6 +54,13 @@ export function isDefaultBrandedAppName(appName: string): boolean {
 }
 
 /**
+ * Name given to the personal MCP gateway seeded for every member. It is a
+ * placeholder, not a chosen name, so the connect flow does not register it as
+ * a client-side server name — see `resolveMcpClientServerName`.
+ */
+export const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
+
+/**
  * Prefix used for newly generated platform-managed tokens (team tokens, user
  * tokens, virtual API keys, API keys). Keep this branding-neutral.
  */

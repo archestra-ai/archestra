@@ -161,7 +161,7 @@ describe("chat composer typing performance", () => {
     expect(renderCounts.apiKeySelector).toBe(apiKeySelectorRendersAfterMount);
   });
 
-  it("shows the current OpenAPPA labels as read-only info buttons", () => {
+  it("shows the current OpenAPPA labels as read-only status", () => {
     statusState.data = { trust: "suspicious", audience: "internal" };
     render(
       <ArchestraPromptInput
@@ -174,12 +174,37 @@ describe("chat composer typing performance", () => {
       />,
     );
 
+    const status = screen.getByRole("status", {
+      name: "Trust: suspicious; audience: internal",
+    });
+    expect(status).toHaveTextContent("suspicious");
+    expect(status).toHaveTextContent("internal");
     expect(
-      screen.getByRole("button", { name: "trust: suspicious" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "audience: internal" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /trust:|audience:/i }),
+    ).toBeNull();
+  });
+
+  it("preserves policy-defined labels in the status text", () => {
+    statusState.data = {
+      trust: "reviewed",
+      audience: "alice ∩ internal,@finance",
+    };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
+    const status = screen.getByRole("status", {
+      name: "Trust: reviewed; audience: alice ∩ internal,@finance",
+    });
+    expect(status).toHaveTextContent("reviewed");
+    expect(status).toHaveTextContent("alice ∩ internal,@finance");
   });
 
   it("hides retained labels when a status refresh fails", () => {
@@ -195,7 +220,7 @@ describe("chat composer typing performance", () => {
       />,
     );
     expect(
-      screen.getByRole("button", { name: "trust: trusted" }),
+      screen.getByRole("status", { name: "Trust: trusted; audience: public" }),
     ).toBeInTheDocument();
 
     // TanStack Query retains the previous data after a failed refetch.
@@ -210,10 +235,7 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
-    expect(screen.queryByRole("button", { name: "trust: trusted" })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "audience: public" }),
-    ).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("shows no labels when the status endpoint returns null", () => {
@@ -227,7 +249,6 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
-    expect(screen.queryByRole("button", { name: /^trust:/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^audience:/ })).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

@@ -9,10 +9,14 @@ import {
   type ThinkingEffortSetting,
 } from "@archestra/shared";
 import {
-  InfoIcon,
+  GlobeIcon,
   MoreVerticalIcon,
   PaperclipIcon,
+  ShieldAlertIcon,
+  ShieldCheckIcon,
   ShieldIcon,
+  UserRoundIcon,
+  UsersRoundIcon,
   XIcon,
 } from "lucide-react";
 import { memo, useCallback, useEffect } from "react";
@@ -550,22 +554,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         ))}
 
       {isNarrow && openappaStatus && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-muted-foreground"
-              aria-label={`OpenAPPA status: trust ${openappaStatus.trust}, audience ${openappaStatus.audience}`}
-            >
-              <ShieldIcon className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <span>{`trust: ${openappaStatus.trust} · audience: ${openappaStatus.audience}`}</span>
-          </TooltipContent>
-        </Tooltip>
+        <OpenappaStatusDisplay status={openappaStatus} compact />
       )}
 
       {/* Rendered beside whichever control the collapsed toolbar picked (the
@@ -815,18 +804,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
       )}
 
       {!isNarrow && openappaStatus && (
-        <>
-          <OpenappaStatusInfoButton
-            label="trust"
-            value={openappaStatus.trust}
-            description="The current trust label of this protected conversation"
-          />
-          <OpenappaStatusInfoButton
-            label="audience"
-            value={openappaStatus.audience}
-            description="The current audience label of this protected conversation"
-          />
-        </>
+        <OpenappaStatusDisplay status={openappaStatus} />
       )}
 
       {/* Apps Hackathon session recorder — a distinct cluster in the composer.
@@ -839,31 +817,57 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 
 export { ChatPromptInputTools };
 
-function OpenappaStatusInfoButton({
-  label,
-  value,
-  description,
+function OpenappaStatusDisplay({
+  status,
+  compact = false,
 }: {
-  label: "trust" | "audience";
-  value: string;
-  description: string;
+  status: { trust: string; audience: string };
+  compact?: boolean;
 }) {
+  const TrustIcon =
+    status.trust === "trusted"
+      ? ShieldCheckIcon
+      : status.trust === "suspicious"
+        ? ShieldAlertIcon
+        : ShieldIcon;
+  const AudienceIcon =
+    status.audience === "public"
+      ? GlobeIcon
+      : status.audience === "internal"
+        ? UsersRoundIcon
+        : status.audience === "self"
+          ? UserRoundIcon
+          : UsersRoundIcon;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-1 px-2 text-xs text-muted-foreground"
-          aria-label={`${label}: ${value}`}
+        <output
+          aria-label={`Trust: ${status.trust}; audience: ${status.audience}`}
+          className={cn(
+            "inline-flex h-8 min-w-0 items-center text-xs text-muted-foreground",
+            compact ? "gap-1 px-1" : "max-w-72 gap-3 border-l pl-3",
+          )}
         >
-          <InfoIcon className="size-3" />
-          <span>{`${label}: ${value}`}</span>
-        </Button>
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <TrustIcon
+              aria-hidden="true"
+              className={cn(
+                "size-3.5 shrink-0",
+                status.trust === "suspicious" &&
+                  "text-amber-600 dark:text-amber-400",
+              )}
+            />
+            {!compact && <span className="truncate">{status.trust}</span>}
+          </span>
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <AudienceIcon aria-hidden="true" className="size-3.5 shrink-0" />
+            {!compact && <span className="truncate">{status.audience}</span>}
+          </span>
+        </output>
       </TooltipTrigger>
-      <TooltipContent side="top">
-        <span>{description}</span>
+      <TooltipContent side="top" className="max-w-xs break-words">
+        <span>{`Trust: ${status.trust} · Audience: ${status.audience}`}</span>
       </TooltipContent>
     </Tooltip>
   );

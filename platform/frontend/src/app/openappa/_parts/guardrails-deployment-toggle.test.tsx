@@ -16,7 +16,7 @@ import { SidebarMenu, SidebarProvider } from "@/components/ui/sidebar";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   EnforcementSwitch,
-  GuardrailsDeploymentToggle,
+  GuardrailsDisabledWarning,
 } from "./guardrails-deployment-toggle";
 
 vi.mock("@/lib/auth/auth.query");
@@ -59,12 +59,12 @@ function show(ui: "sidebar" | "switch" = "switch") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  render(
+  return render(
     <QueryClientProvider client={client}>
       <SidebarProvider>
         {ui === "sidebar" ? (
           <SidebarMenu>
-            <GuardrailsDeploymentToggle />
+            <GuardrailsDisabledWarning />
           </SidebarMenu>
         ) : (
           <EnforcementSwitch />
@@ -74,11 +74,19 @@ function show(ui: "sidebar" | "switch" = "switch") {
   );
 }
 
-test("the sidebar shows the enforcement state and links to the Policy page", async () => {
+test("the sidebar warns while enforcement is off and links to the Guardrails page", async () => {
   show("sidebar");
-  const link = await screen.findByRole("link", { name: /OpenAPPA off/ });
-  expect(link).toHaveAttribute("href", "/openappa/policy");
+  const link = await screen.findByRole("link", { name: /Guardrails disabled/ });
+  expect(link).toHaveAttribute("href", "/openappa");
   expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+});
+
+test("the sidebar says nothing once enforcement is on", async () => {
+  enabled = true;
+  const { container } = show("sidebar");
+  // Nothing to warn about, so no row at all — not a row reporting success.
+  await waitFor(() => expect(container.querySelector("li")).toBeNull());
+  expect(screen.queryByText(/Guardrails/)).toBeNull();
 });
 
 test("an administrator turns enforcement on and off", async () => {

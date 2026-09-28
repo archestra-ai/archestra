@@ -29,13 +29,7 @@ vi.mock("@archestra/shared", async () => {
 
 let mockSecretsType = "DB";
 let mockAgentRuntimeEnabled = false;
-let mockOpenAppaEnforcementEnabled = false;
-
-vi.mock("@/lib/guardrails-deployment.query", () => ({
-  useGuardrailsDeployment: () => ({
-    data: { enabled: mockOpenAppaEnforcementEnabled },
-  }),
-}));
+let mockOpenAppaEnabled = false;
 
 vi.mock("@/lib/secrets.query", () => ({
   useSecretsType: vi.fn(() => ({
@@ -46,6 +40,7 @@ vi.mock("@/lib/secrets.query", () => ({
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: vi.fn((feature: string) => {
     if (feature === "agentRuntime") return mockAgentRuntimeEnabled;
+    if (feature === "openappaEnabled") return mockOpenAppaEnabled;
     return false;
   }),
 }));
@@ -65,7 +60,7 @@ beforeEach(() => {
   mockCapabilities = [];
   mockSecretsType = "DB";
   mockAgentRuntimeEnabled = false;
-  mockOpenAppaEnforcementEnabled = false;
+  mockOpenAppaEnabled = false;
 
   vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
@@ -119,8 +114,8 @@ describe("useSettingsTabs", () => {
     });
   });
 
-  it("hides legacy Security settings when OpenAPPA enforcement is enabled", async () => {
-    mockOpenAppaEnforcementEnabled = true;
+  it("hides legacy Security settings when OpenAPPA is enabled", async () => {
+    mockOpenAppaEnabled = true;
     mockPermissions = { agentSettings: ["read"] };
     const { result } = renderHook(() => useSettingsTabs(), {
       wrapper: createWrapper(),

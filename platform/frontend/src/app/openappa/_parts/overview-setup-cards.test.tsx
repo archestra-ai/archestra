@@ -100,7 +100,9 @@ function show() {
 }
 test("a fresh instance shows only the policy step", async () => {
   show();
-  expect(await screen.findByText("Turn on the guardrail")).toBeInTheDocument();
+  expect(
+    await screen.findByRole("heading", { name: "Turn on the guardrail" }),
+  ).toBeInTheDocument();
   expect(
     await screen.findByRole("link", { name: "Create my policy" }),
   ).toHaveAttribute(
@@ -108,10 +110,7 @@ test("a fresh instance shows only the policy step", async () => {
     expect.stringContaining("/chat?agentId=appa-agent&user_prompt="),
   );
   expect(
-    screen.getByText(/Archestra's guardrail uses OpenAPPA/),
-  ).toBeInTheDocument();
-  expect(
-    screen.getByText("You review it. Nothing changes until you approve."),
+    screen.getByText(/frontier deterministic guardrail/),
   ).toBeInTheDocument();
   expect(
     screen.getByRole("link", { name: /How OpenAPPA works/ }),
@@ -149,7 +148,9 @@ test("a saved policy with enforcement off makes enforcement the next step", asyn
     screen.queryByRole("link", { name: "Ask about the policy" }),
   ).not.toBeInTheDocument();
   expect(screen.getByText("How it works")).toBeInTheDocument();
-  expect(screen.queryByText("Turn on the guardrail")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Turn on the guardrail" }),
+  ).not.toBeInTheDocument();
 });
 
 test("the enforcement switch turns enforcement on and off", async () => {

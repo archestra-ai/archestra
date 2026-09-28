@@ -76,6 +76,9 @@ test.each([
     "aria-current",
     "page",
   );
+  expect(
+    screen.getByText(/deterministic guardrails that stop AI from leaking/),
+  ).toBeInTheDocument();
   const configureLink = screen.queryByRole("link", {
     name: "Configure with chat",
   });
@@ -108,4 +111,26 @@ test("a fresh Overview hides the tabs until a policy is saved", () => {
   expect(
     screen.queryByRole("link", { name: "Policy" }),
   ).not.toBeInTheDocument();
+  // The header keeps naming the page and what it is for, tabs or no tabs.
+  expect(
+    screen.getByRole("heading", { level: 1, name: "Guardrails Alpha" }),
+  ).toBeInTheDocument();
+});
+
+test("the header labels the feature as Alpha on every tab", () => {
+  setupState.isFresh = false;
+  vi.mocked(usePathname).mockReturnValue("/openappa/policy");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as ReturnType<typeof useSearchParams>,
+  );
+
+  show(
+    <OpenAppaPageLayout>
+      <div>Content</div>
+    </OpenAppaPageLayout>,
+  );
+
+  expect(screen.getByText("Alpha")).toBeInTheDocument();
+  // The browser tab keeps the plain name; the badge is only for the page.
+  expect(document.title).toBe("Guardrails - Archestra");
 });

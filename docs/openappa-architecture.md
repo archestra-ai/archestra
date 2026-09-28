@@ -6,17 +6,18 @@ Session state is keyed by session ID. Internal requests over loopback use shared
 
 ## Startup configuration
 
-`ARCHESTRA_OPENAPPA_ENABLED` defaults to `false`. Explicit `true` enables APPA
-and the OpenAPPA editor. It automatically registers the proxy plugin.
+OpenAPPA follows the `ARCHESTRA_BETA` master switch and has no flag of its
+own. `ARCHESTRA_BETA=true` enables APPA and the OpenAPPA editor and
+automatically registers the proxy plugin.
 The **Enable Guardrails v2** switch on `/openappa` controls APPA enforcement
 across every organization and agent in the deployment. It defaults to off and
 requires organization administration permission to change. Both the server flag
 and this shared switch must be on for APPA to enforce policies. Each request
 reads the shared setting, so replicas do not rely on a process-local switch.
 Policy editing and GitHub sync remain available while enforcement is off.
-`ARCHESTRA_BETA` and the plugin list alone do not activate them.
+The plugin list alone does not activate them.
 The OpenAPPA editor stores organization policy revisions in PostgreSQL. Restart
-the backend when changing the flag; saving a policy requires no restart.
+the backend when changing the switch; saving a policy requires no restart.
 
 Existing trusted-data and invocation guardrails always remain active. When APPA
 is enabled, existing result filters run first and APPA evaluates their filtered
@@ -47,7 +48,7 @@ so a rule named `grain__*` matches nothing. Globs live in argument selectors
 
 | Boundary | APPA inactive | Flag and global switch on |
 | --- | --- | --- |
-| Incoming tool results | Existing result policies | Existing result policies, then APPA admission and saved output |
+| Incoming tool results | Existing result policies | APPA admission and saved output |
 | Outgoing calls | Existing invocation policies | Existing invocation policies, then APPA decision |
 | Denied call | Existing adapter refusal | Notice call carrying APPA's explanation and remedies |
 | Session header | No APPA wiring | Stable conversation identity |
@@ -55,7 +56,22 @@ so a rule named `grain__*` matches nothing. Globs live in argument selectors
 | Runtime | Not loaded or initialized | Lazy native initialization; errors fail closed |
 
 Migrations remain additive and deployment-wide; runtime APPA records are accessed
-only when enabled. The existing guardrails remain active with the APPA flag off.
+only when enabled.
+
+The server flag hands the trusted-data decision over rather than layering it.
+With the flag on, the pre-APPA trusted-data guardrail stands down: it marks no
+tool result untrusted, runs no dual-LLM sanitization, reports no
+sensitive-context boundary, and an agent's own "consider context untrusted"
+setting stops applying. Every proxied request then reads as trusted context, so an existing
+invocation policy that only restricts untrusted context no longer fires, while
+one that blocks or requires approval outright still does. Note that the flag
+alone enforces nothing on the APPA side: until the deployment switch is also
+on, a deployment with the flag set has neither guardrail judging its traffic.
+
+Their pages step aside with them: the legacy Guardrails page, the Security
+settings tab, and their navigation entries are hidden, and deep links redirect
+to OpenAPPA. Nothing stored changes, so clearing the flag restores both the
+pages and the evaluation exactly as they were, with every policy row intact.
 
 ## GitHub policy sync
 

@@ -3,7 +3,7 @@
 import { DEFAULT_ADMIN_EMAIL, DocsPage } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { GuardrailsDeploymentToggle } from "@/app/openappa/_parts/guardrails-deployment-toggle";
+import { GuardrailsDisabledWarning } from "@/app/openappa/_parts/guardrails-deployment-toggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +26,7 @@ import {
 import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useK8sCapabilities } from "@/lib/environment.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { cn } from "@/lib/utils/tailwind";
 
 interface Warning {
@@ -34,13 +35,19 @@ interface Warning {
   external: boolean;
 }
 
-export function SidebarWarningsAccordion() {
+export function SidebarWarningsAccordion({
+  showGuardrailsStatus = true,
+}: {
+  /** False where the navigation already shows the Guardrails row. */
+  showGuardrailsStatus?: boolean;
+}) {
   const { data: session } = useSession();
   const userEmail = session?.user?.email;
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();
   const disableBasicAuth = useDisableBasicAuth();
   const openappaEnabled = useFeature("openappaEnabled");
+  const guardrailsDeployment = useGuardrailsDeployment();
   const { data: canUpdateOrg } = useHasPermissions({
     organization: ["update"],
   });
@@ -92,7 +99,14 @@ export function SidebarWarningsAccordion() {
     },
   ].filter((w): w is Warning => Boolean(w));
 
-  if (warnings.length === 0 && !openappaEnabled) {
+  // Only while enforcement is off: the row is a warning, and there is nothing
+  // to warn about once the guardrail is doing its job. Checked here too, not
+  // just inside the row, so the group does not render as an empty strip.
+  const showGuardrails =
+    openappaEnabled === true &&
+    showGuardrailsStatus &&
+    guardrailsDeployment.data?.enabled === false;
+  if (warnings.length === 0 && !showGuardrails) {
     return null;
   }
 
@@ -154,7 +168,7 @@ export function SidebarWarningsAccordion() {
           ) : (
             warnings.map((w) => <WarningItem key={w.label} {...w} />)
           )}
-          {openappaEnabled && <GuardrailsDeploymentToggle />}
+          {showGuardrails && <GuardrailsDisabledWarning />}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

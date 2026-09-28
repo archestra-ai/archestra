@@ -4,7 +4,11 @@ import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import config from "@/config";
 import { afterEach, expect, test } from "@/test";
-import { buildMcpGatewayTool, type ChatToolContext } from "./chat-tool-builder";
+import {
+  buildMcpGatewayTool,
+  buildUnsafeContextBoundaryResult,
+  type ChatToolContext,
+} from "./chat-tool-builder";
 import { ToolCallRepeatTracker } from "./tool-call-repeat-tracker";
 
 const native = vi.hoisted(() => ({
@@ -101,5 +105,38 @@ for (const enabled of [false, true]) {
     expect(JSON.stringify(result.steps[0].toolResults)).toContain(agent.id);
     expect(native.initializeOpenappa).not.toHaveBeenCalled();
     expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+}
+
+// Chat runs the pre-OpenAPPA result policies on its own path rather than
+// through `evaluateIfContextIsTrusted`, so it needs its own stand-down check.
+// Without one, a chat tool result keeps carrying a boundary and the transcript
+// keeps drawing "Sensitive context below" after the guardrail is off.
+for (const enabled of [false, true]) {
+  test(`chat tool results carry a boundary only while the old guardrail runs (openappa=${enabled})`, async ({
+    makeAgent,
+  }) => {
+    config.openappa = { ...config.openappa, enabled };
+    const agent = await makeAgent();
+
+    const result = await buildUnsafeContextBoundaryResult({
+      toolCallId: "call-1",
+      // No policy covers this tool, which the old guardrail treats as untrusted.
+      toolName: "some_server__fetch_page",
+      toolOutput: [{ type: "text", text: "page text" }],
+      agentId: agent.id,
+      considerContextUntrusted: false,
+    });
+
+    if (enabled) {
+      expect(result.unsafeContextBoundary).toBeUndefined();
+      expect(result._meta).toBeUndefined();
+    } else {
+      expect(result.unsafeContextBoundary).toMatchObject({
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: "call-1",
+      });
+    }
   });
 }

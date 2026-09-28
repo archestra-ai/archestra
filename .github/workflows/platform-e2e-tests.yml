@@ -845,7 +845,7 @@ jobs:
             projects_nightly: openappa
             shard: ""
             workers_arg: ""
-            openappa_enabled: "true"
+            beta_enabled: "true"
           - name: chromium-1of2
             projects_default: chromium
             projects_nightly: chromium
@@ -905,9 +905,10 @@ jobs:
       - name: Start lite e2e stack
         env:
           PLATFORM_IMAGE: ${{ steps.load-platform-image.outputs.image-tag }}
-          # Off for every leg but the openappa one, so the other legs' stacks
-          # are byte-identical to what they were before this existed.
-          ARCHESTRA_OPENAPPA_ENABLED: ${{ matrix.openappa_enabled || 'false' }}
+          # OpenAPPA follows the beta master switch. Off for every leg but the
+          # openappa one, so the other legs' stacks are byte-identical to what
+          # they were before this existed.
+          ARCHESTRA_BETA: ${{ matrix.beta_enabled || 'false' }}
           # The embedded Kind cluster pulls the MCP server base image straight
           # from the (anonymous-pull) registry, so trusted runs can use the
           # image this workflow just built. Untrusted PRs don't push to the

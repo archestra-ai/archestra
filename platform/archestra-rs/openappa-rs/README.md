@@ -40,13 +40,14 @@ pnpm --filter @archestra/openappa-rs build:dev
 pnpm --filter @backend db:migrate
 ```
 
-Configure the usual Archestra database and auth secret, then explicitly set:
+Configure the usual Archestra database and auth secret, then turn on the beta
+master switch (OpenAPPA has no flag of its own):
 
 ```sh
-ARCHESTRA_OPENAPPA_ENABLED=true
+ARCHESTRA_BETA=true
 ```
 
-With this flag enabled in `platform/.env`, `tilt up` builds and load-checks the
+With this switch enabled in `platform/.env`, `tilt up` builds and load-checks the
 native addon before starting the development backend. Changes to its Rust
 sources, build configuration, or the workspace Cargo manifest/lockfile rebuild
 the addon and restart the backend after a successful build. Failed builds leave

@@ -4,6 +4,7 @@ import { MessageCircle } from "lucide-react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageLayout } from "@/components/page-layout";
+import { Badge } from "@/components/ui/badge";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { BatteriesUploadAction } from "./batteries-panel";
 import { OpenAppaChatButton } from "./openappa-chat-button";
@@ -18,8 +19,20 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
 
   return (
     <PageLayout
-      title="OpenAPPA"
-      description={`${appName}'s guardrail against data leaks. Every tool call is checked before it runs.`}
+      // Maturity, not runtime state, so it belongs to the name rather than to
+      // the `status` pill beside it. Laid out inline with a real space rather
+      // than a flex gap: a CSS gap leaves no separator in the accessible name,
+      // which a screen reader then reads as one word.
+      title={
+        <span>
+          Guardrails{" "}
+          <Badge variant="secondary" className="align-middle">
+            Alpha
+          </Badge>
+        </span>
+      }
+      documentTitle="Guardrails"
+      description={`${appName} runs unique deterministic guardrails that stop AI from leaking sensitive corporate data, built on OpenAPPA.`}
       tabs={
         firstStepOnly
           ? []

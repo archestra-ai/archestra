@@ -2972,7 +2972,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(evaluateTrustedData).toHaveBeenCalledTimes(2);
   });
 
-  test("existing result blocking reaches APPA and stays untrusted for invocation checks", async ({
+  test("OpenAPPA replaces results and controls calls without legacy trusted-data blocking", async ({
     makeTool,
     makeToolPolicy,
     makeTrustedDataPolicy,
@@ -3023,14 +3023,16 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "tool_result",
-        output: expect.stringContaining("Unsafe result"),
+        output: JSON.stringify({ secret: "RAW SECRET" }),
       }),
     );
-    expect(events.some((event) => event.event === "tool_call")).toBe(false);
+    expect(events).toContainEqual(
+      expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
+    );
     expect(JSON.stringify(providerRequests)).toContain("APPROVED REPLACEMENT");
     expect(JSON.stringify(providerRequests)).not.toContain("RAW SECRET");
-    expect(response.body).toContain("this session contains sensitive data");
-    expect(response.body).not.toContain('"type":"tool_use"');
+    expect(response.body).not.toContain("this session contains sensitive data");
+    expect(response.body).toContain('"type":"tool_use"');
   });
 
   test("Claude Code compact stays on the root and a new session opens a fresh root with no parent id", async () => {

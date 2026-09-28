@@ -2024,11 +2024,12 @@ const MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH = 32;
 const OFFER_SIGNING_DOMAIN = "archestra.openappa.offer-signing.v1";
 
 /**
- * Validates APPA settings only when its feature flag is explicitly enabled.
+ * OpenAPPA follows the ARCHESTRA_BETA master switch; it has no flag of its own.
+ * Validates APPA settings only when that switch is explicitly "true".
  * @public — exported for testability
  */
 export function parseOpenAppaConfig(
-  enabled: string | undefined,
+  betaEnabled: string | undefined,
   yellEnabled?: string,
   offerSigningSecret?: string,
   postgresMaxConnections?: string,
@@ -2046,7 +2047,7 @@ export function parseOpenAppaConfig(
   // Derives from the session authentication secret when no dedicated key is set.
   // Uses a domain-separated HMAC so the key never collides with session or MRTR keys.
   const secret = dedicated || deriveOfferSigningSecret(authSecret);
-  const isEnabled = enabled === "true";
+  const isEnabled = betaEnabled === "true";
   if (isEnabled && secret.length === 0) {
     logger.warn(
       "OpenAPPA is enabled without a signing key. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret, or signed remedy, native-question, session-receipt, and external-client tool-call requests will fail closed (503) until every replica uses the same secret.",
@@ -2273,7 +2274,7 @@ const authSessionSecret =
   process.env.ARCHESTRA_AUTH_SECRET;
 
 const openappa = parseOpenAppaConfig(
-  process.env.ARCHESTRA_OPENAPPA_ENABLED,
+  process.env.ARCHESTRA_BETA,
   process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,

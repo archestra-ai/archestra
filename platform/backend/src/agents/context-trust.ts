@@ -1,6 +1,7 @@
 import type { ToolExecutionOptions } from "ai";
 import {
   evaluateIfContextIsTrusted,
+  legacyTrustedDataActive,
   preexistingUntrustedBoundary,
 } from "@/guardrails/trusted-data";
 import { AgentTeamModel } from "@/models";
@@ -21,6 +22,13 @@ export async function evaluateToolExecutionContextTrust(params: {
   contextIsTrusted: boolean;
   unsafeContextBoundary?: UnsafeContextBoundary;
 }> {
+  // Checked before the shortcut below: the agent's own "consider context
+  // untrusted" setting belongs to this guardrail too, so it stops applying
+  // with the rest of it rather than surviving as the one legacy rule left.
+  if (!legacyTrustedDataActive()) {
+    return { contextIsTrusted: true };
+  }
+
   // This caller discards the result-policy redactions the evaluator computes,
   // so with the verdict and boundary already settled there is nothing left to
   // learn — and evaluating would cost a team lookup plus a policy pass over the

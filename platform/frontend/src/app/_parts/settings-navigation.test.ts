@@ -43,22 +43,33 @@ vi.mock("@/lib/secrets.query", () => ({
   useSecretsType: () => ({ data: { type: "Vault" } }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({ useFeature: () => true }));
-
-vi.mock("@/lib/guardrails-deployment.query", () => ({
-  useGuardrailsDeployment: () => ({ data: { enabled: false } }),
+let openappaEnabled = true;
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: (feature: string) =>
+    feature === "openappaEnabled" ? openappaEnabled : true,
 }));
 
 describe("settings navigation", () => {
-  it("lists the same tabs, in the same order, as the settings page renders", () => {
+  // Security and OpenAPPA are one slot with two occupants: the legacy tab
+  // while OpenAPPA is off, its settings once it is on. Either way the rest of
+  // the order must match.
+  it.each([
+    { openappa: true, hidden: "/settings/security" },
+    { openappa: false, hidden: "/settings/openappa" },
+  ])("lists the same tabs, in the same order, as the settings page renders (openappa=%j)", ({
+    openappa,
+    hidden,
+  }) => {
+    openappaEnabled = openappa;
     const { result } = renderHook(() => useSettingsTabs());
 
-    // The sidebar picks the first entry of this list; if a tab is added to the
-    // rendered tabs but not here, the sidebar would skip past it and open a
-    // page further down than the one the user actually lands on via /settings.
-    expect(result.current.map((tab) => tab.href)).toEqual([
-      ...SETTINGS_TAB_HREFS,
-    ]);
+    // The sidebar picks the first entry of this list; if a tab is added to
+    // the rendered tabs but not here, the sidebar would skip past it and open
+    // a page further down than the one the user actually lands on via
+    // /settings.
+    expect(result.current.map((tab) => tab.href)).toEqual(
+      SETTINGS_TAB_HREFS.filter((href) => href !== hidden),
+    );
   });
 
   it("sends the sidebar to the first tab the reader may open", () => {

@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   isAgentTool,
+  isRequiredOpenAppaToolShortName,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -366,6 +367,12 @@ class AgentToolExclusionsService {
           throw new ApiError(
             400,
             `The ${shortName} meta tool cannot be excluded`,
+          );
+        }
+        if (isRequiredOpenAppaToolShortName(shortName)) {
+          throw new ApiError(
+            400,
+            `The ${shortName} recovery tool cannot be excluded`,
           );
         }
       } else {

@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   isPrefillExemptArchestraToolShortName,
+  isRequiredOpenAppaToolShortName,
   parseFullToolName,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -25,7 +26,7 @@ export const EMPTY_EXCLUSIONS: AgentToolExclusions = {
 
 /**
  * Tools offered in a server's exclusion checklist. The built-in catalog's
- * meta dispatch tools (search_tools / run_tool) are never excludable, so they
+ * meta dispatch and OpenAPPA recovery tools are never excludable, so they
  * are hidden from its checklist.
  */
 export function filterExcludableTools<T extends { name: string }>(
@@ -35,7 +36,8 @@ export function filterExcludableTools<T extends { name: string }>(
   if (catalogId !== ARCHESTRA_MCP_CATALOG_ID) return tools;
   return tools.filter(
     (tool) =>
-      !NON_EXCLUDABLE_SHORT_NAMES.has(parseFullToolName(tool.name).toolName),
+      !NON_EXCLUDABLE_SHORT_NAMES.has(parseFullToolName(tool.name).toolName) &&
+      !isRequiredOpenAppaToolShortName(parseFullToolName(tool.name).toolName),
   );
 }
 
@@ -161,8 +163,8 @@ export function exclusionsKey(exclusions: AgentToolExclusions): string {
 
 // === internal ===
 
-// Must match the backend PUT validation: only the search_tools/run_tool meta
-// tools are rejected server-side, so they are all the picker hides.
+// Must match the backend PUT validation for meta tools; the required recovery
+// tools are filtered through the shared predicate above.
 const NON_EXCLUDABLE_SHORT_NAMES = new Set<string>([
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,

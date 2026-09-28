@@ -65,7 +65,7 @@ describe("fetchOpenAiModels with a ChatGPT-subscription credential", () => {
       "/backend-api/codex/models",
     );
     expect(new URL(String(modelsUrl)).searchParams.get("client_version")).toBe(
-      "99.99.99",
+      "0.158.0",
     );
     expect(new Headers(modelsInit?.headers).get("authorization")).toBe(
       "Bearer at_1",

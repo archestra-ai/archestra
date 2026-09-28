@@ -553,12 +553,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   </div>
                 )}
                 {showOpenappaStatus && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                      Trust &amp; audience
-                    </p>
-                    <OpenappaStatusDisplay status={openappaStatus} inPopover />
-                  </div>
+                  <OpenappaStatusDisplay status={openappaStatus} inPopover />
                 )}
               </div>
             </PopoverContent>

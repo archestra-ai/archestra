@@ -137,11 +137,23 @@ jobs:
           owner="${GH_REPO%%/*}"
           existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
           if [[ -z "$existing_pr" ]]; then
-            gh pr create \
+            pr="$(gh pr create \
               --base main \
               --head "$BRANCH" \
               --title "$pr_title" \
-              --body "$pr_body"
+              --body "$pr_body")"
           else
-            gh pr edit "$existing_pr" --title "$pr_title" --body "$pr_body"
+            pr="$existing_pr"
+            gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+          fi
+
+          pr_number="$(gh pr view "$pr" --json number --jq .number)"
+          merge_armed="$(gh api graphql \
+            -f owner="$owner" \
+            -f repo="${GH_REPO#*/}" \
+            -F number="$pr_number" \
+            -f query='query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { autoMergeRequest { enabledAt } mergeQueueEntry { state } } } }' \
+            --jq '.data.repository.pullRequest | (.autoMergeRequest != null or .mergeQueueEntry != null)')"
+          if [[ "$merge_armed" == "false" ]]; then
+            gh pr merge "$pr" --repo "$GH_REPO" --auto
           fi

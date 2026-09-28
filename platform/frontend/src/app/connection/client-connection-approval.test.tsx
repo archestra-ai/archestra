@@ -64,6 +64,7 @@ function show(
   resources = {
     gatewaySelected: true,
     proxySelected: true,
+    proxyUsesVirtualKey: true,
     skillsSelected: true,
   },
 ) {
@@ -83,6 +84,7 @@ function show(
         setupId="setup"
         clientId={clientId}
         platform="linux"
+        gatewayName="My Gateway"
         {...resources}
       />
     </QueryClientProvider>,
@@ -107,7 +109,9 @@ test("approval requires matching the terminal code, then submits the reviewed se
   ).toBeVisible();
   expect(screen.getByText("Reload Cursor to see shared skills.")).toBeVisible();
   expect(
-    screen.getByText(/enter the proxy URL and key in Cursor Settings/),
+    screen.getByText(
+      /Paste its proxy URL and virtual key into Cursor Settings/,
+    ),
   ).toBeVisible();
   expect(requests).toEqual([{ decision: "approve", setupId: "setup" }]);
   expect(
@@ -119,6 +123,7 @@ test("approval only shows steps for selected Cursor resources", async () => {
   show("cursor", {
     gatewaySelected: true,
     proxySelected: false,
+    proxyUsesVirtualKey: false,
     skillsSelected: false,
   });
   await screen.findByText("ABCD-1234");
@@ -136,6 +141,22 @@ test("approval only shows steps for selected Cursor resources", async () => {
   expect(screen.queryByText(/Reload Cursor/)).not.toBeInTheDocument();
 });
 
+test("Cursor provider-key setup tells the user which key to use", async () => {
+  show("cursor", {
+    gatewaySelected: false,
+    proxySelected: true,
+    proxyUsesVirtualKey: false,
+    skillsSelected: false,
+  });
+  await screen.findByText("ABCD-1234");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Approve connection" }));
+  expect(
+    await screen.findByText(/Paste its proxy URL and your own OpenAI API key/),
+  ).toBeVisible();
+  expect(screen.queryByText(/virtual key/)).not.toBeInTheDocument();
+});
+
 test("Claude Desktop approval points to its connector step", async () => {
   server.use(
     http.get(`${origin}/api/client-connections/request`, () =>
@@ -151,11 +172,8 @@ test("Claude Desktop approval points to its connector step", async () => {
   await screen.findByText("ABCD-1234");
   fireEvent.click(screen.getByRole("checkbox"));
   fireEvent.click(screen.getByRole("button", { name: "Approve connection" }));
-  expect(
-    await screen.findByText(
-      /After Claude Desktop restarts, connect the gateway/,
-    ),
-  ).toBeVisible();
+  expect(await screen.findByText(/After Desktop restarts, open/)).toBeVisible();
+  expect(screen.getByText(/Ask Claude to list the tools/)).toBeVisible();
 });
 
 test("a mismatched client cannot be approved but can be denied", async () => {

@@ -7,6 +7,7 @@ import {
   useClientConnection,
   useDecideClientConnection,
 } from "@/lib/client-connection.query";
+import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 
 export function ClientConnectionApproval({
   requestId,
@@ -14,7 +15,9 @@ export function ClientConnectionApproval({
   clientId,
   platform,
   gatewaySelected,
+  gatewayName,
   proxySelected,
+  proxyUsesVirtualKey,
   skillsSelected,
 }: {
   requestId: string;
@@ -22,7 +25,9 @@ export function ClientConnectionApproval({
   clientId: string;
   platform: string;
   gatewaySelected: boolean;
+  gatewayName: string;
   proxySelected: boolean;
+  proxyUsesVirtualKey: boolean;
   skillsSelected: boolean;
 }) {
   const request = useClientConnection(requestId);
@@ -43,19 +48,26 @@ export function ClientConnectionApproval({
                   </li>
                 )}
                 {skillsSelected && <li>Reload Cursor to see shared skills.</li>}
-                {proxySelected && (
+                {proxySelected && proxyUsesVirtualKey && (
                   <li>
-                    To route OpenAI model requests, enter the proxy URL and key
-                    in Cursor Settings → Models → API Keys.
+                    For model routing, find “Cursor model settings (manual
+                    step)” in the output of the setup command Cursor ran. Paste
+                    its proxy URL and virtual key into Cursor Settings → Models
+                    → API Keys.
+                  </li>
+                )}
+                {proxySelected && !proxyUsesVirtualKey && (
+                  <li>
+                    For model routing, find “Cursor model settings (manual
+                    step)” in the output of the setup command Cursor ran. Paste
+                    its proxy URL and your own OpenAI API key into Cursor
+                    Settings → Models → API Keys.
                   </li>
                 )}
               </ul>
             )}
             {clientId === "claude-desktop" && gatewaySelected && (
-              <p className="text-muted-foreground">
-                After Claude Desktop restarts, connect the gateway in Settings →
-                Connectors and enable it in your conversation.
-              </p>
+              <ClaudeDesktopGatewaySteps gatewayName={gatewayName} />
             )}
           </>
         ) : (
@@ -65,7 +77,7 @@ export function ClientConnectionApproval({
     );
   if (request.isError)
     return (
-      <p role="alert" className="p-5">
+      <p role="alert" className="p-5 text-sm">
         <span>
           This connection request is unavailable or expired. Start the installer
           again.

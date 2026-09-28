@@ -59,6 +59,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils/tailwind";
+import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientConnectionApproval } from "./client-connection-approval";
 import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
 import {
@@ -423,7 +424,8 @@ export function ConnectCommandPanel({
     client.id === "claude-code" &&
     !!gateway &&
     !virtualKeyUnbacked;
-  const showDesktopGatewayStep = client.id === "claude-desktop" && !!gateway;
+  const showDesktopGatewayStep =
+    !connectRequest && client.id === "claude-desktop" && !!gateway;
   // The script installs skills itself for everyone who can read them, so the
   // wizard never grows an extra step here. The marketplace step appears only
   // when there is no script to carry them: nothing to connect at all (below),
@@ -1206,9 +1208,23 @@ export function ConnectCommandPanel({
               <TriangleAlert />
               <AlertTitle>Cursor model setup needs a separate step</AlertTitle>
               <AlertDescription>
-                Approving prepares the proxy settings. After installation, enter
-                the URL and key in Cursor Settings → Models → API Keys. Your
-                Cursor subscription cannot supply the key.
+                {effectiveProxyAuth === "virtual-key" ? (
+                  <p>
+                    After approval, look in the output of the setup command
+                    Cursor runs. The “Cursor model settings (manual step)”
+                    section prints the proxy URL and virtual key.
+                  </p>
+                ) : (
+                  <p>
+                    After approval, look in the output of the setup command
+                    Cursor runs. The “Cursor model settings (manual step)”
+                    section prints the proxy URL. Use your own OpenAI API key; a
+                    Cursor subscription cannot supply one.
+                  </p>
+                )}
+                <p>
+                  Enter these values in Cursor Settings → Models → API Keys.
+                </p>
               </AlertDescription>
             </Alert>
           )}
@@ -1279,7 +1295,9 @@ export function ConnectCommandPanel({
                 clientId={client.id}
                 platform={setupPlatform}
                 gatewaySelected={!!gateway}
+                gatewayName={oauthServerName}
                 proxySelected={proxyActive}
+                proxyUsesVirtualKey={effectiveProxyAuth === "virtual-key"}
                 skillsSelected={skillsEligible && includeSkills}
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (
@@ -1364,28 +1382,7 @@ export function ConnectCommandPanel({
 
       {showDesktopGatewayStep && (
         <WizardStep n={4} title="Enable your gateway in Claude Desktop" last>
-          <div className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              The installer registers your gateway. Claude Desktop does not let
-              installers enable connectors automatically, so you need to enable
-              the gateway in your conversation.
-            </p>
-            <ol className="list-decimal space-y-3 pl-5">
-              <li>
-                After Desktop restarts, open{" "}
-                <strong>Settings → Connectors</strong>. Select{" "}
-                <strong>{oauthServerName}</strong> and connect it if needed.
-                Complete sign-in and approve access in your browser.
-              </li>
-              <li>
-                In your conversation, open <strong>+ → Connectors</strong> and
-                enable <strong>{oauthServerName}</strong> if it is off. A
-                connected checkmark in Settings does not confirm it is enabled
-                for that conversation.
-              </li>
-              <li>Ask Claude to list the tools available from your gateway.</li>
-            </ol>
-          </div>
+          <ClaudeDesktopGatewaySteps gatewayName={oauthServerName} />
         </WizardStep>
       )}
 

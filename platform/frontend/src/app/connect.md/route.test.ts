@@ -16,7 +16,10 @@ describe("Connect agent instructions", () => {
       "the skills check, or proxy inference remain unverified, say so explicitly.",
     );
     expect(instructions).toContain(
-      "never ask for the key in chat. Do not claim the proxy is configured",
+      "their own OpenAI API key in Cursor Settings; never ask for the key in chat.",
+    );
+    expect(instructions).toContain(
+      'find "Cursor model settings (manual step)"',
     );
     expect(instructions).toContain(
       "curl --fail --silent --show-error http://localhost:3000/api/client-connections/installer",
@@ -33,6 +36,11 @@ describe("Connect agent instructions", () => {
     expect(instructions).toContain("--client cursor");
     expect(instructions).toContain("Customize > MCPs");
     expect(instructions).toContain("Customize > Skills");
+    expect(instructions).toContain("Cursor model settings (manual step)");
+    expect(instructions).toContain("printed virtual key");
+    expect(instructions).toContain(
+      "otherwise they need their own OpenAI API key",
+    );
     expect(instructions).toContain("A Cursor subscription cannot authenticate");
     expect(instructions).not.toContain("Claude Desktop");
     expect(instructions).not.toContain("opencode mcp auth");

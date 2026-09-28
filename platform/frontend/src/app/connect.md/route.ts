@@ -72,8 +72,12 @@ under Settings > Plugins. Send a message to make sure that inference works.
    Cursor: open Customize > MCPs to connect/authenticate the configured server.
    If the setup installed shared skills, reload Cursor and verify them under
    Customize > Skills. Cursor reads nested skills from ~/.cursor/skills/.
-   To use the proxy for models, configure an OpenAI API key and base URL under
-   Settings > Models > API Keys and enable Use OpenAI API Key and Override OpenAI Base URL.
+   If the proxy was selected, find "Cursor model settings (manual step)" in the
+   installer output. It prints the proxy URL and either a virtual key or an
+   instruction to use the user's own OpenAI API key. Tell the user where to find
+   these values in the terminal; do not quote a secret key in chat. In Cursor
+   Settings > Models > API Keys, enter them and enable Use OpenAI API Key and
+   Override OpenAI Base URL.
    A Cursor subscription cannot authenticate the proxy. Send a test prompt in
    Cursor and confirm the request appears in this deployment before reporting success.
    Codex: use codex mcp login SERVER_NAME. Open a new terminal and run codex.
@@ -98,8 +102,9 @@ under Settings > Plugins. Send a message to make sure that inference works.
    Cursor: installation alone is not a complete connection. If native OAuth,
    the skills check, or proxy inference remain unverified, say so explicitly.
    List the remaining steps from the setup output, including any manual User
-   Rules and model settings. Ask the user to enter their provider key in Cursor
-   Settings; never ask for the key in chat. Do not claim the proxy is configured
+   Rules and model settings. Ask the user to enter the printed virtual key or
+   their own OpenAI API key in Cursor Settings; never ask for the key in chat.
+   Do not claim the proxy is configured
    merely because the installer printed its settings.
    For other clients, close with one short, imperative user instruction, e.g.:
    "Open a new terminal, then run claude /mcp and select <server> to sign in."
@@ -201,7 +206,7 @@ function focusedClientDetails(client: string): {
       return {
         label: "Cursor",
         finish:
-          "Reload Cursor. Open Customize > MCPs, authenticate the configured gateway, and verify it lists tools. Confirm installed shared skills under Customize > Skills. Cursor discovers nested skills in ~/.cursor/skills/. If runtime handoff User Rules were printed, ask the user to paste them under Customize > Rules > User Rules without replacing existing rules. For the model proxy, ask the user to enter their own OpenAI API key and the printed base URL under Settings > Models > API Keys, then enable Use OpenAI API Key and Override OpenAI Base URL. A Cursor subscription cannot authenticate the proxy. Send a test prompt and confirm the request appears in this deployment. Installation alone does not complete these native steps; state exactly which checks remain unverified.",
+          "Reload Cursor. Open Customize > MCPs, authenticate the configured gateway, and verify it lists tools. Confirm installed shared skills under Customize > Skills. Cursor discovers nested skills in ~/.cursor/skills/. If runtime handoff User Rules were printed, ask the user to paste them under Customize > Rules > User Rules without replacing existing rules. If the model proxy was selected, find 'Cursor model settings (manual step)' in the installer output. Tell the user where to find the printed proxy URL and, for virtual-key setup, the printed virtual key; otherwise they need their own OpenAI API key. Do not quote a secret key in chat. Ask the user to enter these values under Settings > Models > API Keys, then enable Use OpenAI API Key and Override OpenAI Base URL. A Cursor subscription cannot authenticate the proxy. Send a test prompt and confirm the request appears in this deployment. Installation alone does not complete these native steps; state exactly which checks remain unverified.",
       };
     case "codex":
       return {

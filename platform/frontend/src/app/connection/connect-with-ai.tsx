@@ -34,10 +34,12 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
               through {appName} too, choose LLM Proxy under Customize setup.
             </p>
             <p>
-              In Cursor Settings → Models → API Keys, enter the URL and key
-              shown during setup, then turn on Use OpenAI API Key and Override
-              OpenAI Base URL. You can use your own OpenAI API key; a Cursor
-              subscription cannot be used as a key.
+              After setup, find “Cursor model settings (manual step)” in the
+              installer output. It shows the proxy URL and, if selected, a
+              virtual key. Otherwise use your own OpenAI API key. In Cursor
+              Settings → Models → API Keys, enter those values and turn on Use
+              OpenAI API Key and Override OpenAI Base URL. A Cursor subscription
+              cannot be used as a key.
             </p>
           </AlertDescription>
         </Alert>

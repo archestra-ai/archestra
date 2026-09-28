@@ -50,6 +50,9 @@ test("Cursor explains how to opt into proxy inference", () => {
   );
   expect(notice).toHaveTextContent("Cursor keeps using its current models");
   expect(notice).toHaveTextContent("Customize setup");
+  expect(notice).toHaveTextContent("Cursor model settings (manual step)");
+  expect(notice).toHaveTextContent("installer output");
+  expect(notice).toHaveTextContent("Otherwise use your own OpenAI API key");
   expect(notice).toHaveTextContent("Override OpenAI Base URL");
   expect(notice).toHaveTextContent(
     "a Cursor subscription cannot be used as a key",

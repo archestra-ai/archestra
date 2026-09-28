@@ -58,6 +58,12 @@ import {
 export interface SetupScriptMcpSection {
   /** Logical server name registered in the client (slug). */
   serverName: string;
+  /**
+   * Names an earlier connect run registered this same gateway under. A re-run
+   * moves such an entry onto `serverName`, so one gateway never shows up twice
+   * in the client's server list. Empty when nothing needs migrating.
+   */
+  legacyServerNames?: string[];
   /** Gateway URL, e.g. https://host/v1/mcp/<gateway-slug>. */
   url: string;
 }
@@ -598,6 +604,16 @@ function indent(block: string, prefix: string): string {
     .join("\n");
 }
 
+/**
+ * Server names this gateway may already sit under in the client's config,
+ * minus the one it is about to be registered as.
+ */
+export function legacyServerNames(mcp: SetupScriptMcpSection): string[] {
+  return (mcp.legacyServerNames ?? []).filter(
+    (name) => name && name !== mcp.serverName,
+  );
+}
+
 // ===================================================================
 // Internal helpers — Claude Code
 // ===================================================================
@@ -613,9 +629,15 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
     // local and user scopes first: a stale local entry from an older connect run
     // would otherwise shadow the user entry and fail `add` under `set -euo
     // pipefail`, leaving the gateway removed and not re-added.
+    const stale = legacyServerNames(ctx.mcp)
+      .flatMap((name) => [
+        `cli claude mcp remove --scope local ${sh(name)} >/dev/null 2>&1 || true`,
+        `cli claude mcp remove --scope user ${sh(name)} >/dev/null 2>&1 || true`,
+      ])
+      .join("\n");
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 cli claude mcp remove --scope local ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-cli claude mcp remove --scope user ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli claude mcp remove --scope user ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli claude mcp add --scope user --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   }
 
@@ -924,6 +946,9 @@ if (fs.existsSync(configPath) && !fs.existsSync(backupPath)) fs.copyFileSync(con
 cfg.$schema ??= "https://opencode.ai/config.json";
 if (process.env.ARCHESTRA_OC_MCP_NAME) {
   cfg.mcp ??= {};
+  // Move, not add: an entry left by an earlier connect run points at this same
+  // gateway, so it is dropped rather than left beside the new one.
+  for (const legacy of JSON.parse(process.env.ARCHESTRA_OC_MCP_LEGACY_NAMES || "[]")) delete cfg.mcp[legacy];
   cfg.mcp[process.env.ARCHESTRA_OC_MCP_NAME] = { type: "remote", url: process.env.ARCHESTRA_OC_MCP_URL };
 }
 const managedHeaders = JSON.parse(process.env.ARCHESTRA_OC_HEADERS || "{}");
@@ -1160,8 +1185,11 @@ fi`);
   }
 
   if (ctx.mcp) {
+    const stale = legacyServerNames(ctx.mcp)
+      .map((name) => `cli codex mcp remove ${sh(name)} >/dev/null 2>&1 || true`)
+      .join("\n");
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
   }
 
@@ -1240,8 +1268,13 @@ function copilotSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
   if (ctx.mcp) {
+    const stale = legacyServerNames(ctx.mcp)
+      .map(
+        (name) => `cli copilot mcp remove ${sh(name)} >/dev/null 2>&1 || true`,
+      )
+      .join("\n");
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-cli copilot mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli copilot mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli copilot mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}
 cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
   }
@@ -1448,6 +1481,10 @@ if path.exists():
     if raw:
         config = json.loads(raw)
 servers = config.setdefault("mcpServers", {})
+# Move, not add: an entry left by an earlier connect run points at this same
+# gateway, so it is dropped rather than left beside the new one.
+for legacy in json.loads(os.environ.get("ARCHESTRA_MCP_LEGACY_NAMES", "[]")):
+    servers.pop(legacy, None)
 servers[os.environ["ARCHESTRA_MCP_SERVER_NAME"]] = {
     "url": os.environ["ARCHESTRA_MCP_SERVER_URL"],
 }
@@ -1469,6 +1506,7 @@ ${mergeJsonFileSnippet({
   env: {
     ARCHESTRA_MCP_SERVER_NAME: ctx.mcp.serverName,
     ARCHESTRA_MCP_SERVER_URL: ctx.mcp.url,
+    ARCHESTRA_MCP_LEGACY_NAMES: JSON.stringify(legacyServerNames(ctx.mcp)),
   },
   python: CURSOR_MCP_MERGE_PY,
   fallbackMessage:
@@ -1565,7 +1603,11 @@ if path.exists() and not backup.exists():
     shutil.copy2(path, backup)
 cfg.setdefault("$schema", "https://opencode.ai/config.json")
 if os.environ.get("ARCHESTRA_OC_MCP_NAME"):
-    cfg.setdefault("mcp", {})[os.environ["ARCHESTRA_OC_MCP_NAME"]] = {"type": "remote", "url": os.environ["ARCHESTRA_OC_MCP_URL"]}
+    servers = cfg.setdefault("mcp", {})
+    # Move, not add: an entry left by an earlier connect run points at this
+    # same gateway, so it is dropped rather than left beside the new one.
+    for legacy in json.loads(os.environ.get("ARCHESTRA_OC_MCP_LEGACY_NAMES", "[]")): servers.pop(legacy, None)
+    servers[os.environ["ARCHESTRA_OC_MCP_NAME"]] = {"type": "remote", "url": os.environ["ARCHESTRA_OC_MCP_URL"]}
 managed_headers = json.loads(os.environ.get("ARCHESTRA_OC_HEADERS", "{}"))
 routes = json.loads(os.environ.get("ARCHESTRA_OC_PROVIDER_ROUTES", "{}"))
 runtime_routing = os.environ.get("ARCHESTRA_OC_RUNTIME_ROUTING") == "1"
@@ -1704,6 +1746,7 @@ ${opencodeOwnedMerge(
   {
     ARCHESTRA_OC_MCP_NAME: ctx.mcp.serverName,
     ARCHESTRA_OC_MCP_URL: ctx.mcp.url,
+    ARCHESTRA_OC_MCP_LEGACY_NAMES: JSON.stringify(legacyServerNames(ctx.mcp)),
     ARCHESTRA_OC_PROVIDER_ID: "",
   },
   JSON.stringify(

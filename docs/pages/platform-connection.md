@@ -154,7 +154,7 @@ Set the disable variable to turn the guard off without uninstalling. To remove e
 
 Five clients get the one-command script: Claude Code, Codex, Cursor, Copilot CLI, and OpenCode. Claude Desktop gets a downloadable installer. n8n and Any Client get step-by-step instructions you apply yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
 
-In the **MCP gateway** commands below, `<name>` is the name your client uses for the gateway. Any name works. The gateway signs each tool that it lists. Guardrails and OpenAPPA use that signature to identify tools under any name.
+In the **MCP gateway** commands below, `<name>` is the name your client uses for the gateway. The script uses your gateway's own name. A gateway still called "My Gateway" registers under the deployment's name instead — `archestra`, unless your deployment is white-labelled. Re-running the command moves a gateway that an earlier run registered under a different name. The gateway signs each tool that it lists. Guardrails and OpenAPPA use that signature to identify tools under any name.
 
 ### Claude Code
 

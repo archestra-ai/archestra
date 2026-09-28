@@ -217,6 +217,7 @@ export function ConnectionFlow({
               gatewayId={effectiveMcpId}
               gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
               gatewayName={selectedMcp.name}
+              isPersonalGateway={selectedMcp.isPersonalGateway}
               baseUrl={baseUrl}
             />
           ) : (

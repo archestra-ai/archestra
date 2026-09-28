@@ -1163,6 +1163,43 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByText("my_gateway")).toBeInTheDocument();
   });
 
+  it("names the seeded personal gateway after the deployment, not 'my_gateway'", async () => {
+    // "My Gateway" is the name every member's gateway is seeded with, so
+    // my_gateway in the client's server list tells the user nothing about
+    // which platform serves it.
+    renderPanel({
+      mcpGateways: [
+        {
+          id: "g1",
+          name: "My Gateway",
+          agentType: "mcp_gateway",
+          isPersonalGateway: true,
+        },
+      ],
+    });
+    await screen.findByText(COMMAND);
+
+    expect(screen.getByText("archestra")).toBeInTheDocument();
+    expect(screen.queryByText("my_gateway")).not.toBeInTheDocument();
+  });
+
+  it("names the seeded personal gateway after a white-label app name", async () => {
+    vi.mocked(useAppName).mockReturnValue("Acme AI");
+    renderPanel({
+      mcpGateways: [
+        {
+          id: "g1",
+          name: "My Gateway",
+          agentType: "mcp_gateway",
+          isPersonalGateway: true,
+        },
+      ],
+    });
+    await screen.findByText(COMMAND);
+
+    expect(screen.getByText("acme_ai")).toBeInTheDocument();
+  });
+
   it("omits the OAuth step when only a proxy (no gateway) is connected", async () => {
     renderPanel({ mcpGateways: [], mcpGatewayId: null });
     await screen.findByText(COMMAND);

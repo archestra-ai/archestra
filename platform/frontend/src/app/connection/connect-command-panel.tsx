@@ -4,6 +4,7 @@ import {
   DEFAULT_MODELS,
   DocsPage,
   providerRequiresPerUserCredential,
+  resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
 import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
@@ -61,10 +62,7 @@ import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ClientConnectionApproval } from "./client-connection-approval";
 import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
-import {
-  type ConnectionBaseUrl,
-  deriveMcpServerName,
-} from "./connection-flow.utils";
+import type { ConnectionBaseUrl } from "./connection-flow.utils";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
@@ -430,9 +428,10 @@ export function ConnectCommandPanel({
   );
   // The exact name the script registers the gateway under — referenced in the
   // OAuth step so the user can find it in the `claude /mcp` list.
-  const oauthServerName = deriveMcpServerName({
+  const oauthServerName = resolveMcpClientServerName({
     gatewayName: gateway?.name ?? "",
     appName,
+    isPersonalGateway: gateway?.isPersonalGateway,
   });
 
   // Passthrough setups also get a personal passthrough virtual key wired into the

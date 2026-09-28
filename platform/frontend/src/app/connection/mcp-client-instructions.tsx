@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveMcpClientServerName } from "@archestra/shared";
 import {
   AlertTriangle,
   ChevronDown,
@@ -40,7 +41,6 @@ import type {
   McpBuildParams,
   McpSupportedAuth,
 } from "./clients";
-import { deriveMcpServerName } from "./connection-flow.utils";
 import { TerminalBlock } from "./terminal-block";
 
 interface McpClientInstructionsProps {
@@ -48,6 +48,11 @@ interface McpClientInstructionsProps {
   gatewayId: string;
   gatewaySlug: string;
   gatewayName: string;
+  /**
+   * Whether this is the member's seeded personal gateway — it registers under
+   * the deployment's name rather than its own (see resolveMcpClientServerName).
+   */
+  isPersonalGateway?: boolean;
   /** Connection base URL chosen at the page level (see ConnectionUrlStep). */
   baseUrl: string;
 }
@@ -65,6 +70,7 @@ export function McpClientInstructions({
   gatewayId,
   gatewaySlug,
   gatewayName,
+  isPersonalGateway,
   baseUrl,
 }: McpClientInstructionsProps) {
   const supportedAuth =
@@ -88,7 +94,11 @@ export function McpClientInstructions({
   }
 
   const mcpUrl = `${baseUrl}/mcp/${gatewaySlug}`;
-  const serverName = deriveMcpServerName({ gatewayName, appName });
+  const serverName = resolveMcpClientServerName({
+    gatewayName,
+    appName,
+    isPersonalGateway,
+  });
   const isQuick = client.mcp.kind === "custom" && client.mcp.quick === true;
 
   // The generic client mirrors the LLM Proxy section: the endpoint terminal

@@ -23,8 +23,6 @@ You can also give your coding agent this prompt, replacing the example hostname:
 
 > Read https://ai.example.com/connect.md?client=cursor and connect Cursor.
 
-The Connection page adds the selected client to the link so the agent sees only its relevant steps. Without `?client=`, `/connect.md` still returns the full instructions for every client.
-
 The public instructions need no installed skill or platform login.
 They support Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
 The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.

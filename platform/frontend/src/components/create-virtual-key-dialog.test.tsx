@@ -218,7 +218,9 @@ describe("CreateVirtualKeyDialog", () => {
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     expect(within(dialog).getByText("Copy your key")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Connect" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Connect" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "General" }),
     ).not.toBeInTheDocument();

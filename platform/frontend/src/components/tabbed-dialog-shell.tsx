@@ -34,6 +34,7 @@ interface TabbedDialogShellProps<TSection extends string> {
   sidebarLabel: string;
   sidebarDescription: string;
   sidebarIcon: ReactNode;
+  showSidebar?: boolean;
   activeSection: TSection;
   navItems: Array<TabbedDialogNavItem<TSection>>;
   onActiveSectionChange: (section: TSection) => void;
@@ -60,6 +61,7 @@ export function TabbedDialogShell<TSection extends string>({
   sidebarLabel,
   sidebarDescription,
   sidebarIcon,
+  showSidebar = true,
   activeSection,
   navItems,
   onActiveSectionChange,
@@ -79,51 +81,55 @@ export function TabbedDialogShell<TSection extends string>({
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
   const formContent = (
     <DialogForm className="contents" onSubmit={onSubmit}>
-      <nav
-        className={cn(
-          "w-[240px] border-r flex flex-col shrink-0",
-          sidebarClassName,
-        )}
-      >
-        <div className="flex min-h-[72px] items-center border-b px-4 py-4">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted">
-              {sidebarIcon}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold text-sm truncate">
-                {sidebarLabel}
+      {showSidebar && (
+        <nav
+          className={cn(
+            "w-[240px] border-r flex flex-col shrink-0",
+            sidebarClassName,
+          )}
+        >
+          <div className="flex min-h-[72px] items-center border-b px-4 py-4">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted">
+                {sidebarIcon}
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                {sidebarDescription}
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm truncate">
+                  {sidebarLabel}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {sidebarDescription}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex flex-col gap-0.5 px-2 py-3 flex-1">
-          {navItems.map((navItem) => (
-            <Button
-              key={navItem.id}
-              type="button"
-              variant="ghost"
-              data-testid={getNavItemTestId?.(navItem.id)}
-              className={cn(
-                "justify-start h-9 px-3 font-normal w-full",
-                activeSection === navItem.id &&
-                  "bg-accent text-accent-foreground font-medium",
-              )}
-              onClick={() => onActiveSectionChange(navItem.id)}
-            >
-              {navItem.label}
-            </Button>
-          ))}
-        </div>
+          <div className="flex flex-col gap-0.5 px-2 py-3 flex-1">
+            {navItems.map((navItem) => (
+              <Button
+                key={navItem.id}
+                type="button"
+                variant="ghost"
+                data-testid={getNavItemTestId?.(navItem.id)}
+                className={cn(
+                  "justify-start h-9 px-3 font-normal w-full",
+                  activeSection === navItem.id &&
+                    "bg-accent text-accent-foreground font-medium",
+                )}
+                onClick={() => onActiveSectionChange(navItem.id)}
+              >
+                {navItem.label}
+              </Button>
+            ))}
+          </div>
 
-        {sidebarFooter && (
-          <div className="px-2 pb-3 flex flex-col gap-1.5">{sidebarFooter}</div>
-        )}
-      </nav>
+          {sidebarFooter && (
+            <div className="px-2 pb-3 flex flex-col gap-1.5">
+              {sidebarFooter}
+            </div>
+          )}
+        </nav>
+      )}
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <div className="flex min-h-[72px] shrink-0 items-center justify-between gap-4 border-b px-4 py-4">

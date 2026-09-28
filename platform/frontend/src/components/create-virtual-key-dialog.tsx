@@ -303,10 +303,12 @@ export function CreateVirtualKeyDialog({
       sidebarLabel={newKeyName || "New virtual key"}
       sidebarDescription="Virtual key"
       sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
+      showSidebar={!createdKeyValue}
+      className={createdKeyValue ? "max-w-4xl" : undefined}
       activeSection={activeSection}
       navItems={
         createdKeyValue
-          ? [{ id: "connect", label: "Connect" }]
+          ? []
           : isPassthrough
             ? [{ id: "general", label: "General" }]
             : [

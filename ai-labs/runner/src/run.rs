@@ -640,20 +640,18 @@ async fn stop_mcps(setups: &[(Lane, LaneAgents, BenchmarkMcp)]) {
     }
 }
 
-/// Seed an env's backend-wide defaults — skill defaults on, tool auto-assignment off, the `bench`
-/// team, and every env skill — shared by the shared-backend and isolated-lane setup paths. Returns
-/// the team id. The error is pre-stringified so each caller can route it into its own teardown +
+/// Seed an env's backend-wide defaults — skill defaults on, tool auto-assignment off, and every env
+/// skill — shared by the shared-backend and isolated-lane setup paths. The error is pre-stringified so each caller can route it into its own teardown +
 /// failure-reporting style without re-wrapping (preserving today's raw `e.to_string()` text).
-async fn seed_backend_defaults(client: &EvalClient, env: &EnvConfig) -> Result<String, String> {
+async fn seed_backend_defaults(client: &EvalClient, env: &EnvConfig) -> Result<(), String> {
     client.enable_skill_defaults().await.map_err(|e| e.to_string())?;
     client.disable_tool_auto_assignment().await.map_err(|e| e.to_string())?;
-    let team_id = client.create_team("bench").await.map_err(|e| e.to_string())?;
     for sref in &env.skills {
-        seed_skill_ref(client, &sref.repo, sref.path.as_deref(), &sref.ref_, sref.cap, "org")
+        seed_skill_ref(client, &sref.repo, sref.path.as_deref(), &sref.ref_, sref.cap)
             .await
             .map_err(|e| e.to_string())?;
     }
-    Ok(team_id)
+    Ok(())
 }
 
 /// Seed an env's remote MCPs (with lock enforcement) and, when enabled, the harness-owned synthetic
@@ -722,13 +720,10 @@ async fn setup_shared_env(
         }
     };
 
-    let team_id = match seed_backend_defaults(&client, env).await {
-        Ok(id) => id,
-        Err(e) => {
-            let _ = instance.shutdown().await;
-            return Err(e);
-        }
-    };
+    if let Err(e) = seed_backend_defaults(&client, env).await {
+        let _ = instance.shutdown().await;
+        return Err(e);
+    }
 
     let mut setups: Vec<(Lane, LaneAgents, BenchmarkMcp)> = Vec::new();
     for lane in &shared_lanes {
@@ -741,7 +736,7 @@ async fn setup_shared_env(
                 return Err(e.to_string());
             }
         };
-        match setup_lane_agent(&client, env, &env_plan.tasks, lane, &mcp, &team_id, None).await {
+        match setup_lane_agent(&client, env, &env_plan.tasks, lane, &mcp, None).await {
             Ok(agents) => {
                 setups.push((lane.clone(), agents, mcp));
             }
@@ -820,13 +815,10 @@ async fn run_isolated_lane(
         }
     };
 
-    let team_id = match seed_backend_defaults(&client, &env).await {
-        Ok(id) => id,
-        Err(e) => {
-            let _ = instance.shutdown().await;
-            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
-        }
-    };
+    if let Err(e) = seed_backend_defaults(&client, &env).await {
+        let _ = instance.shutdown().await;
+        return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
+    }
 
     let mcp = match BenchmarkMcp::start(BENCH_MCP_NAME).await {
         Ok(m) => m,
@@ -836,7 +828,7 @@ async fn run_isolated_lane(
         }
     };
 
-    let agents = match setup_lane_agent(&client, &env, &tasks, &lane, &mcp, &team_id, advisor.as_ref()).await {
+    let agents = match setup_lane_agent(&client, &env, &tasks, &lane, &mcp, advisor.as_ref()).await {
         Ok(s) => s,
         Err(e) => {
             mcp.stop().await;
@@ -987,7 +979,6 @@ async fn resolve_lanes(
             lane.base_url.as_deref(),
             Some(&format!("bench-{}", lane.name)),
             is_primary,
-            "personal",
             180.0,
             3.0,
         )
@@ -1006,7 +997,6 @@ async fn resolve_lanes(
                     advisor.base_url.as_deref(),
                     Some(&format!("bench-{}-advisor", lane.name)),
                     false,
-                    "personal",
                     180.0,
                     3.0,
                 )
@@ -1030,7 +1020,6 @@ async fn setup_lane_agent(
     tasks: &[Task],
     lane: &Lane,
     mcp: &BenchmarkMcp,
-    team_id: &str,
     advisor_resolved: Option<&ResolvedModel>,
 ) -> Result<LaneAgents, RunError> {
     let mut task_agents = HashMap::new();
@@ -1042,7 +1031,6 @@ async fn setup_lane_agent(
             &format!("{}-{}-{}", env.agent_name, task.id, lane.slug()),
             &system_prompt,
             env.platform.tool_exposure_mode,
-            team_id,
         )
         .await?;
         task_agents.insert(task.id.clone(), TaskAgent { id, system_prompt });
@@ -1127,9 +1115,8 @@ async fn ensure_agent(
     name: &str,
     system_prompt: &str,
     tool_exposure_mode: ToolExposureMode,
-    team_id: &str,
 ) -> Result<String, RunError> {
-    let existing = client.list_agents(Some(name), Some("org")).await?;
+    let existing = client.list_agents(Some(name), None).await?;
     // Reuse by name is intra-run idempotency only: each run boots a fresh per-run database that
     // teardown drops (see lifecycle::Instance::start), so no agent created with a different
     // tool_exposure_mode can survive into a later run with a flipped flag.
@@ -1142,11 +1129,9 @@ async fn ensure_agent(
     let created = client
         .create_agent(&AgentCreate {
             name: name.to_string(),
-            scope: "org".to_string(),
             agent_type: "agent".to_string(),
             system_prompt: (!system_prompt.trim().is_empty()).then(|| system_prompt.to_string()),
             tool_exposure_mode,
-            teams: vec![team_id.to_string()],
         })
         .await?;
     require_id(&created, "agent")

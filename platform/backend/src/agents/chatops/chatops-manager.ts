@@ -74,7 +74,7 @@ import {
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
 import {
-  parseSlackRichReply,
+  parseSlackRichReplyFallback,
   SLACK_RICH_REPLY_INSTRUCTIONS,
 } from "./slack-rich-reply";
 import TelegramProvider from "./telegram-provider";
@@ -2174,7 +2174,8 @@ export class ChatOpsManager {
       .join("\n");
     const cleanedResponse = stripThinkingBlocks(text);
     let agentResponse =
-      provider.providerId === "slack" && parseSlackRichReply(cleanedResponse)
+      provider.providerId === "slack" &&
+      parseSlackRichReplyFallback(cleanedResponse)
         ? cleanedResponse
         : compactChatOpsResponse(cleanedResponse);
 

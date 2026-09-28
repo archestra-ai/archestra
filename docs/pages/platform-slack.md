@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 7
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-09-24
+lastUpdated: 2026-09-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -44,9 +44,9 @@ See [Deployment — Environment Variables](/docs/platform-deployment#environment
 
 Agents can reply with headers, sections, images, context, dividers, and buttons that open HTTPS links. Ask for a rich Slack reply when you want a structured report. Ordinary Markdown replies still work.
 
-The agent returns one `slack-blocks` code block containing a JSON object with `text` and `blocks`. The `text` field provides a complete summary for notifications and screen readers. The `blocks` field contains the visible Slack Block Kit components. Archestra adds the agent footer.
+The agent returns one `slack-blocks` code block containing a JSON object with `text` and `blocks`. The `text` field provides a complete summary for notifications, screen readers, and follow-up context. It includes important details and link destinations. The `blocks` field contains the visible Slack Block Kit components. Archestra adds the agent footer.
 
-Only display components and link buttons are supported. Custom actions, forms, and approval controls are rejected. Invalid rich replies appear as text.
+Only display components and link buttons are supported. Custom actions, forms, and approval controls are rejected. Invalid rich replies use their summary as plain text when available. Slack formatting rejections also fall back to the plain-text summary. Malformed envelopes without a usable summary appear as text.
 
 ### First Message
 

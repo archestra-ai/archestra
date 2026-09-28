@@ -7,7 +7,13 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { SocketModeClient } from "@slack/socket-mode";
-import { type Button, type ColorScheme, WebClient } from "@slack/web-api";
+import {
+  type Button,
+  type ColorScheme,
+  ErrorCode,
+  type WebAPIPlatformError,
+  WebClient,
+} from "@slack/web-api";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   type AllowedCacheKey,
@@ -60,7 +66,10 @@ import {
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
-import { parseSlackRichReply } from "./slack-rich-reply";
+import {
+  parseSlackRichReply,
+  parseSlackRichReplyFallback,
+} from "./slack-rich-reply";
 import {
   EventDedupMap,
   errorMessage,
@@ -450,11 +459,55 @@ class SlackProvider implements ChatOpsProvider {
     // seen it on earlier bot replies replayed as thread history. Drop that echo
     // before anything else so the reply renders exactly one footer — and before
     // chunking, so an echo can't survive inside a chunk's markdown block.
+    const client = this.client;
+    const footer = options.footer;
     const richReply = parseSlackRichReply(options.text);
-    const replyText = richReply?.text ?? options.text;
+    const summary =
+      richReply?.text ?? parseSlackRichReplyFallback(options.text);
+    const replyText = summary ?? options.text;
     const body = options.footer
       ? stripDuplicateAgentFooter(replyText, options.footer)
       : replyText;
+
+    // Keep the summary usable even if the model echoes attribution inside
+    // rich blocks. The ordinary footer stripper cannot sanitize those blocks.
+    const echoedFooter =
+      footer &&
+      richReply?.blocks.some((block) => {
+        const texts =
+          block.type === "context"
+            ? block.elements.flatMap((element) =>
+                element.type === "image" ? [] : [element.text],
+              )
+            : block.type === "header"
+              ? [block.text.text]
+              : block.type === "section"
+                ? [
+                    block.text?.text,
+                    ...(block.fields?.map((field) => field.text) ?? []),
+                  ]
+                : [];
+        return texts.some(
+          (text) =>
+            text !== undefined &&
+            stripDuplicateAgentFooter(text, footer) !== text,
+        );
+      });
+    const sendPlainSummary = async () => {
+      const result = await client.chat.postMessage({
+        channel: options.originalMessage.channelId,
+        thread_ts: options.originalMessage.threadId,
+        text: [body, options.hint, options.footer].filter(Boolean).join("\n\n"),
+        mrkdwn: false,
+        parse: "none",
+        unfurl_links: false,
+        unfurl_media: false,
+      });
+      return (result.ts as string) || "";
+    };
+    if (summary !== null && (!richReply || echoedFooter)) {
+      return sendPlainSummary();
+    }
 
     // Slack expands `markdown` blocks server-side into Block Kit primitives
     // (one per heading, table, list, code block, paragraph) and rejects any
@@ -545,8 +598,30 @@ class SlackProvider implements ChatOpsProvider {
         },
         "[SlackProvider] chat.postMessage (sendReply)",
       );
-      const result = await this.client.chat.postMessage(postArgs);
-      if (i === 0) firstTs = (result.ts as string) || "";
+      try {
+        const result = await this.client.chat.postMessage(postArgs);
+        if (i === 0) firstTs = (result.ts as string) || "";
+      } catch (error) {
+        const slackError = error as Partial<WebAPIPlatformError> | null;
+        // Only a definitive formatting rejection is safe to retry. Network
+        // failures may have happened after Slack accepted the message.
+        if (
+          richReply &&
+          slackError?.code === ErrorCode.PlatformError &&
+          [
+            "invalid_blocks",
+            "invalid_blocks_format",
+            "msg_blocks_too_long",
+          ].includes(slackError.data?.error ?? "")
+        ) {
+          logger.warn(
+            { error: slackError.data?.error },
+            "[SlackProvider] Rich reply rejected; sending plain-text summary",
+          );
+          return sendPlainSummary();
+        }
+        throw error;
+      }
     }
 
     return firstTs;

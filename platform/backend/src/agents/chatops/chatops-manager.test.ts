@@ -4130,16 +4130,20 @@ describe("ChatOpsManager Slack conversation context", () => {
     };
   }
 
-  test("teaches rich replies and preserves their content through response compaction", async ({
+  test.for([
+    true,
+    false,
+  ])("preserves Slack envelopes through response compaction (valid blocks: %s)", async (validBlocks, {
     makeUser,
     makeOrganization,
+    makeMember,
     makeInternalAgent,
   }) => {
     const text = `\`\`\`slack-blocks\n${JSON.stringify({
       text: "Run 11111111-1111-4111-8111-111111111111 started",
       blocks: [
         {
-          type: "section",
+          type: validBlocks ? "section" : "unsupported",
           text: { type: "plain_text", text: "Your report is being prepared." },
         },
       ],
@@ -4158,9 +4162,10 @@ describe("ChatOpsManager Slack conversation context", () => {
       });
     const user = await makeUser({ email: "rich-reply@example.com" });
     const org = await makeOrganization();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      scope: "org",
+      access: "org",
     });
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
@@ -4177,6 +4182,7 @@ describe("ChatOpsManager Slack conversation context", () => {
       message: slackMessage(),
       provider,
     });
+    expect(executorSpy).toHaveBeenCalledOnce();
     expect(executorSpy.mock.calls[0][0].message).toContain("slack-blocks");
     expect(sendReply).toHaveBeenCalledWith(
       expect.objectContaining({

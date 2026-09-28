@@ -60,6 +60,7 @@ describe("rich Slack reply validation", () => {
     ["callback value", { ...link, value: "approve" }],
     ["callback button", { type: "button", text: link.text }],
     ["script URL", { ...link, url: "javascript:alert(1)" }],
+    ["malformed URL", { ...link, url: "not a URL" }],
     ["HTTP URL", { ...link, url: "http://example.com" }],
     ["credential URL", { ...link, url: "https://user:pass@example.com" }],
     [
@@ -160,13 +161,15 @@ describe("rich replies through the Slack HTTP client", () => {
     isThreadReply: true,
   };
 
-  async function send(text: string) {
+  async function send(text: string, errors: string[] = []) {
     const posts: URLSearchParams[] = [];
     server.use(
       http.post(
         "https://slack.com/api/chat.postMessage",
         async ({ request }) => {
           posts.push(new URLSearchParams(await request.text()));
+          const error = errors[posts.length - 1];
+          if (error) return HttpResponse.json({ ok: false, error });
           return HttpResponse.json({ ok: true, ts: "1234567890.000002" });
         },
       ),
@@ -183,14 +186,19 @@ describe("rich replies through the Slack HTTP client", () => {
       const ts = await provider.sendReply({
         originalMessage,
         text,
-        footer: "Test Agent",
+        footer: "🤖 Test Agent",
         hint: "Thread hint",
       });
       expect(ts).toBe("1234567890.000002");
-      expect(posts).toHaveLength(1);
-      expect(posts[0].get("channel")).toBe(originalMessage.channelId);
-      expect(posts[0].get("thread_ts")).toBe(originalMessage.threadId);
-      return posts[0];
+      expect(posts).toHaveLength(errors.length + 1);
+      for (const post of posts) {
+        expect(post.get("channel")).toBe(originalMessage.channelId);
+        expect(post.get("thread_ts")).toBe(originalMessage.threadId);
+      }
+      return posts[posts.length - 1];
+    } catch (error) {
+      expect(posts).toHaveLength(errors.length);
+      throw error;
     } finally {
       await provider.cleanup();
     }
@@ -201,7 +209,7 @@ describe("rich replies through the Slack HTTP client", () => {
       envelope([header, { type: "actions", elements: [link] }]),
     );
     expect(post.get("text")).toBe(
-      "Release ready. View the report.\n\nTest Agent",
+      "Release ready. View the report.\n\n🤖 Test Agent",
     );
     expect(JSON.parse(post.get("blocks") ?? "[]")).toEqual([
       header,
@@ -215,7 +223,7 @@ describe("rich replies through the Slack HTTP client", () => {
       },
       {
         type: "context",
-        elements: [{ type: "plain_text", text: "Test Agent", emoji: true }],
+        elements: [{ type: "plain_text", text: "🤖 Test Agent", emoji: true }],
       },
     ]);
   });
@@ -224,6 +232,84 @@ describe("rich replies through the Slack HTTP client", () => {
     const text = envelope([
       { type: "actions", elements: [{ ...link, action_id: "select_agent" }] },
     ]);
+    const post = await send(text);
+    expect(post.get("blocks")).toBeNull();
+    expect(post.get("mrkdwn")).toBe("false");
+    expect(post.get("text")).toBe(
+      "Release ready. View the report.\n\nThread hint\n\n🤖 Test Agent",
+    );
+  });
+
+  test.each([
+    "invalid_blocks",
+    "invalid_blocks_format",
+  ])("falls back to literal summary text after Slack rejects blocks: %s", async (error) => {
+    const post = await send(
+      envelope(
+        [
+          {
+            type: "image",
+            image_url: "https://example.com/missing.png",
+            alt_text: "Missing chart",
+          },
+        ],
+        "Report ready. <https://example.com/report|View report> *summary*",
+      ),
+      [error],
+    );
+    expect(post.get("blocks")).toBeNull();
+    expect(post.get("text")).toBe(
+      "Report ready. <https://example.com/report|View report> *summary*\n\nThread hint\n\n🤖 Test Agent",
+    );
+    expect(post.get("mrkdwn")).toBe("false");
+    expect(post.get("parse")).toBe("none");
+    expect(post.get("unfurl_links")).toBe("false");
+    expect(post.get("unfurl_media")).toBe("false");
+  });
+
+  test.each([
+    "internal_error",
+    "ratelimited",
+    "invalid_auth",
+    "channel_not_found",
+  ])("does not retry a rich reply for unrelated or uncertain delivery errors: %s", async (error) => {
+    await expect(send(envelope([header]), [error])).rejects.toThrow(error);
+  });
+
+  test("does not retry the plain-text fallback again when it fails", async () => {
+    await expect(
+      send(envelope([header]), ["invalid_blocks", "invalid_auth"]),
+    ).rejects.toThrow("invalid_auth");
+  });
+
+  test("does not apply the rich fallback to ordinary Markdown errors", async () => {
+    await expect(send("Ordinary reply", ["invalid_blocks"])).rejects.toThrow(
+      "invalid_blocks",
+    );
+  });
+
+  test.each([
+    {
+      type: "context",
+      elements: [{ type: "plain_text", text: "🤖 Test Agent" }],
+    },
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: "Ready.\n\n**🤖 Test Agent**" },
+    },
+  ])("falls back without duplicate attribution from rich blocks %#", async (footerBlock) => {
+    const post = await send(
+      envelope([header, footerBlock], "Ready.\n\n🤖 Test Agent"),
+    );
+    expect(post.get("blocks")).toBeNull();
+    expect(post.get("text")).toBe("Ready.\n\nThread hint\n\n🤖 Test Agent");
+  });
+
+  test.each([
+    '```slack-blocks\n{"text":"","blocks":[]}\n```',
+    "```slack-blocks\nnot JSON\n```",
+    `Here is an example:\n${envelope([header])}`,
+  ])("retains the original text when no safe envelope summary exists: %#", async (text) => {
     const post = await send(text);
     expect(JSON.parse(post.get("blocks") ?? "[]")[0]).toEqual({
       type: "markdown",

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const SLACK_RICH_REPLY_INSTRUCTIONS = `For a rich Slack reply, return ONLY one fenced \`slack-blocks\` JSON object: {"text":"A complete plain-text summary for notifications and screen readers","blocks":[...]}.
-Use Slack Block Kit header, section (text and/or fields), divider, image, context, or actions blocks. Actions may contain only URL buttons with plain_text labels and HTTPS urls. Images require HTTPS image_url and alt_text. Do not supply block_id, action_id, value, selects, inputs, approval buttons, or other callbacks. Use at most 48 blocks and 32 KiB of JSON. The fallback text is required (1–3000 characters); include its important information in the visible blocks too. The platform adds the agent footer. Ordinary Markdown replies still work; use rich blocks only when they help.`;
+Use Slack Block Kit header, section (text and/or fields), divider, image, context, or actions blocks. Actions may contain only URL buttons with plain_text labels and HTTPS urls. Images require HTTPS image_url and alt_text. Do not supply block_id, action_id, value, selects, inputs, approval buttons, or other callbacks. Use at most 48 blocks and 32 KiB of JSON. The fallback text is required (1–3000 characters). It is also used for thread history and when rich rendering fails, so include all important details and link destinations there and in the visible blocks. The platform adds the agent footer. Ordinary Markdown replies still work; use rich blocks only when they help.`;
 
 /**
  * Only an explicit, whole-reply envelope opts into rich rendering. Code examples,
@@ -9,28 +9,36 @@ Use Slack Block Kit header, section (text and/or fields), divider, image, contex
  * Never pass arbitrary agent JSON to Slack's message API.
  */
 export function parseSlackRichReply(text: string) {
+  const parsed = ReplySchema.safeParse(parseEnvelope(text));
+  if (!parsed.success) return null;
+  return {
+    text: parsed.data.text,
+    blocks: parsed.data.blocks.map((block, blockIndex) =>
+      block.type === "actions"
+        ? {
+            ...block,
+            elements: block.elements.map((button, buttonIndex) => ({
+              ...button,
+              // This namespace cannot select agents or approve tool calls.
+              action_id: `agent_rich_link_${blockIndex}_${buttonIndex}`,
+            })),
+          }
+        : block,
+    ),
+  };
+}
+
+/** Recover only a bounded summary from a whole envelope, never its controls. */
+export function parseSlackRichReplyFallback(text: string): string | null {
+  const parsed = FallbackSchema.safeParse(parseEnvelope(text));
+  return parsed.success ? parsed.data.text : null;
+}
+
+function parseEnvelope(text: string): unknown {
   const match = /^```slack-blocks\r?\n([\s\S]*?)\r?\n```$/.exec(text.trim());
-  if (!match || Buffer.byteLength(match[1], "utf8") > 32 * 1024) {
-    return null;
-  }
+  if (!match || Buffer.byteLength(match[1], "utf8") > 32 * 1024) return null;
   try {
-    const parsed = ReplySchema.safeParse(JSON.parse(match[1]));
-    if (!parsed.success) return null;
-    return {
-      text: parsed.data.text,
-      blocks: parsed.data.blocks.map((block, blockIndex) =>
-        block.type === "actions"
-          ? {
-              ...block,
-              elements: block.elements.map((button, buttonIndex) => ({
-                ...button,
-                // This namespace cannot select agents or approve tool calls.
-                action_id: `agent_rich_link_${blockIndex}_${buttonIndex}`,
-              })),
-            }
-          : block,
-      ),
-    };
+    return JSON.parse(match[1]);
   } catch {
     return null;
   }
@@ -43,6 +51,7 @@ const HttpsUrlSchema = z
   .url()
   .max(3000)
   .refine((value) => {
+    if (!URL.canParse(value)) return false;
     const url = new URL(value);
     return url.protocol === "https:" && !url.username && !url.password;
   });
@@ -119,10 +128,14 @@ const BlockSchema = z.union([
     .strict(),
 ]);
 
-const ReplySchema = z
+const FallbackSchema = z
   .object({
     text: z.string().trim().min(1).max(3000),
-    // Reserve two blocks for the platform's hint and agent attribution.
-    blocks: z.array(BlockSchema).min(1).max(48),
+    blocks: z.array(z.unknown()),
   })
   .strict();
+
+const ReplySchema = FallbackSchema.extend({
+  // Reserve two blocks for the platform's hint and agent attribution.
+  blocks: z.array(BlockSchema).min(1).max(48),
+});

@@ -55,7 +55,7 @@ test("Cursor explains how to opt into proxy inference", () => {
   expect(notice).toHaveTextContent("Otherwise use your own OpenAI API key");
   expect(notice).toHaveTextContent("Override OpenAI Base URL");
   expect(notice).toHaveTextContent(
-    "a Cursor subscription cannot be used as a key",
+    "A Cursor subscription cannot be used as a key",
   );
 
   view.rerender(<ConnectWithAi client={claudeCode} />);

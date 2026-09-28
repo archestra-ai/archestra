@@ -98,7 +98,7 @@ test.describe("Skills marketplace share step", () => {
 
     await page.goto(STEP_URL);
     await expect(
-      page.getByRole("heading", { name: "Select your client" }),
+      page.getByRole("heading", { name: /^Connect your tools to / }),
     ).toBeVisible();
     await expect(page.getByText(STEP_TITLE)).toBeHidden();
   });
@@ -108,7 +108,7 @@ test.describe("Skills marketplace share step", () => {
   }) => {
     await page.goto("/connection?clientId=n8n");
     await expect(
-      page.getByRole("heading", { name: "Select your client" }),
+      page.getByRole("heading", { name: /^Connect your tools to / }),
     ).toBeVisible();
     await expect(page.getByText(STEP_TITLE)).toBeHidden();
   });

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
 import ConnectionPage from "./page";
@@ -18,17 +19,21 @@ const refetchOrganizationMock = vi.fn();
 vi.mock("next/navigation");
 vi.mock("@/lib/agent.query");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/llm-proxy.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/components/page-layout", () => ({
   PageLayout: ({
     children,
     actionButton,
+    title,
   }: {
     children: ReactNode;
     actionButton?: ReactNode;
+    title: ReactNode;
   }) => (
     <>
+      <h1>{title}</h1>
       {actionButton}
       {children}
     </>
@@ -41,6 +46,7 @@ vi.mock("./connection-flow", () => ({
 describe("ConnectionPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAppName).mockReturnValue("Example Platform");
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
@@ -107,6 +113,11 @@ describe("ConnectionPage", () => {
     render(<ConnectionPage />);
 
     expect(
+      screen.getByRole("heading", {
+        name: "Connect Cursor to Example Platform",
+      }),
+    ).toBeVisible();
+    expect(
       screen.queryByRole("link", { name: "Connection settings" }),
     ).not.toBeInTheDocument();
   });
@@ -123,6 +134,11 @@ describe("ConnectionPage", () => {
       refetch: refetchOrganizationMock,
     } as unknown as ReturnType<typeof useOrganization>);
     render(<ConnectionPage />);
+    expect(
+      screen.getByRole("heading", {
+        name: "Connect your tools to Example Platform",
+      }),
+    ).toBeVisible();
     expect(screen.getByTestId("connection-flow")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Other ways to connect" }),

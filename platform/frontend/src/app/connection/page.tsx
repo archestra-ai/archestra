@@ -10,6 +10,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -18,6 +19,7 @@ import { ConnectionFlow } from "./connection-flow";
 import { getConnectableProviders } from "./connection-flow.utils";
 
 export default function ConnectionPage() {
+  const appName = useAppName();
   const searchParams = useSearchParams();
   const { data: canReadConnectionSettings } = useHasPermissions({
     organizationSettings: ["read"],
@@ -26,11 +28,8 @@ export default function ConnectionPage() {
   const requestedClient = CONNECT_CLIENTS.find(
     (client) => client.id === searchParams.get("clientId"),
   );
-  usePageTitle(
-    isApproval
-      ? `Connect ${requestedClient?.label ?? "your client"}`
-      : "Connect",
-  );
+  const approvalDocumentTitle = `Connect ${requestedClient?.label ?? "your app"}`;
+  usePageTitle(isApproval ? approvalDocumentTitle : "Connect");
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const organizationQuery = useOrganization(true, { fresh: true });
   useEffect(() => {
@@ -74,18 +73,15 @@ export default function ConnectionPage() {
           <>
             Connect{" "}
             <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-              {requestedClient?.label ?? "your client"}
+              {requestedClient?.label ?? "your app"}
             </span>
+            {` to ${appName}`}
           </>
         ) : (
-          "Connect your tools to AI"
+          `Connect your tools to ${appName}`
         )
       }
-      documentTitle={
-        isApproval
-          ? `Connect ${requestedClient?.label ?? "your client"}`
-          : "Connection"
-      }
+      documentTitle={isApproval ? approvalDocumentTitle : "Connection"}
       maxWidth="wizard"
       actionInlineOnMobile={Boolean(canReadConnectionSettings && !isApproval)}
       actionButton={

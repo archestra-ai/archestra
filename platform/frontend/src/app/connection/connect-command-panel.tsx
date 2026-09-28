@@ -962,7 +962,7 @@ export function ConnectCommandPanel({
           {hasProxy && (
             <SetupSummaryRow
               compact={compact}
-              done={proxyActive}
+              done={proxyActive && client.id !== "cursor"}
               editable
               isEditing={editing === "proxy"}
               onToggle={() => toggleEdit("proxy")}
@@ -971,6 +971,11 @@ export function ConnectCommandPanel({
             >
               {!provider ? (
                 noVirtualKeyMessage
+              ) : client.id === "cursor" ? (
+                <span>
+                  Prepare {providerCatalog.label(provider)} proxy settings for
+                  Cursor; finish setup in Cursor Settings
+                </span>
               ) : effectiveProxyAuth === "virtual-key" ? (
                 <>
                   Route{" "}

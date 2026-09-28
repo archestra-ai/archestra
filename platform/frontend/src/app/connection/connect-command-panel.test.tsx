@@ -1353,6 +1353,12 @@ describe("ConnectCommandPanel", () => {
     renderPanel({ client: findClient("cursor") });
     await screen.findByText(COMMAND);
 
+    expect(
+      screen.getByTestId("connect-change-proxy").closest("li"),
+    ).toHaveTextContent(
+      "Prepare OpenAI proxy settings for Cursor; finish setup in Cursor Settings",
+    );
+
     await userEvent.setup().click(screen.getByTestId("connect-change-proxy"));
     expect(
       screen.getByText(

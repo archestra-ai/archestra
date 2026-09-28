@@ -56,6 +56,26 @@ const CTX: StartupGuardContext = {
   },
 };
 
+test.each([
+  [CLAUDE_CODE_GUARD_CLIENT, "stop"],
+  [CODEX_GUARD_CLIENT, "upgrade"],
+])("%s passes utility commands through without running the guard or handoff", (client, command) => {
+  const section = buildWindowsStartupGuardInstallSection(
+    { ...CTX, runtimeHandoffInstructions: "runtime instructions" },
+    client,
+  );
+  expect(section).toContain(`'${command}'`);
+  expect(section).toContain(
+    "if (-not $archUtilityCommand -and (Test-Path $archGuard))",
+  );
+  expect(section).toContain(
+    "if ($archUtilityCommand) { & $archReal.Source @args; return }",
+  );
+  const guard = renderStartupGuardPowerShell(CTX, client);
+  expect(guard).toContain(`'${command}'`);
+  expect(guard).toContain("if ($args.Count -gt 0 -and $args[0] -in @(");
+});
+
 test("OpenCode provider-key disconnect restores the catalog and removes routing enforcement", () => {
   if (!CTX.proxy) throw new Error("test proxy missing");
   const section = buildWindowsStartupGuardInstallSection(

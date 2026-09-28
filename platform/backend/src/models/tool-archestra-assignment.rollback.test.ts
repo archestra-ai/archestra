@@ -460,7 +460,15 @@ describe("Archestra Tools Dynamic Assignment", () => {
   }) => {
     const sandboxConfig = config.skillsSandbox as { enabled: boolean };
     const originalSandbox = sandboxConfig.enabled;
+    const openappaConfig = config.openappa as {
+      enabled: boolean;
+      yellEnabled: boolean;
+    };
+    const originalOpenappa = openappaConfig.enabled;
+    const originalYell = openappaConfig.yellEnabled;
     sandboxConfig.enabled = true;
+    openappaConfig.enabled = true;
+    openappaConfig.yellEnabled = true;
     try {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       const org = await makeOrganization();
@@ -474,12 +482,15 @@ describe("Archestra Tools Dynamic Assignment", () => {
       const expected = getCreationDefaultArchestraToolShortNames({
         skillsEnabled: true,
         sandboxEnabled: true,
+        openappaEnabled: true,
       })
         .map((shortName) => getArchestraToolFullName(shortName))
         .sort();
       expect((await assignedToolNames(agent.id)).sort()).toEqual(expected);
     } finally {
       sandboxConfig.enabled = originalSandbox;
+      openappaConfig.enabled = originalOpenappa;
+      openappaConfig.yellEnabled = originalYell;
     }
   });
 

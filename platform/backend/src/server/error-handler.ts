@@ -11,6 +11,7 @@ import {
   isDbStatementTimeoutError,
 } from "@/database/retry";
 import { ApiError } from "@/types";
+import { isFetchConnectivityError } from "@/utils/network-errors";
 import { captureServerException } from "./exception-capture";
 
 export function handleServerError(
@@ -144,6 +145,22 @@ export function handleServerError(
     });
   }
 
+  // Native HTTP fetch errors share socket codes with database connections.
+  // Preserve their known origin before the broader database errno matching.
+  if (isFetchConnectivityError(error)) {
+    this.log.warn(
+      { ...requestContext, statusCode: 503 },
+      "HTTP 503 upstream service unavailable",
+    );
+    return reply.status(503).send({
+      error: {
+        message:
+          "Could not connect to an upstream service. Check the service URL and network access, then retry.",
+        type: "api_service_unavailable_error",
+      },
+    });
+  }
+
   // Transient database connectivity failures (DNS lookup, connection
   // refused during a database restart, pool connect timeouts) that
   // survived the retry budget are availability incidents, not bugs in
@@ -209,14 +226,15 @@ export function handleServerError(
     });
   }
 
-  // The passthrough proxy can wrap a provider connect timeout in its
-  // generic 500 error, losing the original network error code. Keep the
-  // response retryable and point the caller at the configured upstream.
+  // The passthrough proxy returns 500 for connect timeouts, either preserving
+  // undici's code or wrapping it in a generic error in older versions. Keep
+  // both responses retryable and point the caller at the configured upstream.
+  const providerErrorCode = (error as { code?: string }).code;
   if (
     request.url.startsWith("/v1/") &&
-    (error as { code?: string }).code ===
-      "FST_REPLY_FROM_INTERNAL_SERVER_ERROR" &&
-    error.message === "Connect Timeout Error"
+    (providerErrorCode === "UND_ERR_CONNECT_TIMEOUT" ||
+      (providerErrorCode === "FST_REPLY_FROM_INTERNAL_SERVER_ERROR" &&
+        error.message === "Connect Timeout Error"))
   ) {
     this.log.warn(
       { ...requestContext, statusCode: 503 },

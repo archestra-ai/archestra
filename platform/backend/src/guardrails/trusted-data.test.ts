@@ -10,6 +10,7 @@ import {
 } from "@/agents/subagents/dual-llm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { cacheManager } from "@/cache-manager";
+import config from "@/config";
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -17,6 +18,7 @@ import type { CommonMessage, Tool } from "@/types";
 import {
   DualLlmSanitizationError,
   evaluateIfContextIsTrusted,
+  legacyTrustedDataActive,
   sensitiveContextOriginFromBoundary,
 } from "./trusted-data";
 
@@ -1834,6 +1836,47 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       // With no policies, data should be untrusted (the engine always enforces)
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("stands down entirely once OpenAPPA is enabled", async () => {
+      // Same fixture as the test above, which this guardrail marks untrusted.
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_untrusted",
+              name: "get_emails",
+              content: { from: "user@example.com" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+      const original = config.openappa.enabled;
+      config.openappa.enabled = true;
+      onTestFinished(() => {
+        config.openappa.enabled = original;
+      });
+
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        // Even the caller's own "treat this as untrusted" instruction stops
+        // applying: the setting belongs to this guardrail, not to OpenAPPA.
+        considerContextUntrusted: true,
+        policyContext: { teamIds: [] },
+      });
+
+      expect(legacyTrustedDataActive()).toBe(false);
+      expect(result.contextIsTrusted).toBe(true);
+      // No boundary, so no caller draws a sensitive-context warning that this
+      // guardrail did not produce.
+      expect(result.unsafeContextBoundary).toBeUndefined();
+      expect(result.toolResultUpdates).toEqual({});
+      expect(result.dualLlmAnalyses).toEqual([]);
     });
 
     test("KB tool error result still makes context untrusted", async () => {

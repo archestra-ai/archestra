@@ -820,6 +820,7 @@ class AgentModel {
         getCreationDefaultArchestraToolShortNames({
           skillsEnabled: organization?.skillToolsEnabled === true,
           sandboxEnabled: config.skillsSandbox.enabled,
+          openappaEnabled: config.openappa.enabled,
         }),
       );
       const composesGroup = (group: readonly ArchestraToolShortName[]) =>

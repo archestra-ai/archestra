@@ -2,10 +2,11 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { EditPolicyDialog } from "@/components/chat/edit-policy-dialog";
+import { useFeature } from "@/lib/config/config.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   prefetchOperators,
@@ -27,6 +28,14 @@ export function ToolGuardrailsClient({
   initialData?: ToolsInitialData;
 }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  // Once OpenAPPA is on, its page replaces this one; deep links follow. The
+  // policies themselves stay put, so turning the flag off restores the page.
+  const openappaEnabled = useFeature("openappaEnabled");
+
+  useEffect(() => {
+    if (openappaEnabled === true) router.replace("/openappa");
+  }, [openappaEnabled, router]);
 
   // Prefetch policy data on mount
   useEffect(() => {
@@ -35,6 +44,7 @@ export function ToolGuardrailsClient({
     prefetchToolResultPolicies(queryClient);
   }, [queryClient]);
 
+  if (openappaEnabled !== false) return null;
   return (
     <div className="w-full h-full">
       <ErrorBoundary>

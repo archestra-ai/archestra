@@ -320,7 +320,7 @@ class SandboxRuntimeService {
         await loadNative();
         if ((this.status as SandboxRuntimeStatus) === "stopped") return;
         this.setStatus("ready");
-        logger.info(
+        logger.debug(
           "[SandboxRuntime] ready — per-organization engines warm on first use",
         );
       } catch (error) {
@@ -343,7 +343,9 @@ class SandboxRuntimeService {
       // re-read status as the union type since TS narrows past the await.
       if ((this.status as SandboxRuntimeStatus) === "stopped") return;
       this.setStatus("ready");
-      logger.info("[SandboxRuntime] ready — shared session + warm base online");
+      logger.debug(
+        "[SandboxRuntime] ready — shared session + warm base online",
+      );
     } catch (error) {
       if ((this.status as SandboxRuntimeStatus) !== "stopped") {
         this.setStatus("error");

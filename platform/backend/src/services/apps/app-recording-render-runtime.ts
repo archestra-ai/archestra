@@ -53,7 +53,7 @@ export function ensureRenderRuntime(): Promise<RenderRuntime> {
 export function warmRenderRuntime(): void {
   if (!config.hackathonRecorder.enabled) return;
   void ensureRenderRuntime().then(
-    (runtime) => logger.info(runtime, "App session video rendering is ready"),
+    (runtime) => logger.debug(runtime, "App session video rendering is ready"),
     (error) =>
       logger.warn(
         { err: error },

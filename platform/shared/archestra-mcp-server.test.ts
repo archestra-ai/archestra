@@ -14,6 +14,7 @@ import {
   isLikelyArchestraToolName,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseArchestraAppResourceUri,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_CREATE_AGENT_FULL_NAME,
@@ -169,9 +170,11 @@ describe("archestra MCP tool names", () => {
         getCreationDefaultArchestraToolShortNames({
           skillsEnabled: true,
           sandboxEnabled: true,
+          openappaEnabled: true,
         }),
       ).toEqual([
         ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
         ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
         ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
         ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,

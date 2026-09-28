@@ -51,14 +51,12 @@ pub async fn ensure_provider_and_models(
     base_url: Option<&str>,
     key_name: Option<&str>,
     is_primary: bool,
-    scope: &str,
     timeout_s: f64,
     interval_s: f64,
 ) -> Result<HashMap<String, ResolvedModel>, SeedingError> {
     let created = client
         .create_llm_key(&LlmKeyCreate {
             provider: provider.to_string(),
-            scope: scope.to_string(),
             api_key: api_key.to_string(),
             name: Some(key_name.unwrap_or(&format!("bench-{provider}")).to_string()),
             base_url: base_url.map(|s| s.to_string()),
@@ -144,7 +142,6 @@ pub async fn seed_skill_ref(
     path: Option<&str>,
     ref_: &str,
     cap: Option<usize>,
-    scope: &str,
 ) -> Result<Vec<String>, SeedingError> {
     let discovered = client.discover_github_skills(repo, path, Some(ref_)).await?;
     let paths: Vec<String> = discovered
@@ -176,7 +173,7 @@ pub async fn seed_skill_ref(
         }
         None => paths.clone(),
     };
-    client.import_github_skills(repo, &selected, scope, Some(ref_)).await?;
+    client.import_github_skills(repo, &selected, Some(ref_)).await?;
     info!("imported {} skills from {}@{}", selected.len(), repo, ref_);
     Ok(selected)
 }
@@ -192,7 +189,6 @@ pub async fn register_remote_mcp(
         .create_catalog_item(&CatalogCreate {
             name: name.to_string(),
             server_type: "remote".to_string(),
-            scope: scope.to_string(),
             description: None,
             server_url: Some(server_url.to_string()),
         })

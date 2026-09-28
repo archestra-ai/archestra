@@ -35,6 +35,7 @@ import {
 } from "@/app/_parts/studio-nav";
 import { AppLogo } from "@/components/app-logo";
 import { OnboardingDot } from "@/components/onboarding-dot";
+import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -197,10 +198,11 @@ const NavPrimary = ({
   const { isMobile, setOpenMobile } = useSidebar();
 
   const renderItem = (item: NavItem) => (
-    <SidebarMenuItem key={item.title}>
+    <SidebarMenuItem key={item.url}>
       <SidebarMenuButton
         asChild
         tooltip={item.tooltipLabel ?? item.title}
+        className={item.className}
         isActive={
           item.customIsActive?.(pathname, searchParams) ??
           pathname.startsWith(item.url)
@@ -389,7 +391,7 @@ const NavSecondary = ({
       <SidebarGroupContent>
         <SidebarMenu>
           {permittedItems.map((item) => (
-            <SidebarMenuItem key={item.title}>
+            <SidebarMenuItem key={item.url}>
               <SidebarMenuButton
                 asChild
                 tooltip={item.title}
@@ -530,15 +532,31 @@ export function AppSidebar() {
           .filter(
             (item) => item.url !== "/openappa" || openappaEnabled === true,
           )
+          // The legacy guardrails page steps aside once OpenAPPA is on: the
+          // flag alone decides, so turning it off brings the page back with
+          // its policies untouched. Waits for the flag answer like Plugins.
           .filter(
             (item) =>
-              item.url !== "/mcp/tool-guardrails" ||
-              guardrailsDeployment?.enabled !== true,
+              item.url !== "/mcp/tool-guardrails" || openappaEnabled === false,
           )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
           .map((item) => {
+            // Enforcement off is the state an operator needs to notice, so the
+            // row itself carries the warning instead of a second status row.
+            if (
+              item.url === "/openappa" &&
+              guardrailsDeployment?.enabled === false
+            ) {
+              return {
+                ...item,
+                icon: OpenAppaAlertIcon,
+                iconClassName: "size-4 shrink-0",
+                className:
+                  "text-destructive hover:text-destructive data-[active=true]:text-destructive",
+              };
+            }
             if (item.url === "/llm/costs") {
               return { ...item, url: getCostsNavigationUrl(permissionMap) };
             }
@@ -650,7 +668,11 @@ export function AppSidebar() {
         )}
       </SidebarContent>
       <SidebarFooter>
-        <SidebarWarningsAccordion />
+        {/* The studio nav already shows the Guardrails row, tinted red while
+            enforcement is off, so the status row would only repeat it. */}
+        <SidebarWarningsAccordion
+          showGuardrailsStatus={sidebarMode !== "studio"}
+        />
         {isAuthenticated && (
           <SidebarGroup className="mt-auto p-0">
             <SidebarGroupContent>

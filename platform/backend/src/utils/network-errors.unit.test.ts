@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   collectErrorCodes,
   isConnectionErrno,
+  isFetchConnectivityError,
   isTimeoutErrno,
 } from "./network-errors";
 
@@ -80,5 +81,49 @@ describe("collectErrorCodes", () => {
   test("returns an empty array for a non-error or code-less error", () => {
     expect(collectErrorCodes("not an error")).toEqual([]);
     expect(collectErrorCodes(new Error("no code"))).toEqual([]);
+  });
+
+  test("collects per-address codes from nested connection failures", () => {
+    const error = new TypeError("fetch failed", {
+      cause: new AggregateError([
+        Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }),
+        Object.assign(new Error("unreachable"), { code: "ENETUNREACH" }),
+      ]),
+    });
+    expect(collectErrorCodes(error)).toEqual(["ETIMEDOUT", "ENETUNREACH"]);
+    expect(collectErrorCodes(error, 2)).toEqual([]);
+  });
+
+  test("bounds circular aggregate traversal", () => {
+    const aggregate = new AggregateError([]);
+    aggregate.errors.push(aggregate);
+    expect(collectErrorCodes(aggregate)).toEqual([]);
+  });
+});
+
+describe("isFetchConnectivityError", () => {
+  test.each([
+    "ECONNREFUSED",
+    "ETIMEDOUT",
+    "UND_ERR_CONNECT_TIMEOUT",
+  ])("recognizes a native fetch failure caused by %s", (code) => {
+    const cause = Object.assign(new Error("network failure"), { code });
+    expect(
+      isFetchConnectivityError(new TypeError("fetch failed", { cause })),
+    ).toBe(true);
+    expect(isFetchConnectivityError(cause)).toBe(false);
+    expect(isFetchConnectivityError(new Error("Failed query", { cause }))).toBe(
+      false,
+    );
+  });
+
+  test("does not hide invalid URLs or unexplained fetch failures", () => {
+    const cause = Object.assign(new TypeError("Invalid URL"), {
+      code: "ERR_INVALID_URL",
+    });
+    expect(
+      isFetchConnectivityError(new TypeError("fetch failed", { cause })),
+    ).toBe(false);
+    expect(isFetchConnectivityError(new TypeError("fetch failed"))).toBe(false);
   });
 });

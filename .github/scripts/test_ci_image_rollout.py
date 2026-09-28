@@ -169,7 +169,9 @@ class RolloutTimelineTests(unittest.TestCase):
                 "count=0\n"
                 "[[ -f \"$FAKE_COUNTER\" ]] && read -r count < \"$FAKE_COUNTER\"\n"
                 "count=$((count + 1))\n"
-                "echo \"$count\" > \"$FAKE_COUNTER\"\n"
+                # The polling thread must see a complete counter, including on its first read.
+                "echo \"$count\" > \"$FAKE_COUNTER.tmp\"\n"
+                "mv \"$FAKE_COUNTER.tmp\" \"$FAKE_COUNTER\"\n"
                 "if [[ $count -eq 1 ]]; then state='\"active\":1'; "
                 "else state='\"succeeded\":1'; fi\n"
                 "printf '{\"items\":[{\"kind\":\"Job\",\"metadata\":"

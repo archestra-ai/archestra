@@ -27,7 +27,7 @@
  * restored history must name it too, while the released retry stays the
  * wrapper the client can execute.
  *
- * This spec requires a stack booted with `ARCHESTRA_OPENAPPA_ENABLED=true`.
+ * This spec requires a stack booted with `ARCHESTRA_BETA=true`.
  * It lives in the `openappa` Playwright project for exactly that reason and
  * must never be added to another project's testMatch — see the note on
  * `testPatterns.openappa` in playwright.config.ts. The second switch —
@@ -145,7 +145,7 @@ test("denies a tool call, rules on it, and releases it after the model executes 
 
   try {
     // --- deployment switch -------------------------------------------------
-    // Enforcement needs two switches: the container's ARCHESTRA_OPENAPPA_ENABLED
+    // Enforcement needs two switches: the container's ARCHESTRA_BETA
     // and this deployment-wide one, which lives in the database and is off
     // until an operator turns it on. A freshly booted stack has no row, so the
     // flag alone enforces nothing. Flip it the way an operator does.
@@ -160,7 +160,7 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     };
     expect(
       deployment.featureEnabled,
-      "the stack was booted without ARCHESTRA_OPENAPPA_ENABLED=true — the openappa Playwright project requires it",
+      "the stack was booted without ARCHESTRA_BETA=true — the openappa Playwright project requires it",
     ).toBe(true);
     deploymentWasEnabled = deployment.enabled;
     if (!deployment.enabled) {
@@ -399,7 +399,7 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     };
     expect(
       deployment.featureEnabled,
-      "the stack was booted without ARCHESTRA_OPENAPPA_ENABLED=true — the openappa Playwright project requires it",
+      "the stack was booted without ARCHESTRA_BETA=true — the openappa Playwright project requires it",
     ).toBe(true);
     deploymentWasEnabled = deployment.enabled;
     if (!deployment.enabled) {

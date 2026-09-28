@@ -13,7 +13,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useOrganization,
   useUpdateSecuritySettings,
@@ -26,13 +26,14 @@ const DEFAULT_RESULT_POLICY: ResultPolicyAction = "mark_as_untrusted";
 
 export default function SecuritySettingsPage() {
   const router = useRouter();
-  const { data: deployment, isPending } = useGuardrailsDeployment();
+  // Once OpenAPPA is on, its settings replace these; a deep link follows.
+  const openappaEnabled = useFeature("openappaEnabled");
 
   useEffect(() => {
-    if (deployment?.enabled) router.replace("/settings/openappa");
-  }, [deployment?.enabled, router]);
+    if (openappaEnabled === true) router.replace("/settings/openappa");
+  }, [openappaEnabled, router]);
 
-  if (isPending || deployment?.enabled) return null;
+  if (openappaEnabled !== false) return null;
   return <LegacySecuritySettingsPage />;
 }
 

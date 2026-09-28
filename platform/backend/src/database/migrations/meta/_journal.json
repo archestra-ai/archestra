@@ -3452,6 +3452,13 @@
       "when": 1790539489018,
       "tag": "0492_normalize-openappa-chat-origin",
       "breakpoints": true
+    },
+    {
+      "idx": 493,
+      "version": "7",
+      "when": 1790602943441,
+      "tag": "0493_assign-openappa-recovery-tools",
+      "breakpoints": true
     }
   ]
 }

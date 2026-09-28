@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolFullName,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
@@ -14,7 +15,7 @@ import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
-import { AgentExcludedToolModel, ToolModel } from "@/models";
+import { AgentExcludedToolModel, AgentToolModel, ToolModel } from "@/models";
 import {
   agentToolExclusionsService,
   hasAnyExclusions,
@@ -95,6 +96,32 @@ describe("agentToolExclusionsService", () => {
           .excludedToolIds,
       ].sort(),
     ).toEqual([toolA.id, toolB.id].sort());
+  });
+
+  test("recovery tools cannot be excluded or unassigned", async ({
+    seedAndAssignArchestraTools,
+  }) => {
+    await seedAndAssignArchestraTools(agent.id);
+    for (const shortName of REQUIRED_OPENAPPA_TOOL_SHORT_NAMES) {
+      const tool = await ToolModel.findByName(
+        getArchestraToolFullName(shortName),
+      );
+      expect(tool).toBeDefined();
+      if (!tool) continue;
+      await expect(
+        agentToolExclusionsService.replaceExclusions({
+          agentId: agent.id,
+          organizationId,
+          excludedToolIds: [tool.id],
+        }),
+      ).rejects.toThrow(/recovery tool cannot be excluded/);
+      await expect(
+        AgentToolModel.delete({ agentId: agent.id, toolId: tool.id }),
+      ).rejects.toThrow(/cannot be unassigned/);
+      await expect(
+        AgentToolModel.bulkDelete(agent.id, [tool.id]),
+      ).rejects.toThrow(/cannot be unassigned/);
+    }
   });
 
   test("evicts the cached chat MCP client after a successful replace", async ({

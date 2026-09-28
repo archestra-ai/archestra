@@ -65,6 +65,7 @@ import {
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
 import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
@@ -396,6 +397,8 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
  * annotations, raw definition, and inline guardrail controls.
  */
 export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
+  // The legacy guardrails table is gone once OpenAPPA is on.
+  const openappaEnabled = useFeature("openappaEnabled");
   const queryClient = useQueryClient();
   const [selectedTool, setSelectedTool] =
     useState<ToolWithAssignmentsData | null>(null);
@@ -618,14 +621,19 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
       </div>
       {total > tools.length && (
         <p className="text-sm text-muted-foreground">
-          Showing the first {tools.length} of {total} tools.{" "}
-          <Link
-            href={`/mcp/tool-guardrails?origin=${item.id}`}
-            className="underline underline-offset-4"
-          >
-            Open the full guardrails table
-          </Link>{" "}
-          for the rest.
+          Showing the first {tools.length} of {total} tools.
+          {openappaEnabled === false && (
+            <>
+              {" "}
+              <Link
+                href={`/mcp/tool-guardrails?origin=${item.id}`}
+                className="underline underline-offset-4"
+              >
+                Open the full guardrails table
+              </Link>{" "}
+              for the rest.
+            </>
+          )}
         </p>
       )}
 

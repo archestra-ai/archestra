@@ -61,6 +61,8 @@ describe("sandbox tools (runtime disabled)", () => {
   let context: ArchestraContext;
 
   beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    // The deployment default can be enabled; pin the state this suite exercises.
+    config.skillsSandbox.enabled = false;
     const agent = await makeAgent({ name: "Sandbox Agent" });
     const user = await makeUser();
     await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });

@@ -24,9 +24,13 @@ import {
   buildStartupGuardContext,
   buildStartupGuardInstallSection,
   renderStartupGuardScript,
+  type StartupGuardClient,
   type StartupGuardContext,
 } from "@/services/startup-guard";
-import { CLAUDE_CODE_GUARD_CLIENT } from "@/services/startup-guard.clients";
+import {
+  CLAUDE_CODE_GUARD_CLIENT,
+  CODEX_GUARD_CLIENT,
+} from "@/services/startup-guard.clients";
 
 const execFileAsync = promisify(execFile);
 
@@ -273,10 +277,13 @@ async function readClaudeLog(guardHome: GuardHome): Promise<string> {
  */
 async function runInstallSection(params: {
   preExistingGuard?: string;
-}): Promise<{ stdout: string; guardFile: string }> {
+  ctx?: StartupGuardContext;
+  client?: StartupGuardClient;
+}): Promise<{ stdout: string; guardFile: string; home: string }> {
   const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-install-"));
   const home = path.join(dir, "home");
-  const guardFile = path.join(home, CLAUDE_CODE_GUARD_SCRIPT_RELPATH);
+  const client = params.client ?? CLAUDE_CODE_GUARD_CLIENT;
+  const guardFile = path.join(home, client.scriptRelpath);
   await mkdir(path.dirname(guardFile), { recursive: true });
   if (params.preExistingGuard !== undefined) {
     await writeFile(guardFile, params.preExistingGuard, "utf8");
@@ -290,7 +297,7 @@ async function runInstallSection(params: {
   const scriptFile = path.join(dir, "install.sh");
   await writeFile(
     scriptFile,
-    preamble + buildStartupGuardInstallSection(CTX, CLAUDE_CODE_GUARD_CLIENT),
+    preamble + buildStartupGuardInstallSection(params.ctx ?? CTX, client),
     "utf8",
   );
   const { stdout } = await execFileAsync("bash", [scriptFile], {
@@ -302,7 +309,7 @@ async function runInstallSection(params: {
   });
   // the sandbox $HOME (and the guard it wrote) is left on disk for the caller to
   // read back, then reaped by the OS temp sweeper.
-  return { stdout, guardFile };
+  return { stdout, guardFile, home };
 }
 
 describe("buildStartupGuardContext", () => {
@@ -1049,6 +1056,48 @@ describe("renderStartupGuardScript", () => {
 });
 
 describe("buildStartupGuardInstallSection", () => {
+  test.each([
+    [CLAUDE_CODE_GUARD_CLIENT, ["stop session-123", "login", "upgrade"]],
+    [CODEX_GUARD_CLIENT, ["upgrade", "login"]],
+  ])("%s utility commands bypass the guard and keep their arguments", async (client, commands) => {
+    const { home } = await runInstallSection({
+      client,
+      ctx: { ...CTX, runtimeHandoffInstructions: "runtime instructions" },
+    });
+    const bin = path.join(home, "bin");
+    await mkdir(bin);
+    await writeFile(
+      path.join(bin, client.binary),
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$@" >> "$HOME/client-args.log"\n`,
+      { mode: 0o755 },
+    );
+    await writeFile(
+      path.join(bin, "curl"),
+      "#!/usr/bin/env bash\nprintf 'called\\n' >> \"$HOME/curl.log\"\n",
+      { mode: 0o755 },
+    );
+    const shells = ["bash", ...(existsSync("/bin/zsh") ? ["zsh"] : [])];
+    for (const shell of shells) {
+      for (const args of commands) {
+        await execFileAsync(
+          shell,
+          ["-c", `source "$HOME/.${shell}rc"; ${client.binary} ${args}`],
+          {
+            env: {
+              ...process.env,
+              HOME: home,
+              PATH: `${bin}:${process.env.PATH}`,
+            },
+          },
+        );
+      }
+    }
+    expect(await readFile(path.join(home, "client-args.log"), "utf8")).toBe(
+      `${Array.from({ length: shells.length }, () => commands.flatMap((command) => command.split(" ")).join("\n")).join("\n")}\n`,
+    );
+    expect(existsSync(path.join(home, "curl.log"))).toBe(false);
+  });
+
   test("writes the guard file and hooks an idempotent marker block into shell profiles", () => {
     const section = buildStartupGuardInstallSection(
       CTX,

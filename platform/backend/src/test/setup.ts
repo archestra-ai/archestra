@@ -48,8 +48,15 @@ process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
 // Native/OpenAPPA tests opt in explicitly; local policy settings must not
 // switch unrelated PGlite suites away from the existing guardrails.
+//
+// The beta master switch is pinned for the same reason as Vertex AI above: a
+// developer's .env reaches these tests through dotenv, and OpenAPPA now rides
+// this switch. Left to the .env it would turn the legacy trusted-data
+// guardrail off on a beta machine and leave it on in CI, so the same suite
+// would assert different behavior in the two places. A test that wants a beta
+// feature stubs its own gate.
+process.env.ARCHESTRA_BETA = "false";
 process.env.ARCHESTRA_LLM_PROXY_PLUGINS = "";
-process.env.ARCHESTRA_OPENAPPA_ENABLED = "false";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";

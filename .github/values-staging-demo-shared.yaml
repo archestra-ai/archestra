@@ -17,7 +17,6 @@ archestra:
     ARCHESTRA_ANALYTICS: disabled
     ARCHESTRA_BETA: "true"
     # Keep these capabilities available even if the beta master switch changes.
-    ARCHESTRA_OPENAPPA_ENABLED: "true"
     ARCHESTRA_OPENAPPA_YELL_ENABLED: "true"
     ARCHESTRA_LLM_PROXY_PLUGINS: ""
     ARCHESTRA_MCP_SERVER_ALERTING_ENABLED: "true"

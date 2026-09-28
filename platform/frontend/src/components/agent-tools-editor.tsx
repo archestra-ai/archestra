@@ -8,6 +8,7 @@ import {
   E2eTestId,
   getAgentToolCatalogPillTestId,
   isPlaywrightCatalogItem,
+  isRequiredOpenAppaToolShortName,
   parseFullToolName,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,6 +40,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useBulkUpdateAgentTools } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
@@ -343,6 +349,7 @@ const AgentToolsEditorContent = forwardRef<
   const { data: organization } = useOrganization();
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
   const sandboxEnabled = useFeature("sandbox") === true;
+  const openappaEnabled = useFeature("openappaEnabled") === true;
 
   // The built-in catalog's tools, fetched only while creating an agent — the
   // one place this component still needs a tool list rather than a count, to
@@ -363,9 +370,16 @@ const AgentToolsEditorContent = forwardRef<
     const toolIds = filterDefaultArchestraToolIds(builtInCatalogTools, {
       skillsEnabled: skillToolsEnabled,
       sandboxEnabled,
+      openappaEnabled,
     });
     return toolIds.size > 0 ? toolIds : null;
-  }, [agentId, builtInCatalogTools, skillToolsEnabled, sandboxEnabled]);
+  }, [
+    agentId,
+    builtInCatalogTools,
+    skillToolsEnabled,
+    sandboxEnabled,
+    openappaEnabled,
+  ]);
 
   // Pre-select the creation-default Archestra tools when creating a new agent
   // (no agentId), so the form shows exactly what AgentModel.create will assign
@@ -596,6 +610,8 @@ const AgentToolsEditorContent = forwardRef<
         ? pending.isActive !== false
         : assigned.length > 0;
 
+      if (currentlySelected && catalogId === ARCHESTRA_MCP_CATALOG_ID) return;
+
       if (currentlySelected) {
         // Toggle OFF: clear all tools and hide the pill
         registerPendingChanges(catalogId, {
@@ -630,6 +646,7 @@ const AgentToolsEditorContent = forwardRef<
             ? filterDefaultArchestraToolIds(tools, {
                 skillsEnabled: skillToolsEnabled,
                 sandboxEnabled,
+                openappaEnabled,
               })
             : allToolIds,
           // Newly assigned tools default to resolve-at-call-time, which follows
@@ -651,6 +668,7 @@ const AgentToolsEditorContent = forwardRef<
       registerPendingChanges,
       skillToolsEnabled,
       sandboxEnabled,
+      openappaEnabled,
     ],
   );
 
@@ -696,8 +714,13 @@ const AgentToolsEditorContent = forwardRef<
             : assignedCount > 0
               ? `${assignedCount}/${totalCount}`
               : `${totalCount} tools`,
-        disabled: gate.disabled,
-        disabledReason: gate.disabledReason,
+        disabled:
+          gate.disabled ||
+          (catalog.id === ARCHESTRA_MCP_CATALOG_ID && assignedCount > 0),
+        disabledReason:
+          catalog.id === ARCHESTRA_MCP_CATALOG_ID && assignedCount > 0
+            ? "Required recovery tools cannot be unassigned"
+            : gate.disabledReason,
       };
     });
   }, [
@@ -987,6 +1010,7 @@ function McpServerPill({
   const { data: organization } = useOrganization();
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
   const sandboxEnabled = useFeature("sandbox") === true;
+  const openappaEnabled = useFeature("openappaEnabled") === true;
 
   // Creation-default subset for the built-in catalog: powers the checklist's
   // "Reset to defaults" action, so restoring a drifted selection no longer
@@ -998,9 +1022,16 @@ function McpServerPill({
         ? filterDefaultArchestraToolIds(allTools, {
             skillsEnabled: skillToolsEnabled,
             sandboxEnabled,
+            openappaEnabled,
           })
         : undefined,
-    [catalogItem.id, allTools, skillToolsEnabled, sandboxEnabled],
+    [
+      catalogItem.id,
+      allTools,
+      skillToolsEnabled,
+      sandboxEnabled,
+      openappaEnabled,
+    ],
   );
 
   // Fetch available credentials for this catalog
@@ -1099,6 +1130,7 @@ function McpServerPill({
       const defaults = filterDefaultArchestraToolIds(allTools, {
         skillsEnabled: skillToolsEnabled,
         sandboxEnabled,
+        openappaEnabled,
       });
       // Fall back to all tools only if nothing matched, so a naming mismatch
       // never strands the user on zero tools.
@@ -1109,7 +1141,13 @@ function McpServerPill({
     // Clear the flag regardless so we don't fight user deselections.
     pendingSelectDefaultsRef.current = false;
     // Depend on .size (not the full set) — see pendingSelectAllRef above.
-  }, [selectedToolIds.size, allTools, skillToolsEnabled, sandboxEnabled]);
+  }, [
+    selectedToolIds.size,
+    allTools,
+    skillToolsEnabled,
+    sandboxEnabled,
+    openappaEnabled,
+  ]);
 
   // Report pending changes to parent whenever local state changes.
   // The pill can only be rendered when isActive !== false, so always report as active
@@ -1200,6 +1238,7 @@ function McpServerPill({
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <ToolChecklist
             tools={allTools}
+            catalogId={catalogItem.id}
             selectedToolIds={selectedToolIds}
             onSelectionChange={(ids) => {
               setSelectedToolIds(ids);
@@ -1223,6 +1262,7 @@ function McpServerPill({
 
 export interface ToolChecklistProps {
   tools: CatalogTool[];
+  catalogId?: string;
   selectedToolIds: Set<string>;
   onSelectionChange: (selectedIds: Set<string>) => void;
   /**
@@ -1327,18 +1367,21 @@ function ToolRow({
   isSelected,
   disableVariant,
   onToggle,
+  locked = false,
 }: {
   tool: CatalogTool;
   isSelected: boolean;
   disableVariant: boolean;
   onToggle: (toolId: string) => void;
+  locked?: boolean;
 }) {
   const toolName = formatToolName(tool.name);
   return (
     <label
       htmlFor={`tool-${tool.id}`}
       className={cn(
-        "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
+        "flex items-start gap-3 p-2 rounded-md transition-colors",
+        locked ? "cursor-default" : "cursor-pointer",
         !isSelected && "hover:bg-muted/50",
         isSelected && (disableVariant ? "bg-destructive/10" : "bg-primary/10"),
       )}
@@ -1346,6 +1389,7 @@ function ToolRow({
       <Checkbox
         id={`tool-${tool.id}`}
         checked={isSelected}
+        disabled={locked}
         onCheckedChange={() => onToggle(tool.id)}
         className="mt-0.5"
       />
@@ -1360,6 +1404,21 @@ function ToolRow({
               Disabled
             </Badge>
           )}
+          {locked && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="secondary"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Required: ${requiredToolReason(toolName)}`}
+                >
+                  Required
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>{requiredToolReason(toolName)}</TooltipContent>
+            </Tooltip>
+          )}
         </div>
         {tool.description && (
           <ExpandableDescription description={tool.description} />
@@ -1367,6 +1426,19 @@ function ToolRow({
       </div>
     </label>
   );
+}
+
+function requiredToolReason(toolName: string) {
+  switch (toolName) {
+    case "get_remedy_plans":
+      return "Always available so agents can find remedies for blocked calls.";
+    case "execute_remedy_plan":
+      return "Always available so agents can apply an offered remedy.";
+    case "yell":
+      return "Always available so agents can report confusing OpenAPPA decisions.";
+    default:
+      return "Always available for OpenAPPA recovery.";
+  }
 }
 
 const OTHER_GROUP_ID = "__other__";
@@ -1422,6 +1494,7 @@ function bucketToolsByGroup(
 
 export function ToolChecklist({
   tools,
+  catalogId,
   selectedToolIds,
   onSelectionChange,
   variant = "assign",
@@ -1429,11 +1502,27 @@ export function ToolChecklist({
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const disableVariant = variant === "disable";
+  const protectedToolIds = new Set(
+    catalogId === ARCHESTRA_MCP_CATALOG_ID && !disableVariant
+      ? tools
+          .filter((tool) =>
+            isRequiredOpenAppaToolShortName(
+              parseFullToolName(tool.name).toolName,
+            ),
+          )
+          .map((tool) => tool.id)
+      : [],
+  );
 
   // Hidden when the set is empty so the action can never reset to zero tools.
+  const effectiveDefaultToolIds = new Set([
+    ...(defaultToolIds ?? []),
+    ...protectedToolIds,
+  ]);
   const showResetToDefaults = defaultToolIds != null && defaultToolIds.size > 0;
   const selectionAtDefaults =
-    defaultToolIds != null && setsEqual(selectedToolIds, defaultToolIds);
+    defaultToolIds != null &&
+    setsEqual(selectedToolIds, effectiveDefaultToolIds);
 
   // Snapshot the initial selection for sort order so tools don't jump
   // around as the user toggles checkboxes. Updates synchronously during
@@ -1453,11 +1542,12 @@ export function ToolChecklist({
     selectedToolIds.has(tool.id),
   );
   const noneSelected = filteredTools.every(
-    (tool) => !selectedToolIds.has(tool.id),
+    (tool) => !selectedToolIds.has(tool.id) || protectedToolIds.has(tool.id),
   );
   const selectedCount = tools.filter((t) => selectedToolIds.has(t.id)).length;
 
   const handleToggle = (toolId: string) => {
+    if (protectedToolIds.has(toolId)) return;
     const newSet = new Set(selectedToolIds);
     if (newSet.has(toolId)) {
       newSet.delete(toolId);
@@ -1478,6 +1568,7 @@ export function ToolChecklist({
   const handleDeselectAll = () => {
     const newSet = new Set(selectedToolIds);
     for (const tool of filteredTools) {
+      if (protectedToolIds.has(tool.id)) continue;
       newSet.delete(tool.id);
     }
     onSelectionChange(newSet);
@@ -1486,6 +1577,7 @@ export function ToolChecklist({
   const setToolsSelected = (groupTools: CatalogTool[], selected: boolean) => {
     const newSet = new Set(selectedToolIds);
     for (const tool of groupTools) {
+      if (!selected && protectedToolIds.has(tool.id)) continue;
       if (selected) {
         newSet.add(tool.id);
       } else {
@@ -1569,7 +1661,7 @@ export function ToolChecklist({
               variant="ghost"
               size="sm"
               className="text-xs h-6 px-2"
-              onClick={() => onSelectionChange(new Set(defaultToolIds))}
+              onClick={() => onSelectionChange(effectiveDefaultToolIds)}
               disabled={selectionAtDefaults}
               title="Replace the selection with the default set assigned at creation"
             >
@@ -1612,7 +1704,9 @@ export function ToolChecklist({
                   selectedToolIds.has(tool.id),
                 );
                 const noneGroupSelected = section.tools.every(
-                  (tool) => !selectedToolIds.has(tool.id),
+                  (tool) =>
+                    !selectedToolIds.has(tool.id) ||
+                    protectedToolIds.has(tool.id),
                 );
                 return (
                   <div
@@ -1670,6 +1764,7 @@ export function ToolChecklist({
                             tool={tool}
                             isSelected={selectedToolIds.has(tool.id)}
                             disableVariant={disableVariant}
+                            locked={protectedToolIds.has(tool.id)}
                             onToggle={handleToggle}
                           />
                         ))}
@@ -1693,6 +1788,7 @@ export function ToolChecklist({
                   tool={tool}
                   isSelected={selectedToolIds.has(tool.id)}
                   disableVariant={disableVariant}
+                  locked={protectedToolIds.has(tool.id)}
                   onToggle={handleToggle}
                 />
               ))

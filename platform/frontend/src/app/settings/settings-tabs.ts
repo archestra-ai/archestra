@@ -23,14 +23,12 @@ import {
 import { OpenAppaIcon } from "@/components/openappa-icon";
 import { usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useSecretsType } from "@/lib/secrets.query";
 
 export function useSettingsTabs() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const { data: secretsType } = useSecretsType();
   const openappaEnabled = useFeature("openappaEnabled");
-  const { data: deployment } = useGuardrailsDeployment();
   return [
     ...(permissionMap?.["/settings/appearance"]
       ? [{ label: "Appearance", href: "/settings/appearance", Icon: Palette }]
@@ -83,7 +81,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/skills"]
       ? [{ label: "Skills", href: "/settings/skills", Icon: BookOpen }]
       : []),
-    ...(permissionMap?.["/settings/security"] && deployment?.enabled !== true
+    // Legacy security defaults step aside once OpenAPPA is on; the flag alone
+    // decides, so turning it off brings the tab back unchanged.
+    ...(permissionMap?.["/settings/security"] && openappaEnabled === false
       ? [{ label: "Security", href: "/settings/security", Icon: ShieldCheck }]
       : []),
     ...(openappaEnabled && permissionMap?.["/settings/openappa"]

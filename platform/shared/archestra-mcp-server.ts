@@ -777,6 +777,19 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
+/** OpenAPPA recovery tools must remain available on every agent and gateway. */
+export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  "yell",
+] as const satisfies readonly ArchestraToolShortName[];
+
+export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
+  return (REQUIRED_OPENAPPA_TOOL_SHORT_NAMES as readonly string[]).includes(
+    shortName,
+  );
+}
+
 /**
  * Built-in tools that do NOT bypass policy evaluation. Most built-ins are
  * auto-trusted, but these ingest external content (e.g. knowledge-base
@@ -963,11 +976,13 @@ export function isSandboxArchestraToolShortName(shortName: string): boolean {
 export function getCreationDefaultArchestraToolShortNames(params: {
   skillsEnabled: boolean;
   sandboxEnabled: boolean;
+  openappaEnabled?: boolean;
 }): ArchestraToolShortName[] {
   const { skillsEnabled, sandboxEnabled } = params;
 
   const shortNames: ArchestraToolShortName[] = [
     ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+    ...(params.openappaEnabled ? REQUIRED_OPENAPPA_TOOL_SHORT_NAMES : []),
   ];
   if (skillsEnabled) {
     shortNames.push(...SKILL_ARCHESTRA_TOOL_SHORT_NAMES);
@@ -994,6 +1009,7 @@ const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
   ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 ] as const satisfies readonly ArchestraToolShortName[];

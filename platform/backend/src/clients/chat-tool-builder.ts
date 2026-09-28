@@ -51,7 +51,10 @@ import type {
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
-import { sensitiveContextOriginFromBoundary } from "@/guardrails/trusted-data";
+import {
+  legacyTrustedDataActive,
+  sensitiveContextOriginFromBoundary,
+} from "@/guardrails/trusted-data";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import {
@@ -1749,7 +1752,13 @@ async function attachDispatchUnsafeContextBoundary(params: {
   return { ...result, ...boundaryResult };
 }
 
-async function buildUnsafeContextBoundaryResult(params: {
+/**
+ * Attaches the boundary a chat tool result carries into the transcript, which
+ * is what draws the sensitive-context divider.
+ *
+ * @public — exported for testability
+ */
+export async function buildUnsafeContextBoundaryResult(params: {
   resultMeta?: Record<string, unknown>;
   toolCallId: string;
   toolName: string;
@@ -1796,6 +1805,13 @@ async function buildUnsafeContextBoundaryResult(params: {
   };
 }
 
+/**
+ * Chat evaluates the pre-OpenAPPA result policies here rather than through
+ * `evaluateIfContextIsTrusted`, so it needs the same stand-down check: without
+ * it this path keeps marking chat tool results untrusted, and the chat keeps
+ * drawing a sensitive-context divider, after the guardrail is supposed to be
+ * off. See `legacyTrustedDataActive`.
+ */
 async function evaluateUnsafeContextBoundaryForToolResult(params: {
   toolCallId: string;
   toolName: string;
@@ -1805,7 +1821,7 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
   considerContextUntrusted: boolean;
   resolvedToolId?: string;
 }): Promise<UnsafeContextBoundary | undefined> {
-  if (params.considerContextUntrusted) {
+  if (!legacyTrustedDataActive() || params.considerContextUntrusted) {
     return undefined;
   }
 

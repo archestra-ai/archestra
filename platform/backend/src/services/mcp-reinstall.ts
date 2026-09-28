@@ -531,7 +531,7 @@ async function syncToolsForServer(
       openappaBatteriesService.onCatalogToolsChanged(catalogItem.id),
     );
 
-  logger.info(
+  logger.debug(
     {
       serverId: server.id,
       serverName: server.name,

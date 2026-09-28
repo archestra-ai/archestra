@@ -239,7 +239,7 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 - Explicit rules apply. Keep the catch-all unless the user wants unknown tools blocked. Do not quietly weaken a rule to let a blocked call succeed.
 - The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
 - Keep secrets out of policy text. A remote binding's \`token_env\` reads the organization runtime credential bound to it in \`[credentials]\`, never a backend environment variable. Never put raw credentials in policy text.
-- APPA is available only when \`ARCHESTRA_OPENAPPA_ENABLED=true\`. If its tools are unavailable, report that fact. Do not change process environment settings through this skill; policy \`[policy.deployment]\` may be edited through preview and approval.
+- APPA is available only when \`ARCHESTRA_BETA=true\`. If its tools are unavailable, report that fact. Do not change process environment settings through this skill; policy \`[policy.deployment]\` may be edited through preview and approval.
 - A refused policy blocks enabling Guardrails v2. If it is already on, every proxied request fails closed without retry until the policy is fixed. Report the error. Do not claim Guardrails v2 switched off or that the draft is active.
 `,
   files: [

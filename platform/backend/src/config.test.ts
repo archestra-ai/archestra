@@ -3545,7 +3545,7 @@ describe("OpenAPPA feature configuration", () => {
       expect(parseOpenAppaConfig(enabled, reporting).yellEnabled).toBe(false);
     }
   });
-  test("gates APPA registration on its feature flag, regardless of the explicit plugin list", () => {
+  test("gates APPA registration on the beta switch, regardless of the explicit plugin list", () => {
     expect(parseLlmProxyPlugins(undefined)).toEqual([]);
     expect(parseLlmProxyPlugins(" appa ")).toEqual([]);
     expect(parseLlmProxyPlugins(undefined, true)).toEqual(["appa"]);
@@ -3570,9 +3570,8 @@ describe("OpenAPPA feature configuration", () => {
     "false",
     "TRUE",
     "1",
-  ])("requires explicit true to enable APPA (flag=%s)", (enabled) => {
-    vi.stubEnv("ARCHESTRA_BETA", "true");
-    expect(parseOpenAppaConfig(enabled)).toEqual({
+  ])("stays off unless ARCHESTRA_BETA is exactly true (value=%s)", (beta) => {
+    expect(parseOpenAppaConfig(beta)).toEqual({
       enabled: false,
       yellEnabled: false,
       offerSigningSecret: "",

@@ -105,7 +105,7 @@ dependencies = [
 [[package]]
 name = "appa"
 version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#7ca74a241b3b586d5d236d669cfaeafa4339dfa6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
 dependencies = [
  "appa-adapter-claude-code",
  "appa-adapter-kagent",
@@ -157,7 +157,7 @@ dependencies = [
 [[package]]
 name = "appa-adapter-claude-code"
 version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#7ca74a241b3b586d5d236d669cfaeafa4339dfa6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -168,7 +168,7 @@ dependencies = [
 [[package]]
 name = "appa-adapter-kagent"
 version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#7ca74a241b3b586d5d236d669cfaeafa4339dfa6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
 dependencies = [
  "appa-runtime-api",
 ]
@@ -176,7 +176,7 @@ dependencies = [
 [[package]]
 name = "appa-builtin"
 version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#7ca74a241b3b586d5d236d669cfaeafa4339dfa6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
 dependencies = [
  "serde",
  "serde_json",
@@ -186,7 +186,7 @@ dependencies = [
 [[package]]
 name = "appa-engine"
 version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#7ca74a241b3b586d5d236d669cfaeafa4339dfa6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -200,7 +200,7 @@ dependencies = [
 [[package]]
 name = "appa-eventlog"
 version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#7ca74a241b3b586d5d236d669cfaeafa4339dfa6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -218,7 +218,7 @@ dependencies = [
 [[package]]
 name = "appa-package"
 version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#7ca74a241b3b586d5d236d669cfaeafa4339dfa6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -231,7 +231,7 @@ dependencies = [
 [[package]]
 name = "appa-policy"
 version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#7ca74a241b3b586d5d236d669cfaeafa4339dfa6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -244,7 +244,7 @@ dependencies = [
 [[package]]
 name = "appa-runtime-api"
 version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#7ca74a241b3b586d5d236d669cfaeafa4339dfa6"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?branch=main#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
 dependencies = [
  "serde",
  "serde_json",

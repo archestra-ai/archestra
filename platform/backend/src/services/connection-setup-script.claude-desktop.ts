@@ -232,6 +232,9 @@ def main():
             # An explicit inferenceModels list overrides discovery and would
             # restrict the picker to the model used for the connection check.
             'modelDiscoveryEnabled': True,
+            # Third-party mode keeps its own history; enable Settings > Import
+            # so users can copy their Claude.ai conversations into it.
+            'claudeAiImport': {'enabled': True, 'bannerBehavior': 'show'},
         })
     if SETUP.get('mcp'):
         mcp = SETUP['mcp']
@@ -276,6 +279,8 @@ def main():
         print('In Desktop Settings > Connectors, connect the gateway and finish its browser sign-in.')
     if SETUP.get('skills'):
         print('In Desktop Settings > Plugins, install your shared marketplace.')
+    if proxy:
+        print('In Desktop Settings > Import, bring over your Claude.ai conversations. Rerun the import later to add newer conversations.')
     if subscription:
         print('The subscription token lasts up to one year. Rerun setup after expiration or revocation.')
     print('To switch back, rerun the previous deployment installer or select a manually created inference profile.')

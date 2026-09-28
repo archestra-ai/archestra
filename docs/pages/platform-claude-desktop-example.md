@@ -3,7 +3,7 @@ title: Using Claude Desktop (Cowork)
 category: Examples
 order: 9
 description: Route Claude Desktop's inference and tools through Archestra
-lastUpdated: 2026-09-19
+lastUpdated: 2026-09-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,7 +24,7 @@ MCP sign-in requires HTTPS, including local deployments. Use a trusted local HTT
 
 ## Setup
 
-Connecting the LLM Proxy switches Desktop to third-party inference mode. Existing Claude conversations do not appear in that mode. The installer does not delete them or migrate them. Third-party conversations stay on your device, separate from standard Claude history. See [Revert](#revert) before switching. Tools-only setup does not require third-party inference.
+Connecting the LLM Proxy switches Desktop to third-party inference mode. That mode keeps its own conversation history, so your Claude.ai conversations do not appear there at first. See [Import Conversations](#import-conversations) to bring them over, and [Revert](#revert) before switching. Tools-only setup does not require third-party inference.
 
 Open **Connect** and select **Claude Desktop**. Review your authentication, model, gateway, and platform. The platform defaults to your detected operating system and remains editable. Finish active Desktop tasks before installing. Download the installer and open the `.mcpb` file in normal Claude Desktop. Confirm installation in Desktop’s native dialog. The setup helper opens your browser for sign-in and restart confirmation. You can remove the helper from Desktop’s Extensions settings afterward.
 
@@ -52,9 +52,17 @@ Installing the gateway does not complete its authentication or enable it for eve
 
 The skills selected on Connect install automatically after Desktop restarts. Setup pins the selected snapshot; rerun Connect to install an updated snapshot.
 
+## Import Conversations
+
+Setup turns on **Settings → Import** in Desktop. Desktop also offers an import when you start a new chat or task. Sign in to Claude.ai there to copy your chats and projects. You can also import a Claude.ai data export, or earlier Cowork and Code sessions from this computer.
+
+Import is a one-time copy, not a sync. Rerun it any time to add newer conversations — it skips the ones already imported. New messages in an already imported conversation are not copied. Conversations you start in third-party mode stay on this computer and never appear on Claude.ai.
+
+Importing from Claude.ai needs network access to `claude.ai`, `api.anthropic.com`, and `storage.googleapis.com`. Claude.ai can refuse or delay an export — when your organization disables data export, for example.
+
 ## Revert
 
-To return to standard Claude Desktop, choose Anthropic sign-in on Desktop's sign-in screen. Sign in with your original Claude account to access its conversations. This is [Anthropic's documented return path](https://claude.com/docs/third-party/claude-desktop/installation#single-machine-setup). If your Desktop version does not expose that option, contact your administrator or Anthropic support. Organization policy can hide Claude sign-in.
+To return to standard Claude Desktop, choose Anthropic sign-in on Desktop's sign-in screen. Sign in with your original Claude account to access its conversations. Setup and import delete nothing, so your original Claude.ai history is still there. This is [Anthropic's documented return path](https://claude.com/docs/third-party/claude-desktop/installation#single-machine-setup). If your Desktop version does not expose that option, contact your administrator or Anthropic support. Organization policy can hide Claude sign-in.
 
 Keep the `Claude-3p` application data directory. Deleting it can remove conversations created in third-party mode. Removing the setup extension alone does not revert your inference settings.
 

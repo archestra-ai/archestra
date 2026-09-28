@@ -50,6 +50,7 @@ export function PageLayout({
   children,
   tabs = [],
   actionButton,
+  actionInlineOnMobile = false,
   mobileVisibleCount = 3,
   maxWidth: maxWidthKey = "wide",
   minWidth: minWidthKey = "none",
@@ -108,6 +109,8 @@ export function PageLayout({
    */
   status?: React.ReactNode;
   actionButton?: React.ReactNode;
+  /** Keep a compact action beside the title on narrow screens. */
+  actionInlineOnMobile?: boolean;
   mobileVisibleCount?: number;
   /**
    * The column the header row and the content share. `wide` is the band list
@@ -228,7 +231,9 @@ export function PageLayout({
               )}
               <div
                 className={cn(
-                  "col-span-2 min-w-0 sm:col-span-1",
+                  actionInlineOnMobile && !backLink
+                    ? "col-span-1 min-w-0"
+                    : "col-span-2 min-w-0 sm:col-span-1",
                   backLink ? "row-start-2" : "row-start-1",
                   maxWidthKey === "wizard" &&
                     "min-h-10 sm:relative sm:h-[3.75rem] sm:min-h-0",
@@ -290,13 +295,15 @@ export function PageLayout({
                       ? "row-start-1 sm:row-start-2"
                       : backLink
                         ? "row-start-3 sm:row-start-2"
-                        : "row-start-2 sm:row-start-1",
+                        : actionInlineOnMobile
+                          ? "row-start-1"
+                          : "row-start-2 sm:row-start-1",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
                     // The left block is the 40px title row plus a description
                     // pinned under it. Centre the actions on the title row,
                     // not on the whole block, so both sides line up.
                     maxWidthKey === "wizard" &&
-                      "sm:flex sm:h-10 sm:items-center",
+                      "sm:flex sm:h-10 sm:items-center sm:self-start",
                   )}
                 >
                   {actionButton}

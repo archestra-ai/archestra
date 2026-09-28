@@ -6,9 +6,11 @@ import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import type { ConnectClient } from "./clients";
 
 export function ConnectWithAi({ client }: { client: ConnectClient }) {
+  const appName = useAppName();
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
   useEffect(() => setOrigin(window.location.origin), []);
@@ -21,64 +23,63 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Paste this prompt into {client.label}. Review and approve the setup in
-        your browser.
-      </p>
-      <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
-        <code className="min-w-0 flex-1 break-words font-mono text-sm leading-6">
-          {origin ? prompt : "Loading your connection prompt…"}
-        </code>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={!origin}
-          className="shrink-0"
-          aria-label={copied ? "Copied" : "Copy prompt"}
-          title={copied ? "Copied" : "Copy prompt"}
-          onClick={async () => {
-            try {
-              await copyToClipboard(prompt);
-              setCopied(true);
-            } catch {
-              toast.error(
-                "Could not copy. Select the prompt and copy it manually.",
-              );
-            }
-          }}
-        >
-          {copied ? (
-            <Check className="size-3.5" />
-          ) : (
-            <Copy className="size-3.5" />
-          )}
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Requires Node.js 18+ and terminal access in {client.label}.
-      </p>
       {client.id === "cursor" && (
         <Alert variant="warning">
           <TriangleAlert />
-          <AlertTitle>Cursor inference needs separate setup</AlertTitle>
+          <AlertTitle>Using {appName} for Cursor&apos;s AI requests</AlertTitle>
           <AlertDescription>
             <p>
-              Connecting the gateway gives Cursor access to tools. Cursor keeps
-              using its current models unless you change its model settings.
+              Connecting Cursor here adds {appName} tools and skills. Cursor
+              keeps using its current models. To route supported OpenAI requests
+              through {appName} too, choose LLM Proxy under Customize setup.
             </p>
             <p>
-              To route supported OpenAI chat models through the LLM Proxy,
-              select it under Customize setup when approving the connection.
-              After installation, open Cursor Settings → Models → API Keys.
-              Paste the printed proxy URL under Override OpenAI Base URL, enter
-              the printed virtual key or your own OpenAI API key, and turn on
-              Use OpenAI API Key. Then select an OpenAI model and send a test
-              prompt. Your Cursor subscription cannot authenticate proxy
-              requests.
+              In Cursor Settings → Models → API Keys, enter the URL and key
+              shown during setup, then turn on Use OpenAI API Key and Override
+              OpenAI Base URL. You can use your own OpenAI API key; a Cursor
+              subscription cannot be used as a key.
             </p>
           </AlertDescription>
         </Alert>
       )}
+      <p className="text-sm text-muted-foreground">
+        Paste this prompt into {client.label}. Review and approve the setup in
+        your browser.
+      </p>
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+          <code className="min-w-0 flex-1 break-words font-mono text-sm leading-6">
+            {origin ? prompt : "Loading your connection prompt…"}
+          </code>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={!origin}
+            className="shrink-0"
+            aria-label={copied ? "Copied" : "Copy prompt"}
+            title={copied ? "Copied" : "Copy prompt"}
+            onClick={async () => {
+              try {
+                await copyToClipboard(prompt);
+                setCopied(true);
+              } catch {
+                toast.error(
+                  "Could not copy. Select the prompt and copy it manually.",
+                );
+              }
+            }}
+          >
+            {copied ? (
+              <Check className="size-3.5" />
+            ) : (
+              <Copy className="size-3.5" />
+            )}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Requires Node.js 18+ and terminal access in {client.label}.
+        </p>
+      </div>
     </div>
   );
 }

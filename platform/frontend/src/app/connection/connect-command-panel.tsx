@@ -1133,8 +1133,8 @@ export function ConnectCommandPanel({
         </ul>
         {connectRequest && (
           <Button
-            variant="ghost"
-            className="mt-3"
+            variant="link"
+            className="mt-3 h-auto cursor-pointer p-0 underline underline-offset-4"
             aria-expanded={customizing}
             onClick={() => setCustomizing(!customizing)}
           >

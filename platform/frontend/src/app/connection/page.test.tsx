@@ -87,6 +87,30 @@ describe("ConnectionPage", () => {
     }
   });
 
+  it("keeps connection settings off the approval page", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "connectRequest=request&clientId=cursor",
+      ) as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {},
+      isFetchedAfterMount: true,
+      isFetching: false,
+      isError: false,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ConnectionPage />);
+
+    expect(
+      screen.queryByRole("link", { name: "Connection settings" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens the client selection flow by default", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,

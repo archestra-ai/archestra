@@ -87,12 +87,19 @@ export default function ConnectionPage() {
           : "Connection"
       }
       maxWidth="wizard"
+      actionInlineOnMobile={Boolean(canReadConnectionSettings && !isApproval)}
       actionButton={
-        canReadConnectionSettings && (
-          <Button variant="outline" asChild>
-            <Link href="/settings/connection">
+        canReadConnectionSettings &&
+        !isApproval && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="md:w-auto md:px-3"
+            asChild
+          >
+            <Link href="/settings/connection" aria-label="Connection settings">
               <Settings aria-hidden="true" />
-              <span>Connection settings</span>
+              <span className="hidden md:inline">Connection settings</span>
             </Link>
           </Button>
         )

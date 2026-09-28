@@ -1,6 +1,8 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  isRequiredOpenAppaToolShortName,
   type PaginationQuery,
+  parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -469,6 +471,7 @@ class AgentToolModel {
     deferVersionFork?: boolean;
   }): Promise<boolean> {
     const { agentId, toolId } = params;
+    await AgentToolModel.requireRemovableTools([toolId]);
     // RETURNING (not rowCount) so the deleted flag is reliable — the fork below
     // and callers key off it, and rowCount is not dependable under PGlite.
     const rows = await db
@@ -515,6 +518,7 @@ class AgentToolModel {
     tx?: Transaction,
   ): Promise<string[]> {
     if (toolIds.length === 0) return [];
+    await AgentToolModel.requireRemovableTools(toolIds, tx);
     const dbx = tx ?? db;
 
     const rows = await dbx
@@ -1600,6 +1604,27 @@ class AgentToolModel {
     if (!scoped) return null;
 
     return AgentToolModel.toAuditSnapshot(scoped);
+  }
+
+  private static async requireRemovableTools(
+    toolIds: string[],
+    tx?: Transaction,
+  ): Promise<void> {
+    const rows = await (tx ?? db)
+      .select({
+        name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
+      })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.id, toolIds));
+    const required = rows.find(
+      (row) =>
+        row.catalogId === ARCHESTRA_MCP_CATALOG_ID &&
+        isRequiredOpenAppaToolShortName(parseFullToolName(row.name).toolName),
+    );
+    if (required) {
+      throw new ApiError(400, "OpenAPPA recovery tools cannot be unassigned");
+    }
   }
 
   private static toAuditSnapshot(scoped: {

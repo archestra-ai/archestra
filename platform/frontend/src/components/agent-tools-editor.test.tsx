@@ -1,3 +1,4 @@
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -45,10 +46,12 @@ function createMockTool(
 // Wrapper component to handle state
 function ToolChecklistWrapper({
   tools,
+  catalogId,
   initialSelectedIds = new Set(),
   defaultToolIds,
 }: {
   tools: ToolChecklistProps["tools"];
+  catalogId?: string;
   initialSelectedIds?: Set<string>;
   defaultToolIds?: Set<string>;
 }) {
@@ -58,6 +61,7 @@ function ToolChecklistWrapper({
   return (
     <ToolChecklist
       tools={tools}
+      catalogId={catalogId}
       selectedToolIds={selectedToolIds}
       onSelectionChange={setSelectedToolIds}
       defaultToolIds={defaultToolIds}
@@ -66,6 +70,58 @@ function ToolChecklistWrapper({
 }
 
 describe("ToolChecklist", () => {
+  it("keeps recovery tools selected through bulk clear while allowing other tools to be removed", async () => {
+    const user = userEvent.setup();
+    const tools = [
+      createMockTool("notice", "branded__get_remedy_plans", "Notice"),
+      createMockTool("control", "branded__execute_remedy_plan", "Control"),
+      createMockTool("report", "branded__yell", "Report"),
+      createMockTool("other", "branded__whoami", "Identity"),
+    ];
+    render(
+      <ToolChecklistWrapper
+        tools={tools}
+        catalogId={ARCHESTRA_MCP_CATALOG_ID}
+        initialSelectedIds={new Set(tools.map((tool) => tool.id))}
+      />,
+    );
+    expect(
+      screen.getByRole("checkbox", { name: /get_remedy_plans/i }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Deselect All" }));
+    expect(
+      screen.getByRole("checkbox", { name: /get_remedy_plans/i }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: /execute_remedy_plan/i }),
+    ).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /yell/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /whoami/i })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Deselect All" })).toBeDisabled();
+  });
+
+  it("keeps recovery tools selected when resetting to defaults", async () => {
+    const user = userEvent.setup();
+    const tools = [
+      createMockTool("notice", "archestra__get_remedy_plans", "Notice"),
+      createMockTool("other", "archestra__whoami", "Identity"),
+    ];
+    render(
+      <ToolChecklistWrapper
+        tools={tools}
+        catalogId={ARCHESTRA_MCP_CATALOG_ID}
+        initialSelectedIds={new Set(["notice"])}
+        defaultToolIds={new Set(["other"])}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    expect(
+      screen.getByRole("checkbox", { name: /get_remedy_plans/i }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("button", { name: "Reset to defaults" }),
+    ).toBeDisabled();
+  });
   describe("search bar visibility", () => {
     it("should not show search bar when there are 5 or fewer tools", () => {
       const tools = createMockTools(5);

@@ -41,9 +41,12 @@ describe("filterExcludableTools", () => {
     { id: "4", name: "archestra__list_skills" },
     { id: "5", name: "archestra__run_command" },
     { id: "6", name: "archestra__scaffold_app" },
+    { id: "7", name: "brand__get_remedy_plans" },
+    { id: "8", name: "archestra__execute_remedy_plan" },
+    { id: "9", name: "archestra__yell" },
   ];
 
-  it("removes only the meta dispatch tools from the built-in catalog regardless of prefix", () => {
+  it("removes meta and recovery tools from the built-in exclusion picker", () => {
     expect(
       filterExcludableTools(ARCHESTRA_MCP_CATALOG_ID, tools).map((t) => t.id),
     ).toEqual(["3", "4", "5", "6"]);

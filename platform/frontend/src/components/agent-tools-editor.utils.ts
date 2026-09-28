@@ -208,12 +208,14 @@ export function filterDefaultArchestraToolIds(
   options: {
     skillsEnabled?: boolean;
     sandboxEnabled?: boolean;
+    openappaEnabled?: boolean;
   } = {},
 ): Set<string> {
   const creationDefaultShortNames = new Set<string>(
     getCreationDefaultArchestraToolShortNames({
       skillsEnabled: options.skillsEnabled === true,
       sandboxEnabled: options.sandboxEnabled === true,
+      openappaEnabled: options.openappaEnabled === true,
     }),
   );
 

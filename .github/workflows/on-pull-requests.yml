@@ -734,9 +734,9 @@ jobs:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
     if: github.event_name == 'merge_group'
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    # The measured two-shard gate is about 7m30s. Allow for cold caches and
-    # normal variance, while bounding hung test workers.
-    timeout-minutes: 15
+    # A merge-queue shard can take about 15 minutes, including setup and
+    # cleanup. Leave room for cold caches while bounding hung test workers.
+    timeout-minutes: 25
     permissions:
       contents: read
     defaults:

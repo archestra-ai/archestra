@@ -217,6 +217,11 @@ describe("CreateVirtualKeyDialog", () => {
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
+    expect(within(dialog).getByText("Copy your key")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "General" }),
+    ).not.toBeInTheDocument();
     // The default model is linked to this key and gets a Responses example.
     expect(dialog).toHaveTextContent(
       "https://proxy.example.com/model-router/responses",

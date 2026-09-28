@@ -3,10 +3,6 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { KeyRound, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  resolveAdminDefaultBaseUrl,
-  resolveCandidateBaseUrls,
-} from "@/app/connection/connection-flow.utils";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
@@ -34,12 +30,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
+import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
 import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useOrganization } from "@/lib/organization.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
   useAllVirtualApiKeys,
@@ -144,9 +139,9 @@ export function CreateVirtualKeyDialog({
     {},
   );
   const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
-  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
-    "general",
-  );
+  const [activeSection, setActiveSection] = useState<
+    "general" | "permissions" | "connect"
+  >("general");
   const createdKeyValue = createdKey?.value ?? null;
 
   const prevOpenRef = useRef(open);
@@ -268,6 +263,7 @@ export function CreateVirtualKeyDialog({
       setNewKeyName("");
       if (result?.value) {
         setCreatedKey(result);
+        setActiveSection("connect");
       }
     } catch {
       // handled by mutation
@@ -309,12 +305,14 @@ export function CreateVirtualKeyDialog({
       sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
       activeSection={activeSection}
       navItems={
-        isPassthrough || createdKeyValue
-          ? [{ id: "general", label: "General" }]
-          : [
-              { id: "general", label: "General" },
-              { id: "permissions", label: "Permissions" },
-            ]
+        createdKeyValue
+          ? [{ id: "connect", label: "Connect" }]
+          : isPassthrough
+            ? [{ id: "general", label: "General" }]
+            : [
+                { id: "general", label: "General" },
+                { id: "permissions", label: "Permissions" },
+              ]
       }
       onActiveSectionChange={setActiveSection}
       onSubmit={() => void handleCreate()}
@@ -336,7 +334,7 @@ export function CreateVirtualKeyDialog({
       isDirty={isDirty}
     >
       <div
-        hidden={activeSection !== "general"}
+        hidden={activeSection !== (createdKey ? "connect" : "general")}
         className="space-y-4"
         data-testid={E2eTestId.VirtualKeyCreateDialog}
       >
@@ -474,21 +472,4 @@ function getGeneratedVirtualKeyName({
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {
   if (defaultSeconds === null) return null;
   return new Date(Date.now() + defaultSeconds * 1000);
-}
-
-/** Same base-URL resolution as the /connection and /llm/proxy pages. */
-function useConnectionBaseUrl(): string {
-  const { data: organization } = useOrganization();
-  const connectionBaseUrls = organization?.connectionBaseUrls ?? null;
-  return useMemo(() => {
-    const candidates = resolveCandidateBaseUrls({
-      externalProxyUrls: config.api.externalProxyUrls,
-      internalProxyUrl: config.api.internalProxyUrl,
-      metadata: connectionBaseUrls,
-    });
-    const adminDefault = resolveAdminDefaultBaseUrl(connectionBaseUrls);
-    return adminDefault && candidates.includes(adminDefault)
-      ? adminDefault
-      : candidates[0];
-  }, [connectionBaseUrls]);
 }

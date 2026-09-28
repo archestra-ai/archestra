@@ -8,17 +8,7 @@ import {
   subscriptionKindForProvider,
   type ThinkingEffortSetting,
 } from "@archestra/shared";
-import {
-  GlobeIcon,
-  MoreVerticalIcon,
-  PaperclipIcon,
-  ShieldAlertIcon,
-  ShieldCheckIcon,
-  ShieldIcon,
-  UserRoundIcon,
-  UsersRoundIcon,
-  XIcon,
-} from "lucide-react";
+import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { memo, useCallback, useEffect } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -37,6 +27,7 @@ import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
 import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -827,20 +818,6 @@ function OpenappaStatusDisplay({
   status: { trust: string; audience: string } | null | undefined;
   inPopover?: boolean;
 }) {
-  const TrustIcon =
-    status?.trust === "trusted"
-      ? ShieldCheckIcon
-      : status?.trust === "suspicious"
-        ? ShieldAlertIcon
-        : ShieldIcon;
-  const AudienceIcon =
-    status?.audience === "public"
-      ? GlobeIcon
-      : status?.audience === "internal"
-        ? UsersRoundIcon
-        : status?.audience === "self"
-          ? UserRoundIcon
-          : UsersRoundIcon;
   const statusLabel = status
     ? `Trust: ${status.trust}; audience: ${status.audience}`
     : "Trust and audience status unavailable";
@@ -848,35 +825,12 @@ function OpenappaStatusDisplay({
   const content = (
     <output
       aria-label={statusLabel}
-      className={cn(
-        "inline-flex min-w-0 text-muted-foreground",
-        inPopover
-          ? "max-w-64 flex-col gap-1 text-sm [overflow-wrap:anywhere]"
-          : "h-8 max-w-72 items-center gap-3 pl-3 text-xs",
-      )}
+      className="flex max-w-64 items-start gap-2 text-sm text-muted-foreground [overflow-wrap:anywhere]"
     >
-      <span className="inline-flex min-w-0 items-center gap-1">
-        <TrustIcon
-          aria-hidden="true"
-          className={cn(
-            "size-3.5 shrink-0",
-            status?.trust === "suspicious" &&
-              "text-amber-600 dark:text-amber-400",
-          )}
-        />
-        {inPopover ? (
-          <span>{`Trust: ${status?.trust ?? "unavailable"}`}</span>
-        ) : (
-          status && <span className="truncate">{status.trust}</span>
-        )}
-      </span>
-      <span className="inline-flex min-w-0 items-center gap-1">
-        <AudienceIcon aria-hidden="true" className="size-3.5 shrink-0" />
-        {inPopover ? (
-          <span>{`Audience: ${status?.audience ?? "unavailable"}`}</span>
-        ) : (
-          status && <span className="truncate">{status.audience}</span>
-        )}
+      <OpenAppaIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+      <span className="flex min-w-0 flex-col gap-1">
+        <span>{`Trust: ${status?.trust ?? "unavailable"}`}</span>
+        <span>{`Audience: ${status?.audience ?? "unavailable"}`}</span>
       </span>
     </output>
   );
@@ -884,15 +838,20 @@ function OpenappaStatusDisplay({
   if (inPopover) return content;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{content}</TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs break-words">
-        <span>
-          {status
-            ? `Trust: ${status.trust} · Audience: ${status.audience}`
-            : "Trust and audience status unavailable"}
-        </span>
-      </TooltipContent>
-    </Tooltip>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="OpenAPPA status"
+        >
+          <OpenAppaIcon aria-hidden="true" className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" className="w-auto p-3">
+        {content}
+      </PopoverContent>
+    </Popover>
   );
 }

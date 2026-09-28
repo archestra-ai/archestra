@@ -175,7 +175,7 @@ describe("chat composer typing performance", () => {
     expect(renderCounts.apiKeySelector).toBe(apiKeySelectorRendersAfterMount);
   });
 
-  it("shows the current OpenAPPA labels as read-only status", () => {
+  it("shows trust and audience when the OpenAPPA icon is opened", () => {
     statusState.data = { trust: "suspicious", audience: "internal" };
     render(
       <ArchestraPromptInput
@@ -188,14 +188,12 @@ describe("chat composer typing performance", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
     const status = screen.getByRole("status", {
       name: "Trust: suspicious; audience: internal",
     });
     expect(status).toHaveTextContent("suspicious");
     expect(status).toHaveTextContent("internal");
-    expect(
-      screen.queryByRole("button", { name: /trust:|audience:/i }),
-    ).toBeNull();
   });
 
   it("preserves policy-defined labels in the status text", () => {
@@ -214,6 +212,7 @@ describe("chat composer typing performance", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
     const status = screen.getByRole("status", {
       name: "Trust: reviewed; audience: alice ∩ internal,@finance",
     });
@@ -233,6 +232,7 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
     expect(
       screen.getByRole("status", { name: "Trust: trusted; audience: public" }),
     ).toBeInTheDocument();
@@ -254,10 +254,10 @@ describe("chat composer typing performance", () => {
     });
     expect(status).not.toHaveTextContent("trusted");
     expect(status).not.toHaveTextContent("public");
-    expect(status.querySelectorAll("svg")).toHaveLength(2);
+    expect(status.querySelectorAll("svg")).toHaveLength(1);
   });
 
-  it("keeps both icons before the status endpoint returns a label", () => {
+  it("keeps the OpenAPPA icon before the status endpoint returns a label", () => {
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -268,10 +268,14 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
+    expect(
+      screen.getByRole("button", { name: "OpenAPPA status" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
     const status = screen.getByRole("status", {
       name: "Trust and audience status unavailable",
     });
-    expect(status.querySelectorAll("svg")).toHaveLength(2);
+    expect(status.querySelectorAll("svg")).toHaveLength(1);
     expect(status).not.toHaveTextContent(/trusted|public/);
   });
 
@@ -288,7 +292,9 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "OpenAPPA status" }),
+    ).toBeNull();
   });
 
   it("shows trust and audience inside the narrow toolbar popup", () => {

@@ -2,8 +2,11 @@ import { requestOrigin } from "@/lib/request-origin";
 
 export function GET(request: Request) {
   const origin = requestOrigin(request);
+  const client = new URL(request.url).searchParams.get("client");
+  const focused = client ? focusedInstructions(origin, client) : null;
   return new Response(
-    `# Connect This Client
+    focused ??
+      `# Connect This Client
 
 Connect the coding client running this conversation to ${origin}.
 No preinstalled skill or platform credentials are needed to start.
@@ -129,4 +132,96 @@ Review its output for backup paths and restart instructions.
       },
     },
   );
+}
+
+function focusedInstructions(origin: string, client: string): string | null {
+  if (client === "claude-desktop") {
+    return `# Connect Claude Desktop
+
+In Claude Desktop's Cowork or Code tab, use client ID claude-desktop, not claude-code.
+Direct the user to ${origin}/connection?clientId=claude-desktop to review and download the installer.
+They open it in normal Claude Desktop; its native Install confirmation starts setup in a separate OS terminal.
+The installer reuses a valid local subscription token, or opens Claude sign-in if needed.
+It checks inference before changing configuration and restarting Desktop.
+
+Cowork's code-execution terminal runs in a VM or cloud sandbox, not the host computer.
+Do not install into that environment. A localhost deployment must be accessed from the user's host computer or browser.
+Do not retry a denied action through another tool. After handoff, end the task without polling or cleanup.
+After installation, the user authorizes the gateway under Settings > Connectors and installs shared skills under Settings > Plugins.
+Do not ask the user to paste passwords, session cookies, or tokens into this conversation.
+`;
+  }
+
+  const details = focusedClientDetails(client);
+  if (!details) return null;
+
+  return `# Connect ${details.label}
+
+Connect the client running this conversation to ${origin}.
+Use client ID ${client}. No preinstalled skill or platform credentials are needed.
+The terminal needs Node.js 18 or newer and access to this deployment.
+If a localhost page cannot be fetched through a web tool, use the local terminal.
+
+## Setup
+
+Run exactly one command in the client's terminal.
+macOS/Linux:
+p="$(mktemp)"; trap 'rm -f "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client ${client}
+Windows PowerShell:
+$p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client ${client} } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
+
+Keep the command running while the user signs in and reviews the setup in their browser.
+The browser code must match the code printed in the terminal. If no browser opens, show the printed approval URL.
+The public bootstrap downloads and applies only the approved setup. If it fails, report the exact error; do not replace this flow with manual API calls.
+Do not print the polling secret, installer source, or approved setup payload.
+If runtime handoff instructions are enabled, tell the user that future sessions inject a system-prompt file.
+
+## Finish and verify
+
+${details.finish}
+
+Do not claim the connection works until its gateway and any selected model proxy have been verified.
+Never ask the user to paste passwords, session cookies, or provider keys into this conversation.
+The approval request expires after ten minutes. Denial or expiry requires a new run.
+`;
+}
+
+function focusedClientDetails(client: string): {
+  label: string;
+  finish: string;
+} | null {
+  switch (client) {
+    case "claude-code":
+      return {
+        label: "Claude Code",
+        finish:
+          "Open a new Claude Code session so the gateway registers. In that new session, open /mcp, select the configured server, and authenticate. Verify that it lists tools. Follow the setup output for model proxy settings; send a short test prompt before reporting inference as working.",
+      };
+    case "cursor":
+      return {
+        label: "Cursor",
+        finish:
+          "Reload Cursor. Open Customize > MCPs, authenticate the configured gateway, and verify it lists tools. Confirm installed shared skills under Customize > Skills. Cursor discovers nested skills in ~/.cursor/skills/. If runtime handoff User Rules were printed, ask the user to paste them under Customize > Rules > User Rules without replacing existing rules. For the model proxy, ask the user to enter their own OpenAI API key and the printed base URL under Settings > Models > API Keys, then enable Use OpenAI API Key and Override OpenAI Base URL. A Cursor subscription cannot authenticate the proxy. Send a test prompt and confirm the request appears in this deployment. Installation alone does not complete these native steps; state exactly which checks remain unverified.",
+      };
+    case "codex":
+      return {
+        label: "Codex",
+        finish:
+          "Run codex mcp login SERVER_NAME, then open a new terminal and start Codex. Confirm config.toml selects the proxy provider at the top level. Verify gateway tools and send a short test prompt through the proxy. If either fails, report the connection as incomplete.",
+      };
+    case "copilot-cli":
+      return {
+        label: "Copilot CLI",
+        finish:
+          "Follow the setup output to restart Copilot CLI and complete native gateway OAuth. Verify that the gateway lists tools. If a model proxy was selected, send a short prompt and verify that inference reaches this deployment.",
+      };
+    case "opencode":
+      return {
+        label: "OpenCode",
+        finish:
+          "Run opencode mcp list. If SERVER_NAME is connected, skip authentication. Otherwise run opencode mcp auth list; if authentication is missing or expired, run CI=true opencode mcp auth SERVER_NAME and keep the process running while the user completes native OAuth consent. Do not start a second auth process while one is pending. Run opencode mcp list again, then close every OpenCode process and restart it to load new tools. Verify the gateway and any selected model proxy before reporting success.",
+      };
+    default:
+      return null;
+  }
 }

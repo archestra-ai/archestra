@@ -17,7 +17,7 @@ test.each([
   const client = CONNECT_CLIENTS.find((entry) => entry.id === id);
   if (!client) throw new Error("Missing client");
   render(<ConnectWithAi client={client} />);
-  const prompt = `Read ${window.location.origin}/connect.md and connect ${client.label}.`;
+  const prompt = `Read ${window.location.origin}/connect.md?client=${id} and connect ${client.label}.`;
   expect(screen.getByText(prompt)).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Copy prompt" }));
   expect(await navigator.clipboard.readText()).toBe(prompt);

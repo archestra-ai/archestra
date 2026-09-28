@@ -296,6 +296,10 @@ describe("ConnectCommandPanel", () => {
         screen.getByRole("heading", { name: "Connect Claude Code" }),
       ).toBeVisible();
       for (const label of ["Cursor", "Codex", "OpenCode", "Copilot CLI"]) {
+        const selectedClient = CONNECT_CLIENTS.find(
+          (entry) => entry.label === label,
+        );
+        if (!selectedClient) throw new Error(`Missing client: ${label}`);
         await user.click(
           screen.getByRole("button", {
             name: new RegExp(`${label} logo ${label}`),
@@ -306,7 +310,7 @@ describe("ConnectCommandPanel", () => {
         ).toBeVisible();
         expect(
           screen.getByText(
-            `Read ${window.location.origin}/connect.md and connect ${label}.`,
+            `Read ${window.location.origin}/connect.md?client=${selectedClient.id} and connect ${label}.`,
           ),
         ).toBeVisible();
       }

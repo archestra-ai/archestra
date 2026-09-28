@@ -21,7 +21,9 @@ On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `i
 The terminal on the Connection page provides a prompt for your deployment.
 You can also give your coding agent this prompt, replacing the example hostname:
 
-> Read https://ai.example.com/connect.md and connect this client.
+> Read https://ai.example.com/connect.md?client=cursor and connect Cursor.
+
+The Connection page adds the selected client to the link so the agent sees only its relevant steps. Without `?client=`, `/connect.md` still returns the full instructions for every client.
 
 The public instructions need no installed skill or platform login.
 They support Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.

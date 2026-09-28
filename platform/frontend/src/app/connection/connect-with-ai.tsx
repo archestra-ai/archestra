@@ -16,7 +16,7 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
     const timeout = setTimeout(() => setCopied(false), 2000);
     return () => clearTimeout(timeout);
   }, [copied]);
-  const prompt = `Read ${origin}/connect.md and connect ${client.label}.`;
+  const prompt = `Read ${origin}/connect.md?client=${encodeURIComponent(client.id)} and connect ${client.label}.`;
 
   return (
     <div className="space-y-4">

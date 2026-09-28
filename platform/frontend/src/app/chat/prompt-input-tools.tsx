@@ -58,6 +58,7 @@ import { useOpenappaStatus } from "@/lib/chat/chat.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -218,6 +219,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     runtimeMode ? undefined : conversationId,
   );
   const openappaStatus = statusReadFailed ? null : statusData;
+  const { data: guardrailsDeployment } = useGuardrailsDeployment();
+  const showOpenappaStatus = guardrailsDeployment?.active === true;
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
@@ -553,7 +556,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </Popover>
         ))}
 
-      {isNarrow && openappaStatus && (
+      {isNarrow && showOpenappaStatus && (
         <OpenappaStatusDisplay status={openappaStatus} compact />
       )}
 
@@ -803,7 +806,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         </>
       )}
 
-      {!isNarrow && openappaStatus && (
+      {!isNarrow && showOpenappaStatus && (
         <OpenappaStatusDisplay status={openappaStatus} />
       )}
 
@@ -821,29 +824,32 @@ function OpenappaStatusDisplay({
   status,
   compact = false,
 }: {
-  status: { trust: string; audience: string };
+  status: { trust: string; audience: string } | null | undefined;
   compact?: boolean;
 }) {
   const TrustIcon =
-    status.trust === "trusted"
+    status?.trust === "trusted"
       ? ShieldCheckIcon
-      : status.trust === "suspicious"
+      : status?.trust === "suspicious"
         ? ShieldAlertIcon
         : ShieldIcon;
   const AudienceIcon =
-    status.audience === "public"
+    status?.audience === "public"
       ? GlobeIcon
-      : status.audience === "internal"
+      : status?.audience === "internal"
         ? UsersRoundIcon
-        : status.audience === "self"
+        : status?.audience === "self"
           ? UserRoundIcon
           : UsersRoundIcon;
+  const statusLabel = status
+    ? `Trust: ${status.trust}; audience: ${status.audience}`
+    : "Trust and audience status unavailable";
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <output
-          aria-label={`Trust: ${status.trust}; audience: ${status.audience}`}
+          aria-label={statusLabel}
           className={cn(
             "inline-flex h-8 min-w-0 items-center text-xs text-muted-foreground",
             compact ? "gap-1 px-1" : "max-w-72 gap-3 border-l pl-3",
@@ -854,20 +860,28 @@ function OpenappaStatusDisplay({
               aria-hidden="true"
               className={cn(
                 "size-3.5 shrink-0",
-                status.trust === "suspicious" &&
+                status?.trust === "suspicious" &&
                   "text-amber-600 dark:text-amber-400",
               )}
             />
-            {!compact && <span className="truncate">{status.trust}</span>}
+            {!compact && status && (
+              <span className="truncate">{status.trust}</span>
+            )}
           </span>
           <span className="inline-flex min-w-0 items-center gap-1">
             <AudienceIcon aria-hidden="true" className="size-3.5 shrink-0" />
-            {!compact && <span className="truncate">{status.audience}</span>}
+            {!compact && status && (
+              <span className="truncate">{status.audience}</span>
+            )}
           </span>
         </output>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs break-words">
-        <span>{`Trust: ${status.trust} · Audience: ${status.audience}`}</span>
+        <span>
+          {status
+            ? `Trust: ${status.trust} · Audience: ${status.audience}`
+            : "Trust and audience status unavailable"}
+        </span>
       </TooltipContent>
     </Tooltip>
   );

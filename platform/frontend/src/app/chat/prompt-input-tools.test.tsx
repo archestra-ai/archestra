@@ -13,12 +13,13 @@ import { E2eTestId } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { renderCounts, statusState } = vi.hoisted(() => ({
+const { renderCounts, statusState, deploymentState } = vi.hoisted(() => ({
   renderCounts: { modelSelector: 0, apiKeySelector: 0 },
   statusState: {
     data: null as { trust: string; audience: string } | null,
     isError: false,
   },
+  deploymentState: { active: true },
 }));
 
 // Used by Radix and the toolbar-collapse hook; jsdom reports 0 widths, so the
@@ -77,6 +78,10 @@ vi.mock("@/lib/chat/chat.query", () => ({
   useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
+vi.mock("@/lib/guardrails-deployment.query", () => ({
+  useGuardrailsDeployment: () => ({ data: deploymentState }),
+}));
+
 vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: () => ({
     placeholder: "placeholder",
@@ -109,6 +114,7 @@ describe("chat composer typing performance", () => {
     renderCounts.apiKeySelector = 0;
     statusState.data = null;
     statusState.isError = false;
+    deploymentState.active = true;
     localStorage.clear();
     vi.mocked(useOrganization).mockReturnValue({
       data: null,
@@ -207,7 +213,7 @@ describe("chat composer typing performance", () => {
     expect(status).toHaveTextContent("alice ∩ internal,@finance");
   });
 
-  it("hides retained labels when a status refresh fails", () => {
+  it("keeps the status icons but hides retained labels when a refresh fails", () => {
     statusState.data = { trust: "trusted", audience: "public" };
     const { rerender } = render(
       <ArchestraPromptInput
@@ -235,10 +241,35 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
-    expect(screen.queryByRole("status")).toBeNull();
+    const status = screen.getByRole("status", {
+      name: "Trust and audience status unavailable",
+    });
+    expect(status).not.toHaveTextContent("trusted");
+    expect(status).not.toHaveTextContent("public");
+    expect(status.querySelectorAll("svg")).toHaveLength(2);
   });
 
-  it("shows no labels when the status endpoint returns null", () => {
+  it("keeps both icons before the status endpoint returns a label", () => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+    const status = screen.getByRole("status", {
+      name: "Trust and audience status unavailable",
+    });
+    expect(status.querySelectorAll("svg")).toHaveLength(2);
+    expect(status).not.toHaveTextContent(/trusted|public/);
+  });
+
+  it("hides the status when guardrails are disabled", () => {
+    deploymentState.active = false;
+    statusState.data = { trust: "trusted", audience: "public" };
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}

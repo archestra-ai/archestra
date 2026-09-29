@@ -1,4 +1,3 @@
-import type { IncomingHttpHeaders } from "node:http";
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
@@ -7,94 +6,41 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
-import logger from "@/logging";
 import {
-  AgentModel,
-  AgentTeamModel,
   ConversationModel,
-  ProjectAccessModel,
-  ProjectModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
 } from "@/models";
 import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
+  findAccessibleScheduleTriggerOrThrow,
+  findAccessibleScheduleTriggerRunOrThrow,
+  startManualScheduleTriggerRun,
+} from "@/services/schedule-trigger-access";
+import {
+  createScheduleTrigger,
+  updateScheduleTrigger,
+} from "@/services/schedule-trigger-management";
+import {
   backfillRunConversationMessages,
   createAndLinkRunConversation,
   ensureFailedRunErrorVisible,
 } from "@/services/scheduled-run-conversation";
-import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  ScheduleTriggerConfigurationSchema,
-  ScheduleTriggerConfigurationSchemaBase,
   ScheduleTriggerRunStatusSchema,
   SelectConversationSchema,
   SelectScheduleTriggerRunSchema,
   SelectScheduleTriggerSchema,
   UuidIdSchema,
 } from "@/types";
-
-const ScheduleTriggerBodyFieldsSchema = z.object({
-  name: z.string().min(1),
-  // Optional: callers without `agent:read` (e.g. a basic-user role) omit it and
-  // the handler falls back to the org's default agent.
-  agentId: UuidIdSchema.optional(),
-  // Optional in the shared shape so updates can omit it; create requires it
-  // (see CreateScheduleTriggerBodySchema) since a scheduled task is scoped to a
-  // project.
-  projectId: UuidIdSchema.optional(),
-  enabled: z.boolean().optional().default(true),
-  ...ScheduleTriggerConfigurationSchemaBase.shape,
-});
-
-// A scheduled task is scoped to a project, so create requires projectId — the
-// contract clients see, not just a runtime check.
-const CreateScheduleTriggerBodySchema = ScheduleTriggerBodyFieldsSchema.extend({
-  projectId: UuidIdSchema,
-}).superRefine((data, ctx) => {
-  const result = ScheduleTriggerConfigurationSchema.safeParse(data);
-  if (result.success) {
-    return;
-  }
-
-  for (const issue of result.error.issues) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: issue.message,
-      path: issue.path,
-    });
-  }
-});
-
-const UpdateScheduleTriggerBodySchema =
-  ScheduleTriggerBodyFieldsSchema.partial().superRefine((data, ctx) => {
-    if (Object.keys(data).length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "At least one field must be provided",
-      });
-      return;
-    }
-
-    const result =
-      ScheduleTriggerConfigurationSchemaBase.partial().safeParse(data);
-    if (result.success) {
-      return;
-    }
-
-    for (const issue of result.error.issues) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: issue.message,
-        path: issue.path,
-      });
-    }
-  });
+import {
+  CreateScheduleTriggerBodySchema,
+  UpdateScheduleTriggerBodySchema,
+} from "@/types/schedule-trigger-input";
 
 const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -238,74 +184,10 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+      const trigger = await createScheduleTrigger({
+        body,
         userId: user.id,
         organizationId,
-      });
-
-      // projectId is required by the schema; verify the caller can access it.
-      // Resolved first because the project's pinned agent outranks the org
-      // default for a caller who did not (or could not) pick one.
-      const projectId = body.projectId;
-      const project = await projectService.get({
-        id: projectId,
-        organizationId,
-        userId: user.id,
-      });
-
-      // A caller who can pick an agent (`agent:read`) passes one and we verify
-      // access; a caller who can't (e.g. a basic-user role) omits it and we fall
-      // back to the project's default agent, then the org's.
-      let agentId: string;
-      if (body.agentId) {
-        const agent = await AgentModel.findById(
-          body.agentId,
-          user.id,
-          isAgentAdmin,
-        );
-        if (!agent) {
-          throw new ApiError(
-            403,
-            "You do not have access to the selected agent",
-          );
-        }
-        if (
-          agent.organizationId !== organizationId ||
-          agent.agentType !== "agent"
-        ) {
-          throw new ApiError(
-            400,
-            "Scheduled triggers require an internal agent",
-          );
-        }
-        agentId = agent.id;
-      } else if (project.defaultAgent) {
-        // Already re-validated as a live, org-scoped chat agent by the read.
-        agentId = project.defaultAgent.id;
-      } else {
-        const defaultAgent = await AgentModel.findDefaultByType({
-          organizationId,
-          agentType: "agent",
-        });
-        if (!defaultAgent) {
-          throw new ApiError(
-            400,
-            "No default agent is configured for scheduled tasks",
-          );
-        }
-        agentId = defaultAgent.id;
-      }
-
-      const trigger = await ScheduleTriggerModel.create({
-        organizationId,
-        name: body.name,
-        agentId,
-        projectId,
-        messageTemplate: body.messageTemplate,
-        cronExpression: body.cronExpression,
-        timezone: body.timezone,
-        enabled: body.enabled ?? true,
-        actorUserId: user.id,
       });
 
       return reply.send(trigger);
@@ -323,12 +205,11 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
-      const trigger = await findAccessibleTriggerOrThrow({
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const trigger = await findAccessibleScheduleTriggerOrThrow({
         id,
         userId: user.id,
         organizationId,
-        headers,
         access: "read",
       });
 
@@ -348,92 +229,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
-      const existing = await findAccessibleTriggerOrThrow({
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const updated = await updateScheduleTrigger({
         id,
-        userId: user.id,
-        organizationId,
-        headers,
-        access: "mutate",
-      });
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        body,
         userId: user.id,
         organizationId,
       });
-
-      // Only validate the agent when the caller is actually changing it. A
-      // caller without `agent:read` editing other fields omits agentId and must
-      // not be access-checked against the trigger's existing (default) agent.
-      if (body.agentId !== undefined && body.agentId !== existing.agentId) {
-        const agent = await AgentModel.findById(
-          body.agentId,
-          user.id,
-          isAgentAdmin,
-        );
-        if (!agent) {
-          throw new ApiError(
-            403,
-            "You do not have access to the selected agent",
-          );
-        }
-        if (
-          agent.organizationId !== organizationId ||
-          agent.agentType !== "agent"
-        ) {
-          throw new ApiError(
-            400,
-            "Scheduled triggers require an internal agent",
-          );
-        }
-
-        const actorIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
-          userId: existing.actorUserId,
-          organizationId,
-        });
-        const actorHasAgentAccess = await AgentTeamModel.userHasAgentAccess({
-          userId: existing.actorUserId,
-          agentId: body.agentId,
-          isAgentAdmin: actorIsAgentAdmin,
-          action: "use",
-        });
-        if (!actorHasAgentAccess) {
-          throw new ApiError(
-            400,
-            "The stored trigger actor must have access to the selected agent",
-          );
-        }
-      }
-
-      const cronExpression = body.cronExpression ?? existing.cronExpression;
-      const timezone = body.timezone ?? existing.timezone;
-      const messageTemplate = body.messageTemplate ?? existing.messageTemplate;
-      const validation = ScheduleTriggerConfigurationSchema.safeParse({
-        cronExpression,
-        timezone,
-        messageTemplate,
-      });
-      if (!validation.success) {
-        const firstIssue = validation.error.issues[0];
-        throw new ApiError(
-          400,
-          firstIssue?.message ?? "Invalid schedule trigger configuration",
-        );
-      }
-
-      // Guard project re-scoping: only to a project the caller can access.
-      if (body.projectId !== undefined) {
-        await projectService.get({
-          id: body.projectId,
-          organizationId,
-          userId: user.id,
-        });
-      }
-
-      const updated = await ScheduleTriggerModel.update(id, body);
-
-      if (!updated) {
-        throw new ApiError(404, "Schedule trigger not found");
-      }
 
       return reply.send(updated);
     },
@@ -450,12 +252,11 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
-      await findAccessibleTriggerOrThrow({
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await findAccessibleScheduleTriggerOrThrow({
         id,
         userId: user.id,
         organizationId,
-        headers,
         access: "mutate",
       });
 
@@ -479,12 +280,11 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
-      await findAccessibleTriggerOrThrow({
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await findAccessibleScheduleTriggerOrThrow({
         id,
         userId: user.id,
         organizationId,
-        headers,
         access: "mutate",
       });
 
@@ -511,12 +311,11 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
-      await findAccessibleTriggerOrThrow({
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await findAccessibleScheduleTriggerOrThrow({
         id,
         userId: user.id,
         organizationId,
-        headers,
         access: "mutate",
       });
 
@@ -543,29 +342,18 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerRunSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
-      const trigger = await findAccessibleTriggerOrThrow({
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const trigger = await findAccessibleScheduleTriggerOrThrow({
         id,
         userId: user.id,
         organizationId,
-        headers,
         access: "mutate",
       });
 
-      const run = await ScheduleTriggerRunModel.createManualRun({
+      const run = await startManualScheduleTriggerRun({
         trigger,
         initiatedByUserId: user.id,
       });
-
-      await taskQueueService.enqueue({
-        taskType: "schedule_trigger_run_execute",
-        payload: { runId: run.id, triggerId: trigger.id },
-      });
-
-      logger.info(
-        { runId: run.id, triggerId: trigger.id, userId: user.id },
-        "Manual schedule trigger run created",
-      );
 
       return reply.send(run);
     },
@@ -593,15 +381,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         query: { limit, offset, status },
         user,
         organizationId,
-        headers,
       },
       reply,
     ) => {
-      const trigger = await findAccessibleTriggerOrThrow({
+      const trigger = await findAccessibleScheduleTriggerOrThrow({
         id,
         userId: user.id,
         organizationId,
-        headers,
         access: "read",
       });
 
@@ -641,13 +427,12 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerRunSchema),
       },
     },
-    async ({ params: { id, runId }, user, organizationId, headers }, reply) => {
-      const run = await findAccessibleRunOrThrow({
+    async ({ params: { id, runId }, user, organizationId }, reply) => {
+      const run = await findAccessibleScheduleTriggerRunOrThrow({
         triggerId: id,
         runId,
         userId: user.id,
         organizationId,
-        headers,
         access: "read",
       });
 
@@ -670,17 +455,16 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async ({ params: { id, runId }, user, organizationId, headers }, reply) => {
-      // Access is owner / scheduledTask:admin (findAccessibleRunOrThrow) — the
+    async ({ params: { id, runId }, user, organizationId }, reply) => {
+      // Access is owner / scheduledTask:admin (the shared run gate) — the
       // same gate as every other schedule op. Loading the run conversation can
       // MINT one when it isn't linked yet (createAndLinkRunConversation below),
       // so it stays on that existing permission rather than any project scope.
-      const run = await findAccessibleRunOrThrow({
+      const run = await findAccessibleScheduleTriggerRunOrThrow({
         triggerId: id,
         runId,
         userId: user.id,
         organizationId,
-        headers,
         access: "mutate",
       });
 
@@ -696,110 +480,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default scheduleTriggerRoutes;
-
-/**
- * How much authority an operation needs over a trigger.
- *
- * `read` — viewing the trigger and its runs. Project members qualify, so a
- * project's schedules are visible to everyone who can see the project.
- *
- * `mutate` — anything that changes the trigger or causes it to execute (update,
- * delete, enable/disable, run-now, minting a run conversation). Project
- * membership is NOT enough: a scheduled run executes as `trigger.actorUserId`
- * against that actor's agent and credentials, so letting a project member
- * rewrite or fire another member's schedule would let them act as that actor.
- * Restricted to the actor themselves or a `scheduledTask:admin`.
- */
-type ScheduleTriggerAccess = "read" | "mutate";
-
-async function findAccessibleTriggerOrThrow(params: {
-  id: string;
-  userId: string;
-  organizationId: string;
-  headers: IncomingHttpHeaders;
-  access: ScheduleTriggerAccess;
-}): Promise<z.infer<typeof SelectScheduleTriggerSchema>> {
-  const trigger = await ScheduleTriggerModel.findById(params.id);
-  if (!trigger || trigger.organizationId !== params.organizationId) {
-    throw new ApiError(404, "Schedule trigger not found");
-  }
-
-  // A trigger of a soft-deleted project is hidden and paused with it — 404 for
-  // everyone (actor and scheduledTask:admin included), or run-now could still
-  // execute into the hidden project past the due-picker's pause. `findById`
-  // excludes soft-deleted projects, so a retained trigger resolves to no project.
-  const project = trigger.projectId
-    ? await ProjectModel.findById(trigger.projectId)
-    : null;
-  if (trigger.projectId && !project) {
-    throw new ApiError(404, "Schedule trigger not found");
-  }
-
-  // The actor the trigger runs as always has access
-  if (trigger.actorUserId === params.userId) {
-    return trigger;
-  }
-
-  // Reading every scheduled task (a grant at `*`) reaches any trigger, incl.
-  // ones inside a project. Project oversight of schedules rides this grant —
-  // there is no separate project path here.
-  const isScheduledTaskAdmin = await ResourcePermissions.allows({
-    userId: params.userId,
-    organizationId: params.organizationId,
-    resource: "scheduledTask",
-    scope: "*",
-    action: "read",
-  });
-  if (isScheduledTaskAdmin) {
-    return trigger;
-  }
-
-  // Project members may READ the schedules of a project they can access (and
-  // their runs). Reuses the same ProjectAccessModel.userCanAccessProject check
-  // that backs GET /api/projects/:id (via projectService.requireViewable).
-  // Deliberately read-only — see ScheduleTriggerAccess.
-  if (params.access === "read" && project) {
-    if (
-      await ProjectAccessModel.userCanAccessProject({
-        project,
-        userId: params.userId,
-        organizationId: params.organizationId,
-      })
-    ) {
-      return trigger;
-    }
-  }
-
-  throw new ApiError(403, "You do not have access to this scheduled task");
-}
-
-async function findAccessibleRunOrThrow(params: {
-  triggerId: string;
-  runId: string;
-  userId: string;
-  organizationId: string;
-  headers: IncomingHttpHeaders;
-  access: ScheduleTriggerAccess;
-}): Promise<z.infer<typeof SelectScheduleTriggerRunSchema>> {
-  await findAccessibleTriggerOrThrow({
-    id: params.triggerId,
-    userId: params.userId,
-    organizationId: params.organizationId,
-    headers: params.headers,
-    access: params.access,
-  });
-
-  const run = await ScheduleTriggerRunModel.findById(params.runId);
-  if (
-    !run ||
-    run.organizationId !== params.organizationId ||
-    run.triggerId !== params.triggerId
-  ) {
-    throw new ApiError(404, "Schedule trigger run not found");
-  }
-
-  return run;
-}
 
 async function ensureRunConversation(params: {
   run: z.infer<typeof SelectScheduleTriggerRunSchema>;

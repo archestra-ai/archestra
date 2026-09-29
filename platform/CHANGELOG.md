@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.4.0-rc.27](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.26...platform-v1.4.0-rc.27) (2026-09-29)
+
+
+### Features
+
+* **chat:** show OpenAPPA trust and audience status ([#8254](https://github.com/archestra-ai/archestra/issues/8254)) ([90d0eef](https://github.com/archestra-ai/archestra/commit/90d0eef520ae7eb761227e163bdf766890e54cd6))
+* **connection:** let Claude Desktop import Claude.ai history after proxy setup ([#8263](https://github.com/archestra-ai/archestra/issues/8263)) ([76f9b22](https://github.com/archestra-ai/archestra/commit/76f9b222de4e3e82c497936753316c2572185132))
+* **mcp:** manage project scheduled agents with built-in tools ([#8283](https://github.com/archestra-ai/archestra/issues/8283)) ([fb36f2a](https://github.com/archestra-ai/archestra/commit/fb36f2a60cb2c3bb5ae3e34de46161f6db6edc92))
+
+
+### Bug Fixes
+
+* **api:** distinguish HTTP connection failures from database outages ([#8255](https://github.com/archestra-ai/archestra/issues/8255)) ([8659662](https://github.com/archestra-ai/archestra/commit/8659662ac0ce28acb0fdba99ec8473e5af91d551))
+* **chat:** use model sampling defaults for tool repair ([#8256](https://github.com/archestra-ai/archestra/issues/8256)) ([e0e0b33](https://github.com/archestra-ai/archestra/commit/e0e0b33e151bb320211abf8209287c54c41e0c06))
+* **chat:** use one Guardrails policy completion banner ([#8267](https://github.com/archestra-ai/archestra/issues/8267)) ([f647bf9](https://github.com/archestra-ai/archestra/commit/f647bf9328728acca1f0d05668fbdb47e3b22a25))
+* **connect:** correct Cursor setup flow ([#8264](https://github.com/archestra-ai/archestra/issues/8264)) ([49ff8d5](https://github.com/archestra-ai/archestra/commit/49ff8d55af88a1779b6d9908c0beaaeca511098b))
+* **connection:** pass utility CLI commands through wrappers ([#8262](https://github.com/archestra-ai/archestra/issues/8262)) ([ed5e625](https://github.com/archestra-ai/archestra/commit/ed5e625b5417d20041a3eb1f3efbd463c9e902d4))
+* **connection:** register the personal gateway under the app name ([#8275](https://github.com/archestra-ai/archestra/issues/8275)) ([b1248d8](https://github.com/archestra-ai/archestra/commit/b1248d8cf440080934f14e22247262efae660ca2))
+* **deps:** update fast-uri past CVE-2026-84394 ([#8279](https://github.com/archestra-ai/archestra/issues/8279)) ([f994493](https://github.com/archestra-ai/archestra/commit/f9944937b9de8641e1a15527d256e4b0e2a5ef43))
+* identify owners and clean up stale personal assistants ([#8274](https://github.com/archestra-ai/archestra/issues/8274)) ([90712f6](https://github.com/archestra-ai/archestra/commit/90712f61644ade3ab3568fb738f37c05fc85607b))
+* keep OpenAPPA recovery tools assigned to agents ([#8260](https://github.com/archestra-ai/archestra/issues/8260)) ([ac947de](https://github.com/archestra-ai/archestra/commit/ac947de6412589a6cdb0524f8864274510a1e567))
+* **mcp:** skip hosted apps during upstream listings ([#8259](https://github.com/archestra-ai/archestra/issues/8259)) ([63245a9](https://github.com/archestra-ai/archestra/commit/63245a9a413d87c15dcdea0a9a549cacfdf6299b))
+* **openai:** sync ChatGPT subscription models from Codex ([#8251](https://github.com/archestra-ai/archestra/issues/8251)) ([46d5eb9](https://github.com/archestra-ai/archestra/commit/46d5eb9137cc5a71224245397f572917b392b438))
+* **proxy:** return 503 for preserved connection timeouts ([#8258](https://github.com/archestra-ai/archestra/issues/8258)) ([5aa9925](https://github.com/archestra-ai/archestra/commit/5aa99256a210347b708d62db15ee06cd489a226f))
+* **proxy:** round-trip null tool calls through vLLM ([#8257](https://github.com/archestra-ai/archestra/issues/8257)) ([43e5cd8](https://github.com/archestra-ai/archestra/commit/43e5cd8d1113344259383112450e777148ada344))
+* **ui:** update sidebar maturity badges ([#8278](https://github.com/archestra-ai/archestra/issues/8278)) ([f584d8c](https://github.com/archestra-ai/archestra/commit/f584d8c66cc183550f5f79f423d65730745648d4))
+
+
+### Miscellaneous Chores
+
+* add Connect tab to virtual key dialogs ([#8261](https://github.com/archestra-ai/archestra/issues/8261)) ([3ac1690](https://github.com/archestra-ai/archestra/commit/3ac1690063355e4b6acef2831a4d7fa1f6213607))
+* **openai:** automate Codex client version updates ([#8273](https://github.com/archestra-ai/archestra/issues/8273)) ([656cad2](https://github.com/archestra-ai/archestra/commit/656cad2c5eaf0e37bca0d441c652a10107d2ebd9))
+* **openappa:** update embedded runtime to latest main ([#8269](https://github.com/archestra-ai/archestra/issues/8269)) ([1550913](https://github.com/archestra-ai/archestra/commit/1550913a76bb24a5caec943739c2c9881525af42))
+
 ## [1.4.0-rc.26](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.25...platform-v1.4.0-rc.26) (2026-09-28)
 
 

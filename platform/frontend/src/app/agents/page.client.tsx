@@ -1057,7 +1057,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <DataTable
             columns={sortable ? columns : pinnedColumns}
             tableClassName="table-fixed"
-            fixedWidthColumnIds={["team", "provider", "environment"]}
+            fixedWidthColumnIds={[
+              "tools",
+              "subagents",
+              "team",
+              "provider",
+              "environment",
+            ]}
             flexibleColumnIds={["name"]}
             data={sectionRows}
             isLoading={showLoading}

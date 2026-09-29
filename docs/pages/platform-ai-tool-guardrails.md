@@ -3,7 +3,7 @@ title: Guardrails
 category: LLM Proxy
 order: 5
 description: Enable and operate OpenAPPA tool guardrails in Archestra
-lastUpdated: 2026-09-29
+lastUpdated: 2026-09-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,6 +35,8 @@ This alone doesn't protect anything — tool calls run unchecked until you turn 
 On a fresh install, the page asks you to create a policy. A chat drafts one from your tools. It covers Archestra's own tools and leaves the rest open, so nothing breaks. Review it and approve — enforcement turns on.
 
 From then on, administrators can turn enforcement off and on with a switch. The policy stays as it is. Ask about the policy explains what it does.
+
+Turning enforcement on also applies to sessions that are already running. If such a session ran a subagent while enforcement was off, the proxy refuses its later requests. Start a new session to continue — or rewind the conversation to before the subagent ran.
 
 ## Client Support Matrix
 

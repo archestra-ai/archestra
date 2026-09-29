@@ -104,17 +104,22 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
-    app.setErrorHandler((error, _request, reply) =>
-      reply.status(error instanceof ApiError ? error.statusCode : 500).send({
-        error: {
-          message: error instanceof Error ? error.message : String(error),
-          type:
-            error instanceof ApiError
-              ? error.type
-              : "api_internal_server_error",
-        },
-      }),
-    );
+    app.setErrorHandler((error, _request, reply) => {
+      // Relays retry guidance as the central handler does (server.test.ts).
+      if (error instanceof ApiError && typeof error.shouldRetry === "boolean")
+        reply.header("x-should-retry", String(error.shouldRetry));
+      return reply
+        .status(error instanceof ApiError ? error.statusCode : 500)
+        .send({
+          error: {
+            message: error instanceof Error ? error.message : String(error),
+            type:
+              error instanceof ApiError
+                ? error.type
+                : "api_internal_server_error",
+          },
+        });
+    });
     await app.register(anthropicProxyRoutes);
     agent = await makeAgent({ name: "Native proxy test" });
     userId = (await makeUser()).id;
@@ -4328,6 +4333,82 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ]);
       expect(nestedForged.statusCode, nestedForged.body).toBe(409);
       expect(providerRequests).toHaveLength(0);
+    });
+
+    // A subagent that ran while enforcement was off left no retained return, and
+    // the client re-sends its result with every later request of the session.
+    test.for([
+      [
+        "a foreground report",
+        [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_unprotected_agent",
+            content: [
+              { type: "text", text: "The lockfile is stale." },
+              { type: "text", text: "agentId: a1\n<usage>tokens: 9</usage>" },
+            ],
+          },
+        ],
+      ],
+      [
+        "a background notification",
+        [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_unprotected_agent",
+            content:
+              "Async agent launched successfully.\nagentId: a1\noutput_file: /tmp/a1.output",
+          },
+          {
+            type: "text",
+            text: "<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>toolu_unprotected_agent</tool-use-id>\n<status>completed</status>\n<result>The lockfile is stale.</result>\n</task-notification>",
+          },
+        ],
+      ],
+    ] as const)("refuses an unretained subagent return in %s and says how to continue", async ([
+      _shape,
+      returned,
+    ]) => {
+      config.openappa.offerSigningSecret = secret;
+      const body = payload(true, [
+        { role: "user", content: "Find out why the build fails" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_unprotected_agent",
+              name: "Agent",
+              input: { description: "Check the build", prompt: spawnPrompt },
+            },
+          ],
+        },
+        { role: "user", content: returned },
+      ]);
+      body.tools.push({
+        name: "Agent",
+        description: "Launch a subagent",
+        input_schema: { type: "object", properties: {} },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.0 (external, cli)",
+          "x-claude-code-session-id": "unretained-subagent",
+        },
+        payload: body,
+      });
+      expect(response.statusCode, response.body).toBe(409);
+      expect(providerRequests).toHaveLength(0);
+      // The same history fails the same way, so the SDK must not retry it.
+      expect(response.headers["x-should-retry"]).toBe("false");
+      const { message } = response.json().error;
+      expect(message).toContain("toolu_unprotected_agent");
+      expect(message).toContain("start a new session");
     });
 
     test("a Codex spawn_agent keeps its namespace on the re-emitted stream, and its grandchild binds under the root", async ({

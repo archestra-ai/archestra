@@ -1229,10 +1229,11 @@ async function approveChildReturnCarriers(params: {
           record.childNativeId !== first.childNativeId,
       )
     ) {
-      throw new ApiError(
-        409,
-        "OpenAPPA withheld an unverified child completion",
-      );
+      const callId = completion.envelopeId ?? completion.spawnCallId;
+      throw childReturnRefusal({
+        reason: first ? AMBIGUOUS_CHILD_RETURN : UNRECORDED_CHILD_RETURN,
+        callId: callId && envelopeIdOf(callId),
+      });
     }
     const hit = eligible[0].index;
     const [record] = available.splice(hit, 1);
@@ -1251,10 +1252,10 @@ async function approveChildReturnCarriers(params: {
         ? envelopeIdOf(completion.envelopeId)
         : undefined);
     if (!spawnCallId) {
-      throw new ApiError(
-        409,
-        "OpenAPPA cannot bind the child completion to its spawn call",
-      );
+      throw childReturnRefusal({
+        reason: UNBOUND_CHILD_RETURN,
+        callId: completion.envelopeId && envelopeIdOf(completion.envelopeId),
+      });
     }
     if (completion.envelopeId) {
       const envelopeId = envelopeIdOf(completion.envelopeId);
@@ -1273,15 +1274,14 @@ async function approveChildReturnCarriers(params: {
       spawnCallId,
     });
   }
-  if (
-    completionResults.some(
-      (result) => (byEnvelope.get(envelopeIdOf(result.id)) ?? []).length === 0,
-    )
-  ) {
-    throw new ApiError(
-      409,
-      "OpenAPPA withheld an unverified child completion from the parent",
-    );
+  const unrecorded = completionResults.find(
+    (result) => (byEnvelope.get(envelopeIdOf(result.id)) ?? []).length === 0,
+  );
+  if (unrecorded) {
+    throw childReturnRefusal({
+      reason: UNRECORDED_CHILD_RETURN,
+      callId: envelopeIdOf(unrecorded.id),
+    });
   }
   // Records every verified crossing with the runtime. The runtime re-checks
   // each value against the return its fork bound, so a client-named spawn
@@ -1301,10 +1301,10 @@ async function approveChildReturnCarriers(params: {
     const envelopeId = envelopeIdOf(result.id);
     const verified = byEnvelope.get(envelopeId) ?? [];
     if (verified.length === 0) {
-      throw new ApiError(
-        409,
-        "OpenAPPA withheld an unverified child completion",
-      );
+      throw childReturnRefusal({
+        reason: UNRECORDED_CHILD_RETURN,
+        callId: envelopeId,
+      });
     }
     updates[result.id] =
       verified.length === 1 &&
@@ -1323,6 +1323,33 @@ async function approveChildReturnCarriers(params: {
   }
   return updates;
 }
+
+/**
+ * Refuses a child return carried in the conversation history. The client
+ * re-sends that history with every later request, so a retry fails the same
+ * way: the SDK is told not to retry, and the user is told how to continue.
+ */
+function childReturnRefusal(params: {
+  reason: string;
+  callId: string | undefined;
+}): ApiError {
+  const target = params.callId
+    ? `tool call ${params.callId}`
+    : "this subagent result";
+  const error = new ApiError(
+    409,
+    `OpenAPPA blocked this request. ${params.reason} Each request that contains this result fails the same way. To continue, start a new session, or rewind the conversation to before ${target}.`,
+  );
+  error.shouldRetry = false;
+  return error;
+}
+
+const UNRECORDED_CHILD_RETURN =
+  "The conversation contains a subagent result that OpenAPPA has no record of. This can happen when the subagent ran while Guardrails enforcement was off, or when the result changed after the subagent finished.";
+const AMBIGUOUS_CHILD_RETURN =
+  "The conversation contains a subagent result that matches several subagents, so OpenAPPA cannot tell which subagent returned it.";
+const UNBOUND_CHILD_RETURN =
+  "The conversation contains a subagent result that OpenAPPA cannot link to the call that started the subagent.";
 
 async function admitChildHandback(params: {
   binding: AppaPluginBinding;

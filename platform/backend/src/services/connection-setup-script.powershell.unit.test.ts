@@ -15,11 +15,14 @@ import {
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared/consts";
+import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import {
   renderSetupScript,
   type SetupScriptProxySection,
 } from "@/services/connection-setup-script";
+import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
+import { CODEX_GUARD_CLIENT } from "./startup-guard.clients";
 
 const execFileAsync = promisify(execFile);
 const powershellAvailable =
@@ -160,6 +163,78 @@ describe.skipIf(!powershellAvailable)(
   "PowerShell session recovery (requires pwsh and POSIX CLI fixtures)",
   () => {
     test.each([
+      false,
+      true,
+    ])("Codex proxy removal restores the catalog with MCP remaining: %s", async (keepMcp) => {
+      const home = await mkdtemp(
+        path.join(tmpdir(), "codex-windows-lifecycle-"),
+      );
+      const config = path.join(home, "config.toml");
+      const helper = path.join(home, "guard.ps1.handoff.cjs");
+      const cli = path.join(home, "codex");
+      const script = path.join(home, "disconnect.ps1");
+      const before = `model = "model-a"\nmodel_provider = "llm_proxy"\nweb_search = "live"\n[features]\ncode_mode_host = true\n# >>> archestra:llm_proxy >>>\n[model_providers.llm_proxy]\nname = "llm_proxy"\n# <<< archestra:llm_proxy <<<\n${keepMcp ? '[mcp_servers.gateway]\nurl = "https://example.com/mcp"\n' : ""}`;
+      try {
+        await writeFile(config, before);
+        await writeFile(
+          `${config}.archestra-backup`,
+          'model_provider = "openai"\n',
+        );
+        await writeFile(helper, CODEX_HANDOFF_HELPER);
+        await writeFile(
+          cli,
+          `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()})); console.log(JSON.stringify({models:[{slug:'model-a',tool_mode:'code_mode_only'}]}));`,
+        );
+        await chmod(cli, 0o755);
+        const env = { ...process.env, USERPROFILE: home, CODEX_HOME: home };
+        await execFileAsync(
+          process.execPath,
+          [helper, "--install-direct", cli],
+          { env },
+        );
+        expect(
+          parseToml(await readFile(config, "utf8")).model_catalog_json,
+        ).toBeDefined();
+        await writeFile(
+          script,
+          `$ErrorActionPreference = 'Stop'
+$GuardPath = Join-Path $env:CODEX_HOME 'guard.ps1'
+function Invoke-ArchCodexLogoutIfOurs { }
+${CODEX_GUARD_CLIENT.windows.renderProxyDisconnect({ appName: "Archestra", healthUrl: null, mcp: null, skills: null, proxy: { provider: "openai", providerLabel: "OpenAI", ref: "proxy", proxyName: "llm_proxy", url: "https://example.com/v1/openai" } })}
+Disconnect-ArchProxy
+`,
+        );
+        await execFileAsync(
+          "pwsh",
+          ["-NoProfile", "-NonInteractive", "-File", script],
+          { env },
+        );
+        expect(parseToml(await readFile(config, "utf8"))).toEqual({
+          model: "model-a",
+          model_provider: "openai",
+          web_search: "live",
+          features: { code_mode_host: true },
+          ...(keepMcp
+            ? { mcp_servers: { gateway: { url: "https://example.com/mcp" } } }
+            : {}),
+        });
+        await expect(
+          readFile(path.join(home, "archestra-direct-model-catalog.json")),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+        await execFileAsync(
+          process.execPath,
+          [helper, "--install-direct", cli],
+          { env },
+        );
+        expect(parseToml(await readFile(config, "utf8")).features).toEqual({
+          code_mode_host: false,
+        });
+      } finally {
+        await rm(home, { recursive: true, force: true });
+      }
+    });
+
+    test.each([
       { clientId: "claude-code" as const, binary: "claude" },
       { clientId: "codex" as const, binary: "codex" },
       { clientId: "copilot-cli" as const, binary: "copilot" },
@@ -195,6 +270,10 @@ describe.skipIf(!powershellAvailable)(
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, JSON.stringify(args) + "\\n");
+if (args[0] === "debug") {
+  process.stdout.write(JSON.stringify({models:[{slug:'selected',tool_mode:'code_mode_only',supports_search_tool:true},{slug:'other',tool_mode:null}]}));
+  process.exit(0);
+}
 if (args[0] === "app-server") {
   require("node:readline").createInterface({input:process.stdin}).on("line", line => {
     const request = JSON.parse(line);
@@ -279,7 +358,7 @@ foreach ($attempt in 1..2) {
 if ('${clientId}' -eq 'codex') {
   Remove-Item ($guardPath + '.handoff.cjs') -Force
   ${binary} @invokeArgs
-  if ($LASTEXITCODE -ne 125) { throw 'Missing handoff helper blocked the client' }
+  if ($LASTEXITCODE -ne 125) { throw 'Missing helper blocked the client' }
 }
 exit 0
 `,
@@ -292,6 +371,7 @@ exit 0
             env: {
               HOME: home,
               USERPROFILE: home,
+              CODEX_HOME: path.join(home, "custom codex"),
               PATH: `${bin}:${process.env.PATH}`,
               NO_COLOR: "1",
               ARCHESTRA_TEST_COMMAND_LOG: callsPath,

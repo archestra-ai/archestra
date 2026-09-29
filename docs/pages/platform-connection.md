@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-28
+lastUpdated: 2026-09-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -181,9 +181,10 @@ The `codex` CLI must be on your `PATH`.
 - **LLM proxy** — adds a `[model_providers.<name>]` block to `~/.codex/config.toml` and selects it as the default provider. New `codex` sessions use the proxy automatically. Codex can use an existing ChatGPT subscription or OpenAI API key. In virtual-key mode, the script signs in with `codex login --with-api-key`.
 - **Skills** — runs `codex plugin marketplace add`.
 - **Plugins** — runs `codex plugin add` for each plugin. Codex delivers the plugin but does not execute its hooks until you open `/hooks` and approve that content hash.
-- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `codex` launch. See [Startup Guard](#startup-guard).
+- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `codex` launch. Connecting the LLM proxy also installs direct-tool settings, including a model catalog, in `~/.codex`. Connection probes use these settings without requiring a shell profile. While the proxy is connected, the launcher refreshes the catalog before starting Codex, including newly released models. An unverified refresh stops the proxy-connected launch instead of falling back to code mode. MCP-only connections leave tool mode unchanged. See [Startup Guard](#startup-guard).
+- **MCP forms** — Codex's Full Access preset does not show required MCP forms. Connection setup does not change your approval policy.
 - **Backup** — `~/.codex/config.toml.archestra-backup`.
-- **Revert** — the startup guard reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore `~/.codex/config.toml.archestra-backup`, or delete the `# >>> archestra:<name> >>>` block and remove `model_provider`. Run `codex mcp remove <name>` and `codex plugin marketplace remove <name>`. If the script signed Codex in with a virtual key, run `codex logout`, then sign in with your own account.
+- **Revert** — removing the LLM proxy in the startup guard (press `C` at launch) restores the previous tool-mode settings and removes the generated catalog. This also applies when the MCP gateway stays connected. Removing only the gateway leaves the proxy's direct-tool settings active. By hand: restore `~/.codex/config.toml.archestra-backup`, or delete the `# >>> archestra:<name> >>>` block and remove `model_provider`; restore any `# original:` entries inside the `archestra:codex-direct` blocks before deleting those blocks. Run `codex mcp remove <name>` and `codex plugin marketplace remove <name>`. If the script signed Codex in with a virtual key, run `codex logout`, then sign in with your own account.
 
 ### Cursor
 

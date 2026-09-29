@@ -2448,15 +2448,24 @@ function toMcpListTool(tool: {
     _meta?: Record<string, unknown>;
   } | null;
   builtIn?: boolean;
+  annotations?: Record<string, unknown>;
 }): McpListToolCandidate {
+  const builtIn =
+    tool.builtIn === true || tool.catalogId === ARCHESTRA_MCP_CATALOG_ID;
+  const annotations = builtIn
+    ? (tool.annotations ??
+      getArchestraMcpTools().find((candidate) => candidate.name === tool.name)
+        ?.annotations)
+    : undefined;
   return {
     name: tool.name,
     description: tool.description ?? null,
     parameters: normalizeToolInputSchema(tool.parameters ?? tool.inputSchema),
     catalogId: tool.catalogId,
-    meta: tool.meta ?? undefined,
-    builtIn:
-      tool.builtIn === true || tool.catalogId === ARCHESTRA_MCP_CATALOG_ID,
+    meta: annotations
+      ? { ...tool.meta, annotations }
+      : (tool.meta ?? undefined),
+    builtIn,
   };
 }
 

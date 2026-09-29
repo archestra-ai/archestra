@@ -468,6 +468,10 @@ describe("renderSetupScript", () => {
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, JSON.stringify({ executable: process.argv[1], args }) + "\\n");
+if (args[0] === "debug") {
+  process.stdout.write(JSON.stringify({models:[{slug:'one',tool_mode:'code_mode_only',supports_search_tool:true},{slug:'two',tool_mode:null}]}));
+  process.exit(0);
+}
 process.exit(args[0] === "mcp" ? 0 : 23);
 `,
         );
@@ -494,6 +498,7 @@ printf '%s' '{"mcp":"ok","llm":"ok"}'
       );
       const env = {
         HOME: home,
+        CODEX_HOME: path.join(home, "custom codex"),
         SHELL: "/bin/bash",
         PATH: `${bin}:${process.env.PATH}`,
         ARCHESTRA_TEST_COMMAND_LOG: callsPath,
@@ -526,7 +531,8 @@ cat "$1" | bash
           setupCalls.every(
             (call) =>
               call.executable === path.join(bin, binary) &&
-              call.args[0] === "mcp",
+              (call.args[0] === "mcp" ||
+                (clientId === "codex" && call.args[0] === "debug")),
           ),
         ).toBe(true);
         expect(setupCalls.some((call) => call.args.includes("add"))).toBe(true);
@@ -567,6 +573,16 @@ ${binary} "$@"
             { health: true },
             { executable: path.join(directory, binary), args },
           ]);
+          if (clientId === "codex") {
+            await expect(
+              readFile(
+                path.join(
+                  env.CODEX_HOME,
+                  "archestra-direct-model-catalog.json",
+                ),
+              ),
+            ).rejects.toMatchObject({ code: "ENOENT" });
+          }
         }
       }
     } finally {
@@ -1808,7 +1824,15 @@ ${script.slice(start, end)}
       const codexHome = path.join(home, ".codex");
       await mkdir(bin);
       await mkdir(codexHome);
-      await writeFile(path.join(bin, "codex"), "#!/bin/sh\nexit 0\n");
+      await writeFile(
+        path.join(bin, "codex"),
+        `#!/usr/bin/env node
+if (process.argv[2] === 'debug') {
+  require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()}));
+  console.log(JSON.stringify({models:[{slug:'gpt-5.5',tool_mode:null,supports_search_tool:true}]}));
+}
+`,
+      );
       await chmod(path.join(bin, "codex"), 0o755);
       const configPath = path.join(codexHome, "config.toml");
       const original =
@@ -1839,6 +1863,11 @@ ${script.slice(start, end)}
       expect(parsed.model).toBe("gpt-5.5");
       expect(parsed.approval_policy).toBe("on-request");
       expect(parsed.tools).toEqual({ web_search: true });
+      expect(parsed.features).toEqual({ code_mode_host: false });
+      expect(parsed.web_search).toBe("disabled");
+      expect(parsed.model_catalog_json).toBe(
+        path.join(codexHome, "archestra-direct-model-catalog.json"),
+      );
       expect(parsed.model_providers).toMatchObject({
         default_proxy: {
           requires_openai_auth: true,
@@ -1852,7 +1881,11 @@ ${script.slice(start, end)}
         original,
       );
       await execFileAsync("bash", [scriptPath], { env });
-      expect(await readFile(configPath, "utf8")).toBe(installed);
+      const reinstalled = await readFile(configPath, "utf8");
+      expect(parseToml(reinstalled)).toEqual(parsed);
+      expect(
+        reinstalled.split("# >>> archestra:codex-direct:root >>>"),
+      ).toHaveLength(2);
     } finally {
       await rm(home, { recursive: true, force: true });
     }

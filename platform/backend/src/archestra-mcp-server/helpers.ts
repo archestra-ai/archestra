@@ -68,6 +68,7 @@ type ArchestraToolDefinition<
   schema: TSchema;
   publicSchema?: ZodType;
   outputSchema?: ZodType;
+  annotations?: Tool["annotations"];
   handler: ArchestraToolHandler<TSchema>;
   invoke: ArchestraToolHandler;
 };
@@ -268,6 +269,7 @@ function createToolDefinition(params: {
   description: string;
   schema: ZodType;
   outputSchema?: ZodType;
+  annotations?: Tool["annotations"];
 }): Tool {
   return {
     name: params.name,
@@ -283,7 +285,7 @@ function createToolDefinition(params: {
           }) as Tool["outputSchema"],
         }
       : {}),
-    annotations: {},
+    annotations: params.annotations ?? {},
     _meta: {},
   };
 }
@@ -299,6 +301,7 @@ export function defineArchestraTool<
   schema: TSchema;
   publicSchema?: ZodType;
   outputSchema?: TOutputSchema;
+  annotations?: Tool["annotations"];
   handler: ArchestraToolHandler<TSchema>;
 }): ArchestraToolDefinition<ShortName, TSchema> & {
   outputSchema?: TOutputSchema;
@@ -354,6 +357,7 @@ export function defineArchestraTools<
       description: definition.description,
       schema: definition.publicSchema ?? definition.schema,
       outputSchema: definition.outputSchema,
+      annotations: definition.annotations,
     }),
   );
 

@@ -45,7 +45,7 @@ under Settings > Plugins. Send a message to make sure that inference works.
 1. Run exactly one command below in the terminal. Replace CLIENT_ID with the
    current client ID.
    macOS/Linux:
-   p="$(mktemp)"; trap 'rm -f "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client CLIENT_ID
+   p="$(mktemp)"; trap 'unlink "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client CLIENT_ID
    Windows PowerShell:
    $p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client CLIENT_ID } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
 2. The public bootstrap validates the deployment URL, starts a browser approval,
@@ -171,7 +171,7 @@ If a localhost page cannot be fetched through a web tool, use the local terminal
 
 Run exactly one command in the client's terminal.
 macOS/Linux:
-p="$(mktemp)"; trap 'rm -f "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client ${client}
+p="$(mktemp)"; trap 'unlink "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client ${client}
 Windows PowerShell:
 $p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client ${client} } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
 
@@ -212,7 +212,7 @@ function focusedClientDetails(client: string): {
       return {
         label: "Codex",
         finish:
-          "Run codex mcp login SERVER_NAME, then open a new terminal and start Codex. Confirm config.toml selects the proxy provider at the top level. Verify gateway tools and send a short test prompt through the proxy. If either fails, report the connection as incomplete.",
+          "Run codex mcp login SERVER_NAME, then open a new terminal and start Codex. Confirm config.toml selects the proxy provider at the top level. Verify gateway tools and send a short test prompt through the proxy. Report the connection status briefly without listing tool names or quoting the test response. If either check fails, report the connection as incomplete.",
       };
     case "copilot-cli":
       return {

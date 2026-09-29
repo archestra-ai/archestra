@@ -10,8 +10,10 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { decodeCursor } from "@/database/utils/pagination";
 import type {
   InsertScheduleTrigger,
   ScheduleTrigger,
@@ -29,6 +31,7 @@ type ScheduleTriggerListFilters = {
   organizationId: string;
   limit?: number;
   offset?: number;
+  cursor?: string;
   enabled?: boolean;
   agentIds?: string[];
   actorUserId?: string;
@@ -65,13 +68,26 @@ class ScheduleTriggerModel {
 
   static async listByOrganization(
     params: ScheduleTriggerListFilters,
-  ): Promise<ScheduleTrigger[]> {
+  ): Promise<(ScheduleTrigger & { cursorCreatedAt: string })[]> {
     const filters = buildListFilters(params);
     if (!filters) return [];
+
+    const position = decodeCursor(params.cursor);
+    if (
+      position &&
+      z.uuid().safeParse(position.id).success &&
+      !Number.isNaN(Date.parse(position.value))
+    ) {
+      filters.push(
+        sql`(${schema.scheduleTriggersTable.createdAt}, ${schema.scheduleTriggersTable.id}) < (${position.value}::timestamptz, ${position.id}::uuid)`,
+      );
+    }
 
     let query = db
       .select({
         ...triggerColumns(),
+        // Preserve PostgreSQL microseconds when encoding the next page.
+        cursorCreatedAt: sql<string>`${schema.scheduleTriggersTable.createdAt}::text`,
         actor: actorColumns(),
         agent: agentColumns(),
       })
@@ -88,7 +104,10 @@ class ScheduleTriggerModel {
         ),
       )
       .where(and(...filters))
-      .orderBy(desc(schema.scheduleTriggersTable.createdAt))
+      .orderBy(
+        desc(schema.scheduleTriggersTable.createdAt),
+        desc(schema.scheduleTriggersTable.id),
+      )
       .$dynamic();
 
     if (params.limit !== undefined) {

@@ -371,7 +371,7 @@ describe("schedule trigger MCP tools", () => {
       expect(textOf(result)).toContain("not found");
     }
     const listed = await executeArchestraTool(LIST_TRIGGERS, {}, context);
-    expect(listed.structuredContent).toEqual({ schedule_triggers: [] });
+    expect(listed.structuredContent).toMatchObject({ schedule_triggers: [] });
   });
 
   test("organization boundaries apply to every mutation", async ({
@@ -401,6 +401,182 @@ describe("schedule trigger MCP tools", () => {
     expect(await ScheduleTriggerModel.findById(foreign.id)).toMatchObject({
       name: foreign.name,
     });
+  });
+
+  test("pages past 100 schedules without including new rows or other users' schedules", async ({
+    makeScheduleTrigger,
+    makeUser,
+  }) => {
+    const expected: string[] = [];
+    for (let i = 0; i < 101; i++) {
+      expected.push(
+        (
+          await makeScheduleTrigger({
+            organizationId,
+            agentId: agent.id,
+            actorUserId: userId,
+            enabled: true,
+          })
+        ).id,
+      );
+    }
+    await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: userId,
+      enabled: false,
+    });
+    await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: (await makeUser()).id,
+      enabled: true,
+    });
+    const first = await executeArchestraTool(
+      LIST_TRIGGERS,
+      { enabled: true, limit: 100 },
+      context,
+    );
+    expect(first.isError, textOf(first)).toBe(false);
+    const page = first.structuredContent as {
+      schedule_triggers: { id: string }[];
+      pagination: { nextCursor: string; hasNext: boolean };
+    };
+    expect(page.schedule_triggers).toHaveLength(100);
+    expect(textOf(first)).toContain(page.pagination.nextCursor);
+    expect(page.pagination).toMatchObject({
+      hasNext: true,
+      nextCursor: expect.any(String),
+    });
+    await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: userId,
+      enabled: true,
+    });
+    const second = await executeArchestraTool(
+      LIST_TRIGGERS,
+      { enabled: true, limit: 100, cursor: page.pagination.nextCursor },
+      context,
+    );
+    expect(second.isError, textOf(second)).toBe(false);
+    const last = second.structuredContent as {
+      schedule_triggers: { id: string }[];
+      pagination: unknown;
+    };
+    expect(last.schedule_triggers).toHaveLength(1);
+    expect(last.pagination).toMatchObject({ hasNext: false, nextCursor: null });
+    expect(
+      [...page.schedule_triggers, ...last.schedule_triggers]
+        .map((row) => row.id)
+        .sort(),
+    ).toEqual(expected.sort());
+  });
+
+  test("pages filtered run history past 100 rows and rechecks access on every page", async ({
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: userId,
+    });
+    const expected: string[] = [];
+    for (let i = 0; i < 101; i++)
+      expected.push((await makeScheduleTriggerRun(trigger.id)).id);
+    const completed = await makeScheduleTriggerRun(trigger.id);
+    await ScheduleTriggerRunModel.markCompleted({
+      runId: completed.id,
+      status: "success",
+    });
+    const first = await executeArchestraTool(
+      LIST_RUNS,
+      { schedule_trigger_id: trigger.id, status: "running", limit: 100 },
+      context,
+    );
+    expect(first.isError, textOf(first)).toBe(false);
+    const page = first.structuredContent as {
+      runs: { id: string }[];
+      pagination: { nextCursor: string };
+    };
+    expect(page.runs).toHaveLength(100);
+    expect(textOf(first)).toContain(page.pagination.nextCursor);
+    const args = {
+      schedule_trigger_id: trigger.id,
+      status: "running",
+      limit: 100,
+      cursor: page.pagination.nextCursor,
+    };
+    await makeScheduleTriggerRun(trigger.id);
+    const second = await executeArchestraTool(LIST_RUNS, args, context);
+    expect(second.isError, textOf(second)).toBe(false);
+    const last = second.structuredContent as {
+      runs: { id: string }[];
+      pagination: unknown;
+    };
+    expect(last.runs).toHaveLength(1);
+    expect(last.pagination).toMatchObject({ hasNext: false, nextCursor: null });
+    expect([...page.runs, ...last.runs].map((row) => row.id).sort()).toEqual(
+      expected.sort(),
+    );
+    const other = await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: (await makeUser()).id,
+    });
+    const denied = await executeArchestraTool(
+      LIST_RUNS,
+      { ...args, schedule_trigger_id: other.id },
+      context,
+    );
+    expect(denied.isError).toBe(true);
+    expect(textOf(denied)).toContain("do not have access");
+  });
+
+  test("unusable cursors restart at the newest page and invalid page sizes are rejected", async ({
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: userId,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    for (const tool of [LIST_TRIGGERS, LIST_RUNS]) {
+      const args =
+        tool === LIST_RUNS ? { schedule_trigger_id: trigger.id } : {};
+      for (const cursor of [
+        "broken",
+        Buffer.from(
+          JSON.stringify({ id: "not-a-uuid", value: new Date().toISOString() }),
+        ).toString("base64url"),
+        Buffer.from(
+          JSON.stringify({ id: trigger.id, value: "not-a-date" }),
+        ).toString("base64url"),
+      ]) {
+        const result = await executeArchestraTool(
+          tool,
+          { ...args, cursor },
+          context,
+        );
+        expect(result.isError, textOf(result)).toBe(false);
+        expect(result.structuredContent).toMatchObject({
+          [tool === LIST_RUNS ? "runs" : "schedule_triggers"]: [
+            { id: tool === LIST_RUNS ? run.id : trigger.id },
+          ],
+          pagination: { hasNext: false, nextCursor: null },
+        });
+      }
+      for (const limit of [0, -1, 1.5, 101]) {
+        expect(
+          (await executeArchestraTool(tool, { ...args, limit }, context))
+            .isError,
+        ).toBe(true);
+      }
+    }
   });
 
   describe("list_schedule_triggers", () => {

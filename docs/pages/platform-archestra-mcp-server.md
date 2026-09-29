@@ -2303,11 +2303,16 @@ Required RBAC permission: `scheduledTask:read`
 | `agent_id` | `string` | No | Only schedules that run this agent. |
 | `include_all_users` | `boolean` | No | Include other members' schedules. Ignored unless the caller holds organization-wide scheduled-task access. |
 | `limit` | `integer` | No | How many rows to return, newest first (1-100, default 25). |
+| `cursor` | `string` | No | Pass pagination.nextCursor from the previous response to read the next page. Keep the same filters; omit for the newest page. |
 
 ##### Output
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `pagination` | `object` | Yes |  |
+| `pagination.limit` | `integer` | Yes |  |
+| `pagination.nextCursor` | `string \| null` | Yes |  |
+| `pagination.hasNext` | `boolean` | Yes |  |
 | `schedule_triggers` | `object[]` | Yes | Matching schedules, newest first. |
 | `schedule_triggers[].id` | `string` | Yes | The trigger's id — pass it to get_schedule_trigger. |
 | `schedule_triggers[].name` | `string` | Yes | The trigger's name. |
@@ -2365,16 +2370,21 @@ Additional access requirement: Requires a user token. The caller must be the sch
 | `schedule_trigger_id` | `string` | Yes | Id of the schedule whose runs to list. |
 | `status` | `"running" \| "success" \| "failed" \| "cancelled"` | No | Only runs in this state. |
 | `limit` | `integer` | No | How many rows to return, newest first (1-100, default 25). |
+| `cursor` | `string` | No | Pass pagination.nextCursor from the previous response to read the next page. Keep the same filters; omit for the newest page. |
 
 ##### Output
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `pagination` | `object` | Yes |  |
+| `pagination.limit` | `integer` | Yes |  |
+| `pagination.nextCursor` | `string \| null` | Yes |  |
+| `pagination.hasNext` | `boolean` | Yes |  |
 | `runs` | `object[]` | Yes | Matching runs, newest first. |
 | `runs[].id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
 | `runs[].trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
 | `runs[].run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
-| `runs[].status` | `"running" \| "success" \| "failed" \| "cancelled"` | Yes | running \| success \| failed \| cancelled. |
+| `runs[].status` | `"running" \| "success" \| "failed" \| "cancelled"` | Yes | Current state of the run. |
 | `runs[].started_at` | `string \| null` | Yes | ISO 8601 timestamp the run started. |
 | `runs[].completed_at` | `string \| null` | Yes | ISO 8601 timestamp the run settled; null while still running. |
 | `runs[].error` | `string \| null` | Yes | Failure text when the run failed or was skipped — for example a run skipped because the previous one was still in progress. |
@@ -2402,7 +2412,7 @@ Additional access requirement: Requires a user token. The caller must be the sch
 | `id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
 | `trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
 | `run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
-| `status` | `"running" \| "success" \| "failed" \| "cancelled"` | Yes | running \| success \| failed \| cancelled. |
+| `status` | `"running" \| "success" \| "failed" \| "cancelled"` | Yes | Current state of the run. |
 | `started_at` | `string \| null` | Yes | ISO 8601 timestamp the run started. |
 | `completed_at` | `string \| null` | Yes | ISO 8601 timestamp the run settled; null while still running. |
 | `error` | `string \| null` | Yes | Failure text when the run failed or was skipped — for example a run skipped because the previous one was still in progress. |
@@ -2487,7 +2497,7 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 | `id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
 | `trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
 | `run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
-| `status` | `"running" \| "success" \| "failed" \| "cancelled"` | Yes | running \| success \| failed \| cancelled. |
+| `status` | `"running" \| "success" \| "failed" \| "cancelled"` | Yes | Current state of the run. |
 | `started_at` | `string \| null` | Yes | ISO 8601 timestamp the run started. |
 | `completed_at` | `string \| null` | Yes | ISO 8601 timestamp the run settled; null while still running. |
 | `error` | `string \| null` | Yes | Failure text when the run failed or was skipped — for example a run skipped because the previous one was still in progress. |

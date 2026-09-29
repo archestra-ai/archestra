@@ -1,4 +1,6 @@
 import {
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_DELETE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_DISABLE_SCHEDULE_TRIGGER_SHORT_NAME,
@@ -11,6 +13,7 @@ import {
   TOOL_UPDATE_SCHEDULE_TRIGGER_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import { createCursorPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { ScheduleTriggerModel, ScheduleTriggerRunModel } from "@/models";
 import { projectService } from "@/services/project";
@@ -86,6 +89,8 @@ const ScheduleTriggerSummarySchema = z.object({
 });
 
 const ListScheduleTriggersOutputSchema = z.object({
+  pagination: createCursorPaginatedResponseSchema(ScheduleTriggerSummarySchema)
+    .shape.pagination,
   schedule_triggers: z
     .array(ScheduleTriggerSummarySchema)
     .describe("Matching schedules, newest first."),
@@ -105,9 +110,7 @@ const ScheduleTriggerRunSummarySchema = z.object({
   run_kind: z
     .enum(["due", "manual"])
     .describe("`due` = fired by the schedule; `manual` = started by a person."),
-  status: ScheduleTriggerRunStatusSchema.describe(
-    "running | success | failed | cancelled.",
-  ),
+  status: ScheduleTriggerRunStatusSchema.describe("Current state of the run."),
   started_at: z
     .string()
     .nullable()
@@ -135,6 +138,9 @@ const ScheduleTriggerRunSummarySchema = z.object({
 });
 
 const ListScheduleTriggerRunsOutputSchema = z.object({
+  pagination: createCursorPaginatedResponseSchema(
+    ScheduleTriggerRunSummarySchema,
+  ).shape.pagination,
   runs: z
     .array(ScheduleTriggerRunSummarySchema)
     .describe("Matching runs, newest first."),
@@ -283,6 +289,9 @@ const registry = defineArchestraTools([
               "organization-wide scheduled-task access.",
           ),
         limit: LimitSchema,
+        cursor: CursorQuerySchema.shape.cursor.describe(
+          "Pass pagination.nextCursor from the previous response to read the next page. Keep the same filters; omit for the newest page.",
+        ),
       })
       .strict(),
     outputSchema: ListScheduleTriggersOutputSchema,
@@ -314,17 +323,23 @@ const registry = defineArchestraTools([
 
         const triggers = await ScheduleTriggerModel.listByOrganization({
           organizationId,
-          limit: args.limit ?? DEFAULT_LIMIT,
+          limit: (args.limit ?? DEFAULT_LIMIT) + 1,
+          cursor: args.cursor,
           enabled: args.enabled,
           agentIds: args.agent_id ? [args.agent_id] : undefined,
           actorUserId,
           projectId: args.project_id,
         });
 
-        const summaries = triggers.map(toTriggerSummary);
+        const page = createCursorPaginatedResult(
+          triggers,
+          { limit: args.limit ?? DEFAULT_LIMIT },
+          (row) => ({ value: row.cursorCreatedAt, id: row.id }),
+        );
+        const summaries = page.data.map(toTriggerSummary);
         return structuredSuccessResult(
-          { schedule_triggers: summaries },
-          summaries.length === 0
+          { schedule_triggers: summaries, pagination: page.pagination },
+          (summaries.length === 0
             ? "No scheduled tasks matched."
             : summaries
                 .map(
@@ -334,7 +349,8 @@ const registry = defineArchestraTools([
                     `${t.enabled ? "enabled" : "disabled"}, ` +
                     `last run ${t.last_executed_at ?? "never"})`,
                 )
-                .join("\n"),
+                .join("\n")) +
+            `\nPagination: ${JSON.stringify(page.pagination)}`,
         );
       } catch (error) {
         return apiErrorOr(error, "listing scheduled tasks");
@@ -395,6 +411,9 @@ const registry = defineArchestraTools([
           "Only runs in this state.",
         ),
         limit: LimitSchema,
+        cursor: CursorQuerySchema.shape.cursor.describe(
+          "Pass pagination.nextCursor from the previous response to read the next page. Keep the same filters; omit for the newest page.",
+        ),
       })
       .strict(),
     outputSchema: ListScheduleTriggerRunsOutputSchema,
@@ -413,14 +432,20 @@ const registry = defineArchestraTools([
         const runs = await ScheduleTriggerRunModel.listByTrigger({
           organizationId,
           triggerId: trigger.id,
-          limit: args.limit ?? DEFAULT_LIMIT,
+          limit: (args.limit ?? DEFAULT_LIMIT) + 1,
+          cursor: args.cursor,
           status: args.status,
         });
 
-        const summaries = runs.map(toRunSummary);
+        const page = createCursorPaginatedResult(
+          runs,
+          { limit: args.limit ?? DEFAULT_LIMIT },
+          (row) => ({ value: row.cursorCreatedAt, id: row.id }),
+        );
+        const summaries = page.data.map(toRunSummary);
         return structuredSuccessResult(
-          { runs: summaries },
-          summaries.length === 0
+          { runs: summaries, pagination: page.pagination },
+          (summaries.length === 0
             ? `No runs recorded for "${trigger.name}".`
             : summaries
                 .map(
@@ -429,7 +454,8 @@ const registry = defineArchestraTools([
                     (r.error ? ` (${r.error})` : "") +
                     ` [id=${r.id}]`,
                 )
-                .join("\n"),
+                .join("\n")) +
+            `\nPagination: ${JSON.stringify(page.pagination)}`,
         );
       } catch (error) {
         return apiErrorOr(error, "listing scheduled task runs");

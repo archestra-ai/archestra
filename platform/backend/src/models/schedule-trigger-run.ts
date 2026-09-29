@@ -1,5 +1,17 @@
-import { and, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+} from "drizzle-orm";
+import { z } from "zod";
 import db, { schema } from "@/database";
+import { decodeCursor } from "@/database/utils/pagination";
 import type {
   ScheduleTrigger,
   ScheduleTriggerRun,
@@ -69,8 +81,9 @@ class ScheduleTriggerRunModel {
     triggerId: string;
     limit?: number;
     offset?: number;
+    cursor?: string;
     status?: ScheduleTriggerRunStatus;
-  }): Promise<ScheduleTriggerRun[]> {
+  }): Promise<(ScheduleTriggerRun & { cursorCreatedAt: string })[]> {
     const conditions = [
       eq(schema.scheduleTriggerRunsTable.organizationId, params.organizationId),
       eq(schema.scheduleTriggerRunsTable.triggerId, params.triggerId),
@@ -82,11 +95,29 @@ class ScheduleTriggerRunModel {
       );
     }
 
+    const position = decodeCursor(params.cursor);
+    if (
+      position &&
+      z.uuid().safeParse(position.id).success &&
+      !Number.isNaN(Date.parse(position.value))
+    ) {
+      conditions.push(
+        sql`(${schema.scheduleTriggerRunsTable.createdAt}, ${schema.scheduleTriggerRunsTable.id}) < (${position.value}::timestamptz, ${position.id}::uuid)`,
+      );
+    }
+
     let query = db
-      .select()
+      .select({
+        ...getTableColumns(schema.scheduleTriggerRunsTable),
+        // Preserve PostgreSQL microseconds when encoding the next page.
+        cursorCreatedAt: sql<string>`${schema.scheduleTriggerRunsTable.createdAt}::text`,
+      })
       .from(schema.scheduleTriggerRunsTable)
       .where(and(...conditions))
-      .orderBy(desc(schema.scheduleTriggerRunsTable.createdAt))
+      .orderBy(
+        desc(schema.scheduleTriggerRunsTable.createdAt),
+        desc(schema.scheduleTriggerRunsTable.id),
+      )
       .$dynamic();
 
     if (params.limit !== undefined) {

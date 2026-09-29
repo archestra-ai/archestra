@@ -434,6 +434,7 @@ export const RouteId = {
   GetChatConversations: "getChatConversations",
   GetDeletedChatConversations: "getDeletedChatConversations",
   GetChatConversation: "getChatConversation",
+  GetChatOpenappaStatus: "getChatOpenappaStatus",
   GetChatConversationFiles: "getChatConversationFiles",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",

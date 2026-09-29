@@ -13,9 +13,17 @@ import { E2eTestId } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { renderCounts } = vi.hoisted(() => ({
-  renderCounts: { modelSelector: 0, apiKeySelector: 0 },
-}));
+const { renderCounts, statusState, deploymentState, layoutState } = vi.hoisted(
+  () => ({
+    renderCounts: { modelSelector: 0, apiKeySelector: 0 },
+    statusState: {
+      data: null as { trust: string; audience: string } | null,
+      isError: false,
+    },
+    deploymentState: { active: true },
+    layoutState: { isNarrow: false },
+  }),
+);
 
 // Used by Radix and the toolbar-collapse hook; jsdom reports 0 widths, so the
 // toolbar stays in its full (expanded) layout, which renders the selectors.
@@ -69,7 +77,16 @@ vi.mock("@/lib/agent.query", () => ({
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useConversation: () => ({ data: null }),
+  useOpenappaStatus: () => statusState,
   useToggleHooksDebug: () => ({ mutate: vi.fn() }),
+}));
+
+vi.mock("@/lib/guardrails-deployment.query", () => ({
+  useGuardrailsDeployment: () => ({ data: deploymentState }),
+}));
+
+vi.mock("@/lib/hooks/use-toolbar-collapse", () => ({
+  useToolbarCollapse: () => layoutState.isNarrow,
 }));
 
 vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
@@ -91,6 +108,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 }));
 
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
   useOrganization,
@@ -100,8 +118,15 @@ import ArchestraPromptInput from "./prompt-input";
 describe("chat composer typing performance", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "openappaEnabled" ? true : undefined,
+    );
     renderCounts.modelSelector = 0;
     renderCounts.apiKeySelector = 0;
+    statusState.data = null;
+    statusState.isError = false;
+    deploymentState.active = true;
+    layoutState.isNarrow = false;
     localStorage.clear();
     vi.mocked(useOrganization).mockReturnValue({
       data: null,
@@ -152,5 +177,171 @@ describe("chat composer typing performance", () => {
 
     expect(renderCounts.modelSelector).toBe(modelSelectorRendersAfterMount);
     expect(renderCounts.apiKeySelector).toBe(apiKeySelectorRendersAfterMount);
+  });
+
+  it("shows trust and audience when the OpenAPPA icon is opened", () => {
+    statusState.data = { trust: "suspicious", audience: "internal" };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
+    const status = screen.getByRole("status", {
+      name: "Trust: suspicious; audience: internal",
+    });
+    expect(status).toHaveTextContent("suspicious");
+    expect(status).toHaveTextContent("internal");
+  });
+
+  it("preserves policy-defined labels in the status text", () => {
+    statusState.data = {
+      trust: "reviewed",
+      audience: "alice ∩ internal,@finance",
+    };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
+    const status = screen.getByRole("status", {
+      name: "Trust: reviewed; audience: alice ∩ internal,@finance",
+    });
+    expect(status).toHaveTextContent("reviewed");
+    expect(status).toHaveTextContent("alice ∩ internal,@finance");
+  });
+
+  it("keeps the status icons but hides retained labels when a refresh fails", () => {
+    statusState.data = { trust: "trusted", audience: "public" };
+    const { rerender } = render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
+    expect(
+      screen.getByRole("status", { name: "Trust: trusted; audience: public" }),
+    ).toBeInTheDocument();
+
+    // TanStack Query retains the previous data after a failed refetch.
+    statusState.isError = true;
+    rerender(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4o"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+    const status = screen.getByRole("status", {
+      name: "Trust and audience status unavailable",
+    });
+    expect(status).not.toHaveTextContent("trusted");
+    expect(status).not.toHaveTextContent("public");
+    expect(status.querySelectorAll("svg")).toHaveLength(1);
+  });
+
+  it("keeps the OpenAPPA icon before the status endpoint returns a label", () => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "OpenAPPA status" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
+    const status = screen.getByRole("status", {
+      name: "Trust and audience status unavailable",
+    });
+    expect(status.querySelectorAll("svg")).toHaveLength(1);
+    expect(status).not.toHaveTextContent(/trusted|public/);
+  });
+
+  it("hides the status when guardrails are disabled", () => {
+    deploymentState.active = false;
+    statusState.data = { trust: "trusted", audience: "public" };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "OpenAPPA status" }),
+    ).toBeNull();
+  });
+
+  it("hides the OpenAPPA icon when beta is disabled, even with stale active deployment data", () => {
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "openappaEnabled" ? false : undefined,
+    );
+    statusState.data = { trust: "trusted", audience: "public" };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "OpenAPPA status" }),
+    ).toBeNull();
+  });
+
+  it("shows trust and audience inside the narrow toolbar popup", () => {
+    layoutState.isNarrow = true;
+    statusState.data = { trust: "trusted", audience: "public" };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    const status = screen.getByRole("status", {
+      name: "Trust: trusted; audience: public",
+    });
+    expect(status).toHaveTextContent("Trust: trusted");
+    expect(status).toHaveTextContent("Audience: public");
   });
 });

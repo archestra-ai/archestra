@@ -1,8 +1,14 @@
 import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { forwardRef } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  act,
+  fireEvent,
+  render as renderComponent,
+  screen,
+} from "@testing-library/react";
+import { forwardRef, type ReactElement } from "react";
 import { toast } from "sonner";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LOCKED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
@@ -333,6 +339,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
     error: null,
   }),
   useConversation: () => ({ data: mockConversationState.conversation }),
+  useOpenappaStatus: () => ({ data: null }),
   useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
@@ -363,6 +370,16 @@ import {
 } from "@/lib/organization.query";
 import ArchestraPromptInput from "./prompt-input";
 
+let queryClient: QueryClient;
+
+function render(ui: ReactElement) {
+  return renderComponent(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
+
 describe("ArchestraPromptInput", () => {
   const defaultProps = {
     onSubmit: vi.fn(),
@@ -373,6 +390,16 @@ describe("ArchestraPromptInput", () => {
   };
 
   beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    // Deployment status is outside these composer scenarios. Seed its cache
+    // so the real query hook has context without making a backend request.
+    queryClient.setQueryData(["guardrails-deployment"], {
+      enabled: false,
+      featureEnabled: false,
+      active: false,
+    });
     vi.clearAllMocks();
     vi.mocked(useOrganization).mockReturnValue({
       data: null,
@@ -427,6 +454,8 @@ describe("ArchestraPromptInput", () => {
     mockConversationState.conversation = null;
     localStorage.clear();
   });
+
+  afterEach(() => queryClient.clear());
 
   it("returns keyboard focus to the prompt after selecting an agent", () => {
     vi.useFakeTimers();

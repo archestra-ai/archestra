@@ -60,6 +60,7 @@ vi.mock("@/lib/agent.query", () => ({
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useMemberDefaultModel: () => ({ data: null }),
+  useOpenappaStatus: () => ({ data: null }),
 }));
 
 vi.mock("@/lib/chat/use-initial-chat-model-state.hook", () => ({

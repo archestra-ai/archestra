@@ -800,6 +800,9 @@ function ChatSessionHook({
       const conversationInvalidate = queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["openappa-status", conversationId],
+      });
 
       const conversationsSidebarInvalidate = queryClient.invalidateQueries({
         queryKey: ["conversations"],

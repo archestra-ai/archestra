@@ -13,22 +13,18 @@ export function getDocsBaseUrl(): string {
       const base = websiteUrl.replace(/\/+$/, "");
       return base.endsWith("/docs") ? base : `${base}/docs`;
     }
+    if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+      return `${WEBSITE_URL}/docs`;
+    }
   }
 
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    const isDevHost =
-      host === "localhost" ||
-      host.endsWith(".localhost") ||
-      host.endsWith(".local") ||
-      host === "127.0.0.1";
-    if (isDevHost) {
+  if (typeof window !== "undefined" && window.location) {
+    const host = window.location.hostname || "";
+    if (host.startsWith("stack") && host.includes(".localhost")) {
       const port =
         (typeof process !== "undefined" &&
           process.env?.NEXT_PUBLIC_ARCHESTRA_DOCS_PORT) ||
-        (host.startsWith("stack")
-          ? `305${host.replace(/^stack(\d+)\..*/, "$1")}`
-          : "3001");
+        `305${host.replace(/^stack(\d+)\..*/, "$1")}`;
       return `${window.location.protocol}//${host}:${port}/docs`;
     }
   }

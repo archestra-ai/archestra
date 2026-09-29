@@ -80,7 +80,9 @@ test("creates Claude Code from the catalog and explains the account connection a
       );
     }).toPass();
     await expect(
-      page.getByRole("button", { name: "Select a Claude model" }),
+      page.getByRole("button", {
+        name: /^(Select a Claude model|No models available)$/,
+      }),
     ).toBeVisible();
     await page
       .getByRole("radio", { name: /Personal Claude subscription/ })
@@ -114,7 +116,7 @@ test("creates Claude Code from the catalog and explains the account connection a
       page.getByRole("heading", { name: "Agent created", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name, exact: true }),
+      page.getByRole("heading", { name: new RegExp(name) }),
     ).toBeVisible();
     await expect(
       page.getByText("Before this agent can run", { exact: true }),
@@ -127,5 +129,150 @@ test("creates Claude Code from the catalog and explains the account connection a
     ).toBeVisible();
   } finally {
     if (agentId) await deleteAgent(request, agentId);
+  }
+});
+
+test("configures popular agent templates and preserves the creation wizard", async ({
+  page,
+  goToPage,
+}) => {
+  const configResponse = await page.request.get(`${UI_BASE_URL}/api/config`);
+  expect(configResponse.ok()).toBe(true);
+  const config = await configResponse.json();
+  test.skip(
+    !config.features?.agentRuntime,
+    "Requires an Agent Runtime backend",
+  );
+
+  const organizationResponse = await page.request.get(
+    `${UI_BASE_URL}/api/organization`,
+  );
+  expect(organizationResponse.ok()).toBe(true);
+  const original = await organizationResponse.json();
+  const settingsUrl = `${UI_BASE_URL}/api/organization/integration-settings`;
+  const settings = page.locator("#popular-agents");
+  const names = ["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"];
+  const save = async () => {
+    const response = page.waitForResponse(
+      (r) =>
+        r.url().endsWith("/api/organization/integration-settings") &&
+        r.request().method() === "PATCH",
+    );
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    expect((await response).ok()).toBe(true);
+    await expect(
+      page.getByRole("button", { name: "Save", exact: true }),
+    ).toHaveCount(0);
+  };
+
+  try {
+    expect(
+      (
+        await page.request.patch(settingsUrl, {
+          data: { popularAgentOverrides: null },
+        })
+      ).ok(),
+    ).toBe(true);
+    await goToPage(page, "/settings/agents");
+    await expect(
+      settings.getByRole("button", { name: "Remove selected option" }),
+    ).toHaveCount(5);
+    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+      await settings
+        .getByText(name, { exact: true })
+        .getByRole("button", { name: "Remove selected option" })
+        .click();
+    }
+    await save();
+    await page.reload();
+    await expect(
+      settings.getByRole("button", { name: "Remove selected option" }),
+    ).toHaveCount(2);
+
+    await goToPage(page, "/agents/new");
+    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+      await expect(
+        page.getByRole("button", { name: new RegExp(name) }),
+      ).toHaveCount(0);
+    }
+    await expect(page.getByRole("button", { name: /Codex/ })).toBeVisible();
+    await page.getByRole("button", { name: /Claude Code/ }).click();
+    await expect(page.getByRole("textbox", { name: /^Name\b/ })).toHaveValue(
+      "Claude Code",
+    );
+    await expect(
+      page.getByRole("radio", { name: /Claude Code/ }),
+    ).toBeChecked();
+    const runtimeChoices = page.getByRole("radiogroup", {
+      name: "Runtime",
+      exact: true,
+    });
+    await expect(runtimeChoices.getByRole("radio")).toHaveCount(4);
+    await expect(
+      runtimeChoices.getByRole("radio", { name: "Codex", exact: true }),
+    ).toBeVisible();
+    await expect(
+      runtimeChoices.getByRole("radio", { name: "Custom image", exact: true }),
+    ).toBeVisible();
+    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+      await expect(
+        runtimeChoices.getByRole("radio", { name, exact: true }),
+      ).toHaveCount(0);
+    }
+
+    await goToPage(page, "/settings/agents");
+    await expect(
+      settings.getByRole("button", { name: "Remove selected option" }),
+    ).toHaveCount(2);
+    await settings
+      .getByRole("button", { name: "Remove selected option" })
+      .first()
+      .click();
+    await settings
+      .getByRole("button", { name: "Remove selected option" })
+      .click();
+    await save();
+    await goToPage(page, "/agents/new");
+    await expect(
+      page.getByRole("heading", { name: "Popular agents", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /Start from scratch/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Connect via A2A/ }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /Start from scratch/ }).click();
+    await expect(runtimeChoices.getByRole("radio")).toHaveCount(2);
+    await expect(
+      runtimeChoices.getByRole("radio", { name: "Custom image", exact: true }),
+    ).toBeVisible();
+
+    await goToPage(page, "/settings/agents");
+    await settings.getByRole("textbox", { name: "Search options" }).click();
+    for (const name of names) {
+      await page.getByRole("option", { name: new RegExp(name) }).click();
+    }
+    await page.keyboard.press("Escape");
+    await save();
+    await goToPage(page, "/agents/new");
+    for (const name of names)
+      await expect(
+        page.getByRole("button", { name: new RegExp(name) }),
+      ).toBeVisible();
+    await page.getByRole("button", { name: /Start from scratch/ }).click();
+    await expect(runtimeChoices.getByRole("radio")).toHaveCount(7);
+    for (const name of names)
+      await expect(
+        runtimeChoices.getByRole("radio", { name, exact: true }),
+      ).toBeVisible();
+  } finally {
+    expect(
+      (
+        await page.request.patch(settingsUrl, {
+          data: { popularAgentOverrides: original.popularAgentOverrides },
+        })
+      ).ok(),
+    ).toBe(true);
   }
 });

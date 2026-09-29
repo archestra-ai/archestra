@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "popular_agent_overrides" jsonb;

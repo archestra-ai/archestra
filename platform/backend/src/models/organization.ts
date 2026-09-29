@@ -859,6 +859,7 @@ class OrganizationModel {
       connectionRuntimeHandoffEnabled: org.connectionRuntimeHandoffEnabled,
       connectionRuntimeHandoffInstructions:
         org.connectionRuntimeHandoffInstructions ?? null,
+      popularAgentOverrides: org.popularAgentOverrides ?? null,
       modelProviderOverrides: org.modelProviderOverrides ?? null,
       messagingChannelOverrides: org.messagingChannelOverrides ?? null,
       knowledgeConnectorOverrides: org.knowledgeConnectorOverrides ?? null,

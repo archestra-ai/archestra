@@ -1,6 +1,9 @@
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import AuditLogModel from "@/models/audit-log";
+import OrganizationModel from "@/models/organization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -38,6 +41,7 @@ describe("PATCH /api/organization/integration-settings", () => {
       ).organizationId = organizationId;
     });
 
+    registerAuditLogHook(app);
     const { default: organizationRoutes } = await import("./organization");
     await app.register(organizationRoutes);
   });
@@ -54,7 +58,7 @@ describe("PATCH /api/organization/integration-settings", () => {
       payload,
     });
 
-  test("persists overrides for all three catalogs", async () => {
+  test("persists overrides for integration catalogs", async () => {
     const response = await patch({
       modelProviderOverrides: {
         anthropic: { hidden: true },
@@ -98,6 +102,54 @@ describe("PATCH /api/organization/integration-settings", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().modelProviderOverrides).toBeNull();
+  });
+
+  test("persists popular agent choices, preserves omitted choices, and restores defaults", async () => {
+    const overrides = { codex: { hidden: true }, hermes: { hidden: true } };
+    const response = await patch({ popularAgentOverrides: overrides });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().popularAgentOverrides).toEqual(overrides);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.popularAgentOverrides,
+    ).toEqual(overrides);
+
+    await vi.waitFor(async () => {
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "organization",
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(1);
+      expect(data[0]).toMatchObject({
+        action: "organization.updated",
+        outcome: "success",
+        before: { popularAgentOverrides: null },
+        after: { popularAgentOverrides: overrides },
+      });
+    });
+
+    const unrelated = await patch({
+      knowledgeConnectorOverrides: { dropbox: { hidden: true } },
+    });
+    expect(unrelated.json().popularAgentOverrides).toEqual(overrides);
+    const restored = await patch({ popularAgentOverrides: null });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().popularAgentOverrides).toBeNull();
+    expect(restored.json().knowledgeConnectorOverrides).toEqual({
+      dropbox: { hidden: true },
+    });
+  });
+
+  test.each([
+    { unknown: { hidden: true } },
+    { codex: { hidden: "true" } },
+    { codex: { displayName: "Custom name" } },
+  ])("rejects invalid popular agent configuration %j", async (popularAgentOverrides) => {
+    expect((await patch({ popularAgentOverrides })).statusCode).toBe(400);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.popularAgentOverrides,
+    ).toBeNull();
   });
 
   // Channels and connectors are toggle-only, so a name there is a mistake

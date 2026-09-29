@@ -1,6 +1,41 @@
 import { WEBSITE_URL } from "./consts";
 
-const DOCS_BASE_URL = `${WEBSITE_URL}/docs`;
+export function getDocsBaseUrl(): string {
+  if (typeof process !== "undefined" && process.env) {
+    const customDocsUrl =
+      process.env.NEXT_PUBLIC_ARCHESTRA_DOCS_URL ||
+      process.env.ARCHESTRA_DOCS_URL;
+    if (customDocsUrl) {
+      return customDocsUrl.replace(/\/+$/, "");
+    }
+    const websiteUrl = process.env.NEXT_PUBLIC_WEBSITE_URL;
+    if (websiteUrl) {
+      const base = websiteUrl.replace(/\/+$/, "");
+      return base.endsWith("/docs") ? base : `${base}/docs`;
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const isDevHost =
+      host === "localhost" ||
+      host.endsWith(".localhost") ||
+      host.endsWith(".local") ||
+      host === "127.0.0.1";
+    if (isDevHost) {
+      const port =
+        (typeof process !== "undefined" &&
+          process.env?.NEXT_PUBLIC_ARCHESTRA_DOCS_PORT) ||
+        (host.startsWith("stack")
+          ? `305${host.replace(/^stack(\d+)\..*/, "$1")}`
+          : "3001");
+      return `${window.location.protocol}//${host}:${port}/docs`;
+    }
+  }
+
+  return `${WEBSITE_URL}/docs`;
+}
+
 export const COMMUNITY_DOCS_URL = getDocsUrl("platform-quickstart");
 
 /**
@@ -75,7 +110,7 @@ export type DocsPage = (typeof DocsPage)[keyof typeof DocsPage];
  * getDocsUrl(DocsPage.PlatformAgents) // "https://archestra.ai/docs/platform-agents"
  * getDocsUrl(DocsPage.PlatformSupportedLlmProviders, "using-vertex-ai") // "https://archestra.ai/docs/platform-supported-llm-providers#using-vertex-ai"
  */
-export function getDocsUrl(page: DocsPage, anchor?: string): string {
-  const url = `${DOCS_BASE_URL}/${page}`;
+export function getDocsUrl(page: DocsPage | string, anchor?: string): string {
+  const url = `${getDocsBaseUrl()}/${page}`;
   return anchor ? `${url}#${anchor}` : url;
 }

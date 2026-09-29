@@ -2,6 +2,11 @@ import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { guardrailsPolicyRevisionsTable } from "@/database/schemas/guardrails-policy";
 
+export const UnsupportedAppaClientActionSchema = z.enum(["bypass", "block"]);
+export type UnsupportedAppaClientAction = z.infer<
+  typeof UnsupportedAppaClientActionSchema
+>;
+
 export const GuardrailsPolicySchema = createSelectSchema(
   guardrailsPolicyRevisionsTable,
 ).extend({ updatedAt: z.coerce.date().nullable() });

@@ -45706,6 +45706,7 @@ export type GetGuardrailsDeploymentResponses = {
      */
     200: {
         enabled: boolean;
+        unsupportedClientAction: 'bypass' | 'block';
         featureEnabled: boolean;
         active: boolean;
     };
@@ -45715,7 +45716,8 @@ export type GetGuardrailsDeploymentResponse = GetGuardrailsDeploymentResponses[k
 
 export type UpdateGuardrailsDeploymentData = {
     body: {
-        enabled: boolean;
+        enabled?: boolean;
+        unsupportedClientAction?: 'bypass' | 'block';
     };
     path?: never;
     query?: never;
@@ -45793,6 +45795,7 @@ export type UpdateGuardrailsDeploymentResponses = {
      */
     200: {
         enabled: boolean;
+        unsupportedClientAction: 'bypass' | 'block';
         featureEnabled: boolean;
         active: boolean;
     };

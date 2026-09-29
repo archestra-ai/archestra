@@ -164694,6 +164694,13 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "unsupportedClientAction": {
+                      "type": "string",
+                      "enum": [
+                        "bypass",
+                        "block"
+                      ]
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -164703,6 +164710,7 @@
                   },
                   "required": [
                     "enabled",
+                    "unsupportedClientAction",
                     "featureEnabled",
                     "active"
                   ],
@@ -164962,11 +164970,15 @@
                 "properties": {
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "unsupportedClientAction": {
+                    "type": "string",
+                    "enum": [
+                      "bypass",
+                      "block"
+                    ]
                   }
-                },
-                "required": [
-                  "enabled"
-                ]
+                }
               }
             }
           }
@@ -164982,6 +164994,13 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "unsupportedClientAction": {
+                      "type": "string",
+                      "enum": [
+                        "bypass",
+                        "block"
+                      ]
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -164991,6 +165010,7 @@
                   },
                   "required": [
                     "enabled",
+                    "unsupportedClientAction",
                     "featureEnabled",
                     "active"
                   ],

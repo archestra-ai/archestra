@@ -7,6 +7,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
+import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
 
 /** Read shared state at request boundaries so all replicas see the same switch. */
 export async function isGuardrailsV2Active(): Promise<boolean> {
@@ -15,9 +16,11 @@ export async function isGuardrailsV2Active(): Promise<boolean> {
   );
 }
 export async function getGuardrailsDeployment() {
-  const enabled = await GuardrailsDeploymentModel.isEnabled();
+  const { enabled, unsupportedClientAction } =
+    await GuardrailsDeploymentModel.get();
   return {
     enabled,
+    unsupportedClientAction,
     featureEnabled: config.openappa.enabled,
     active: config.openappa.enabled && enabled,
   };
@@ -31,8 +34,11 @@ export async function getGuardrailsDeployment() {
  * So the switch turns on only while every organization's latest policy passes
  * the same check a save runs. Turning it off is never refused.
  */
-export async function setGuardrailsDeployment(enabled: boolean) {
-  if (enabled && config.openappa.enabled) {
+export async function setGuardrailsDeployment(update: {
+  enabled?: boolean;
+  unsupportedClientAction?: UnsupportedAppaClientAction;
+}) {
+  if (update.enabled && config.openappa.enabled) {
     const refusals = await refusedPolicies();
     if (refusals.length > 0)
       throw new ApiError(
@@ -40,7 +46,7 @@ export async function setGuardrailsDeployment(enabled: boolean) {
         `Guardrails v2 was not enabled: the guardrails policy is refused, so every proxied request would fail. Fix the policy on the OpenAPPA page first. ${refusals.join(" ")}`,
       );
   }
-  await GuardrailsDeploymentModel.setEnabled(enabled);
+  await GuardrailsDeploymentModel.set(update);
   return getGuardrailsDeployment();
 }
 
@@ -98,7 +104,7 @@ export async function turnOnForFirstPolicy(params: {
   if (refusal) return refusal;
   const before = await GuardrailsDeploymentModel.findByIdForAudit();
   try {
-    await setGuardrailsDeployment(true);
+    await setGuardrailsDeployment({ enabled: true });
   } catch (error) {
     if (error instanceof ApiError)
       return { enabled: false, turnedOn: false, reason: error.message };

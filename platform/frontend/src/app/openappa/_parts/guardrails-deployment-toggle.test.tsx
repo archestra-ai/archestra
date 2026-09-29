@@ -15,8 +15,8 @@ import {
 import { SidebarMenu, SidebarProvider } from "@/components/ui/sidebar";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
-  EnforcementSwitch,
   GuardrailsDisabledWarning,
+  UnsupportedClientActionSelect,
 } from "./guardrails-deployment-toggle";
 
 vi.mock("@/lib/auth/auth.query");
@@ -24,8 +24,13 @@ vi.mock("sonner");
 const url = "http://localhost:9000/api/guardrails-deployment";
 const server = setupServer();
 let enabled: boolean;
+let unsupportedClientAction: "bypass" | "block";
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
   vi.stubGlobal(
     "matchMedia",
     vi.fn((query: string) => ({
@@ -40,13 +45,19 @@ beforeEach(() => {
     })),
   );
   enabled = false;
+  unsupportedClientAction = "bypass";
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);
   server.use(
     http.get(url, () =>
-      HttpResponse.json({ enabled, active: enabled, featureEnabled: true }),
+      HttpResponse.json({
+        enabled,
+        active: enabled,
+        featureEnabled: true,
+        unsupportedClientAction,
+      }),
     ),
   );
 });
@@ -55,7 +66,7 @@ afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
-function show(ui: "sidebar" | "switch" = "switch") {
+function show(ui: "sidebar" | "unsupported" = "unsupported") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -67,7 +78,7 @@ function show(ui: "sidebar" | "switch" = "switch") {
             <GuardrailsDisabledWarning />
           </SidebarMenu>
         ) : (
-          <EnforcementSwitch />
+          <UnsupportedClientActionSelect />
         )}
       </SidebarProvider>
     </QueryClientProvider>,
@@ -89,57 +100,76 @@ test("the sidebar says nothing once enforcement is on", async () => {
   expect(screen.queryByText(/Guardrails/)).toBeNull();
 });
 
-test("an administrator turns enforcement on and off", async () => {
+test("an administrator selects whether unsupported clients bypass or block", async () => {
+  const updates: unknown[] = [];
   server.use(
     http.put(url, async ({ request }) => {
-      const body = (await request.json()) as { enabled: boolean };
-      enabled = body.enabled;
+      const body = (await request.json()) as {
+        unsupportedClientAction: "bypass" | "block";
+      };
+      updates.push(body);
+      unsupportedClientAction = body.unsupportedClientAction;
       return HttpResponse.json({
         enabled,
         active: enabled,
         featureEnabled: true,
+        unsupportedClientAction,
       });
     }),
   );
   show();
-  const toggle = await screen.findByRole("switch", { name: "Enforcement" });
-  fireEvent.click(toggle);
-  expect(await screen.findByText(/Every tool call is checked/)).toBeVisible();
-  expect(toggle).toBeChecked();
-  await waitFor(() => expect(toggle).toBeEnabled());
-  fireEvent.click(toggle);
-  expect(await screen.findByText(/Tool calls run without/)).toBeVisible();
-  expect(toggle).not.toBeChecked();
+  const selector = await screen.findByRole("combobox", {
+    name: "Unsupported clients",
+  });
+  expect(selector).toHaveTextContent("Bypass");
+  fireEvent.click(selector);
+  fireEvent.click(screen.getByRole("option", { name: "Block" }));
+  await waitFor(() =>
+    expect(updates).toEqual([{ unsupportedClientAction: "block" }]),
+  );
+  expect(selector).toHaveTextContent("Block");
 });
 
-test("a rejected update keeps the accepted deployment state", async () => {
-  server.use(http.put(url, () => new HttpResponse(null, { status: 403 })));
+test("a non-admin cannot change unsupported client behavior", async () => {
+  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
+    typeof useHasPermissions
+  >);
   show();
-  const toggle = await screen.findByRole("switch", { name: "Enforcement" });
-  fireEvent.click(toggle);
-  await waitFor(() => expect(toggle).toBeEnabled());
-  expect(toggle).not.toBeChecked();
+  expect(
+    await screen.findByRole("combobox", {
+      name: "Unsupported clients",
+    }),
+  ).toBeDisabled();
 });
 
-test.each([
-  "permission",
-  "feature flag",
-])("cannot turn enforcement on without the %s", async (missing) => {
-  if (missing === "permission")
-    vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-      typeof useHasPermissions
-    >);
-  else
-    server.use(
-      http.get(url, () =>
-        HttpResponse.json({
-          enabled: false,
-          active: false,
-          featureEnabled: false,
-        }),
-      ),
-    );
+test("a rejected update keeps the accepted unsupported-client setting", async () => {
+  const rejected = vi.fn(() => new HttpResponse(null, { status: 403 }));
+  server.use(http.put(url, rejected));
   show();
-  const toggle = await screen.findByRole("switch", { name: "Enforcement" });
-  expect(toggle).toBeDisabled();
+  const selector = await screen.findByRole("combobox", {
+    name: "Unsupported clients",
+  });
+  fireEvent.click(selector);
+  fireEvent.click(screen.getByRole("option", { name: "Block" }));
+  await waitFor(() => expect(rejected).toHaveBeenCalledOnce());
+  expect(selector).toHaveTextContent("Bypass");
+});
+
+test("the unsupported-client setting is disabled without the feature flag", async () => {
+  server.use(
+    http.get(url, () =>
+      HttpResponse.json({
+        enabled: false,
+        active: false,
+        featureEnabled: false,
+        unsupportedClientAction: "bypass",
+      }),
+    ),
+  );
+  show();
+  expect(
+    await screen.findByRole("combobox", {
+      name: "Unsupported clients",
+    }),
+  ).toBeDisabled();
 });

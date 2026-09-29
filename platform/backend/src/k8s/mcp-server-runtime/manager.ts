@@ -883,16 +883,33 @@ export class McpServerRuntimeManager {
         const secret = await secretManager().getSecret(mcpServer.secretId);
 
         if (secret?.secret && typeof secret.secret === "object") {
-          // Filter to keys this server needs
-          const expectedKeys = new Set(
-            (catalogItem?.localConfig?.environment ?? [])
-              .filter((e) => e.type === "secret")
-              .map((e) => e.key),
-          );
+          // A supplied/persisted bag is installation input, just like a request
+          // map. No declared secret env fields must not mean "allow every key".
+          const expectedKeys = catalogItem
+            ? new Set([
+                ...(catalogItem.localConfig?.environment ?? [])
+                  .filter(
+                    (entry) =>
+                      entry.type === "secret" &&
+                      entry.promptOnInstallation &&
+                      !entry.credentialId,
+                  )
+                  .map((entry) => entry.key),
+                ...Object.entries(catalogItem.userConfig ?? {})
+                  .filter(([, field]) => field.promptOnInstallation !== false)
+                  .map(([key]) => key),
+                ...(catalogItem.oauthConfig?.access_token_env_var
+                  ? [
+                      "access_token",
+                      catalogItem.oauthConfig.access_token_env_var,
+                    ]
+                  : []),
+              ])
+            : undefined;
 
           secretData = {};
           for (const [key, value] of Object.entries(secret.secret)) {
-            if (!expectedKeys.size || expectedKeys.has(key)) {
+            if (!expectedKeys || expectedKeys.has(key)) {
               secretData[key] = String(value);
             }
           }
@@ -900,7 +917,7 @@ export class McpServerRuntimeManager {
           // Use secret data as environmentValues if not explicitly provided
           // This ensures createContainerEnvFromConfig() knows to add secretKeyRef
           if (!effectiveEnvironmentValues) {
-            effectiveEnvironmentValues = secretData;
+            effectiveEnvironmentValues = { ...secretData };
             logger.info(
               {
                 mcpServerId: id,
@@ -952,6 +969,16 @@ export class McpServerRuntimeManager {
             effectiveEnvironmentValues[key] = String(value);
           }
         }
+      }
+
+      // OAuth bags store the token under access_token; the catalog owns its
+      // process environment name, including when restarting without route input.
+      const oauthEnvKey = catalogItem?.oauthConfig?.access_token_env_var;
+      if (oauthEnvKey && secretData?.access_token) {
+        effectiveEnvironmentValues = {
+          ...effectiveEnvironmentValues,
+          [oauthEnvKey]: secretData.access_token,
+        };
       }
 
       const credentialBindings = (

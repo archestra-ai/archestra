@@ -23,6 +23,7 @@ import {
   isMcpInstallationAdmin,
 } from "@/auth/mcp-catalog-permissions";
 import { userHasPermission } from "@/auth/utils";
+import { findUnsafeDeploymentYamlPlaceholders } from "@/k8s/mcp-server-runtime/k8s-yaml-generator";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
@@ -42,11 +43,13 @@ import {
 } from "@/services/environments/environment";
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
+  CatalogSecretStaging,
   extractLocalConfigSecrets,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
+import { assertMcpRuntimeChangeAllowed } from "@/services/mcp-runtime-authorization";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
@@ -982,16 +985,33 @@ async function handleEditMcpConfig(
     // then rejecting the edit would leave the bag ahead of the catalog row.
     const validatedUpdate =
       PartialUpdateInternalMcpCatalogSchema.parse(updateData);
-    await moveCatalogSecretsToBag({
-      updateData: validatedUpdate as Record<string, unknown>,
-      catalogName: existing.name,
-      existingLocalConfigSecretId: existing.localConfigSecretId,
-      existingClientSecretId: existing.clientSecretId,
+    assertDeploymentYamlPlaceholdersSafe(validatedUpdate.deploymentSpecYaml);
+    await assertMcpRuntimeChangeAllowed({
+      userId: context.userId,
+      organizationId,
+      original: existing,
+      updates: validatedUpdate,
     });
-    const updated = await InternalMcpCatalogModel.update(
-      existing.id,
-      validatedUpdate,
-    );
+    const staging = new CatalogSecretStaging();
+    let updated: InternalMcpCatalog;
+    try {
+      await moveCatalogSecretsToBag({
+        staging,
+        updateData: validatedUpdate as Record<string, unknown>,
+        catalogName: existing.name,
+        existingLocalConfigSecretId: existing.localConfigSecretId,
+        existingClientSecretId: existing.clientSecretId,
+      });
+      ({ catalogItem: updated } = await InternalMcpCatalogModel.publishReviewed(
+        {
+          original: existing,
+          updates: validatedUpdate,
+        },
+      ));
+      await staging.publish();
+    } finally {
+      await staging.dispose();
+    }
 
     if (!updated) {
       return errorResult("failed to update MCP server config.");
@@ -1019,6 +1039,9 @@ async function handleEditMcpConfig(
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    if (error instanceof ApiError && error.statusCode < 500) {
+      return errorResult(error.message);
+    }
     return catchError(error, "editing MCP server config");
   }
 }
@@ -1156,17 +1179,32 @@ async function handleCreateMcpServer(
       });
       // SPDX-SnippetEnd
     }
-    await moveCatalogSecretsToBag({
-      updateData: validatedParams as Record<string, unknown>,
-      catalogName: name,
-      existingLocalConfigSecretId: null,
-      existingClientSecretId: null,
-    });
-    const created = await InternalMcpCatalogModel.create(validatedParams, {
+    assertDeploymentYamlPlaceholdersSafe(validatedParams.deploymentSpecYaml);
+    await assertMcpRuntimeChangeAllowed({
+      userId: context.userId,
       organizationId,
-      authorId: context.userId,
-      initialPermissionGrants: args.initialGrants ?? [],
+      original: null,
+      updates: validatedParams,
     });
+    const staging = new CatalogSecretStaging();
+    let created: InternalMcpCatalog;
+    try {
+      await moveCatalogSecretsToBag({
+        staging,
+        updateData: validatedParams as Record<string, unknown>,
+        catalogName: name,
+        existingLocalConfigSecretId: null,
+        existingClientSecretId: null,
+      });
+      created = await InternalMcpCatalogModel.create(validatedParams, {
+        organizationId,
+        authorId: context.userId,
+        initialPermissionGrants: args.initialGrants ?? [],
+      });
+      await staging.publish();
+    } finally {
+      await staging.dispose();
+    }
 
     const lines = [
       "Successfully created MCP server.",
@@ -1194,6 +1232,9 @@ async function handleCreateMcpServer(
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    if (error instanceof ApiError && error.statusCode < 500) {
+      return errorResult(error.message);
+    }
     return catchError(error, "creating MCP server");
   }
 }
@@ -1847,12 +1888,14 @@ async function authorizeDeployScope(params: {
  * bags, rewriting the payload to reference them instead.
  */
 async function moveCatalogSecretsToBag(params: {
+  staging: CatalogSecretStaging;
   updateData: Record<string, unknown>;
   catalogName: string;
   existingLocalConfigSecretId: string | null;
   existingClientSecretId: string | null;
 }): Promise<void> {
   const {
+    staging,
     updateData,
     catalogName,
     existingLocalConfigSecretId,
@@ -1861,6 +1904,7 @@ async function moveCatalogSecretsToBag(params: {
 
   if (updateData.localConfig !== undefined) {
     const { localConfig, secretId } = await extractLocalConfigSecrets({
+      staging,
       localConfig: updateData.localConfig as LocalConfig,
       existingSecretId: existingLocalConfigSecretId,
       catalogName,
@@ -1881,6 +1925,7 @@ async function moveCatalogSecretsToBag(params: {
     >;
     if (typeof clientSecret === "string" && clientSecret) {
       const { id } = await upsertCatalogClientSecretValue({
+        staging,
         clientSecretId: existingClientSecretId,
         catalogName,
         key: "client_secret",
@@ -1889,5 +1934,18 @@ async function moveCatalogSecretsToBag(params: {
       updateData.oauthConfig = rest;
       updateData.clientSecretId = id;
     }
+  }
+}
+
+function assertDeploymentYamlPlaceholdersSafe(
+  yaml: string | null | undefined,
+): void {
+  if (typeof yaml !== "string") return;
+  const problems = findUnsafeDeploymentYamlPlaceholders(yaml);
+  if (problems.length) {
+    throw new ApiError(
+      400,
+      `Custom deployment YAML uses installer inputs in protected fields: ${problems.join("; ")}`,
+    );
   }
 }

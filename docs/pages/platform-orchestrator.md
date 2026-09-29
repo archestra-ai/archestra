@@ -3,7 +3,7 @@ title: MCP Orchestrator
 category: MCP
 order: 3
 description: Running self-hosted MCP servers in Kubernetes
-lastUpdated: 2026-08-08
+lastUpdated: 2026-09-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -136,6 +136,12 @@ Self-hosted registry entries define how the deployment should be built.
 - **Advanced YAML**: override the generated Kubernetes deployment when you need custom pod configuration.
 
 Registry entries define whether a server is remote or self-hosted before the orchestrator creates any Kubernetes resources. See [Private MCP Registry - Server Configuration](/docs/platform-private-registry#server-configuration) for those registry fields.
+
+### Privileged Configuration
+
+Registry-wide edit access is required to configure custom Kubernetes service accounts or advanced YAML. The same requirement applies to existing Kubernetes Secret and ConfigMap references. Changing executable configuration on these entries also requires registry-wide edit access. Editors can still update their metadata.
+
+Installers use the account configured by the registry administrator. They can supply the installation fields declared by the entry. In advanced YAML, installation placeholders can supply container environment values, commands, and arguments. They cannot select Kubernetes accounts, images, secret references, or pod security settings.
 
 ## Transports
 

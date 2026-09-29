@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type ResourcePermissionAction,
@@ -30,6 +31,7 @@ import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import {
+  ApiError,
   type CatalogItemApprovalStatus,
   type CatalogTeamInput,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
@@ -140,34 +142,71 @@ class InternalMcpCatalogModel {
       ...(context?.authorId ? { authorId: context.authorId } : {}),
     };
 
-    let createdItem = await withDbTransaction(async (tx) => {
-      const [row] = await tx
-        .insert(schema.internalMcpCatalogTable)
-        .values(
-          await CreatedByModel.forInsert({
-            data: insertValues,
-            userIdField: "authorId",
-            transaction: tx,
-          }),
-        )
-        .returning();
-      if (row.organizationId && row.serverType !== "app") {
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        await ResourcePermissionPolicyModel.createInitial({
-          tx,
-          organizationId: row.organizationId,
-          resource: "mcpRegistry",
-          scope: row.id,
-          grants: context?.initialPermissionGrants,
-          authorId: row.authorId,
-          publishToOrganization: context?.publishToOrganization,
-        });
-        // SPDX-SnippetEnd
+    const preparedSecretIds = new Set<string>();
+    let createdItem: typeof schema.internalMcpCatalogTable.$inferSelect;
+    try {
+      const preparedValues =
+        await InternalMcpCatalogModel.cloneSecretsFromSource(
+          insertValues,
+          preparedSecretIds,
+        );
+      createdItem = await withDbTransaction(async (tx) => {
+        const [row] = await tx
+          .insert(schema.internalMcpCatalogTable)
+          .values(
+            await CreatedByModel.forInsert({
+              data: preparedValues,
+              userIdField: "authorId",
+              transaction: tx,
+            }),
+          )
+          .returning();
+        if (row.organizationId && row.serverType !== "app") {
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          await ResourcePermissionPolicyModel.createInitial({
+            tx,
+            organizationId: row.organizationId,
+            resource: "mcpRegistry",
+            scope: row.id,
+            grants: context?.initialPermissionGrants,
+            authorId: row.authorId,
+            publishToOrganization: context?.publishToOrganization,
+          });
+          // SPDX-SnippetEnd
+        }
+        return row;
+      });
+    } catch (error) {
+      for (const secretId of preparedSecretIds) {
+        try {
+          const [published] = await db
+            .select({ id: schema.internalMcpCatalogTable.id })
+            .from(schema.internalMcpCatalogTable)
+            .where(
+              or(
+                eq(schema.internalMcpCatalogTable.clientSecretId, secretId),
+                eq(
+                  schema.internalMcpCatalogTable.localConfigSecretId,
+                  secretId,
+                ),
+                eq(schema.internalMcpCatalogTable.presetSecretId, secretId),
+              ),
+            )
+            .limit(1);
+          if (!published) {
+            await secretManager().deleteSecret(secretId);
+          }
+        } catch (cleanupError) {
+          logger.warn(
+            { err: cleanupError, secretId },
+            "Could not remove an unpublished clone secret",
+          );
+        }
       }
-      return row;
-    });
+      throw error;
+    }
 
     if (labels && labels.length > 0) {
       await McpCatalogLabelModel.syncCatalogLabels(
@@ -187,16 +226,14 @@ class InternalMcpCatalogModel {
       createdItem.id,
     );
 
-    // A clone copies the source's tools + guardrails as provisional rows, and
-    // its secrets as independent copies (see cloneSecretsFromSource).
+    // Tools and guardrails are provisional until discovery. Secret composition
+    // finished before insertion, so authoring can safely use the published row.
     if (createdItem.clonedFrom) {
       await ToolModel.cloneToolsAndPoliciesFromCatalog({
         sourceCatalogId: createdItem.clonedFrom,
         targetCatalogId: createdItem.id,
         targetCatalogName: createdItem.name,
       });
-      createdItem =
-        await InternalMcpCatalogModel.cloneSecretsFromSource(createdItem);
     }
 
     const result: InternalMcpCatalog = {
@@ -515,6 +552,15 @@ class InternalMcpCatalogModel {
     await InternalMcpCatalogModel.populateAuthorNames([catalogItem]);
 
     return catalogItem;
+  }
+
+  /** Expand a copy of the reviewed row without reading a newer catalog revision. */
+  static async expandSnapshotSecrets(
+    snapshot: InternalMcpCatalog,
+  ): Promise<InternalMcpCatalog> {
+    const expanded = structuredClone(snapshot);
+    await InternalMcpCatalogModel.expandSecrets([expanded]);
+    return expanded;
   }
 
   /**
@@ -840,16 +886,19 @@ class InternalMcpCatalogModel {
    * anything.
    */
   /** Answers the tool renames it made, which is where tool prefixes moved. */
-  static async renameCascade(params: {
-    id: string;
-    newName: string;
-    flagReinstallRequired: boolean;
-    freezeDeploymentNames: boolean;
-  }): Promise<Array<{ oldName: string; newName: string }>> {
+  static async renameCascade(
+    params: {
+      id: string;
+      newName: string;
+      flagReinstallRequired: boolean;
+      freezeDeploymentNames: boolean;
+    },
+    transaction?: Transaction,
+  ): Promise<Array<{ oldName: string; newName: string }>> {
     const { id, newName, flagReinstallRequired, freezeDeploymentNames } =
       params;
 
-    return withDbTransaction(async (tx) => {
+    const rename = async (tx: Transaction) => {
       const [catalog] = await tx
         .select()
         .from(schema.internalMcpCatalogTable)
@@ -954,7 +1003,94 @@ class InternalMcpCatalogModel {
       // (5) Name-string-keyed limits.
       await LimitModel.renameNameKeys({ serverNamePairs, toolNamePairs }, tx);
       return toolNamePairs;
+    };
+    return transaction ? rename(transaction) : withDbTransaction(rename);
+  }
+
+  /** Publish exactly the runtime definition that was reviewed, with its rename. */
+  static async publishReviewed(params: {
+    original: InternalMcpCatalog;
+    updates: Partial<UpdateInternalMcpCatalog> & { teams?: CatalogTeamInput[] };
+    rename?: {
+      newName: string;
+      flagReinstallRequired: boolean;
+      freezeDeploymentNames: boolean;
+    };
+  }): Promise<{
+    catalogItem: InternalMcpCatalog;
+    renamedTools: Array<{ oldName: string; newName: string }>;
+  }> {
+    const { original, updates, rename } = params;
+    const { labels, teams, ...dbValues } = updates;
+    const renamedTools = await withDbTransaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(
+          and(
+            eq(schema.internalMcpCatalogTable.id, original.id),
+            notDeleted(schema.internalMcpCatalogTable),
+          ),
+        )
+        .for("update");
+      if (
+        !current ||
+        !isDeepStrictEqual(
+          reviewedRuntimeSnapshot(current),
+          reviewedRuntimeSnapshot(original),
+        )
+      ) {
+        throw new ApiError(
+          409,
+          "The MCP catalog runtime configuration changed. Reload it and retry your changes.",
+        );
+      }
+      if (
+        dbValues.name !== undefined &&
+        dbValues.name !== current.name &&
+        dbValues.name !== rename?.newName
+      ) {
+        throw new Error(
+          "Catalog names must be published with their rename cascade",
+        );
+      }
+      const toolRenames = rename
+        ? await InternalMcpCatalogModel.renameCascade(
+            { id: original.id, ...rename },
+            tx,
+          )
+        : [];
+      const values = Object.fromEntries(
+        Object.entries(dbValues).filter(
+          ([key, value]) => key !== "name" && value !== undefined,
+        ),
+      ) as Partial<typeof schema.internalMcpCatalogTable.$inferInsert>;
+      if (
+        dbValues.localConfig !== undefined &&
+        (current.localConfig?.dockerImage ?? null) !==
+          (dbValues.localConfig?.dockerImage ?? null)
+      ) {
+        values.catalogItemApprovalStatus = null;
+        values.catalogItemApprovalReason = null;
+        values.catalogItemApprovalReviewedBy = null;
+        values.catalogItemApprovalReviewedAt = null;
+      }
+      if (Object.keys(values).length > 0) {
+        await tx
+          .update(schema.internalMcpCatalogTable)
+          .set(values)
+          .where(eq(schema.internalMcpCatalogTable.id, original.id));
+      }
+      return toolRenames;
     });
+    // Labels and retired team relations cannot grant pod privileges. Keep their
+    // existing model-owned transactions outside the locked runtime commit.
+    const catalogItem = await InternalMcpCatalogModel.update(original.id, {
+      labels,
+      teams,
+    });
+    if (!catalogItem) throw new ApiError(404, "Catalog item not found");
+    return { catalogItem, renamedTools };
   }
 
   static async update(
@@ -1397,12 +1533,12 @@ class InternalMcpCatalogModel {
   /**
    * Copy the clone source's secrets onto the clone, per key. Inherited keys
    * fill in only what the create payload did not already supply, so a value the
-   * user entered while cloning wins over the source's. Returns the row with any
-   * new secret FK ids applied.
+   * user entered while cloning wins over the source's. Prepare the complete
+   * secret slots before insertion makes the clone available for authorization.
    */
-  private static async cloneSecretsFromSource(
-    clone: typeof schema.internalMcpCatalogTable.$inferSelect,
-  ): Promise<typeof schema.internalMcpCatalogTable.$inferSelect> {
+  private static async cloneSecretsFromSource<
+    T extends typeof schema.internalMcpCatalogTable.$inferInsert,
+  >(clone: T, preparedSecretIds: Set<string>): Promise<T> {
     if (!clone.clonedFrom) return clone;
 
     const [source] = await db
@@ -1423,43 +1559,46 @@ class InternalMcpCatalogModel {
 
     const clientSecretId = await InternalMcpCatalogModel.cloneSecretSlot({
       sourceSecretId: source.clientSecretId,
-      cloneSecretId: clone.clientSecretId,
+      cloneSecretId: clone.clientSecretId ?? null,
       name: `${clone.name}-oauth-client-secret`,
     });
-    if (clientSecretId) updates.clientSecretId = clientSecretId;
+    if (clientSecretId) {
+      updates.clientSecretId = clientSecretId;
+      preparedSecretIds.add(clientSecretId);
+    }
 
     const localConfigSecretId = await InternalMcpCatalogModel.cloneSecretSlot({
       sourceSecretId: source.localConfigSecretId,
-      cloneSecretId: clone.localConfigSecretId,
+      cloneSecretId: clone.localConfigSecretId ?? null,
       name: `${clone.name}-local-config-env`,
     });
-    if (localConfigSecretId) updates.localConfigSecretId = localConfigSecretId;
+    if (localConfigSecretId) {
+      updates.localConfigSecretId = localConfigSecretId;
+      preparedSecretIds.add(localConfigSecretId);
+    }
 
     const presetSecretId = await InternalMcpCatalogModel.cloneSecretSlot({
       sourceSecretId: source.presetSecretId,
-      cloneSecretId: clone.presetSecretId,
+      cloneSecretId: clone.presetSecretId ?? null,
       name: `${clone.name}-preset-secrets`,
     });
-    if (presetSecretId) updates.presetSecretId = presetSecretId;
+    if (presetSecretId) {
+      updates.presetSecretId = presetSecretId;
+      preparedSecretIds.add(presetSecretId);
+    }
 
     if (Object.keys(updates).length === 0) return clone;
 
-    const [updated] = await db
-      .update(schema.internalMcpCatalogTable)
-      .set(updates)
-      .where(eq(schema.internalMcpCatalogTable.id, clone.id))
-      .returning();
-    return updated ?? clone;
+    return { ...clone, ...updates };
   }
 
   /**
    * Reconcile one secret slot of a clone against its source. Returns a new
    * secret id to write on the clone, or null if the clone's FK is unchanged
-   * (it already had its own secret, or there is nothing to inherit).
+   * (its own bag already has every inherited key, or there is nothing to inherit).
    *
-   * - Clone already has a secret (create payload supplied values): merge in the
-   *   source keys it is missing, so per-key the user's value wins. The clone
-   *   keeps its own secret row, so no FK change.
+   * - Clone already has a secret (create payload supplied values): merge into a
+   *   new bag, keeping the supplied bag unchanged and the user's values winning.
    * - Clone has none: duplicate the whole source bag into a new entry.
    */
   private static async cloneSecretSlot(params: {
@@ -1472,28 +1611,24 @@ class InternalMcpCatalogModel {
       await InternalMcpCatalogModel.readClonableSecret(sourceSecretId);
     if (!source) return null;
 
-    if (cloneSecretId) {
-      const cloneBag =
-        (await secretManager().getSecret(cloneSecretId))?.secret ?? {};
-      const merged: SecretValue = { ...cloneBag };
-      let added = false;
-      for (const [key, value] of Object.entries(source.bag)) {
-        if (!(key in cloneBag)) {
-          merged[key] = value;
-          added = true;
-        }
-      }
-      if (added) await secretManager().updateSecret(cloneSecretId, merged);
+    const supplied = cloneSecretId
+      ? await InternalMcpCatalogModel.readClonableSecret(cloneSecretId)
+      : null;
+    // Preserve explicit external Vault references instead of resolving them
+    // into values while merging an unrelated source bag.
+    if (cloneSecretId && !supplied) return null;
+    const merged = { ...source.bag, ...supplied?.bag };
+    if (
+      Object.keys(merged).length === 0 ||
+      (supplied && isDeepStrictEqual(merged, supplied.bag))
+    )
       return null;
-    }
-
-    if (Object.keys(source.bag).length === 0) return null;
-    if (source.isVault) {
-      return (await secretManager().createSecret(source.bag, name)).id;
+    if (supplied?.isVault ?? source.isVault) {
+      return (await secretManager().createSecret(merged, name)).id;
     }
     const copy = await SecretModel.create({
       name,
-      secret: source.bag,
+      secret: merged,
       isVault: false,
       isByosVault: false,
     });
@@ -2102,3 +2237,31 @@ class InternalMcpCatalogModel {
 }
 
 export default InternalMcpCatalogModel;
+
+function reviewedRuntimeSnapshot(
+  catalog: Pick<InternalMcpCatalog, (typeof REVIEWED_RUNTIME_FIELDS)[number]>,
+) {
+  return Object.fromEntries(
+    REVIEWED_RUNTIME_FIELDS.map((field) => [field, catalog[field]]),
+  );
+}
+
+const REVIEWED_RUNTIME_FIELDS = [
+  "organizationId",
+  "authorId",
+  "name",
+  "serverType",
+  "localConfig",
+  "deploymentSpecYaml",
+  "localConfigSecretId",
+  "clientSecretId",
+  "userConfig",
+  "installationCommand",
+  "environmentId",
+  "oauthConfig",
+  "enterpriseManagedConfig",
+  "authFields",
+  "requiresAuth",
+  "serverUrl",
+  "multitenant",
+] as const;

@@ -234,3 +234,132 @@ describe("internal MCP catalog deployment YAML routes", () => {
     });
   });
 });
+
+describe("catalog YAML preserves operator configuration and protects dynamic authority", () => {
+  const OPERATOR_YAML = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+      containers:
+        - name: mcp
+          image: registry.example.com/mcp:latest
+          securityContext:
+            privileged: true
+`;
+
+  let app: FastifyInstance;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _request, reply) => {
+      if (error instanceof ApiError) {
+        return reply.status(error.statusCode).send({
+          error: { message: error.message, type: error.type },
+        });
+      }
+      if (hasZodFastifySchemaValidationErrors(error)) {
+        return reply.status(400).send({
+          error: { message: error.message, type: "api_validation_error" },
+        });
+      }
+      const err = error as Error & { statusCode?: number };
+      const status = err.statusCode ?? 500;
+      return reply.status(status).send({ error: { message: err.message } });
+    });
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { user: User; organizationId: string }
+      ).user = user;
+      (
+        request as typeof request & { user: User; organizationId: string }
+      ).organizationId = organization.id;
+    });
+    await app.register(internalMcpCatalogRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("an administrator can keep static custom pod configuration", async () => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "local-yaml-server",
+        serverType: "local",
+        scope: "org",
+        localConfig: { dockerImage: "registry.example.com/mcp:latest" },
+      },
+      { organizationId, authorId: user.id },
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: { deploymentSpecYaml: OPERATOR_YAML },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.deploymentSpecYaml,
+    ).toBe(OPERATOR_YAML);
+  });
+
+  test("save and validation reject installer placeholders in pod identity", async () => {
+    const yaml = OPERATOR_YAML.replace(
+      "hostNetwork: true",
+      `serviceAccountName: \${env.ACCOUNT}`,
+    );
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "dynamic-authority",
+        serverType: "local",
+        localConfig: { command: "node" },
+        deploymentSpecYaml: yaml,
+      },
+    });
+    expect(create.statusCode, create.body).toBe(400);
+    expect(create.json().error.message).toContain("serviceAccountName");
+    const validate = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog/validate-deployment-yaml",
+      payload: { yaml },
+    });
+    expect(validate.statusCode, validate.body).toBe(200);
+    expect(validate.json().valid).toBe(false);
+    expect(validate.json().errors.join(" ")).toContain("serviceAccountName");
+  });
+
+  test("the validate endpoint accepts static operator pod settings", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog/validate-deployment-yaml",
+      payload: { yaml: OPERATOR_YAML },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.valid).toBe(true);
+  });
+});

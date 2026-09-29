@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: Tests catalog placeholder interpolation.
 
 /**
  * Seam integration tests: the REAL {@link McpServerRuntimeManager} driving the
@@ -30,7 +31,9 @@ import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
-import { MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS } from "@/models/mcp-server";
+import McpServerModel, {
+  MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
+} from "@/models/mcp-server";
 import { secretManager } from "@/secrets-manager";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE service import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
@@ -44,6 +47,97 @@ const NAMESPACE = "seam-test-namespace";
 const DEPLOYMENT_NAME = "mcp-seam-server";
 const MERGE_PATCH_CONTENT_TYPE = "application/merge-patch+json";
 const NOT_FOUND = { statusCode: 404, message: "not found" };
+
+test("a supplied installation bag cannot replace catalog-owned execution on startup", async ({
+  makeOrganization,
+  makeInternalMcpCatalog,
+  makeMcpServer,
+}) => {
+  const organization = await makeOrganization();
+  const bag = await secretManager().createSecret(
+    {
+      script: "unreviewed script",
+      legacy: "provided-input",
+      undeclared: "unreviewed extra",
+    },
+    "installation-inputs",
+  );
+  const catalog = await makeInternalMcpCatalog({
+    organizationId: organization.id,
+    serverType: "local",
+    localConfig: {
+      command: "sh",
+      arguments: [
+        "-c",
+        "${user_config.script}",
+        "${user_config.legacy}",
+        "${user_config.undeclared}",
+      ],
+      serviceAccount: "approved-runtime",
+    },
+    userConfig: {
+      script: {
+        type: "string",
+        title: "Script",
+        description: "Script",
+        promptOnInstallation: false,
+        default: "printf approved",
+      },
+      legacy: { type: "string", title: "Input", description: "Input" },
+    },
+  });
+  const createdServer = await makeMcpServer({
+    catalogId: catalog.id,
+    secretId: bag.id,
+    deploymentName: DEPLOYMENT_NAME,
+  });
+  const server = await McpServerModel.update(createdServer.id, {
+    environmentValues: {
+      script: "stale stored script",
+      undeclared: "stale stored extra",
+    },
+  });
+  if (!server) throw new Error("Missing installation");
+  const cluster = new FakeK8sCluster({ replicas: 1 });
+  cluster.exists = false;
+  const { manager, internals } = makeManager(cluster);
+  let installedSecret: k8s.V1Secret | undefined;
+  let deployment: k8s.V1Deployment | undefined;
+  internals.k8sNetworkingApi.createNamespacedNetworkPolicy = vi.fn(
+    async ({ body }) => body,
+  );
+  internals.k8sApi.createNamespacedSecret = vi.fn(async ({ body }) => {
+    installedSecret = body;
+    return body;
+  });
+  internals.k8sAppsApi.createNamespacedDeployment = vi.fn(async ({ body }) => {
+    deployment = body;
+    cluster.exists = true;
+    return body;
+  });
+  try {
+    await manager.startServer(server);
+    expect(deployment?.spec?.template.spec?.serviceAccountName).toBe(
+      "approved-runtime",
+    );
+    expect(deployment?.spec?.template.spec?.containers[0].args).toEqual([
+      "-c",
+      "printf approved",
+      "provided-input",
+      "${user_config.undeclared}",
+    ]);
+    expect(deployment?.spec?.template.spec?.containers[0].env).toContainEqual({
+      name: "LEGACY",
+      value: "provided-input",
+    });
+    expect(Object.keys(installedSecret?.data ?? {})).toEqual(["legacy"]);
+    expect(
+      Buffer.from(installedSecret?.data?.legacy ?? "", "base64").toString(),
+    ).toBe("provided-input");
+  } finally {
+    await manager.shutdown();
+  }
+});
 
 const IDLE_WINDOW_SECONDS = 300;
 /** Idle window + the throttled-last-used-stamp grace the sweeper adds. */

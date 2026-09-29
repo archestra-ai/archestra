@@ -603,8 +603,9 @@ export default class K8sDeployment {
     this.k8sExec = options.k8sExec;
     this.defaultNamespace = options.namespace;
     this.catalogItem = options.catalogItem;
-    this.userConfigValues = options.userConfigValues;
-    this.environmentValues = options.environmentValues;
+    const inputs = resolveRuntimeInputs(options);
+    this.userConfigValues = inputs.userConfigValues;
+    this.environmentValues = inputs.environmentValues;
     this.credentialExpiresAt = options.credentialExpiresAt;
     this.effectiveNetworkPolicy = options.effectiveNetworkPolicy;
     this.networkPolicyCapabilities = options.networkPolicyCapabilities;
@@ -2163,10 +2164,8 @@ export default class K8sDeployment {
         );
         return yamlDeployment;
       }
-      // If YAML parsing failed, fall through to default generation
-      logger.warn(
-        { mcpServerId: this.mcpServer.id },
-        "Failed to parse deploymentSpecYaml, falling back to default generation",
+      throw new McpServerDeploymentFailedError(
+        "Invalid custom deployment YAML; correct the catalog template before deploying",
       );
     }
 
@@ -2810,7 +2809,7 @@ export default class K8sDeployment {
           envMap.set(envDef.key, value || "");
         }
       }
-    } else if (this.environmentValues) {
+    } else if (!this.catalogItem && this.environmentValues) {
       // Fallback: If no catalog item but environmentValues provided,
       // process them directly (backward compatibility for tests and direct usage)
       Object.entries(this.environmentValues).forEach(([key, value]) => {
@@ -2818,9 +2817,23 @@ export default class K8sDeployment {
       });
     }
 
+    const oauthEnvKey = this.catalogItem?.oauthConfig?.access_token_env_var;
+    if (oauthEnvKey && this.environmentValues?.[oauthEnvKey]) {
+      envMap.set(oauthEnvKey, this.environmentValues[oauthEnvKey]);
+    }
+
     // Add user config values as environment variables
     if (this.userConfigValues) {
       Object.entries(this.userConfigValues).forEach(([key, value]) => {
+        if (this.catalogItem) {
+          const definitions = this.catalogItem.userConfig ?? {};
+          if (!Object.hasOwn(definitions, key)) return;
+          const definition = definitions[key];
+          if (definition.promptOnInstallation === false) {
+            value =
+              definition.default != null ? String(definition.default) : "";
+          }
+        }
         // Convert to uppercase with underscores for environment variable convention
         const envKey = key.toUpperCase().replace(/[^A-Z0-9]/g, "_");
         envMap.set(envKey, value != null ? String(value) : "");
@@ -5818,6 +5831,49 @@ function normalizeCiliumEndpointLabels(
       value,
     ]),
   );
+}
+
+/** All interpolation paths consume these catalog-scoped inputs. */
+function resolveRuntimeInputs({
+  catalogItem,
+  environmentValues,
+  userConfigValues,
+}: Pick<
+  K8sDeploymentOptions,
+  "catalogItem" | "environmentValues" | "userConfigValues"
+>) {
+  if (!catalogItem) return { environmentValues, userConfigValues };
+
+  const environment: Record<string, string> = Object.create(null);
+  const userConfig: Record<string, string> = Object.create(null);
+  for (const field of catalogItem.localConfig?.environment ?? []) {
+    const value =
+      field.promptOnInstallation || field.credentialId
+        ? environmentValues?.[field.key]
+        : field.value;
+    if (value !== undefined) environment[field.key] = String(value);
+  }
+  const oauthEnvKey = catalogItem.oauthConfig?.access_token_env_var;
+  if (oauthEnvKey && environmentValues?.[oauthEnvKey] !== undefined) {
+    environment[oauthEnvKey] = environmentValues[oauthEnvKey];
+  }
+  for (const [key, field] of Object.entries(catalogItem.userConfig ?? {})) {
+    if (field.promptOnInstallation === false) {
+      // environmentValues may also contain userConfig keys loaded from an
+      // installation bag. They must never shadow a catalog-owned default.
+      delete environment[key];
+      if (field.default != null) userConfig[key] = String(field.default);
+      continue;
+    }
+    if (environmentValues && Object.hasOwn(environmentValues, key)) {
+      environment[key] = environmentValues[key];
+      userConfig[key] = environmentValues[key];
+    }
+    if (userConfigValues && Object.hasOwn(userConfigValues, key)) {
+      userConfig[key] = userConfigValues[key];
+    }
+  }
+  return { environmentValues: environment, userConfigValues: userConfig };
 }
 
 const CREDENTIAL_EXPIRY_ANNOTATION = "archestra.ai/credential-expires-at";

@@ -1,4 +1,4 @@
-import { count, eq, inArray } from "drizzle-orm";
+import { count, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
 import {
@@ -18,6 +18,20 @@ function decryptSecretRow<T extends SelectSecret | null | undefined>(
 }
 
 class SecretModel {
+  static async isReferencedByMcpCatalog(id: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        or(
+          eq(schema.internalMcpCatalogTable.localConfigSecretId, id),
+          eq(schema.internalMcpCatalogTable.clientSecretId, id),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   /**
    * Create a new secret entry
    */

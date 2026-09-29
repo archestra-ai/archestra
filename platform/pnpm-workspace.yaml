@@ -108,7 +108,7 @@ overrides:
   # line against an unvetted newer release on its own. Bounded to <8 so the
   # floor can't carry the backend's upstream dispatcher onto undici 8.x, which
   # is a major-version change and not this pin's business.
-  undici: '>=7.29.0 <8'
+  undici: '>=7.29.1 <8'
   # CVE-2026-83605 through CVE-2026-83619: XML injection/DoS fixes.
   # Preserve the consumers' release lines.
   '@xmldom/xmldom': 0.9.12

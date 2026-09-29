@@ -91,11 +91,10 @@ overrides:
   fast-xml-parser: 5.7.2
   fast-xml-builder: '>=1.1.7'
   samlify: '>=2.13.0'
-  # CVE-2026-16221 / CVE-2026-13676 / CVE-2026-18446 / CVE-2026-75899 /
-  # CVE-2026-75931 / CVE-2026-75975 / CVE-2026-76172 (HIGH, URI parsing and
-  # validation flaws) fixed across 3.1.4-3.1.6. Keep every transitive consumer
-  # on the fully patched 3.x line.
-  fast-uri: '>=3.1.6 <4'
+  # CVE-2026-84394 (HIGH, host confusion) fixed in 3.1.7. Use the 3.1.8
+  # release to include the subsequent URI parsing fixes while keeping every
+  # transitive consumer on the patched 3.x line.
+  fast-uri: '>=3.1.8 <4'
   ajv: 8.18.0
   # GHSA-gcfj-64vw-6mp9 (HIGH, prototype pollution) affects >=1.15.2, fixed in 1.18.0.
   axios: '>=1.18.0'
@@ -108,7 +107,7 @@ overrides:
   # line against an unvetted newer release on its own. Bounded to <8 so the
   # floor can't carry the backend's upstream dispatcher onto undici 8.x, which
   # is a major-version change and not this pin's business.
-  undici: '>=7.29.0 <8'
+  undici: '>=7.29.1 <8'
   # CVE-2026-83605 through CVE-2026-83619: XML injection/DoS fixes.
   # Preserve the consumers' release lines.
   '@xmldom/xmldom': 0.9.12

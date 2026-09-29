@@ -29,12 +29,13 @@ import {
   lockedChatRequestHeaders,
   storeLockedChatKey,
 } from "@/lib/chat/locked-chat";
-import { handleApiError, toApiError } from "@/lib/utils/api";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
 const {
   getChatConversations,
   getChatConversation,
+  getChatOpenappaStatus,
   getChatConversationFiles,
   getChatAgentMcpTools,
   createChatConversation,
@@ -164,6 +165,26 @@ export function useConversation(conversationId?: string) {
         ? 1_000
         : false,
     retry: false, // Don't retry on error to avoid multiple 404s
+  });
+}
+
+export const openappaStatusQueryKey = (conversationId: string | undefined) =>
+  ["openappa-status", conversationId] as const;
+
+export function useOpenappaStatus(conversationId?: string) {
+  return useQuery({
+    queryKey: openappaStatusQueryKey(conversationId),
+    queryFn: async () => {
+      if (!conversationId) return null;
+      const { data, error } = await getChatOpenappaStatus({
+        path: { id: conversationId },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    enabled: !!conversationId,
+    staleTime: 0,
+    retry: false,
   });
 }
 

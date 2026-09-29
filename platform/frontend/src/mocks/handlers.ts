@@ -352,6 +352,7 @@ export const handlers: HttpHandler[] = [
   // Chat / role list / model availability — fired by the agent dialog +
   // sidebar. Default empty so dialog open doesn't blow up the leak guard.
   ...getJson("/api/chat/conversations", []),
+  ...getJson("/api/chat/conversations/:id/openappa-status", null),
   ...getJson("/api/roles", {
     data: [],
     pagination: {

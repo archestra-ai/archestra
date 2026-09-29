@@ -1,4 +1,4 @@
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 /**
  * Generic LLM Proxy Handler
  *
@@ -1204,7 +1204,8 @@ export async function handleLLMProxy<
   // Content never reaches spans or logs for a locked-chat session, whether it
   // ends up encrypted or redacted.
   const suppressContent = lockedChat.kind !== "none";
-  const appaActive = await isGuardrailsV2Active();
+  const { active: appaActive, unsupportedClientAction } =
+    await getGuardrailsDeployment();
   if (appaActive && suppressContent) {
     throw new ApiError(
       409,
@@ -1590,11 +1591,25 @@ export async function handleLLMProxy<
       // APPA child-return lifecycle. Keep their events out of that trajectory;
       // the existing guardrails still evaluate the child independently.
       // Only the trusted internal executor's agent chain selects this path.
-      if (
+      const delegatedRun =
+        isInternalRequest &&
+        isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
+      const unsupportedClient =
         appaActive &&
-        (!isInternalRequest ||
-          !isAppaDelegatedRun(resolvedAgent.id, externalAgentId))
-      ) {
+        !isInternalChat &&
+        !delegatedRun &&
+        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
+        headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] === undefined &&
+        !APPA_CLIENT_ADAPTERS.some((adapter) =>
+          adapter.matches({ headers: headersForExtraction, requestBody: body }),
+        );
+      if (unsupportedClient && unsupportedClientAction === "block") {
+        throw new ApiError(
+          400,
+          "This client cannot use Guardrails. Send X-Appa-Session-ID to use guardrails, or ask an administrator to choose Bypass on the Guardrails Overview tab.",
+        );
+      }
+      if (appaActive && !delegatedRun && !unsupportedClient) {
         const callerId = appaUserId
           ? `user:${appaUserId}`
           : authenticatedApp

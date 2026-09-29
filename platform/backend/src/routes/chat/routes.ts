@@ -111,6 +111,7 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { getOpenappaStatus } from "@/openappa/service";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -2470,6 +2471,37 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(conversation);
+    },
+  );
+
+  fastify.get(
+    "/api/chat/conversations/:id/openappa-status",
+    {
+      schema: {
+        operationId: RouteId.GetChatOpenappaStatus,
+        description:
+          "Get the current OpenAPPA trust and audience of a conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          z.object({ trust: z.string(), audience: z.string() }).nullable(),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { user, organizationId } = request;
+      const conversation = await findReadableConversationById({
+        conversationId: id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) throw new ApiError(404, "Conversation not found");
+      if (conversation.lockedChat) return reply.send(null);
+      if (!(await isGuardrailsV2Active())) return reply.send(null);
+      return reply.send(
+        await getOpenappaStatus({ organizationId, sessionId: id }),
+      );
     },
   );
 

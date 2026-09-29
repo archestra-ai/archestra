@@ -36007,6 +36007,92 @@ export type UpdateChatConversationResponses = {
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
 
+export type GetChatOpenappaStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/openappa-status';
+};
+
+export type GetChatOpenappaStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetChatOpenappaStatusError = GetChatOpenappaStatusErrors[keyof GetChatOpenappaStatusErrors];
+
+export type GetChatOpenappaStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        trust: string;
+        audience: string;
+    } | null;
+};
+
+export type GetChatOpenappaStatusResponse = GetChatOpenappaStatusResponses[keyof GetChatOpenappaStatusResponses];
+
 export type SetConversationHooksDebugData = {
     body: {
         enabled: boolean;
@@ -45620,6 +45706,7 @@ export type GetGuardrailsDeploymentResponses = {
      */
     200: {
         enabled: boolean;
+        unsupportedClientAction: 'bypass' | 'block';
         featureEnabled: boolean;
         active: boolean;
     };
@@ -45629,7 +45716,8 @@ export type GetGuardrailsDeploymentResponse = GetGuardrailsDeploymentResponses[k
 
 export type UpdateGuardrailsDeploymentData = {
     body: {
-        enabled: boolean;
+        enabled?: boolean;
+        unsupportedClientAction?: 'bypass' | 'block';
     };
     path?: never;
     query?: never;
@@ -45707,6 +45795,7 @@ export type UpdateGuardrailsDeploymentResponses = {
      */
     200: {
         enabled: boolean;
+        unsupportedClientAction: 'bypass' | 'block';
         featureEnabled: boolean;
         active: boolean;
     };

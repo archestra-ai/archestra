@@ -193,7 +193,7 @@ export function useDeleteBatteryInstall() {
       settled(
         await archestraApiSdk.deleteOpenappaBatteryInstall({ path: { id } }),
       ),
-    () => toast.success("Battery removed"),
+    () => toast.success("Battery detached"),
   );
 }
 

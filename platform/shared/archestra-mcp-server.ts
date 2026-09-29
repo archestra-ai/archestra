@@ -1,5 +1,9 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
-import { DEFAULT_APP_NAME, MCP_SERVER_TOOL_NAME_SEPARATOR } from "./consts";
+import {
+  DEFAULT_APP_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  PERSONAL_MCP_GATEWAY_NAME,
+} from "./consts";
 import { parseFullToolName, slugify } from "./utils";
 
 export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
@@ -135,6 +139,26 @@ export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
 // client on a gateway can pull a project's context into its own session.
 export const TOOL_LIST_PROJECTS_SHORT_NAME = "list_projects";
 export const TOOL_GET_PROJECT_SHORT_NAME = "get_project";
+// Scheduled tasks — the cron-driven agent triggers that live inside a project.
+// Tools manage project schedules and inspect their execution history.
+export const TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "create_schedule_trigger";
+export const TOOL_UPDATE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "update_schedule_trigger";
+export const TOOL_DELETE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "delete_schedule_trigger";
+export const TOOL_LIST_SCHEDULE_TRIGGERS_SHORT_NAME = "list_schedule_triggers";
+export const TOOL_GET_SCHEDULE_TRIGGER_SHORT_NAME = "get_schedule_trigger";
+export const TOOL_LIST_SCHEDULE_TRIGGER_RUNS_SHORT_NAME =
+  "list_schedule_trigger_runs";
+export const TOOL_GET_SCHEDULE_TRIGGER_RUN_SHORT_NAME =
+  "get_schedule_trigger_run";
+export const TOOL_ENABLE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "enable_schedule_trigger";
+export const TOOL_DISABLE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "disable_schedule_trigger";
+export const TOOL_RUN_SCHEDULE_TRIGGER_NOW_SHORT_NAME =
+  "run_schedule_trigger_now";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
@@ -301,6 +325,16 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_LIST_PROJECTS_SHORT_NAME,
   TOOL_GET_PROJECT_SHORT_NAME,
+  TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_UPDATE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_DELETE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_LIST_SCHEDULE_TRIGGERS_SHORT_NAME,
+  TOOL_GET_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_LIST_SCHEDULE_TRIGGER_RUNS_SHORT_NAME,
+  TOOL_GET_SCHEDULE_TRIGGER_RUN_SHORT_NAME,
+  TOOL_ENABLE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_DISABLE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_RUN_SCHEDULE_TRIGGER_NOW_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -509,6 +543,18 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   create_project_from_conversation: "projects",
   list_projects: "projects",
   get_project: "projects",
+  // Scheduled tasks are a project surface in the product (a project's
+  // Schedules section and its run history), so they group with Projects.
+  create_schedule_trigger: "projects",
+  update_schedule_trigger: "projects",
+  delete_schedule_trigger: "projects",
+  list_schedule_triggers: "projects",
+  get_schedule_trigger: "projects",
+  list_schedule_trigger_runs: "projects",
+  get_schedule_trigger_run: "projects",
+  enable_schedule_trigger: "projects",
+  disable_schedule_trigger: "projects",
+  run_schedule_trigger_now: "projects",
 
   search_tools: "meta",
   run_tool: "meta",
@@ -1288,6 +1334,61 @@ export function getArchestraToolPrefix(
  */
 export function toMcpClientServerName(gatewayName: string): string {
   return gatewayName.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+/**
+ * The deployment's own name as an MCP server name, e.g. "Acme AI" -> `acme_ai`.
+ * Used when a gateway's own name would tell the user nothing (see
+ * {@link resolveMcpClientServerName}).
+ */
+function toAppMcpServerName(appName: string): string {
+  return slugify(appName) || ARCHESTRA_MCP_SERVER_NAME;
+}
+
+/**
+ * The name a client registers the gateway under, as the user sees it in
+ * `claude /mcp`, `~/.cursor/mcp.json` and the rest.
+ *
+ * Every user gets a pre-seeded personal gateway called "My Gateway", so the
+ * literal gateway name put `my_gateway` in every client on the connect path.
+ * That name says nothing about which platform serves it. A personal gateway
+ * that still carries its seeded name therefore registers under the
+ * deployment's app name instead. A gateway the owner renamed, and every shared
+ * gateway, keeps its own name: those names were chosen deliberately.
+ */
+export function resolveMcpClientServerName(params: {
+  gatewayName: string;
+  appName: string;
+  isPersonalGateway?: boolean | null;
+}): string {
+  const { gatewayName, appName, isPersonalGateway } = params;
+  if (isPersonalGateway && isDefaultPersonalGatewayName(gatewayName)) {
+    return toAppMcpServerName(appName);
+  }
+  return toMcpClientServerName(gatewayName) || toAppMcpServerName(appName);
+}
+
+/**
+ * Names this same gateway was registered under by earlier versions of the
+ * connect flow, so a re-run can clean up or move the stale entry instead of
+ * leaving the client with two servers for one gateway. Empty when the current
+ * name is the only one ever generated.
+ */
+export function legacyMcpClientServerNames(params: {
+  gatewayName: string;
+  appName: string;
+  isPersonalGateway?: boolean | null;
+}): string[] {
+  const current = resolveMcpClientServerName(params);
+  const previous = toMcpClientServerName(params.gatewayName);
+  return previous && previous !== current ? [previous] : [];
+}
+
+function isDefaultPersonalGatewayName(gatewayName: string): boolean {
+  return (
+    gatewayName.trim().toLowerCase() ===
+    PERSONAL_MCP_GATEWAY_NAME.trim().toLowerCase()
+  );
 }
 
 function parseArchestraToolName(params: {

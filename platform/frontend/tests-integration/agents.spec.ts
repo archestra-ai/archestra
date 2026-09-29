@@ -8,6 +8,61 @@ import {
 import { expect, test } from "./fixtures";
 
 test.describe("Agents", () => {
+  test("keeps count columns compact as the table grows", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    await mswControl.registerMany([
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "false" },
+        body: makeAgentCatalog({
+          agents: [
+            makeAgent({
+              name: "Research and documentation assistant",
+              accessAllTools: true,
+              accessAllSubagents: true,
+            }),
+          ],
+        }),
+      },
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "true" },
+        body: makeAgentCatalog(),
+      },
+    ]);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await agentsPage.goto();
+    await page.getByRole("button", { name: "View as table" }).click();
+    const table = agentsPage.table.getByRole("table");
+    await expect(table.getByText("All", { exact: true })).toHaveCount(2);
+
+    const widths: number[][] = [];
+    for (const width of [1440, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+      const sizes: number[] = [];
+      for (const name of ["Name", "Tools", "Subagents"]) {
+        const header = table.getByRole("columnheader", { name, exact: true });
+        await expect(header).toBeVisible();
+        const bounds = await header.boundingBox();
+        expect(bounds).not.toBeNull();
+        sizes.push(bounds?.width ?? 0);
+      }
+      const [name, tools, subagents] = sizes;
+      expect(tools).toBeLessThanOrEqual(120);
+      expect(subagents).toBeLessThanOrEqual(120);
+      expect(name).toBeGreaterThan(tools + subagents);
+      widths.push(sizes);
+    }
+    expect(widths[1][0]).toBeGreaterThan(widths[0][0]);
+    expect(widths[1][1]).toBeCloseTo(widths[0][1], 0);
+    expect(widths[1][2]).toBeCloseTo(widths[0][2], 0);
+  });
+
   test("selects and bulk modifies regular and external A2A agents together", async ({
     page,
     agentsPage,

@@ -42,6 +42,7 @@ export type AgentSelectorAgent = {
   id: string;
   name: string;
   agentType: "agent" | "mcp_gateway" | "llm_proxy" | "profile";
+  isPersonalGateway?: boolean;
   icon?: string | null;
   scope?: "personal" | "team" | "org";
   authorName?: string | null;

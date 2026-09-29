@@ -183,6 +183,23 @@ export function openappaEnabled(): boolean {
   return config.openappa.enabled;
 }
 
+/** Read the persisted label of a started session without dispatching a hook. */
+export async function getOpenappaStatus(params: {
+  organizationId: string;
+  sessionId: string;
+}) {
+  if (!openappaEnabled()) return null;
+  try {
+    const module = await binding();
+    return await module.getOpenappaStatus(
+      params.organizationId,
+      params.sessionId,
+    );
+  } catch (error) {
+    throw openappaFailure(error);
+  }
+}
+
 /**
  * Carry the legacy `openappa_battery_installs` rows into the policy text every
  * composition now reads from. Runs before the runtime opens and before the

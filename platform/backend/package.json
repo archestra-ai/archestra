@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.4.0-rc.26",
+  "version": "1.4.0-rc.27",
   "description": "",
   "author": "",
   "private": true,
@@ -32,6 +32,7 @@
     "check:migrations": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-drizzle-migration-journal.ts && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/lint-drizzle-migrations.ts",
     "check:sandbox-base": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-sandbox-base-sync.ts",
     "check:test-imports": "dependency-cruiser --config .dependency-cruiser.mjs 'src/**/*.unit.test.ts' src/plugins/github-import.ts src/plugins/github-tree.ts src/plugins/plugin-tree-files.ts --output-type err && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-test-fixture-imports.ts",
+    "update:codex-models-client-version": "node scripts/update-codex-models-client-version.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node ./scripts/migrate-with-lock.mjs",
     "db:studio": "drizzle-kit studio",
@@ -173,7 +174,7 @@
     "sharp": "0.35.4",
     "smol-toml": "1.8.0",
     "tiktoken": "^1.0.22",
-    "undici": "7.29.0",
+    "undici": "7.29.1",
     "ws": "^8.20.1",
     "zod": "catalog:"
   },

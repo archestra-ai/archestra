@@ -107,6 +107,9 @@ export declare function editOpenappaPolicy(content: string, edits: Array<PolicyE
 /** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
 export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy): Promise<string>
 
+/** Read the current label of a started session without mutating its trajectory. */
+export declare function getOpenappaStatus(organizationId: string, sessionId: string): Promise<OpenappaStatus | null>
+
 export interface HelperBindingInput {
   /**
    * The endpoint every `command` external of the battery is served under; the
@@ -163,6 +166,11 @@ export interface OfferReviewOutput {
    * values cannot.
    */
   arguments?: string
+}
+
+export interface OpenappaStatus {
+  trust: string
+  audience: string
 }
 
 /**

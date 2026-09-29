@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  legacyMcpClientServerNames,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   providerDisplayNames,
   RouteId,
+  resolveMcpClientServerName,
   STARTUP_GUARD_FORMAT_VERSION,
   type SupportedProvider,
   SupportedProvidersSchema,
-  toMcpClientServerName,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -1000,9 +1001,17 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       userId: setup.userId,
     });
     if (!gateway) throw GONE();
+    const gatewayNaming = {
+      gatewayName: gateway.name,
+      appName,
+      isPersonalGateway: gateway.isPersonalGateway,
+    };
     mcp = {
-      serverName:
-        toMcpClientServerName(gateway.name) || toMcpServerSlug(appName),
+      serverName: resolveMcpClientServerName(gatewayNaming),
+      // Clients connected by an earlier run still hold the gateway's own name
+      // (e.g. `my_gateway`); the script moves those entries onto the name
+      // above instead of leaving one gateway registered twice.
+      legacyServerNames: legacyMcpClientServerNames(gatewayNaming),
       url: `${setup.baseUrl}/mcp/${gateway.slug ?? gateway.id}`,
     };
   }
@@ -1417,15 +1426,6 @@ function toProxyName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
-  return slug || "archestra";
-}
-
-/** White-label app name → fallback MCP server slug (mirrors the frontend). */
-function toMcpServerSlug(appName: string): string {
-  const slug = appName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
   return slug || "archestra";
 }
 

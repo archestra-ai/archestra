@@ -336,6 +336,7 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     expect(status.audience).not.toBe("");
 
     await goToPage(page, `/chat/${conversationId}`);
+    await page.getByRole("button", { name: "OpenAPPA status" }).click();
     const badge = page.getByRole("status", {
       name: `Trust: ${status.trust}; audience: ${status.audience}`,
     });

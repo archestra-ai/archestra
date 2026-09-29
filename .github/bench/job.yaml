@@ -51,10 +51,11 @@ spec:
           resources:
             requests:
               cpu: "250m"
-              memory: 512Mi
+              # 1Gi OOM-killed postgres mid-run (bench 113-1) once a full run got past seeding.
+              memory: 2Gi
             limits:
               cpu: "1"
-              memory: 1Gi
+              memory: 4Gi
           volumeMounts:
             - name: pgdata
               mountPath: /var/lib/postgresql/data

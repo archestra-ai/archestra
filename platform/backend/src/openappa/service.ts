@@ -1176,13 +1176,16 @@ export type AppaChildReturnRecord = {
  * Loads the child returns a parent's family durably crossed, from the retained
  * ChildEnd operations in PostgreSQL. This is the authority the parent side
  * verifies arriving completions against.
+ *
+ * The deployment switch is not read here. The request that verifies the
+ * returns read it at its boundary; a switch turned off mid-request must not
+ * empty the records and refuse returns the runtime did retain.
  */
 export async function loadChildReturns(params: {
   organizationId: string;
   parentSessionId: string;
 }): Promise<AppaChildReturnRecord[]> {
   try {
-    if (!(await isGuardrailsV2Active())) return [];
     const module = await binding();
     const records = await module.loadChildReturns(
       params.organizationId,

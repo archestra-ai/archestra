@@ -1168,6 +1168,11 @@ async function approveChildReturnCarriers(params: {
       ? { spawnCallId: envelopeIdOf(record.spawnCallId) }
       : {}),
   }));
+  // A fork carries its source's subagent results, but the runtime retained
+  // them under the source session, so the lookup above finds none of them.
+  const unrecorded = params.binding.session.fork_of
+    ? { reason: FORKED_CHILD_RETURN, recovery: FORKED_CHILD_RETURN_RECOVERY }
+    : { reason: UNRECORDED_CHILD_RETURN };
   const directSpawnResults = new Set(
     params.results
       .filter((result) => adapter?.isSpawnTool(result.name, result.namespace))
@@ -1215,10 +1220,12 @@ async function approveChildReturnCarriers(params: {
           record.spawnCallId !== expectedSpawn,
       )
     ) {
-      throw new ApiError(
-        400,
-        "OpenAPPA rejected a child return for another spawn call",
-      );
+      throw childReturnRefusal({
+        status: 400,
+        reason: SUBSTITUTED_CHILD_RETURN,
+        callId: expectedSpawn,
+        childNativeId: completion.childNativeId,
+      });
     }
     if (
       !first ||
@@ -1231,8 +1238,9 @@ async function approveChildReturnCarriers(params: {
     ) {
       const callId = completion.envelopeId ?? completion.spawnCallId;
       throw childReturnRefusal({
-        reason: first ? AMBIGUOUS_CHILD_RETURN : UNRECORDED_CHILD_RETURN,
+        ...(first ? { reason: AMBIGUOUS_CHILD_RETURN } : unrecorded),
         callId: callId && envelopeIdOf(callId),
+        childNativeId: completion.childNativeId,
       });
     }
     const hit = eligible[0].index;
@@ -1255,15 +1263,18 @@ async function approveChildReturnCarriers(params: {
       throw childReturnRefusal({
         reason: UNBOUND_CHILD_RETURN,
         callId: completion.envelopeId && envelopeIdOf(completion.envelopeId),
+        childNativeId: completion.childNativeId ?? record.childNativeId,
       });
     }
     if (completion.envelopeId) {
       const envelopeId = envelopeIdOf(completion.envelopeId);
       if (directSpawnResults.has(envelopeId) && envelopeId !== spawnCallId) {
-        throw new ApiError(
-          400,
-          "OpenAPPA rejected a child return for another spawn call",
-        );
+        throw childReturnRefusal({
+          status: 400,
+          reason: SUBSTITUTED_CHILD_RETURN,
+          callId: envelopeId,
+          childNativeId: completion.childNativeId ?? record.childNativeId,
+        });
       }
       const envelope = byEnvelope.get(envelopeId) ?? [];
       envelope.push(record);
@@ -1274,13 +1285,13 @@ async function approveChildReturnCarriers(params: {
       spawnCallId,
     });
   }
-  const unrecorded = completionResults.find(
+  const unrecordedResult = completionResults.find(
     (result) => (byEnvelope.get(envelopeIdOf(result.id)) ?? []).length === 0,
   );
-  if (unrecorded) {
+  if (unrecordedResult) {
     throw childReturnRefusal({
-      reason: UNRECORDED_CHILD_RETURN,
-      callId: envelopeIdOf(unrecorded.id),
+      ...unrecorded,
+      callId: envelopeIdOf(unrecordedResult.id),
     });
   }
   // Records every verified crossing with the runtime. The runtime re-checks
@@ -1301,10 +1312,7 @@ async function approveChildReturnCarriers(params: {
     const envelopeId = envelopeIdOf(result.id);
     const verified = byEnvelope.get(envelopeId) ?? [];
     if (verified.length === 0) {
-      throw childReturnRefusal({
-        reason: UNRECORDED_CHILD_RETURN,
-        callId: envelopeId,
-      });
+      throw childReturnRefusal({ ...unrecorded, callId: envelopeId });
     }
     updates[result.id] =
       verified.length === 1 &&
@@ -1331,25 +1339,47 @@ async function approveChildReturnCarriers(params: {
  */
 function childReturnRefusal(params: {
   reason: string;
+  recovery?: string;
   callId: string | undefined;
+  childNativeId?: string;
+  status?: 400 | 409;
 }): ApiError {
-  const target = params.callId
-    ? `tool call ${params.callId}`
-    : "this subagent result";
+  // Rewind pickers list the user's own messages, never tool call ids, so the
+  // ids are a reference for support and logs, not the rewind target.
+  const references = [
+    params.callId ? `tool call ${params.callId}` : undefined,
+    params.childNativeId ? `subagent ${params.childNativeId}` : undefined,
+  ].filter((reference) => reference !== undefined);
   const error = new ApiError(
-    409,
-    `OpenAPPA blocked this request. ${params.reason} Each request that contains this result fails the same way. To continue, start a new session, or rewind the conversation to before ${target}.`,
+    params.status ?? 409,
+    [
+      "OpenAPPA blocked this request.",
+      params.reason,
+      "Each request that contains this result fails the same way.",
+      params.recovery ?? CHILD_RETURN_RECOVERY,
+      ...(references.length > 0
+        ? [`Reference: ${references.join(", ")}.`]
+        : []),
+    ].join(" "),
   );
   error.shouldRetry = false;
   return error;
 }
 
+const CHILD_RETURN_RECOVERY =
+  "To continue, start a new session, or rewind the conversation to a message you sent before this subagent started.";
+const FORKED_CHILD_RETURN_RECOVERY =
+  "To keep this context, resume the original session. Otherwise, start a new session, or rewind the conversation to a message you sent before this subagent started.";
 const UNRECORDED_CHILD_RETURN =
   "The conversation contains a subagent result that OpenAPPA has no record of. This can happen when the subagent ran while Guardrails enforcement was off, or when the result changed after the subagent finished.";
+const FORKED_CHILD_RETURN =
+  "The conversation contains a subagent result that OpenAPPA has no record of in this session. This conversation continues another session, and OpenAPPA checks a subagent result only in the session that ran the subagent.";
 const AMBIGUOUS_CHILD_RETURN =
   "The conversation contains a subagent result that matches several subagents, so OpenAPPA cannot tell which subagent returned it.";
 const UNBOUND_CHILD_RETURN =
   "The conversation contains a subagent result that OpenAPPA cannot link to the call that started the subagent.";
+const SUBSTITUTED_CHILD_RETURN =
+  "The conversation contains a subagent result that matches the result of a different subagent call.";
 
 async function admitChildHandback(params: {
   binding: AppaPluginBinding;

@@ -4243,6 +4243,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         },
       ]);
       expect(substituted.statusCode, substituted.body).toBe(400);
+      expect(substituted.json().error.message).toContain(
+        "matches the result of a different subagent call",
+      );
       expect(providerRequests).toHaveLength(0);
 
       providerRequests.length = 0;
@@ -4352,7 +4355,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         ],
       ],
       [
-        "a background notification",
+        "a completed task notification",
         [
           {
             type: "tool_result",
@@ -4407,8 +4410,98 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       // The same history fails the same way, so the SDK must not retry it.
       expect(response.headers["x-should-retry"]).toBe("false");
       const { message } = response.json().error;
-      expect(message).toContain("toolu_unprotected_agent");
+      expect(message).toContain("Guardrails enforcement was off");
       expect(message).toContain("start a new session");
+      expect(message).toContain("tool call toolu_unprotected_agent");
+    });
+
+    // Retained returns are looked up by the session that ran the subagent, so
+    // a fork that carries the parent's history cannot verify them.
+    test("names the source session when a fork carries a subagent return retained there", async () => {
+      config.openappa.offerSigningSecret = secret;
+      const parent = "7f0c6d52-5d2b-4d8e-9c1e-2b6f3f0a9e11";
+      const fork = "1c9b8a2e-4f3d-4a6b-8e7f-5d4c3b2a1f09";
+      const claudeCode = (session: string) => ({
+        ...externalClientHeaders(),
+        "user-agent": "claude-cli/2.1.285 (external, cli)",
+        "x-claude-code-session-id": session,
+      });
+      // The parent's turn stamps the call, which lets the fork name its source.
+      const first = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: claudeCode(parent),
+        payload: payload(false) as Record<string, unknown>,
+      });
+      expect(first.statusCode, first.body).toBe(200);
+      const given = noticeFrom(first.body, false);
+      const report = "The lockfile is stale.";
+      native.loadChildReturns.mockImplementation(
+        async (_orgId: string, parentSessionId: string) =>
+          parentSessionId === `user:${userId}|${parent}`
+            ? [
+                {
+                  childSessionId: `user:${userId}|${parent}:a1`,
+                  spawnCallId: "toolu_forked_agent",
+                  childNativeId: "a1",
+                  value: report,
+                },
+              ]
+            : [],
+      );
+      const body = payload(false, [
+        { role: "user", content: "Check the weather, then the build" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: given.id,
+              name: given.name,
+              input: given.input,
+            },
+            {
+              type: "tool_use",
+              id: "toolu_forked_agent",
+              name: "Agent",
+              input: { description: "Check the build", prompt: spawnPrompt },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: given.id, content: "Sunny" },
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_forked_agent",
+              content: [{ type: "text", text: report }],
+            },
+          ],
+        },
+      ]);
+      body.tools.push({
+        name: "Agent",
+        description: "Launch a subagent",
+        input_schema: { type: "object", properties: {} },
+      });
+      providerRequests.length = 0;
+
+      const forked = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: claudeCode(fork),
+        payload: body,
+      });
+
+      expect(forked.statusCode, forked.body).toBe(409);
+      expect(providerRequests).toHaveLength(0);
+      const { message } = forked.json().error;
+      expect(message).toContain("continues another session");
+      expect(message).toContain("resume the original session");
+      expect(message).not.toContain("Guardrails enforcement was off");
     });
 
     test("a Codex spawn_agent keeps its namespace on the re-emitted stream, and its grandchild binds under the root", async ({
@@ -5015,6 +5108,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         ],
       });
       expect(ambiguous.statusCode, ambiguous.body).toBe(409);
+      expect(ambiguous.json().error.message).toContain(
+        "matches several subagents",
+      );
       expect(providerRequests).toHaveLength(0);
       crossingScenario = "normal";
 

@@ -53,7 +53,9 @@ import {
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { TablePagination } from "@/components/ui/table-pagination";
 import {
@@ -149,7 +151,7 @@ function KnowledgeBasesList() {
     ...scopeFilters,
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingKb, setDeletingKb] = useState<KnowledgeBaseItem | null>(null);
   const [permanentlyDeletingKb, setPermanentlyDeletingKb] =
     useState<KnowledgeBaseItem | null>(null);
   const restoreKnowledgeBase = useRestoreKnowledgeBase();
@@ -313,7 +315,7 @@ function KnowledgeBasesList() {
           icon: <Trash2 className="h-4 w-4" />,
           label: "Delete",
           variant: "destructive",
-          onClick: () => setDeletingId(kb.id),
+          onClick: () => setDeletingKb(kb),
         },
       ];
     },
@@ -668,11 +670,10 @@ function KnowledgeBasesList() {
             />
           )}
 
-          {deletingId && (
+          {deletingKb && (
             <DeleteKnowledgeBaseDialog
-              knowledgeBaseId={deletingId}
-              open={!!deletingId}
-              onOpenChange={(open) => !open && setDeletingId(null)}
+              knowledgeBase={deletingKb}
+              onOpenChange={(open) => !open && setDeletingKb(null)}
             />
           )}
 
@@ -1132,34 +1133,69 @@ function RemoveConnectorDialog({
   );
 }
 
-function DeleteKnowledgeBaseDialog({
-  knowledgeBaseId,
-  open,
+export function DeleteKnowledgeBaseDialog({
+  knowledgeBase,
   onOpenChange,
 }: {
-  knowledgeBaseId: string;
-  open: boolean;
+  knowledgeBase: KnowledgeBaseItem;
   onOpenChange: (open: boolean) => void;
 }) {
-  const deleteKnowledgeBase = useDeleteKnowledgeBase();
-
-  const handleDelete = useCallback(async () => {
-    const result = await deleteKnowledgeBase.mutateAsync(knowledgeBaseId);
-    if (result) {
-      onOpenChange(false);
-    }
-  }, [knowledgeBaseId, deleteKnowledgeBase, onOpenChange]);
+  const [deleteAgentIds, setDeleteAgentIds] = useState<string[]>([]);
+  const deletion = useDeleteKnowledgeBase();
+  const agents = knowledgeBase.assignedAgents;
 
   return (
     <DeleteConfirmDialog
-      open={open}
-      onOpenChange={onOpenChange}
+      open
+      onOpenChange={(open) => {
+        if (!deletion.isPending) onOpenChange(open);
+      }}
       title="Delete Knowledge Base"
-      description="Are you sure you want to delete this knowledge base? Its connectors are not deleted and keep working. An admin can restore it from the Deleted view until it is permanently removed."
-      isPending={deleteKnowledgeBase.isPending}
-      onConfirm={handleDelete}
+      description={`Delete "${knowledgeBase.name}"? Its connectors keep working. An admin can restore the knowledge base from the Deleted view until it is permanently removed.`}
+      isPending={deletion.isPending}
+      onConfirm={() => {
+        deletion.mutate(
+          {
+            id: knowledgeBase.id,
+            deleteAgentIds,
+          },
+          { onSuccess: (result) => result && onOpenChange(false) },
+        );
+      }}
       confirmLabel="Delete Knowledge Base"
-      pendingLabel="Deleting..."
-    />
+    >
+      {agents.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Also delete associated agents:</p>
+          {agents.map((agent) => (
+            <div key={agent.id} className="flex items-start gap-2">
+              <Checkbox
+                id={`delete-agent-${agent.id}`}
+                checked={deleteAgentIds.includes(agent.id)}
+                onCheckedChange={(checked) =>
+                  setDeleteAgentIds((ids) =>
+                    checked === true
+                      ? [...ids, agent.id]
+                      : ids.filter((id) => id !== agent.id),
+                  )
+                }
+                disabled={deletion.isPending}
+                aria-describedby="delete-associated-agents-description"
+              />
+              <Label htmlFor={`delete-agent-${agent.id}`} className="leading-5">
+                {agent.name}
+              </Label>
+            </div>
+          ))}
+          <p
+            id="delete-associated-agents-description"
+            className="text-sm text-muted-foreground"
+          >
+            These agents will stop working in all chats and knowledge bases that
+            use them. They can be restored separately later.
+          </p>
+        </div>
+      )}
+    </DeleteConfirmDialog>
   );
 }

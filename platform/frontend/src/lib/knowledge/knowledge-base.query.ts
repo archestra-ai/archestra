@@ -1,12 +1,14 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { toBulkOutcome } from "@/lib/bulk-action";
+import { memberDefaultAgentQueryKey } from "@/lib/agent.query";
+import { reportBulkOutcome, toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useOrganization } from "@/lib/organization.query";
 import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
+  bulkDeleteAgents,
   bulkDeleteKnowledgeBases,
   getKnowledgeBases,
   getKnowledgeBase,
@@ -216,11 +218,34 @@ export function useUpdateKnowledgeBase() {
 export function useDeleteKnowledgeBase() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({
+      id,
+      deleteAgentIds,
+    }: {
+      id: string;
+      deleteAgentIds: string[];
+    }) => {
       const { data, error } = await deleteKnowledgeBase({ path: { id } });
       if (error) {
         handleApiError(error);
         return null;
+      }
+      if (data && deleteAgentIds.length > 0) {
+        const result = await bulkDeleteAgents({
+          body: { ids: deleteAgentIds },
+        });
+        if (result.error) {
+          handleApiError(result.error);
+        } else if (result.data) {
+          reportBulkOutcome({
+            outcome: toBulkOutcome(result.data),
+            verb: "Deleted",
+            failureVerb: "delete",
+            noun: "agent",
+          });
+        }
+        queryClient.invalidateQueries({ queryKey: ["agents"] });
+        queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
       }
       return data;
     },

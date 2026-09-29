@@ -363,9 +363,12 @@ export function useCreateProfile() {
       }
       return responseData;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      if (variables.knowledgeBaseIds?.length) {
+        queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      }
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
       // Invalidate profile tokens for the new profile
       if (data?.id) {

@@ -1,6 +1,10 @@
 import { FormDialog } from "@/components/form-dialog";
 import { Button, type ButtonProps } from "@/components/ui/button";
-import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 
 type DeleteConfirmDialogProps = {
   open: boolean;
@@ -12,6 +16,7 @@ type DeleteConfirmDialogProps = {
   confirmLabel?: string;
   pendingLabel?: string;
   confirmDisabled?: boolean;
+  children?: React.ReactNode;
   /**
    * Defaults to the destructive red this dialog is named for. Reusable by
    * confirmations that are merely irreversible-looking rather than destructive,
@@ -30,6 +35,7 @@ export function DeleteConfirmDialog({
   confirmLabel = "Delete",
   pendingLabel = "Deleting...",
   confirmDisabled = false,
+  children,
   confirmVariant = "destructive",
 }: DeleteConfirmDialogProps) {
   return (
@@ -60,6 +66,7 @@ export function DeleteConfirmDialog({
           onConfirm();
         }}
       >
+        {children && <DialogBody>{children}</DialogBody>}
         <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
           <Button
             type="button"

@@ -398,9 +398,9 @@ export function OpenAppaCreateRepositoryDialog({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            The App needs repository creation, contents, pull requests, and
-            workflow permissions. Install it for all repositories so it can
-            access the new one.
+            The App needs repository administration, contents, and pull request
+            permissions. Install it for all repositories so it can access the
+            new one.
           </p>
         </div>
       </StandardFormDialog>

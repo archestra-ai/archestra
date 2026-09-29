@@ -15,14 +15,12 @@ import { vi } from "vitest";
 import { hasPermission, userHasPermission } from "@/auth/utils";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
-vi.mock("@/auth/utils", () => ({
-  hasPermission: vi.fn(),
-  userHasPermission: vi.fn(),
-}));
+vi.mock("@/auth/utils");
 
 describe("mcp server inspect route — outbound enterprise credential", () => {
   let app: FastifyInstanceWithZod;
@@ -31,9 +29,11 @@ describe("mcp server inspect route — outbound enterprise credential", () => {
   let server: Server;
   let baseUrl: string;
   let upstreamRequestHeaders: Array<Record<string, string | undefined>>;
+  let exchangeScopes: Array<string | null>;
 
   beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
     upstreamRequestHeaders = [];
+    exchangeScopes = [];
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -48,6 +48,9 @@ describe("mcp server inspect route — outbound enterprise credential", () => {
       req.on("end", () => {
         // The IdP's token endpoint, exchanging the caller's assertion.
         if (req.url?.startsWith("/token")) {
+          exchangeScopes.push(
+            new URLSearchParams(Buffer.concat(chunks).toString()).get("scope"),
+          );
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(
             JSON.stringify({
@@ -127,6 +130,7 @@ describe("mcp server inspect route — outbound enterprise credential", () => {
   });
 
   afterEach(async () => {
+    await app.close();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     vi.mocked(hasPermission).mockReset();
     vi.mocked(userHasPermission).mockReset();
@@ -138,7 +142,7 @@ describe("mcp server inspect route — outbound enterprise credential", () => {
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
-    const identityProvider = await makeIdentityProvider(user.id, {
+    const identityProvider = await makeIdentityProvider(organizationId, {
       providerId: "keycloak",
       issuer: `${baseUrl}/realms/archestra`,
       oidcConfig: {
@@ -195,4 +199,90 @@ describe("mcp server inspect route — outbound enterprise credential", () => {
       expect(headers.authorization).toBeUndefined();
     }
   });
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test("rejects a missing Entra target and recovers after configuring the resource", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const identityProvider = await makeIdentityProvider(organizationId, {
+      providerId: "entra",
+      issuer: baseUrl,
+      oidcConfig: {
+        clientId: "synthetic-client",
+        clientSecret: "synthetic-secret",
+        tokenEndpoint: `${baseUrl}/token`,
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "entra_obo",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+          tokenEndpoint: `${baseUrl}/token`,
+        },
+      },
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Synthetic Entra Server",
+      serverType: "remote",
+      serverUrl: `${baseUrl}/mcp`,
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await makeAccount(user.id, {
+      providerId: "entra",
+      accessToken: "synthetic-session-token",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: {
+        type: "api_validation_error",
+        message:
+          "Configure a Managed Resource Identifier or scopes for this MCP server before using Entra token exchange.",
+      },
+    });
+    expect(upstreamRequestHeaders).toEqual([]);
+    expect(exchangeScopes).toEqual([]);
+
+    await InternalMcpCatalogModel.update(catalog.id, {
+      enterpriseManagedConfig: {
+        ...catalog.enterpriseManagedConfig,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+        resourceIdentifier: "api://synthetic-resource",
+      },
+    });
+    const correctedResponse = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(correctedResponse.statusCode).toBe(200);
+    expect(correctedResponse.json()).toMatchObject({
+      tools: [expect.objectContaining({ name: "get_application" })],
+    });
+    expect(exchangeScopes).toEqual(["api://synthetic-resource/.default"]);
+    expect(upstreamRequestHeaders.length).toBeGreaterThan(0);
+    for (const headers of upstreamRequestHeaders) {
+      expect(headers.authorization).toBe("Bearer exchanged-upstream-token");
+    }
+  });
+  // SPDX-SnippetEnd
 });

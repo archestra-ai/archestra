@@ -771,6 +771,12 @@ function BatteryDialog({
               })}
             </ul>
           )}
+          {writable && servers.length === 1 && (
+            <p className="text-xs text-muted-foreground">
+              Detaching the last server also removes the battery from the
+              policy.
+            </p>
+          )}
           {writable && summary && (
             <AttachServerPicker
               batteryName={summary.name}
@@ -927,7 +933,13 @@ function AttachServerPicker({
   const id = `battery-server-${batteryName}`;
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>Attach to a server</Label>
+      <div className="space-y-0.5">
+        <Label htmlFor={id}>Attach to a server</Label>
+        <p className="text-xs text-muted-foreground">
+          Points the battery's rules at this server's tools. The server itself
+          doesn't change.
+        </p>
+      </div>
       <div className="flex items-center gap-2">
         <SearchableSelect
           id={id}

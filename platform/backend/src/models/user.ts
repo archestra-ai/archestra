@@ -230,6 +230,7 @@ class UserModel {
       // the unit of success.
       await McpServerModel.purgePersonalServersForUserInTransaction(userId, tx);
       await AgentModel.deletePersonalMcpGatewaysForUser(userId, tx);
+      await AgentModel.deletePersonalAgentsForUser({ userId, tx });
       await SkillModel.deletePersonalSkillsForUser(userId, tx);
       const result = await tx
         .delete(schema.usersTable)
@@ -265,6 +266,15 @@ class UserModel {
       logger.error(
         { err: error, userId },
         "UserModel.delete: failed to delete personal MCP gateways",
+      );
+    }
+
+    try {
+      await AgentModel.deletePersonalAgentsForUser({ userId });
+    } catch (error) {
+      logger.error(
+        { err: error, userId },
+        "UserModel.delete: failed to delete personal agents",
       );
     }
 

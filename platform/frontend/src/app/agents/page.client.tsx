@@ -64,6 +64,7 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import {
   isProviderApiKeyId,
   ProviderKeyFilterSelect,
@@ -774,7 +775,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <LabelTags labels={agent.labels} />
           </span>
         }
-        description={agent.description}
+        description={
+          <>
+            <PersonalResourceOwner
+              resource={agent}
+              currentUserId={currentUserId}
+            />
+            {agent.description && (
+              <span className="block">{agent.description}</span>
+            )}
+          </>
+        }
         actions={renderAgentActions(agent)}
         onNavigate={
           isDeletedView
@@ -863,6 +874,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             }
             builtIn={agent.builtIn ?? undefined}
             description={agent.description}
+            owner={{ resource: agent, currentUserId }}
             labels={agent.labels}
             extraBadges={
               <>

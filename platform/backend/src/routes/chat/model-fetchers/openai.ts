@@ -14,7 +14,7 @@ import {
 } from "./types";
 
 // Codex uses client_version to gate models that require a newer client.
-// Use a verified Codex CLI version until release tracking is automated.
+// A weekly workflow proposes updates from stable Codex CLI releases.
 const CODEX_MODELS_CLIENT_VERSION = "0.158.0";
 
 const CodexModelsResponseSchema = z.object({

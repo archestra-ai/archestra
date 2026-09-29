@@ -17,6 +17,7 @@ import {
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
   copilotAttributionHeadersValue,
+  legacyServerNames,
   opencodeOAuthNextStep,
   opencodeProviderTarget,
   opencodeProxyHeaders,
@@ -365,7 +366,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
     case "cursor":
       if (ctx.mcp) {
         steps.push(
-          `Open Cursor settings → MCP and toggle on "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
+          `Open Cursor Customize → MCPs and authenticate "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
         );
       }
       if (ctx.proxy) {
@@ -375,7 +376,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills) {
         steps.push(
-          "Run /add-plugin in Cursor's command palette and paste the clone URL printed above.",
+          "Reload Cursor, then open Customize → Skills to confirm the shared skills are available.",
         );
       }
       break;
@@ -489,9 +490,15 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
     // this user (see connection-setup-script.ts for the full rationale). Clear
     // both local and user scopes first so a stale local entry can't shadow the
     // user entry.
+    const stale = legacyServerNames(ctx.mcp)
+      .flatMap((name) => [
+        `try { claude mcp remove --scope local ${psq(name)} 2>$null | Out-Null } catch { }`,
+        `try { claude mcp remove --scope user ${psq(name)} 2>$null | Out-Null } catch { }`,
+      ])
+      .join("\n");
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 try { claude mcp remove --scope local ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
-try { claude mcp remove --scope user ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
+try { claude mcp remove --scope user ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
 claude mcp add --scope user --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}
 if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }`);
   }
@@ -815,8 +822,14 @@ if ((Test-Path $arch_config) -and -not (Test-Path ($arch_config + '.archestra-ba
   }
 
   if (ctx.mcp) {
+    const stale = legacyServerNames(ctx.mcp)
+      .map(
+        (name) =>
+          `try { codex mcp remove ${psq(name)} 2>$null | Out-Null } catch { }`,
+      )
+      .join("\n");
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
+try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
 codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}
 if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }`);
   }
@@ -939,8 +952,14 @@ function copilotSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
   if (ctx.mcp) {
+    const stale = legacyServerNames(ctx.mcp)
+      .map(
+        (name) =>
+          `try { copilot mcp remove ${psq(name)} 2>$null | Out-Null } catch { }`,
+      )
+      .join("\n");
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-try { copilot mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
+try { copilot mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
 copilot mcp add --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}
 if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }
 copilot mcp get ${psq(ctx.mcp.serverName)}`);
@@ -1179,6 +1198,9 @@ if (-not $arch_config.PSObject.Properties['mcpServers']) { $arch_config | Add-Me
 $arch_servers = $arch_config.mcpServers
 $arch_server_name = ${psq(ctx.mcp.serverName)}
 $arch_entry = [pscustomobject]@{ url = ${psq(ctx.mcp.url)} }
+foreach ($arch_legacy in @(${legacyServerNames(ctx.mcp).map(psq).join(", ") || "''"})) {
+  if ($arch_legacy -and $arch_servers.PSObject.Properties[$arch_legacy]) { $arch_servers.PSObject.Properties.Remove($arch_legacy) }
+}
 if ($arch_servers.PSObject.Properties[$arch_server_name]) { $arch_servers.$arch_server_name = $arch_entry } else { $arch_servers | Add-Member -NotePropertyName $arch_server_name -NotePropertyValue $arch_entry }
 $arch_config | ConvertTo-Json -Depth 32 | Set-Content -Path $arch_path -Encoding utf8
 Write-Host ('Updated ' + $arch_path)`);
@@ -1192,20 +1214,48 @@ In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
   1. Turn on "Override OpenAI Base URL" and paste: ${ctx.proxy.url}
   2. ${
     ctx.proxy.virtualKey
-      ? `Paste this key into the API Key field and click Verify:
+      ? `Paste this key into the API Key field and turn on "Use OpenAI API Key":
      ${ctx.proxy.virtualKey}`
-      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and click Verify.`
+      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and turn on "Use OpenAI API Key". A Cursor subscription cannot be used as a provider credential.`
   }
 '@`);
   }
 
   if (ctx.skills) {
     const pluginNames = ctx.skills.pluginNames ?? [];
-    sections.push(`Say ${psq(`${describeMarketplaceContents(ctx.skills).label} (manual step)`)}
+    sections.push(`Say ${psq(`Installing ${describeMarketplaceContents(ctx.skills).label} for Cursor`)}
+$cursorSkillsDir = Join-Path $env:USERPROFILE ${psq(`.cursor/skills/${ctx.skills.marketplaceName}`)}
+$cursorSkillsInstalled = $false
+if (Get-Command git -ErrorAction SilentlyContinue) {
+  if (Test-Path (Join-Path $cursorSkillsDir '.git')) {
+    & git -C $cursorSkillsDir remote set-url origin ${psq(ctx.skills.cloneUrl)} *> $null
+    if ($LASTEXITCODE -eq 0) {
+      & git -C $cursorSkillsDir pull --ff-only -q *> $null
+      $cursorSkillsInstalled = $LASTEXITCODE -eq 0
+    }
+  } elseif (-not (Test-Path $cursorSkillsDir)) {
+    $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $cursorSkillsDir)
+    & git clone -q ${psq(ctx.skills.cloneUrl)} $cursorSkillsDir *> $null
+    $cursorSkillsInstalled = $LASTEXITCODE -eq 0
+  } else {
+    Warn ${psq("Cursor skills folder already exists and is not a Git repository.")}
+  }
+} else {
+  Warn ${psq("git is not installed. Install git to fetch shared skills for Cursor.")}
+}
+if ($cursorSkillsInstalled) {
+  Ok ${psq(`Cursor skills installed in ~/.cursor/skills/${ctx.skills.marketplaceName}.`)}
+} else {
+  Warn ${psq("Cursor skills installation failed. Retry after checking git access to the marketplace.")}
 Write-Host @'
 
-In Cursor's command palette run /add-plugin and paste:
-  ${ctx.skills.cloneUrl}
+Clone the marketplace into ~/.cursor/skills/${ctx.skills.marketplaceName}:
+  git clone ${psq(ctx.skills.cloneUrl)} "$HOME/.cursor/skills/${ctx.skills.marketplaceName}"
+'@
+}
+Write-Host @'
+
+Reload Cursor and open Customize > Skills to confirm the shared skills are available.
 ${
   pluginNames.length > 0
     ? `
@@ -1333,6 +1383,9 @@ function Enable-ArchOcProviders($cfg, [string[]]$providerIds) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 $archCfg = Read-ArchOcOwned
 if (-not $archCfg.PSObject.Properties['mcp']) { Set-ArchProp $archCfg 'mcp' ([pscustomobject]@{}) }
+foreach ($archLegacy in @(${legacyServerNames(ctx.mcp).map(psq).join(", ") || "''"})) {
+  if ($archLegacy -and $archCfg.mcp.PSObject.Properties[$archLegacy]) { $archCfg.mcp.PSObject.Properties.Remove($archLegacy) }
+}
 Set-ArchProp $archCfg.mcp ${psq(ctx.mcp.serverName)} ([pscustomobject]@{ type = 'remote'; url = ${psq(ctx.mcp.url)} })
 Write-ArchOcOwned $archCfg`);
   }

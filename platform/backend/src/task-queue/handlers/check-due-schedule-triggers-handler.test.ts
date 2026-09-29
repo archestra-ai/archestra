@@ -26,8 +26,11 @@ describe("handleCheckDueScheduleTriggers", () => {
   test("does nothing when no triggers are due", async ({
     makeScheduleTrigger,
   }) => {
-    // lastExecutedAt = now → next run is a minute out → not due yet.
-    const trigger = await makeScheduleTrigger({ lastExecutedAt: new Date() });
+    // Keep the next run beyond the test's execution window, even if the
+    // wall clock crosses a minute boundary while creating the trigger.
+    const trigger = await makeScheduleTrigger({
+      lastExecutedAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
 
     await handleCheckDueScheduleTriggers();
 

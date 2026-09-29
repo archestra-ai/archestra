@@ -141,6 +141,16 @@ function fullContext(
   };
 }
 
+/**
+ * The same gateway as {@link MCP}, as a client that connected before the
+ * app-name change still holds it: registered under the gateway's own name.
+ */
+const MCP_WITH_LEGACY_NAME = {
+  ...MCP,
+  serverName: "archestra",
+  legacyServerNames: ["my_gateway"],
+};
+
 /** Every rendered variant must be parseable bash. */
 async function expectValidBash(script: string): Promise<void> {
   const dir = await mkdtemp(path.join(tmpdir(), "archestra-script-"));
@@ -1972,12 +1982,148 @@ ${script.slice(start, end)}
     expect(script).not.toMatch(/<<[ \t]*ARCHESTRA/);
   });
 
-  test("cursor: merges mcp.json without auth headers (OAuth) and prints manual proxy steps", () => {
-    const script = renderSetupScript(fullContext("cursor"));
-    expect(script).toContain("ARCHESTRA_MCP_SERVER_NAME");
+  test.each([
+    "macos",
+    "windows",
+  ] as const)("cursor (%s): prints the working plugin and model setup steps", (platform) => {
+    const script = renderSetupScript(fullContext("cursor", platform));
+    expect(script).toContain(
+      platform === "windows"
+        ? "$arch_server_name"
+        : "ARCHESTRA_MCP_SERVER_NAME",
+    );
     expect(script).not.toContain("Authorization");
     expect(script).toContain("Override OpenAI Base URL");
-    expect(script).toContain("/add-plugin");
+    expect(script).toContain("Cursor Customize → MCPs");
+    expect(script).toContain('turn on "Use OpenAI API Key"');
+    expect(script).not.toContain("click Verify");
+    expect(script).toContain(".cursor/skills/");
+    expect(script).toContain("git clone");
+    expect(script).toContain("Customize > Skills");
+    expect(script).not.toContain("command palette");
+  });
+
+  test.each([
+    "macos",
+    "windows",
+  ] as const)("cursor (%s): requires an API key for passthrough", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("cursor", platform),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+    expect(script).toContain("Paste your own OpenAI API key");
+    expect(script).toContain("A Cursor subscription cannot be used");
+  });
+
+  test("cursor: setup preserves MCP servers and installs discoverable skills from a Git repository", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-connect-"));
+    try {
+      await mkdir(path.join(home, ".cursor"));
+      const source = path.join(home, "source");
+      await mkdir(path.join(source, "plugins", "skills", "skills", "example"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(source, "plugins", "skills", "skills", "example", "SKILL.md"),
+        "---\nname: example\ndescription: Example skill\n---\n",
+      );
+      await execFileAsync("git", [
+        "-C",
+        source,
+        "init",
+        "-q",
+        "--initial-branch=main",
+      ]);
+      await execFileAsync("git", ["-C", source, "add", "."]);
+      await execFileAsync("git", [
+        "-C",
+        source,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.test",
+        "commit",
+        "-qm",
+        "Initial skills",
+      ]);
+      await writeFile(
+        path.join(home, ".cursor/mcp.json"),
+        JSON.stringify({
+          mcpServers: { existing: { url: "https://example.test/mcp" } },
+        }),
+      );
+      const scriptPath = path.join(home, "connect.sh");
+      const context = fullContext("cursor");
+      if (!context.skills) throw new Error("Missing skills");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...context,
+          skills: { ...context.skills, cloneUrl: source },
+        }),
+      );
+      const { stdout } = await execFileAsync("bash", [scriptPath], {
+        env: {
+          ...process.env,
+          HOME: home,
+          NO_COLOR: "1",
+        },
+      });
+      const mcp = JSON.parse(
+        await readFile(path.join(home, ".cursor/mcp.json"), "utf8"),
+      );
+      expect(mcp.mcpServers).toMatchObject({
+        existing: { url: "https://example.test/mcp" },
+        [MCP.serverName]: { url: MCP.url },
+      });
+      expect(stdout).toContain("Reload Cursor and open Customize > Skills");
+      expect(stdout).toContain('turn on "Use OpenAI API Key"');
+      expect(stdout).not.toContain(source);
+      expect(
+        await readFile(
+          path.join(
+            home,
+            ".cursor/skills",
+            SKILLS.marketplaceName,
+            "plugins/skills/skills/example/SKILL.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("name: example");
+
+      await writeFile(
+        path.join(source, "plugins", "skills", "skills", "example", "SKILL.md"),
+        "---\nname: example\ndescription: Updated skill\n---\n",
+      );
+      await execFileAsync("git", ["-C", source, "add", "."]);
+      await execFileAsync("git", [
+        "-C",
+        source,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.test",
+        "commit",
+        "-qm",
+        "Update skill",
+      ]);
+      await execFileAsync("bash", [scriptPath], {
+        env: { ...process.env, HOME: home, NO_COLOR: "1" },
+      });
+      expect(
+        await readFile(
+          path.join(
+            home,
+            ".cursor/skills",
+            SKILLS.marketplaceName,
+            "plugins/skills/skills/example/SKILL.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("Updated skill");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });
 
@@ -2291,7 +2437,7 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain(".cursor\\mcp.json");
     expect(script).toContain("mcpServers");
     expect(script).toContain("Override OpenAI Base URL");
-    expect(script).toContain("/add-plugin");
+    expect(script).toContain("Customize > Skills");
   });
 
   test("github-copilot passthrough without device-flow config throws", () => {
@@ -2507,5 +2653,120 @@ describe("buildSetupCommand / proxyBaseUrlToOrigin", () => {
     ).toBe(
       "irm 'https://host.example.com/api/connection-setups/script/archestra_con_abc' | iex",
     );
+  });
+});
+
+describe("migrating a gateway registered under an older name", () => {
+  // Every member's gateway is seeded as "My Gateway", so clients connected
+  // before this change hold it as `my_gateway`. A re-run must move that entry
+  // rather than leave the user with the same gateway listed twice.
+  test("claude-code drops the old entry from both scopes", async () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "cli claude mcp remove --scope local 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      "cli claude mcp remove --scope user 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      `cli claude mcp add --scope user --transport http 'archestra' '${MCP.url}'`,
+    );
+    // The removals must precede the add, or the add is undone immediately.
+    expect(script.indexOf("mcp remove --scope user 'my_gateway'")).toBeLessThan(
+      script.indexOf("mcp add --scope user"),
+    );
+    await expectValidBash(script);
+  });
+
+  test("codex drops the old entry", async () => {
+    const script = renderSetupScript({
+      ...fullContext("codex"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "cli codex mcp remove 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      `cli codex mcp add 'archestra' --url '${MCP.url}'`,
+    );
+    await expectValidBash(script);
+  });
+
+  test("copilot drops the old entry", async () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "cli copilot mcp remove 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    await expectValidBash(script);
+  });
+
+  test("cursor moves the mcp.json entry onto the new name", async () => {
+    const script = renderSetupScript({
+      ...fullContext("cursor"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain("ARCHESTRA_MCP_LEGACY_NAMES='[\"my_gateway\"]'");
+    expect(script).toContain("ARCHESTRA_MCP_SERVER_NAME='archestra'");
+    await expectValidBash(script);
+  });
+
+  test("opencode moves the config entry onto the new name", async () => {
+    const script = renderSetupScript({
+      ...fullContext("opencode"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "ARCHESTRA_OC_MCP_LEGACY_NAMES='[\"my_gateway\"]'",
+    );
+    expect(script).toContain("ARCHESTRA_OC_MCP_NAME='archestra'");
+    await expectValidBash(script);
+  });
+
+  test("windows claude-code drops the old entry from both scopes", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code", "windows"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "try { claude mcp remove --scope local 'my_gateway' 2>$null | Out-Null } catch { }",
+    );
+    expect(script).toContain(
+      "try { claude mcp remove --scope user 'my_gateway' 2>$null | Out-Null } catch { }",
+    );
+    expect(script).toContain(
+      `claude mcp add --scope user --transport http 'archestra' '${MCP.url}'`,
+    );
+  });
+
+  test("windows cursor and opencode drop the old config entry", () => {
+    const cursor = renderSetupScript({
+      ...fullContext("cursor", "windows"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+    const opencode = renderSetupScript({
+      ...fullContext("opencode", "windows"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(cursor).toContain("foreach ($arch_legacy in @('my_gateway'))");
+    expect(opencode).toContain("foreach ($archLegacy in @('my_gateway'))");
+  });
+
+  test("emits no migration when the gateway keeps its own name", () => {
+    const script = renderSetupScript(fullContext("claude-code"));
+
+    expect(script).not.toContain("my_gateway");
   });
 });

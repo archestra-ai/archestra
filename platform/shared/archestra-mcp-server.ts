@@ -1,5 +1,9 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
-import { DEFAULT_APP_NAME, MCP_SERVER_TOOL_NAME_SEPARATOR } from "./consts";
+import {
+  DEFAULT_APP_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  PERSONAL_MCP_GATEWAY_NAME,
+} from "./consts";
 import { parseFullToolName, slugify } from "./utils";
 
 export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
@@ -1288,6 +1292,61 @@ export function getArchestraToolPrefix(
  */
 export function toMcpClientServerName(gatewayName: string): string {
   return gatewayName.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+/**
+ * The deployment's own name as an MCP server name, e.g. "Acme AI" -> `acme_ai`.
+ * Used when a gateway's own name would tell the user nothing (see
+ * {@link resolveMcpClientServerName}).
+ */
+function toAppMcpServerName(appName: string): string {
+  return slugify(appName) || ARCHESTRA_MCP_SERVER_NAME;
+}
+
+/**
+ * The name a client registers the gateway under, as the user sees it in
+ * `claude /mcp`, `~/.cursor/mcp.json` and the rest.
+ *
+ * Every user gets a pre-seeded personal gateway called "My Gateway", so the
+ * literal gateway name put `my_gateway` in every client on the connect path.
+ * That name says nothing about which platform serves it. A personal gateway
+ * that still carries its seeded name therefore registers under the
+ * deployment's app name instead. A gateway the owner renamed, and every shared
+ * gateway, keeps its own name: those names were chosen deliberately.
+ */
+export function resolveMcpClientServerName(params: {
+  gatewayName: string;
+  appName: string;
+  isPersonalGateway?: boolean | null;
+}): string {
+  const { gatewayName, appName, isPersonalGateway } = params;
+  if (isPersonalGateway && isDefaultPersonalGatewayName(gatewayName)) {
+    return toAppMcpServerName(appName);
+  }
+  return toMcpClientServerName(gatewayName) || toAppMcpServerName(appName);
+}
+
+/**
+ * Names this same gateway was registered under by earlier versions of the
+ * connect flow, so a re-run can clean up or move the stale entry instead of
+ * leaving the client with two servers for one gateway. Empty when the current
+ * name is the only one ever generated.
+ */
+export function legacyMcpClientServerNames(params: {
+  gatewayName: string;
+  appName: string;
+  isPersonalGateway?: boolean | null;
+}): string[] {
+  const current = resolveMcpClientServerName(params);
+  const previous = toMcpClientServerName(params.gatewayName);
+  return previous && previous !== current ? [previous] : [];
+}
+
+function isDefaultPersonalGatewayName(gatewayName: string): boolean {
+  return (
+    gatewayName.trim().toLowerCase() ===
+    PERSONAL_MCP_GATEWAY_NAME.trim().toLowerCase()
+  );
 }
 
 function parseArchestraToolName(params: {

@@ -2,6 +2,7 @@ import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import logger from "@/logging";
 import {
   AccountModel,
+  AgentModel,
   InvitationModel,
   McpServerModel,
   MemberModel,
@@ -118,6 +119,7 @@ export async function cleanupAfterMembershipRemoval(params: {
       userId,
       organizationId,
     );
+    await AgentModel.deletePersonalAgentsForUser({ userId, organizationId });
     await SkillMarketplaceCredentialModel.deleteForMember({
       userId,
       organizationId,

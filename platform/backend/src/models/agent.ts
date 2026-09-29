@@ -4,6 +4,7 @@ import {
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
   type PaginationQuery,
+  PERSONAL_MCP_GATEWAY_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
@@ -2458,16 +2459,21 @@ class AgentModel {
   }
 
   /**
-   * Names of every live agent that can serve as an MCP gateway in this
-   * organization. External clients register gateways under a server name
-   * derived from these (see `toMcpClientServerName`), so the LLM proxy uses
-   * them to recognize client-decorated gateway tool names.
+   * Every live agent that can serve as an MCP gateway in this organization, by
+   * name. External clients register gateways under a server name derived from
+   * these (see `resolveMcpClientServerName`), so the LLM proxy uses them to
+   * recognize client-decorated gateway tool names. `isPersonalGateway` comes
+   * along because a seeded personal gateway registers under the app name
+   * rather than its own.
    */
   static async findGatewayNamesByOrganizationId(
     organizationId: string,
-  ): Promise<string[]> {
-    const agents = await db
-      .select({ name: schema.agentsTable.name })
+  ): Promise<{ name: string; isPersonalGateway: boolean }[]> {
+    return db
+      .select({
+        name: schema.agentsTable.name,
+        isPersonalGateway: schema.agentsTable.isPersonalGateway,
+      })
       .from(schema.agentsTable)
       .where(
         and(
@@ -2478,8 +2484,6 @@ class AgentModel {
           ]),
         ),
       );
-
-    return agents.map((agent) => agent.name);
   }
 
   static async findIdsByOrganizationId(
@@ -4119,6 +4123,36 @@ class AgentModel {
     );
   }
 
+  /** Soft-delete an author's private chat agents when their membership ends. */
+  static async deletePersonalAgentsForUser(params: {
+    userId: string;
+    organizationId?: string;
+    tx?: Transaction;
+  }): Promise<number> {
+    const table = schema.agentsTable;
+    return await softDelete(
+      params.tx ?? db,
+      table,
+      and(
+        eq(table.authorId, params.userId),
+        eq(table.agentType, "agent"),
+        params.organizationId
+          ? eq(table.organizationId, params.organizationId)
+          : undefined,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        ResourcePermissionPolicyModel.reachesOnlyOwner({
+          organizationId: table.organizationId,
+          resource: "agent",
+          scopeColumn: table.id,
+          ownerColumn: table.authorId,
+        }),
+        // SPDX-SnippetEnd
+      ),
+    );
+  }
+
   /**
    * Resolve a UUID or slug to an agent ID.
    * Checks both the id and slug columns in a single query.
@@ -4662,7 +4696,6 @@ class AgentModel {
   }
 }
 
-const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =
   "All MCP servers you install are automatically connected to this gateway.";
 

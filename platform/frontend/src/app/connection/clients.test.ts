@@ -13,6 +13,46 @@ import {
   type ProxyBuildParams,
   type ProxyStep,
 } from "./clients";
+import { SKILL_MARKETPLACE_CLIENTS } from "./skills-marketplace-clients";
+
+describe("Cursor connection instructions", () => {
+  it("installs shared skills in Cursor's discovered skills folder", () => {
+    const client = SKILL_MARKETPLACE_CLIENTS.find(
+      (candidate) => candidate.id === "cursor",
+    );
+    if (!client) throw new Error("Missing Cursor marketplace instructions");
+    const steps = client.getInstallSteps({
+      cloneUrl: "https://example.test/skills/repo.git",
+      marketplaceName: "example-skills",
+    });
+    expect(steps[0].code).toBe(
+      "git clone 'https://example.test/skills/repo.git' \"$HOME/.cursor/skills/example-skills\"",
+    );
+    expect(steps[1].code).toContain("git -C");
+    expect(steps[1].body).toContain("Customize → Skills");
+  });
+
+  it("enables the custom OpenAI key in the current Cursor settings flow", () => {
+    const client = CONNECT_CLIENTS.find(
+      (candidate) => candidate.id === "cursor",
+    );
+    if (!client || client.proxy.kind !== "custom")
+      throw new Error("Missing Cursor proxy");
+    const instructions = client.proxy.build({
+      provider: "openai",
+      providerLabel: "OpenAI",
+      url: "http://localhost:9000/v1/openai",
+      tokenPlaceholder: "<your-key>",
+      proxyName: "default_proxy",
+      appName: "Example Platform",
+    });
+    if (instructions.kind !== "steps") throw new Error("Expected Cursor steps");
+    const copy = instructions.steps.map((step) => step.body).join("\n");
+    expect(copy).toContain('turn on "Use OpenAI API Key"');
+    expect(copy).toContain("A Cursor subscription cannot be used");
+    expect(copy).not.toContain("click Verify");
+  });
+});
 
 function getCopilotClient() {
   const client = CONNECT_CLIENTS.find((c) => c.id === "copilot-cli");

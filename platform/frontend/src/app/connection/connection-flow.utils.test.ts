@@ -6,11 +6,9 @@ import {
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
-  deriveMcpServerName,
   getConnectableProviders,
   resolveEffectiveId,
   resolveInitialClientId,
-  toMcpServerSlug,
 } from "./connection-flow.utils";
 
 const baseParams = {
@@ -192,42 +190,5 @@ describe("getConnectableProviders", () => {
     });
     expect(providers).not.toContain("anthropic");
     expect(providers).toContain("openai");
-  });
-});
-
-describe("toMcpServerSlug", () => {
-  it("lowercases a single-word name", () => {
-    expect(toMcpServerSlug("Archestra")).toBe("archestra");
-  });
-
-  it("dash-separates multi-word names", () => {
-    expect(toMcpServerSlug("Acme AI")).toBe("acme-ai");
-  });
-
-  it("collapses runs of non-alphanumerics into a single dash", () => {
-    expect(toMcpServerSlug("Foo !! Bar__Baz")).toBe("foo-bar-baz");
-  });
-
-  it("trims leading and trailing dashes", () => {
-    expect(toMcpServerSlug("  !Foo!  ")).toBe("foo");
-  });
-
-  it("falls back to 'archestra' when the input has no alphanumerics", () => {
-    expect(toMcpServerSlug("!!!")).toBe("archestra");
-    expect(toMcpServerSlug("")).toBe("archestra");
-  });
-});
-
-describe("deriveMcpServerName", () => {
-  it("underscore-separates the gateway name (mirrors the backend)", () => {
-    expect(
-      deriveMcpServerName({ gatewayName: " Prod Gateway ", appName: "Acme" }),
-    ).toBe("prod_gateway");
-  });
-
-  it("falls back to the app-name slug for unnamed gateways", () => {
-    expect(deriveMcpServerName({ gatewayName: "  ", appName: "Acme AI" })).toBe(
-      "acme-ai",
-    );
   });
 });

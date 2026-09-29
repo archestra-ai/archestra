@@ -24,6 +24,7 @@ function gateway(overrides: Partial<GatewayProp> = {}): GatewayProp {
 
 function renderActions(agent: GatewayProp, canModify = true) {
   const onPermanentlyDelete = vi.fn();
+  const onTogglePin = vi.fn();
   render(
     <McpGatewayActions
       agent={agent}
@@ -33,10 +34,11 @@ function renderActions(agent: GatewayProp, canModify = true) {
       onRestore={vi.fn()}
       onPermanentlyDelete={onPermanentlyDelete}
       onClone={vi.fn()}
+      onTogglePin={onTogglePin}
       onHistory={vi.fn()}
     />,
   );
-  return { onPermanentlyDelete };
+  return { onPermanentlyDelete, onTogglePin };
 }
 
 const openRowMenu = () =>
@@ -59,6 +61,21 @@ describe("McpGatewayActions", () => {
     } as ReturnType<typeof useHasPermissions>);
   });
 
+  it.each([
+    null,
+    "2026-01-02T00:00:00.000Z",
+  ])("allows readers to toggle a personal pin (pinnedAt=%s)", async (pinnedAt) => {
+    const agent = gateway({ pinnedAt });
+    const { onTogglePin } = renderActions(agent, false);
+    await openRowMenu();
+    await userEvent.click(
+      screen.getByRole("menuitem", {
+        name: pinnedAt ? "Unpin" : "Pin",
+      }),
+    );
+    expect(onTogglePin).toHaveBeenCalledWith(agent);
+  });
+
   it("offers permanent delete on a gateway already in the trash", async () => {
     // Gateways are agent rows with their own trash view, and the permanent
     // delete route accepts every agent type — this is where an admin reaches it.
@@ -68,6 +85,9 @@ describe("McpGatewayActions", () => {
       screen.getByLabelText("Restore billing-gateway"),
     ).toBeInTheDocument();
     await openRowMenu();
+    expect(
+      screen.queryByRole("menuitem", { name: /^(Unpin|Pin)$/ }),
+    ).toBeNull();
     // Named after the row: a trash list is a column of these buttons, and the
     // accessible name is the only thing telling them apart.
     expect(

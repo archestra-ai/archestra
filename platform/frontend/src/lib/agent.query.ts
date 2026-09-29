@@ -269,6 +269,9 @@ export function useProfilesPaginated(
     },
     initialData: useInitialData ? initialData : undefined,
     enabled,
+    // A reload can restore the snapshot saved just before a pin mutation.
+    // Revalidate both sections even while that snapshot is considered fresh.
+    refetchOnMount: pinned !== undefined ? "always" : true,
     // The list pages restore their last rows on refresh and swap in the fresh
     // page when it lands, so a reload lands on a filled table rather than an
     // empty one. Keyed by the full filter set, so a restored page only ever

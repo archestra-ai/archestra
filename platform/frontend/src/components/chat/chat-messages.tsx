@@ -64,6 +64,7 @@ import {
 import { McpElicitationCard } from "@/components/chat/mcp-elicitation-card";
 import { isChoiceElicitationRequest } from "@/components/chat/mcp-elicitation-fields";
 import { McpTaskProvider } from "@/components/chat/mcp-task-context";
+import { RuntimeCredentialSetupTool } from "@/components/chat/runtime-credential-setup-tool";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
@@ -2012,7 +2013,12 @@ const MessageTool = memo(
         (toolResultPart && Boolean(toolResultPart.output)) ||
         (!toolResultPart && Boolean(part.output)),
     );
-    const shouldDefaultOpen = isApprovalRequested || policyChange;
+    const credentialSetup =
+      getToolShortName(toolName) === "request_runtime_credential_setup" &&
+      !errorText &&
+      (part.state === "output-available" || Boolean(toolResultPart));
+    const shouldDefaultOpen =
+      isApprovalRequested || policyChange || credentialSetup;
 
     // Hooks must be called before any early returns
     const { data: session } = useSession();
@@ -2203,6 +2209,13 @@ const MessageTool = memo(
             <ToolErrorDetails errorText={errorText} />
           ) : null}
           {authToolBody}
+          {credentialSetup && (
+            <RuntimeCredentialSetupTool
+              ready
+              toolCallId={part.toolCallId}
+              onSendMessage={onSendMessage}
+            />
+          )}
 
           {/* Standard MCP Apps flow: tool definition has _meta.ui.resourceUri → AppBridge + AppFrame */}
           {!isApprovalRequested &&

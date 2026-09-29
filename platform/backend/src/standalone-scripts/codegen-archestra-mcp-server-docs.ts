@@ -50,6 +50,22 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
   remove_team_member:
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+  get_schedule_trigger:
+    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+  list_schedule_trigger_runs:
+    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+  get_schedule_trigger_run:
+    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+  update_schedule_trigger:
+    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+  delete_schedule_trigger:
+    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+  enable_schedule_trigger:
+    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+  disable_schedule_trigger:
+    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+  run_schedule_trigger_now:
+    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
   // Reads are scoped: non-managers only see teams they belong to.
   get_team:
     "Callers without organization-level team management (`team:create`) can only read teams they are a member of.",

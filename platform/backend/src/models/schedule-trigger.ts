@@ -168,9 +168,10 @@ class ScheduleTriggerModel {
   static async delete(id: string): Promise<boolean> {
     const result = await db
       .delete(schema.scheduleTriggersTable)
-      .where(eq(schema.scheduleTriggersTable.id, id));
+      .where(eq(schema.scheduleTriggersTable.id, id))
+      .returning({ id: schema.scheduleTriggersTable.id });
 
-    return (result.rowCount ?? 0) > 0;
+    return result.length > 0;
   }
 
   static async findDueTriggers(now: Date): Promise<ScheduleTrigger[]> {
@@ -241,6 +242,7 @@ class ScheduleTriggerModel {
     return {
       id: trigger.id,
       name: trigger.name,
+      projectId: trigger.projectId,
       agentId: trigger.agentId,
       agentName: trigger.agent?.name ?? null,
       messageTemplate: trigger.messageTemplate,
@@ -285,7 +287,8 @@ function buildListFilters(
     )`,
     // Triggers of a soft-deleted project are hidden with it, like the deleted
     // agents above. Direct-by-id access (incl. run-now) is closed off separately
-    // in `findAccessibleTriggerOrThrow` (routes/schedule-trigger.ts).
+    // in `findAccessibleScheduleTriggerOrThrow`
+    // (services/schedule-trigger-access.ts).
     belongsToLiveProject(schema.scheduleTriggersTable.projectId),
   ];
 

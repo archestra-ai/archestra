@@ -232,7 +232,7 @@ function sessionKey(
 
 function digest(...values: string[]): string {
   return createHash("sha256")
-    .update(values.join("\0")) // codeql[js/insufficient-password-hash] Digests user, organization, and session ids into a cache key, not a password.
+    .update(values.join("\0")) // lgtm[js/insufficient-password-hash] Digests user, organization, and session ids into a cache key, not a password.
     .digest("hex");
 }
 

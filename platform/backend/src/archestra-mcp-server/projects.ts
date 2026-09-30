@@ -93,6 +93,18 @@ const GetProjectOutputSchema = ProjectSummarySchema.extend({
       "Files the project owns. Read one with read_file, passing the same " +
         "project_id and this `ref`.",
     ),
+  apps: z
+    .array(
+      z.object({
+        id: z.string().describe("The app's id."),
+        name: z.string().describe("The app's name."),
+        description: z.string().nullable().describe("The app's description."),
+      }),
+    )
+    .describe(
+      "Apps linked into the project that you can open. Read or edit one with " +
+        "the app tools, passing this id.",
+    ),
 });
 
 const registry = defineArchestraTools([
@@ -238,7 +250,8 @@ const registry = defineArchestraTools([
     description:
       "Read one project's context in a single call: its metadata, its " +
       `instructions (the \`${PROJECT_INSTRUCTIONS_FILENAME}\` that steers every ` +
-      "chat in the project), and the list of files it owns. Use list_projects " +
+      "chat in the project), the files it owns, and the apps linked into it " +
+      "that you can open. Use list_projects " +
       "to find the id. To read a file's contents, call read_file with the same " +
       "project_id and the `ref` from the files list. Works outside a chat, so " +
       "an external MCP client can pull a project's context into its own session.",
@@ -268,13 +281,14 @@ const registry = defineArchestraTools([
           organizationId,
           userId,
         });
-        const [{ content }, files] = await Promise.all([
+        const [{ content }, files, apps] = await Promise.all([
           projectService.getInstructions({
             id: project.id,
             organizationId,
             userId,
           }),
           projectService.listFiles({ id: project.id, organizationId, userId }),
+          projectService.listApps({ id: project.id, organizationId, userId }),
         ]);
 
         const truncated = content.length > MAX_INLINED_INSTRUCTIONS_CHARS;
@@ -293,6 +307,11 @@ const registry = defineArchestraTools([
             mime_type: f.mimeType,
             size_bytes: f.sizeBytes,
           })),
+          apps: apps.map((a) => ({
+            id: a.id,
+            name: a.name,
+            description: a.description,
+          })),
         };
         const instructionsLine = content
           ? truncated
@@ -308,9 +327,13 @@ const registry = defineArchestraTools([
                     `${f.filename} (${f.mimeType}, ${f.sizeBytes} bytes) ref=${f.downloadRef}`,
                 )
                 .join("\n")}`;
+        const appsLine =
+          apps.length === 0
+            ? "Apps: (none)"
+            : `Apps:\n${apps.map((a) => `${a.name} (id=${a.id})`).join("\n")}`;
         return structuredSuccessResult(
           result,
-          `Project "${project.name}" (id=${project.id})\n\n${instructionsLine}\n\n${filesLine}`,
+          `Project "${project.name}" (id=${project.id})\n\n${instructionsLine}\n\n${filesLine}\n\n${appsLine}`,
         );
       } catch (error) {
         // "Project not found" (the 404 that also covers "no access") is the

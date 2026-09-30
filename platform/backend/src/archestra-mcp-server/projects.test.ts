@@ -246,6 +246,40 @@ describe("project read tools (list_projects, get_project)", () => {
     expect(out.files.map((f) => f.filename)).toContain("spec.md");
   });
 
+  test("lists the project's linked apps", async ({ makeApp }) => {
+    const project = await projectService.create({
+      organizationId,
+      userId,
+      name: "with-apps",
+      description: null,
+    });
+    const tracker = await makeApp({
+      organizationId,
+      authorId: userId,
+      name: "Vendor tracker",
+    });
+    await projectService.linkApp({
+      id: project.id,
+      appId: tracker.id,
+      organizationId,
+      userId,
+    });
+
+    const result = await executeArchestraTool(
+      GET_TOOL_NAME,
+      { project_id: project.id },
+      baseContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(
+      (result.structuredContent as { apps: { id: string; name: string }[] })
+        .apps,
+    ).toEqual([
+      expect.objectContaining({ id: tracker.id, name: "Vendor tracker" }),
+    ]);
+  });
+
   test("flags truncation instead of inlining very long instructions", async () => {
     const project = await projectService.create({
       organizationId,

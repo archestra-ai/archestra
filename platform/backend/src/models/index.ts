@@ -134,6 +134,7 @@ export {
   ProjectAlreadyAssignedError,
 } from "./project";
 export { default as ProjectAccessModel } from "./project-access";
+export { default as ProjectAppModel } from "./project-app";
 export { default as ProjectPinModel } from "./project-pin";
 export { default as RuntimeCredentialConnectionModel } from "./runtime-credential-connection";
 export { default as RuntimeCredentialDefinitionModel } from "./runtime-credential-definition";

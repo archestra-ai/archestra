@@ -114,6 +114,8 @@ export interface A2AExecuteParams {
 
   organizationId: string;
   userId: string;
+  /** Set when a team token made the call (userId is then "system") */
+  actorTeamId?: string;
   /** Session ID to group related LLM requests together in logs */
   sessionId?: string;
   /** Interaction source for tracking request origin in logs */
@@ -220,6 +222,7 @@ export async function executeA2AMessage(
     message,
     organizationId,
     userId,
+    actorTeamId,
     sessionId,
     source,
     parentDelegationChain,
@@ -328,6 +331,7 @@ export async function executeA2AMessage(
       agentName: agent.name,
       agentId: agent.id,
       userId,
+      actorTeamId,
       organizationId,
       chatOpsBindingId,
       chatOpsThreadId,

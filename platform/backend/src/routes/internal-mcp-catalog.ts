@@ -36,6 +36,7 @@ import {
   validateDeploymentYaml,
 } from "@/k8s/mcp-server-runtime/k8s-yaml-generator";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import { assertMcpServiceAccountAllowed } from "@/k8s/mcp-server-runtime/runtime-policy";
 import logger from "@/logging";
 import {
   AppModel,
@@ -458,6 +459,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "App catalog entities are managed via the Apps API.",
         );
+      }
+
+      if (restBody.serverType === "local") {
+        assertMcpServiceAccountAllowed(restBody.localConfig?.serviceAccount);
       }
 
       // Secret FK columns are server-managed: clients submit secret values, never
@@ -1101,6 +1106,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // `localConfigSecretId` on the row itself, so the normal gate
       // already detects them; no override needed there.
       let catalogSharedSecretValuesRotated = false;
+
+      if (restBody.localConfig) {
+        assertMcpServiceAccountAllowed(restBody.localConfig.serviceAccount);
+      }
 
       // Handle OAuth client secret - either via Readonly Vault or direct value
       if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {

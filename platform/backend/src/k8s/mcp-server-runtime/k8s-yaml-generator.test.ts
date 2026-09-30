@@ -614,6 +614,44 @@ spec:
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
     });
+
+    test("rejects pod fields that bypass workload isolation", () => {
+      const yaml = validDeploymentYaml
+        .replace(
+          "    spec:\n",
+          `    spec:
+      hostNetwork: true
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+`,
+        )
+        .replace(
+          "          image: registry.example.com/mcp-server:1.0",
+          `          image: registry.example.com/mcp-server:1.0
+          securityContext:
+            privileged: true
+            capabilities:
+              add: [SYS_ADMIN]
+          ports:
+            - containerPort: 8080
+              hostPort: 8080`,
+        );
+
+      const result = validateDeploymentYaml(yaml);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          "spec.template.spec.hostNetwork is not allowed",
+          "spec.template.spec.volumes[].hostPath is not allowed",
+          "spec.template.spec.containers[].securityContext.privileged is not allowed",
+          "spec.template.spec.containers[].securityContext.capabilities.add is not allowed",
+          "spec.template.spec.containers[].ports[].hostPort is not allowed",
+        ]),
+      );
+    });
   });
 
   // The rename flow's placeholder detection (backend PUT route + frontend
@@ -647,9 +685,10 @@ spec:
         app: "mcp-server",
         "mcp-server-id": "server-1",
       },
+      serviceAccountName: "default",
     };
 
-    test("forces the immutable selector to the id-only labels while metadata/template keep the full set", () => {
+    test("forces system-owned identity, selectors, and labels", () => {
       const userYaml = `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -666,6 +705,7 @@ spec:
       labels:
         custom-pod-label: kept
     spec:
+      serviceAccountName: platform-control-plane
       containers:
         - name: mcp-server
           image: some-image
@@ -680,18 +720,16 @@ spec:
       expect(deployment?.spec?.selector.matchLabels).toEqual(
         systemValues.selectorLabels,
       );
-      // Metadata + pod template: full label set merged over user labels.
-      expect(deployment?.metadata?.labels).toEqual({
-        "custom-label": "kept",
-        ...systemValues.labels,
-      });
-      expect(deployment?.spec?.template.metadata?.labels).toEqual({
-        "custom-pod-label": "kept",
-        ...systemValues.labels,
-      });
+      expect(deployment?.metadata?.labels).toEqual(systemValues.labels);
+      expect(deployment?.spec?.template.metadata?.labels).toEqual(
+        systemValues.labels,
+      );
+      expect(deployment?.spec?.template.spec?.serviceAccountName).toBe(
+        "default",
+      );
     });
 
-    test("preserves privileged pod fields from custom YAML", () => {
+    test("rejects privileged pod fields from custom YAML", () => {
       const userYaml = `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -723,16 +761,37 @@ spec:
 
       const deployment = customYamlToDeployment(userYaml, systemValues);
 
-      expect(deployment?.spec?.template.spec).toMatchObject({
-        serviceAccountName: "untrusted-runtime-account",
-        hostPID: true,
-        volumes: [{ name: "host-root", hostPath: { path: "/" } }],
-        containers: [
-          expect.objectContaining({
-            securityContext: { privileged: true },
-          }),
-        ],
+      expect(deployment).toBeNull();
+    });
+
+    test("removes a custom YAML service account when the catalog uses the default identity", () => {
+      const userYaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-reproduction
+spec:
+  selector:
+    matchLabels:
+      app: ignored
+  template:
+    metadata:
+      labels:
+        app: ignored
+    spec:
+      serviceAccountName: platform-control-plane
+      containers:
+        - name: mcp-server
+          image: example.invalid/runtime:latest
+`;
+
+      const deployment = customYamlToDeployment(userYaml, {
+        ...systemValues,
+        serviceAccountName: undefined,
       });
+
+      expect(
+        deployment?.spec?.template.spec?.serviceAccountName,
+      ).toBeUndefined();
     });
   });
 });

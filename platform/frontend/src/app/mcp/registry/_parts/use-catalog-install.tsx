@@ -821,7 +821,6 @@ export function useCatalogInstall(opts?: {
         installResult.scope === "team"
           ? (installResult.teamId ?? undefined)
           : undefined,
-      serviceAccount: installResult.serviceAccount,
       dontShowToast: true,
     });
 

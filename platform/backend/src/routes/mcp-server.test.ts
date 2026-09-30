@@ -914,7 +914,7 @@ describe("mcp server inspect route", () => {
     });
   });
 
-  test("personal install persists a caller-selected Kubernetes service account on the catalog item", async ({
+  test("personal install cannot override the catalog-owned Kubernetes service account", async ({
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
@@ -928,6 +928,7 @@ describe("mcp server inspect route", () => {
         transportType: "streamable-http",
         httpPort: 8080,
         httpPath: "/mcp",
+        serviceAccount: "default",
       },
     });
 
@@ -947,9 +948,7 @@ describe("mcp server inspect route", () => {
 
     expect(response.statusCode).toBe(200);
     const updatedCatalog = await InternalMcpCatalogModel.findById(catalog.id);
-    expect(updatedCatalog?.localConfig?.serviceAccount).toBe(
-      "untrusted-runtime-account",
-    );
+    expect(updatedCatalog?.localConfig?.serviceAccount).toBe("default");
     expect(k8sStartServerMock).toHaveBeenCalledTimes(1);
   });
 

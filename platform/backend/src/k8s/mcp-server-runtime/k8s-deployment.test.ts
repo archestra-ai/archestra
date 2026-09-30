@@ -2755,6 +2755,46 @@ spec:
     });
   });
 
+  test("falls back to an isolated generated pod when custom YAML requests restricted fields", () => {
+    const deployment = createK8sDeploymentWithYaml(`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: platform
+spec:
+  template:
+    spec:
+      serviceAccountName: platform-control-plane
+      hostPID: true
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+      containers:
+        - name: mcp-server
+          image: test:latest
+          securityContext:
+            privileged: true
+`);
+
+    const spec = deployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+    );
+    const podSpec = spec.spec?.template.spec;
+
+    expect(podSpec?.serviceAccountName).toBeUndefined();
+    expect(podSpec?.hostPID).toBeUndefined();
+    expect(podSpec?.volumes).toBeUndefined();
+    expect(podSpec?.containers[0]?.securityContext).toBeUndefined();
+    expect(spec.metadata?.labels).not.toHaveProperty(
+      "app.kubernetes.io/component",
+    );
+  });
+
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -3618,6 +3658,38 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
     // Should use the service account name from localConfig directly
     expect(deploymentSpec.spec?.template.spec?.serviceAccountName).toBe(
       "archestra-platform-mcp-k8s-operator",
+    );
+  });
+
+  test("rejects a service account outside the MCP runtime allowlist", () => {
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: {
+        id: "rejected-service-account-server",
+        name: "Rejected Service Account",
+        catalogId: "rejected-service-account-catalog",
+      } as McpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+
+    expect(() =>
+      k8sDeployment.generateDeploymentSpec(
+        "test-image:latest",
+        {
+          command: "node",
+          arguments: ["server.js"],
+          serviceAccount: "platform-control-plane",
+        },
+        false,
+        8080,
+      ),
+    ).toThrow(
+      'Kubernetes service account "platform-control-plane" is not allowed for MCP server workloads',
     );
   });
 });

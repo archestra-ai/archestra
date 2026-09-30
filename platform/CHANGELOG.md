@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.67](https://github.com/archestra-ai/archestra/compare/platform-v1.3.66...platform-v1.3.67) (2026-09-30)
+
+
+### Bug Fixes
+
+* **a2a:** resolve team-token identity for MCP gateway lookups (backport release/1.3) ([#8310](https://github.com/archestra-ai/archestra/issues/8310)) ([85c1d19](https://github.com/archestra-ai/archestra/commit/85c1d19f4cd1c7786180bd53638bb1bf64554c94))
+* **backend:** preserve Claude requests on cold replay (backport release/1.3) ([#8194](https://github.com/archestra-ai/archestra/issues/8194)) ([aad933b](https://github.com/archestra-ai/archestra/commit/aad933bcf1aa7f495e2278ceece751a137534a5e))
+* **chat:** cache Anthropic tool results between steps (backport release/1.3) ([#8302](https://github.com/archestra-ai/archestra/issues/8302)) ([90891b2](https://github.com/archestra-ai/archestra/commit/90891b217261cf7b2dfcf6f3e820c757c41f9a32))
+* **deps:** backport all image scan CVE fixes to release/1.3 ([#8307](https://github.com/archestra-ai/archestra/issues/8307)) ([79d89a5](https://github.com/archestra-ai/archestra/commit/79d89a59dfc4173a20c465a8e76018c96f3e3c65))
+* **mcp:** require patched expat in base image (backport release/1.3) ([#8166](https://github.com/archestra-ai/archestra/issues/8166)) ([74216cd](https://github.com/archestra-ai/archestra/commit/74216cd95842d171811f2527b5066d1cbc96faf0))
+* **proxy:** repair trailing model turns in Gemini OpenAI translation (backport release/1.3) ([#8134](https://github.com/archestra-ai/archestra/issues/8134)) ([afb39fb](https://github.com/archestra-ai/archestra/commit/afb39fb10be4941a88c6ea7d5691e158df14b2f8))
+
 ## [1.3.66](https://github.com/archestra-ai/archestra/compare/platform-v1.3.65...platform-v1.3.66) (2026-09-21)
 
 

@@ -37,3 +37,7 @@ ai-labs/**/.trajectory-analysis-*/
 
 # Local verification evidence
 .artifacts/
+
+# Local agent tool state
+.amp/
+.superpowers/

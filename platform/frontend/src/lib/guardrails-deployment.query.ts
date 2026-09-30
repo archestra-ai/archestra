@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
@@ -36,6 +36,28 @@ export function useUpdateGuardrailsDeployment() {
           ? "OpenAPPA enforcement is on"
           : "OpenAPPA enforcement is off. Existing guardrails remain active.",
       );
+    },
+  });
+}
+
+export function useUpdateUnsupportedClientAction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      unsupportedClientAction: archestraApiTypes.GetGuardrailsDeploymentResponses[200]["unsupportedClientAction"],
+    ) => {
+      const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
+        body: { unsupportedClientAction },
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      client.setQueryData(queryKey, data);
+      client.invalidateQueries({ queryKey });
     },
   });
 }

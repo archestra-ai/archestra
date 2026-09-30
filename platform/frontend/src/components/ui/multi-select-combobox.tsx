@@ -164,6 +164,7 @@ export function MultiSelectCombobox({
               <button
                 type="button"
                 aria-label="Remove selected option"
+                disabled={disabled}
                 onClick={(e) => handleRemove(option.value, e)}
                 className="hover:bg-muted-foreground/20 rounded-sm"
               >

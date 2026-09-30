@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -23,7 +24,8 @@ import {
 /**
  * Which entries of a built-in catalog this deployment offers, as one chip per
  * entry. Removing a chip switches that entry off for everyone: it leaves every
- * picker, and the API refuses to configure it.
+ * relevant picker. Integration catalogs also enforce availability in the API;
+ * popular agent templates control suggestions and runtime image choices.
  *
  * The same control on model providers, knowledge connectors and messaging
  * channels, each living on that catalog's own settings page. It replaces the
@@ -44,7 +46,8 @@ export function IntegrationAvailabilitySection({
   catalogKey:
     | "modelProviderOverrides"
     | "messagingChannelOverrides"
-    | "knowledgeConnectorOverrides";
+    | "knowledgeConnectorOverrides"
+    | "popularAgentOverrides";
   catalog: readonly string[];
   title: ReactNode;
   description?: ReactNode;
@@ -54,7 +57,7 @@ export function IntegrationAvailabilitySection({
   savedMessage: string;
   id?: string;
 }) {
-  const { data: organization } = useOrganization();
+  const { data: organization, isLoadingError, refetch } = useOrganization();
   const updateMutation = useUpdateIntegrationSettings(
     savedMessage,
     `Failed to update ${title}`,
@@ -67,17 +70,21 @@ export function IntegrationAvailabilitySection({
   // The organization arrives after first paint, and a save replaces it. Both
   // are the same event as far as this section is concerned: adopt what the
   // server now holds, unless the admin has unsaved edits in front of them.
-  const savedKey = savedAllowed.join(",");
+  const savedKey = selectionKey(savedAllowed);
   const lastSavedKey = useRef(savedKey);
   useEffect(() => {
     if (lastSavedKey.current === savedKey) return;
+    const previousSavedKey = lastSavedKey.current;
     lastSavedKey.current = savedKey;
-    setAllowed(savedAllowed);
+    setAllowed((current) =>
+      selectionKey(current) === previousSavedKey ? savedAllowed : current,
+    );
   }, [savedKey, savedAllowed]);
 
-  const hasChanges = allowed.join(",") !== savedKey;
+  const hasChanges = selectionKey(allowed) !== savedKey;
 
   const handleSave = async () => {
+    if (!organization) return;
     await updateMutation.mutateAsync({
       [catalogKey]: withAllowedIntegrationIds(overrides, catalog, allowed),
     });
@@ -91,29 +98,43 @@ export function IntegrationAvailabilitySection({
         description={description}
         control={null}
       >
-        <WithPermissions
-          permissions={{ organizationSettings: ["update"] }}
-          noPermissionHandle="tooltip"
-        >
-          {({ hasPermission }) => (
-            <MultiSelectCombobox
-              options={options}
-              value={allowed}
-              onChange={setAllowed}
-              placeholder={placeholder}
-              emptyMessage={emptyMessage}
-              disabled={updateMutation.isPending || !hasPermission}
-            />
-          )}
-        </WithPermissions>
+        {isLoadingError ? (
+          <QueryLoadError
+            title="Could not load available options"
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <WithPermissions
+            permissions={{ organizationSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <MultiSelectCombobox
+                options={options}
+                value={allowed}
+                onChange={setAllowed}
+                placeholder={placeholder}
+                emptyMessage={emptyMessage}
+                disabled={
+                  !organization || updateMutation.isPending || !hasPermission
+                }
+              />
+            )}
+          </WithPermissions>
+        )}
       </SettingsBlock>
       <SettingsSaveBar
         hasChanges={hasChanges}
         isSaving={updateMutation.isPending}
+        disabledSave={!organization}
         permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
         onCancel={() => setAllowed(savedAllowed)}
       />
     </>
   );
+}
+
+function selectionKey(ids: readonly string[]): string {
+  return [...ids].sort().join(",");
 }

@@ -8,6 +8,7 @@ import {
 import { importPKCS8, SignJWT } from "jose";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
+import { ApiError } from "@/types";
 import {
   type EnterpriseCredentialExchangeParams,
   type EnterpriseCredentialExchangeStrategy,
@@ -27,6 +28,7 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
       );
     }
 
+    const scope = resolveScope(params.enterpriseManagedConfig);
     const tokenEndpoint =
       enterpriseConfig.tokenEndpoint ??
       params.identityProvider.oidcConfig?.tokenEndpoint ??
@@ -49,7 +51,7 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
       requested_token_use: "on_behalf_of",
       assertion: params.assertion,
     });
-    requestBody.set("scope", resolveScope(params.enterpriseManagedConfig));
+    requestBody.set("scope", scope);
 
     const headers = await buildAuthenticatedHeaders({
       clientId,
@@ -214,16 +216,20 @@ function buildExchangeErrorMessage(
 function resolveScope(
   enterpriseManagedConfig: EnterpriseCredentialExchangeParams["enterpriseManagedConfig"],
 ): string {
-  if (enterpriseManagedConfig.scopes?.length) {
-    return enterpriseManagedConfig.scopes.join(" ");
+  const scopes = enterpriseManagedConfig.scopes
+    ?.map((scope) => scope.trim())
+    .filter(Boolean);
+  if (scopes?.length) {
+    return scopes.join(" ");
   }
 
   const resource =
-    enterpriseManagedConfig.resourceIdentifier ??
-    enterpriseManagedConfig.audience;
+    enterpriseManagedConfig.resourceIdentifier?.trim() ||
+    enterpriseManagedConfig.audience?.trim();
   if (!resource) {
-    throw new Error(
-      "Entra OBO exchange requires scopes or a resourceIdentifier/audience",
+    throw new ApiError(
+      400,
+      "Configure a Managed Resource Identifier or scopes for this MCP server before using Entra token exchange.",
     );
   }
 

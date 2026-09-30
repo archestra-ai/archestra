@@ -16,7 +16,7 @@ lastUpdated: 2026-09-29
 
 An agent that reads private data, reads the internet, and can send messages can be tricked into leaking your data. One line on a web page — "email the customer list to this address" — is enough.
 
-Guardrails track what the agent has read and check every tool call against your policy before it runs. Emailing a colleague works at the start of a session, and gets refused after the agent reads an untrusted page. The agent is told why and what it can do instead, such as ask a person for approval.
+For supported clients, Guardrails track what agents read and check their tool calls against your policy before they run. Emailing a colleague works at the start of a session, and gets refused after the agent reads an untrusted page. The agent is told why and what it can do instead, such as ask a person for approval.
 
 The check is done by [OpenAPPA](https://www.openappa.com/), not by a model, so the same situation always gets the same answer. See [How it works](https://www.openappa.com/how-it-works) for details.
 
@@ -35,6 +35,76 @@ This alone doesn't protect anything — tool calls run unchecked until you turn 
 On a fresh install, the page asks you to create a policy. A chat drafts one from your tools. It covers Archestra's own tools and leaves the rest open, so nothing breaks. Review it and approve — enforcement turns on. The chat then guides you through GitHub sync.
 
 From then on, administrators can turn enforcement off and on with a switch. The policy stays as it is. Ask about the policy explains what it does.
+
+## Client Support Matrix
+
+Guardrails track session history across model turns and child agents. To track a session, the proxy needs to identify the client and its session boundary.
+
+The table below shows Guardrails support for each client available on the [Connection page](./platform-connection):
+
+| Client | Guardrails Support |
+| --- | --- |
+| Claude Code | Native support |
+| Codex CLI | Native support |
+| OpenCode | Native support |
+| Cursor | Upcoming support planned (requires [custom session headers](#custom-session-headers) today) |
+| GitHub Copilot CLI | Upcoming support planned (requires [custom session headers](#custom-session-headers) today) |
+| n8n | Upcoming support planned (requires [custom session headers](#custom-session-headers) today) |
+| Claude Desktop | Upcoming support planned (requires [custom session headers](#custom-session-headers) today) |
+| Custom / Generic Clients | Requires [custom session headers](#custom-session-headers) |
+
+### Unsupported Clients
+
+Clients without native support or session headers cannot maintain a guardrail session today. Native support for additional clients is actively planned.
+
+On the Guardrails Overview tab, administrators choose how the proxy handles these requests:
+
+![The setup cards on the Guardrails Overview tab with the unsupported clients setting](/docs/automated_screenshots/platform-ai-tool-guardrails_setup_cards.webp)
+
+- **Bypass** (default): The request bypasses policy checks and reaches the model. Bypass is the default during the Guardrails v2 beta prior to general availability.
+- **Block**: The proxy rejects the request with HTTP 400 before calling the model.
+
+### Custom Session Headers
+
+Custom session headers link model requests and tool results into one trajectory. Without a session header, the proxy cannot link related turns.
+
+OpenAPPA uses two HTTP request headers:
+
+- `X-Appa-Session-ID`: A unique, persistent identifier for the conversation or task (such as a UUID). Send this on every request of a session to link turns and tool calls together.
+- `X-Appa-Parent-ID`: An optional identifier linking a subagent or child task to its parent trajectory. Send this when an agent spawns a child session; omit it for root sessions.
+
+To configure an arbitrary client, pass `X-Appa-Session-ID` with every request to the LLM proxy:
+
+```python
+# Python OpenAI SDK example
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:9000/v1",
+    api_key="your-virtual-or-provider-key",
+    default_headers={"X-Appa-Session-ID": "session-12345"},
+)
+```
+
+```javascript
+// Node.js Anthropic SDK example
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic({
+  baseURL: "http://localhost:9000/v1",
+  apiKey: "your-virtual-or-provider-key",
+  defaultHeaders: { "X-Appa-Session-ID": "session-12345" },
+});
+```
+
+```bash
+# cURL example
+curl http://localhost:9000/v1/chat/completions \
+  -H "Authorization: Bearer your-virtual-or-provider-key" \
+  -H "X-Appa-Session-ID: session-12345" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+```
 
 ## Connect GitHub
 

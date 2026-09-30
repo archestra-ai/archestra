@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { AgentCatalogId } from "./agent-catalog-images";
+import AGENT_CATALOG_IMAGE_NAMES from "./agent-catalog-images.json";
 import { CONNECTOR_TYPE_LABELS, type ConnectorType } from "./knowledge-base";
 import {
   providerDisplayNames,
@@ -35,14 +37,22 @@ export const KnowledgeConnectorIdSchema = z.enum(
   Object.keys(CONNECTOR_TYPE_LABELS) as [ConnectorType, ...ConnectorType[]],
 );
 
+export const PopularAgentIdSchema = z.enum(
+  Object.keys(AGENT_CATALOG_IMAGE_NAMES) as [
+    AgentCatalogId,
+    ...AgentCatalogId[],
+  ],
+);
+
 export const MAX_INTEGRATION_DISPLAY_NAME_LENGTH = 60;
 
 /**
  * An admin override of a built-in catalog entry.
  *
- * `hidden` is the off switch, and it is a real restriction rather than a
- * cosmetic one: a hidden entry disappears from the pickers and the API refuses
- * to configure it. An absent entry means "available, named as it ships".
+ * `hidden` removes an entry from its picker. Integration catalogs also refuse
+ * to configure hidden entries in the API; popular agent templates only control
+ * suggestions and runtime image choices. An absent entry means "available, named as
+ * it ships".
  */
 const integrationToggleShape = { hidden: z.boolean().optional() };
 
@@ -98,6 +108,27 @@ export const KnowledgeConnectorOverridesSchema = z.partialRecord(
   KnowledgeConnectorIdSchema,
   IntegrationToggleSchema,
 );
+
+// Explicit properties keep the generated OpenAPI/SDK request contract closed.
+// The satisfies check requires every maintained template to be represented.
+export const PopularAgentOverridesSchema = z.strictObject({
+  "claude-code": IntegrationToggleSchema.optional(),
+  codex: IntegrationToggleSchema.optional(),
+  opencode: IntegrationToggleSchema.optional(),
+  hermes: IntegrationToggleSchema.optional(),
+  openclaw: IntegrationToggleSchema.optional(),
+} satisfies Record<
+  AgentCatalogId,
+  z.ZodOptional<typeof IntegrationToggleSchema>
+>);
+
+export const StoredPopularAgentOverridesSchema = z.partialRecord(
+  PopularAgentIdSchema,
+  StoredIntegrationToggleSchema,
+);
+export type PopularAgentOverrides = z.infer<
+  typeof StoredPopularAgentOverridesSchema
+>;
 
 // ---- Stored: what the organization columns may actually hold ----
 

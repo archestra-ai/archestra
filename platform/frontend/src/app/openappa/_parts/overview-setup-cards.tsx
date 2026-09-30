@@ -38,6 +38,7 @@ import {
   OpenAppaCreateRepositoryDialog,
   OpenAppaSourceForm,
 } from "./appa-github-sync-panel";
+import { UnsupportedClientActionSelect } from "./guardrails-deployment-toggle";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
@@ -130,16 +131,18 @@ function EnforcementCard({ next }: { next: boolean }) {
         <span>
           <span>
             {enabled
-              ? `${appName} checks every tool call against your policy before it runs.`
-              : "Tool calls run unchecked. Turn enforcement on to apply your policy."}
+              ? `${appName} checks tool calls against your policy before they run.`
+              : "Tool calls run without policy checks. Turn enforcement on to apply your policy."}
           </span>
           {!canManage && (
-            <span> Only administrators can turn enforcement on or off.</span>
+            <span> Only administrators can change enforcement settings.</span>
           )}
         </span>
       }
-      action={
-        <>
+      action={null}
+    >
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Switch
               id="openappa-overview-enforcement"
@@ -151,23 +154,25 @@ function EnforcementCard({ next }: { next: boolean }) {
               }
               onCheckedChange={(checked) => update.mutate(checked)}
             />
-            <Label htmlFor="openappa-overview-enforcement" className="text-sm">
+            <Label
+              htmlFor="openappa-overview-enforcement"
+              className="text-sm cursor-pointer"
+            >
               Enforce the policy
             </Label>
           </div>
-          {enabled && (
-            <OpenAppaChatButton
-              size="sm"
-              variant="outline"
-              promptKey="explainPolicy"
-            >
-              <MessageCircle />
-              <span>Ask about the policy</span>
-            </OpenAppaChatButton>
-          )}
-        </>
-      }
-    />
+          <OpenAppaChatButton
+            size="sm"
+            variant="outline"
+            promptKey="explainPolicy"
+          >
+            <MessageCircle />
+            <span>Ask about the policy</span>
+          </OpenAppaChatButton>
+        </div>
+        <UnsupportedClientActionSelect />
+      </div>
+    </StatusCard>
   );
 }
 
@@ -292,6 +297,7 @@ function StatusCard({
   title,
   status,
   description,
+  children,
   learnMore,
   action,
 }: {
@@ -300,6 +306,7 @@ function StatusCard({
   title: string;
   status?: ReactNode;
   description: ReactNode;
+  children?: ReactNode;
   learnMore?: { href: string; label: string };
   action: ReactNode;
 }) {
@@ -315,22 +322,25 @@ function StatusCard({
         </CardTitle>
         {status}
       </CardHeader>
-      <CardContent className="flex-1 px-4">
+      <CardContent className="flex-1 px-4 space-y-3">
         <CardDescription className="leading-relaxed">
           {description}
         </CardDescription>
+        {children}
       </CardContent>
-      <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
-        {action}
-        {learnMore && (
-          <ExternalDocsLink
-            href={learnMore.href}
-            className="shrink-0 text-xs text-muted-foreground"
-          >
-            {learnMore.label}
-          </ExternalDocsLink>
-        )}
-      </CardFooter>
+      {(action || learnMore) && (
+        <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
+          {action}
+          {learnMore && (
+            <ExternalDocsLink
+              href={learnMore.href}
+              className="shrink-0 text-xs text-muted-foreground"
+            >
+              {learnMore.label}
+            </ExternalDocsLink>
+          )}
+        </CardFooter>
+      )}
     </Card>
   );
 }

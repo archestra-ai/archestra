@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.26"
+    "version": "1.4.0-rc.27"
   },
   "components": {
     "schemas": {
@@ -164694,6 +164694,13 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "unsupportedClientAction": {
+                      "type": "string",
+                      "enum": [
+                        "bypass",
+                        "block"
+                      ]
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -164703,6 +164710,7 @@
                   },
                   "required": [
                     "enabled",
+                    "unsupportedClientAction",
                     "featureEnabled",
                     "active"
                   ],
@@ -164962,11 +164970,15 @@
                 "properties": {
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "unsupportedClientAction": {
+                    "type": "string",
+                    "enum": [
+                      "bypass",
+                      "block"
+                    ]
                   }
-                },
-                "required": [
-                  "enabled"
-                ]
+                }
               }
             }
           }
@@ -164982,6 +164994,13 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "unsupportedClientAction": {
+                      "type": "string",
+                      "enum": [
+                        "bypass",
+                        "block"
+                      ]
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -164991,6 +165010,7 @@
                   },
                   "required": [
                     "enabled",
+                    "unsupportedClientAction",
                     "featureEnabled",
                     "active"
                   ],
@@ -337594,6 +337614,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -337747,6 +337780,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -338682,6 +338716,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -338835,6 +338882,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -340025,6 +340073,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -340178,6 +340239,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -340965,6 +341027,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -341118,6 +341193,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -341905,6 +341981,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -342058,6 +342147,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -342857,6 +342947,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -343010,6 +343113,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -343872,6 +343976,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -344025,6 +344142,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -344285,7 +344403,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Customize the built-in integration catalogs: hide model providers, messaging channels, or knowledge connectors, and override how they are labelled. Omitted catalogs are left unchanged; null clears a catalog's overrides.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or popular agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
         "requestBody": {
           "required": true,
           "content": {
@@ -344293,6 +344411,58 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "popularAgentOverrides": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "claude-code": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "codex": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "opencode": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "hermes": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "openclaw": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "modelProviderOverrides": {
                     "nullable": true,
                     "type": "object",
@@ -344850,6 +345020,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -345003,6 +345186,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -345860,6 +346044,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -346013,6 +346210,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -346814,6 +347012,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -346967,6 +347178,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -347799,6 +348011,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -347952,6 +348177,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -348721,6 +348947,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -348874,6 +349113,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -350831,6 +351071,19 @@
                         "additionalProperties": false
                       }
                     },
+                    "popularAgentOverrides": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -350984,6 +351237,7 @@
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
+                    "popularAgentOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -376276,7 +376530,6 @@
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "enabled": {
-                    "default": true,
                     "type": "boolean"
                   },
                   "cronExpression": {

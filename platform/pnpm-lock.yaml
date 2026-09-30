@@ -70,7 +70,7 @@ overrides:
   axios: '>=1.18.0'
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
-  undici: '>=7.29.0 <8'
+  undici: '>=7.29.1 <8'
   '@xmldom/xmldom': 0.9.12
   mammoth>@xmldom/xmldom: 0.8.15
   samlify>@xmldom/xmldom: 0.8.15
@@ -83,7 +83,7 @@ overrides:
   nanoid@<4: '>=3.3.18 <4'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.3.1'
-  brace-expansion: '>=5.0.9'
+  brace-expansion: '>=5.0.11'
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
@@ -538,8 +538,8 @@ importers:
         specifier: ^1.0.22
         version: 1.0.22
       undici:
-        specifier: '>=7.29.0 <8'
-        version: 7.29.0
+        specifier: '>=7.29.1 <8'
+        version: 7.29.1
       ws:
         specifier: '>=8.21.0'
         version: 8.21.0
@@ -6868,8 +6868,8 @@ packages:
   bowser@2.14.1:
     resolution: {integrity: sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg==}
 
-  brace-expansion@5.0.9:
-    resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
+  brace-expansion@5.0.12:
+    resolution: {integrity: sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==}
     engines: {node: 20 || >=22}
 
   braces@3.0.3:
@@ -10648,8 +10648,8 @@ packages:
   undici-types@7.25.0:
     resolution: {integrity: sha512-AXNgS1Byr27fTI+2bsPEkV9CxkT8H6xNyRI68b3TatlZo3RkzlqQBLL+w7SmGPVpokjHbcuNVQUWE7FRTg+LRA==}
 
-  undici@7.29.0:
-    resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
+  undici@7.29.1:
+    resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
     engines: {node: '>=20.18.1'}
 
   unicode-emoji-json@0.8.0:
@@ -11204,7 +11204,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.15
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.0
-      undici: 7.29.0
+      undici: 7.29.1
       zod: 4.3.6
 
   '@ai-sdk/provider@3.0.10':
@@ -12752,7 +12752,7 @@ snapshots:
       fast-querystring: 1.1.2
       fastify-plugin: 5.1.0
       toad-cache: 3.7.0
-      undici: 7.29.0
+      undici: 7.29.1
 
   '@fastify/swagger@9.7.0':
     dependencies:
@@ -16052,7 +16052,7 @@ snapshots:
     dependencies:
       progress: 2.0.3
       proxy-from-env: 1.1.0
-      undici: 7.29.0
+      undici: 7.29.1
       which: 2.0.2
     optionalDependencies:
       '@sentry/cli-darwin': 3.3.3
@@ -17779,7 +17779,7 @@ snapshots:
 
   bowser@2.14.1: {}
 
-  brace-expansion@5.0.9:
+  brace-expansion@5.0.12:
     dependencies:
       balanced-match: 4.0.3
 
@@ -17913,7 +17913,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 7.29.0
+      undici: 7.29.1
       whatwg-mimetype: 4.0.0
 
   chokidar@3.6.0:
@@ -19572,7 +19572,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.1
-      undici: 7.29.0
+      undici: 7.29.1
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -20312,7 +20312,7 @@ snapshots:
 
   minimatch@10.2.4:
     dependencies:
-      brace-expansion: 5.0.9
+      brace-expansion: 5.0.12
 
   minimist@1.2.8: {}
 
@@ -22137,7 +22137,7 @@ snapshots:
 
   undici-types@7.25.0: {}
 
-  undici@7.29.0: {}
+  undici@7.29.1: {}
 
   unicode-emoji-json@0.8.0: {}
 

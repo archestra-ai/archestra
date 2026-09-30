@@ -18,6 +18,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import McpServerModel from "@/models/mcp-server";
 import PluginModel from "@/models/plugin";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
@@ -304,6 +305,49 @@ const agentEditSpec: ArchestraToolAuditSpec = {
 };
 
 const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
+  create_schedule_trigger: {
+    resourceType: "scheduleTrigger",
+    action: "scheduleTrigger.created",
+    idFromResult: (s) => str(s?.id),
+    fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+  update_schedule_trigger: {
+    resourceType: "scheduleTrigger",
+    action: "scheduleTrigger.updated",
+    idFromArgs: (a) => str(a.schedule_trigger_id),
+    fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+  delete_schedule_trigger: {
+    resourceType: "scheduleTrigger",
+    action: "scheduleTrigger.deleted",
+    idFromArgs: (a) => str(a.schedule_trigger_id),
+    fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+  enable_schedule_trigger: {
+    resourceType: "scheduleTrigger",
+    action: "scheduleTrigger.updated",
+    idFromArgs: (a) => str(a.schedule_trigger_id),
+    fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+  disable_schedule_trigger: {
+    resourceType: "scheduleTrigger",
+    action: "scheduleTrigger.updated",
+    idFromArgs: (a) => str(a.schedule_trigger_id),
+    fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+  run_schedule_trigger_now: {
+    resourceType: "scheduleTrigger",
+    action: "scheduleTrigger.triggered",
+    idFromArgs: (a) => str(a.schedule_trigger_id),
+    fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+    afterFromResult: (s) => ({
+      runId: s.id,
+      triggerId: s.trigger_id,
+      status: s.status,
+      runKind: s.run_kind,
+    }),
+  },
+
   update_guardrails_policy: {
     resourceType: "guardrailsPolicy",
     action: "guardrailsPolicy.updated",

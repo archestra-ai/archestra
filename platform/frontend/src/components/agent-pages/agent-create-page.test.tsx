@@ -7,9 +7,12 @@ import type { AgentFormProps } from "@/components/agent-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useOrganization } from "@/lib/organization.query";
+import { makeOrganization } from "@/mocks/data/organization";
 import { AgentCreatePage } from "./agent-create-page";
 
 vi.mock("next/navigation");
+vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
@@ -79,6 +82,9 @@ function renderAgentCreatePage({
 describe("AgentCreatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useOrganization).mockReturnValue({
+      data: makeOrganization(),
+    } as ReturnType<typeof useOrganization>);
     mockPermissions({ canRead: true });
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useAppName).mockReturnValue("Archestra");

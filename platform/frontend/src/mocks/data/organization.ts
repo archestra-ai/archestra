@@ -87,6 +87,7 @@ export function makeOrganization(
     modelProviderOverrides: null,
     messagingChannelOverrides: null,
     knowledgeConnectorOverrides: null,
+    popularAgentOverrides: null,
     defaultEnvironmentName: null,
     defaultEnvironmentNamespace: null,
     defaultEnvironmentDescription: null,

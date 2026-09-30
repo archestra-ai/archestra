@@ -107,7 +107,7 @@ overrides:
   # line against an unvetted newer release on its own. Bounded to <8 so the
   # floor can't carry the backend's upstream dispatcher onto undici 8.x, which
   # is a major-version change and not this pin's business.
-  undici: '>=7.29.0 <8'
+  undici: '>=7.29.1 <8'
   # CVE-2026-83605 through CVE-2026-83619: XML injection/DoS fixes.
   # Preserve the consumers' release lines.
   '@xmldom/xmldom': 0.9.12
@@ -137,7 +137,8 @@ overrides:
   # CVE-2026-13149 (HIGH, uncontrolled resource consumption) fixed in 5.0.7, then
   # CVE-2026-14257 (HIGH, same class) fixed in 5.0.8, then CVE-2026-69152 (HIGH,
   # same class again) fixed in 5.0.9.
-  brace-expansion: '>=5.0.9'
+  # CVE-2026-102276 and CVE-2026-102278 require the 5.0.11 fix.
+  brace-expansion: '>=5.0.11'
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0

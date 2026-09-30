@@ -182,9 +182,12 @@ test("expiry retains the workspace until final transcript capture succeeds", asy
       );
     });
   await agentRunReconciler.reconcile();
-  expect((await A2ATaskModel.findById(task.id))?.state).toBe(
-    "TASK_STATE_CANCELED",
-  );
+  // Expiry is not a client cancel: the run records why it ended.
+  expect(await A2ATaskModel.findById(task.id)).toMatchObject({
+    state: "TASK_STATE_FAILED",
+    statusReason:
+      "The run was stopped because it reached its Maximum duration.",
+  });
   expect(deletion).not.toHaveBeenCalled();
   expect(
     (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,

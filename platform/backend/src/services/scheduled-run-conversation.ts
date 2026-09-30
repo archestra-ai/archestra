@@ -294,19 +294,11 @@ export async function backfillRunConversationMessages(params: {
     return;
   }
 
-  // Only interactions[0] is consumed below — the newest interaction carries the
-  // full history in its request and the final reply in its response.
-  const interactionResult = await InteractionModel.findAllPaginated(
-    { limit: 1, offset: 0 },
-    { sortBy: "createdAt", sortDirection: "desc" },
-    ownerUserId,
-    true,
-    { profileId: trigger.agentId, sessionId: `scheduled-${run.id}` },
-  );
-  const uiMessages = buildMessagesFromInteractions(
-    interactionResult.data,
-    trigger.messageTemplate,
-  );
+  const uiMessages = await reconstructRunMessagesFromInteractions({
+    trigger,
+    run,
+    requestingUserId: ownerUserId,
+  });
   if (uiMessages.length === 0) {
     return;
   }
@@ -321,6 +313,32 @@ export async function backfillRunConversationMessages(params: {
         content: message,
         createdAt: new Date(createdAt + index),
       })),
+  );
+}
+
+/**
+ * Rebuild a finished run's transcript from the LLM-proxy interactions it
+ * recorded, without writing anything. Returns no messages until the run has
+ * recorded an interaction. Callers authorize the run first.
+ */
+export async function reconstructRunMessagesFromInteractions(params: {
+  trigger: ScheduleTrigger;
+  run: ScheduleTriggerRun;
+  requestingUserId: string;
+}): Promise<PartialUIMessage[]> {
+  const { trigger, run, requestingUserId } = params;
+  // Only interactions[0] is consumed below — the newest interaction carries the
+  // full history in its request and the final reply in its response.
+  const interactionResult = await InteractionModel.findAllPaginated(
+    { limit: 1, offset: 0 },
+    { sortBy: "createdAt", sortDirection: "desc" },
+    requestingUserId,
+    true,
+    { profileId: trigger.agentId, sessionId: `scheduled-${run.id}` },
+  );
+  return buildMessagesFromInteractions(
+    interactionResult.data,
+    trigger.messageTemplate,
   );
 }
 

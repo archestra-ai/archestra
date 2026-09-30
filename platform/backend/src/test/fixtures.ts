@@ -85,7 +85,7 @@ type MakeUserOverrides = Partial<
  * Vitest test extension with fixtures
  * https://vitest.dev/guide/test-context.html#extend-test-context
  */
-interface TestFixtures {
+export interface TestFixtures {
   makeUser: typeof makeUser;
   makeAdmin: typeof makeAdmin;
   makeVirtualApiKey: typeof makeVirtualApiKey;

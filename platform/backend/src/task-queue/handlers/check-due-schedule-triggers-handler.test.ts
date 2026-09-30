@@ -90,7 +90,7 @@ describe("handleCheckDueScheduleTriggers", () => {
     });
     expect(runs).toHaveLength(1);
     expect(runs[0].status).toBe("failed");
-    expect(runs[0].error).toBe("Skipped: previous run was still in progress");
+    expect(runs[0].error).toBe("Skipped: the previous run was still starting.");
 
     expect(mockEnqueue).not.toHaveBeenCalled();
 

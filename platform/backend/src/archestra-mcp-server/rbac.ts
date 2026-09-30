@@ -197,6 +197,12 @@ export const TOOL_PERMISSIONS: Record<
   get_schedule_trigger: { resource: "scheduledTask", action: "read" },
   list_schedule_trigger_runs: { resource: "scheduledTask", action: "read" },
   get_schedule_trigger_run: { resource: "scheduledTask", action: "read" },
+  // Read-only, but the handler gates like the REST run-conversation route: the
+  // actor or a scheduled-task administrator, never plain project membership.
+  get_schedule_trigger_run_transcript: {
+    resource: "scheduledTask",
+    action: "read",
+  },
   enable_schedule_trigger: { resource: "scheduledTask", action: "update" },
   disable_schedule_trigger: { resource: "scheduledTask", action: "update" },
   // Starting a run creates a run row, matching RunScheduleTriggerNow.

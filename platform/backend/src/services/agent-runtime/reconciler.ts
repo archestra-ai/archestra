@@ -163,14 +163,12 @@ class AgentRunReconciler {
         if (run) {
           const task = await A2ATaskModel.findById(run.taskId);
           if (task && !isTerminalA2ATaskState(task.state)) {
-            await this.a2aManager.cancelTask({
-              actor: {
-                kind: workspace.actorKind,
-                id: workspace.actorId,
-                organizationId: workspace.organizationId,
-              },
-              agentId: workspace.agentId,
-              request: { id: run.taskId },
+            // Record why the run ended instead of reporting a client cancel.
+            await this.a2aManager.failTask({
+              taskId: run.taskId,
+              statusReason: expired
+                ? WORKSPACE_EXPIRED_REASON
+                : WORKSPACE_DELETED_REASON,
             });
           }
           // Capture the supervisor's final output while its volume still exists.
@@ -309,3 +307,7 @@ class AgentRunReconciler {
 export const agentRunReconciler = new AgentRunReconciler();
 
 const ADOPTION_DELAY_MS = 2 * 60 * 1_000;
+const WORKSPACE_EXPIRED_REASON =
+  "The run was stopped because it reached its Maximum duration.";
+const WORKSPACE_DELETED_REASON =
+  "The run was stopped because its workspace was deleted.";

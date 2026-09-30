@@ -5,7 +5,11 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import OpenAppaYellModel from "@/models/openappa-yell";
-import { getOpenAppaYell, yellVisibility } from "@/services/openappa-yells";
+import {
+  downloadOpenAppaYell,
+  getOpenAppaYell,
+  yellVisibility,
+} from "@/services/openappa-yells";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   OpenAppaYellQuerySchema,
@@ -73,6 +77,32 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           userId: request.user.id,
         }),
       ),
+  );
+  app.get(
+    "/api/openappa/yells/:id/archive",
+    {
+      schema: {
+        operationId: RouteId.DownloadOpenAppaYell,
+        tags: ["OpenAPPA"],
+        params: z.object({ id: z.uuid() }),
+        // Raw gzip bytes; the global error handler supplies JSON error responses.
+      },
+    },
+    async (request, reply) => {
+      const archive = await downloadOpenAppaYell({
+        ...request.params,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      return reply
+        .type("application/gzip")
+        .header(
+          "Content-Disposition",
+          `attachment; filename="openappa-yell-${request.params.id}.json.gz"`,
+        )
+        .header("Cache-Control", "private, no-store")
+        .send(archive);
+    },
   );
   app.patch(
     "/api/openappa/yells/:id",

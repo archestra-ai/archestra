@@ -335164,6 +335164,9 @@
                           "resolvedBy": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "hasArchive": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -335178,7 +335181,8 @@
                           "reportedAt",
                           "reportFailed",
                           "resolvedAt",
-                          "resolvedBy"
+                          "resolvedBy",
+                          "hasArchive"
                         ],
                         "additionalProperties": false
                       }
@@ -335787,6 +335791,9 @@
                     "resolvedBy": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "hasArchive": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -335801,7 +335808,8 @@
                     "reportedAt",
                     "reportFailed",
                     "resolvedAt",
-                    "resolvedBy"
+                    "resolvedBy",
+                    "hasArchive"
                   ],
                   "additionalProperties": false
                 }
@@ -336131,6 +336139,9 @@
                     "resolvedBy": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "hasArchive": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -336145,7 +336156,8 @@
                     "reportedAt",
                     "reportFailed",
                     "resolvedAt",
-                    "resolvedBy"
+                    "resolvedBy",
+                    "hasArchive"
                   ],
                   "additionalProperties": false
                 }
@@ -336389,6 +336401,38 @@
           ]
         },
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+      }
+    },
+    "/api/openappa/yells/{id}/archive": {
+      "get": {
+        "operationId": "downloadOpenAppaYell",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "log:read"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization"
       }
     },
     "/v1/openrouter/chat/completions": {

@@ -3,7 +3,9 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { openappaYellsTable } from "@/database/schemas/openappa-yell";
 
-export const OpenAppaYellSchema = createSelectSchema(openappaYellsTable);
+export const OpenAppaYellSchema = createSelectSchema(openappaYellsTable)
+  .omit({ archive: true })
+  .extend({ hasArchive: z.boolean() });
 export const InsertOpenAppaYellSchema = createInsertSchema(
   openappaYellsTable,
 ).pick({

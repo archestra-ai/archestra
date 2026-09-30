@@ -848,6 +848,7 @@ export const RouteId = {
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
   GetOpenAppaYells: "getOpenAppaYells",
   GetOpenAppaYellsSummary: "getOpenAppaYellsSummary",
+  DownloadOpenAppaYell: "downloadOpenAppaYell",
   GetOpenAppaYell: "getOpenAppaYell",
   UpdateOpenAppaYell: "updateOpenAppaYell",
   GetOpenappaExternalConsults: "getOpenappaExternalConsults",

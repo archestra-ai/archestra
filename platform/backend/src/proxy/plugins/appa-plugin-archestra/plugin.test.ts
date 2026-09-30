@@ -1,7 +1,9 @@
+import { gunzipSync } from "node:zlib";
 import { type MockInstance, vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import {
@@ -1184,7 +1186,12 @@ describe("AppaPluginArchestra", () => {
 });
 
 describe("rendering runtime text for this client", () => {
-  test("refuses the turn, with the ruling, when a denied call has no notice tool to carry it", async () => {
+  test("refuses the turn and saves a local diagnostic when the client cannot receive remedies", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    config.openappa.yellEnabled = true;
+    const organizationId = (await makeOrganization()).id;
     // A request that declared no tools opened no notice tool, and a call
     // arrived anyway: Codex's code mode runs its tools out of band and sends
     // them as programs. Nothing can carry the ruling as a notice, so the turn
@@ -1192,6 +1199,7 @@ describe("rendering runtime text for this client", () => {
     const plugin = new AppaPluginArchestra([]);
     const context = requestContext({
       sessionId: "toolless-session",
+      organizationId,
     });
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
@@ -1231,6 +1239,41 @@ describe("rendering runtime text for this client", () => {
       expect(message).toContain("[appa] Refused: tool builtin:exec");
       expect(message).toContain("declared no tools");
       expect(message).toContain("code_mode_host = false");
+      const reports = await OpenAppaYellModel.list({
+        organizationId,
+        status: "unresolved",
+        limit: 10,
+      });
+      expect(reports.data).toHaveLength(1);
+      expect(reports.data[0]).toMatchObject({
+        hasArchive: true,
+        reportedAt: null,
+        withTrajectory: false,
+      });
+      const archive = await OpenAppaYellModel.findArchive({
+        id: reports.data[0].id,
+        organizationId,
+      });
+      expect(archive).not.toBeNull();
+      const diagnostic = JSON.parse(
+        gunzipSync(archive as Buffer).toString("utf8"),
+      );
+      expect(diagnostic.kind).toBe("missing_remedy_tools");
+      expect(diagnostic.ruling).toContain("builtin:exec");
+      expect(diagnostic).not.toHaveProperty("arguments");
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "call", name: "exec", arguments: { input: "..." } }],
+      });
+      expect(
+        (
+          await OpenAppaYellModel.list({
+            organizationId,
+            status: "all",
+            limit: 10,
+          })
+        ).data,
+      ).toHaveLength(1);
     } finally {
       evaluateToolCalls.mockRestore();
     }

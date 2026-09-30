@@ -1772,6 +1772,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // log:read sees the caller's own consults; log:admin lifts it org-wide in the handler.
   [RouteId.GetOpenAppaYells]: { log: ["read"] },
   [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
+  [RouteId.DownloadOpenAppaYell]: { log: ["read"] },
   [RouteId.GetOpenAppaYell]: { log: ["read"] },
   [RouteId.UpdateOpenAppaYell]: { log: ["read"], toolPolicy: ["update"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },

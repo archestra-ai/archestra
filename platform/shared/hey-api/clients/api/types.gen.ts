@@ -86920,6 +86920,7 @@ export type GetOpenAppaYellsResponses = {
             reportFailed: boolean;
             resolvedAt: string | null;
             resolvedBy: string | null;
+            hasArchive: boolean;
         }>;
         pagination: {
             limit: number;
@@ -87105,6 +87106,7 @@ export type GetOpenAppaYellResponses = {
         reportFailed: boolean;
         resolvedAt: string | null;
         resolvedBy: string | null;
+        hasArchive: boolean;
     };
 };
 
@@ -87203,10 +87205,27 @@ export type UpdateOpenAppaYellResponses = {
         reportFailed: boolean;
         resolvedAt: string | null;
         resolvedBy: string | null;
+        hasArchive: boolean;
     };
 };
 
 export type UpdateOpenAppaYellResponse = UpdateOpenAppaYellResponses[keyof UpdateOpenAppaYellResponses];
+
+export type DownloadOpenAppaYellData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/openappa/yells/{id}/archive';
+};
+
+export type DownloadOpenAppaYellResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
     body: OpenrouterChatCompletionRequestInput;

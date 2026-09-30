@@ -3,6 +3,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   ilike,
   isNotNull,
   isNull,
@@ -19,6 +20,7 @@ import type {
   InsertOpenAppaYell,
   OpenAppaYellQuery,
 } from "@/types/openappa-yell";
+import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 export default class OpenAppaYellModel {
   static async findByIdForAudit(id: string, organizationId: string) {
@@ -33,10 +35,10 @@ export default class OpenAppaYellModel {
       .insert(table)
       .values(input)
       .onConflictDoNothing()
-      .returning();
+      .returning(metadataColumns());
     if (row) return row;
     const [existing] = await db
-      .select()
+      .select(metadataColumns())
       .from(table)
       .where(
         and(
@@ -48,6 +50,41 @@ export default class OpenAppaYellModel {
       );
     if (!existing) throw new Error("Could not record OpenAPPA yell");
     return existing;
+  }
+
+  static async storeArchive(params: {
+    id: string;
+    organizationId: string;
+    archive: Buffer;
+  }) {
+    await db
+      .update(table)
+      .set({ archive: params.archive })
+      .where(
+        and(
+          eq(table.id, params.id),
+          eq(table.organizationId, params.organizationId),
+          isNull(table.archive),
+        ),
+      );
+  }
+
+  static async findArchive(params: {
+    id: string;
+    organizationId: string;
+    callerId?: string;
+  }) {
+    const [row] = await db
+      .select({ archive: table.archive })
+      .from(table)
+      .where(
+        and(
+          eq(table.id, params.id),
+          eq(table.organizationId, params.organizationId),
+          params.callerId ? eq(table.callerId, params.callerId) : undefined,
+        ),
+      );
+    return row ? normalizeByteaField(row, "archive").archive : null;
   }
 
   static async recordDelivery(params: {
@@ -75,7 +112,7 @@ export default class OpenAppaYellModel {
     callerId?: string;
   }) {
     const [row] = await db
-      .select()
+      .select(metadataColumns())
       .from(table)
       .where(
         and(
@@ -110,7 +147,7 @@ export default class OpenAppaYellModel {
       z.uuid().safeParse(position.id).success &&
       !Number.isNaN(Date.parse(position.value));
     const rows = await db
-      .select()
+      .select(metadataColumns())
       .from(table)
       .where(
         and(
@@ -160,7 +197,12 @@ export default class OpenAppaYellModel {
           params.callerId ? eq(table.callerId, params.callerId) : undefined,
         ),
       )
-      .returning();
+      .returning(metadataColumns());
     return row ?? null;
   }
+}
+
+function metadataColumns() {
+  const { archive, ...columns } = getTableColumns(table);
+  return { ...columns, hasArchive: sql<boolean>`${archive} IS NOT NULL` };
 }

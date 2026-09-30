@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { readFileAsBase64 } from "@/lib/files/file-upload";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export type OpenAppaYell = archestraApiTypes.GetOpenAppaYellResponses[200];
@@ -44,5 +45,46 @@ export function useResolveOpenAppaYell() {
       return data;
     },
     onSuccess: () => client.invalidateQueries({ queryKey: ["openappa-yells"] }),
+  });
+}
+
+export function useOpenAppaYellArchive() {
+  return useMutation({
+    mutationFn: async ({
+      id,
+      download = false,
+    }: {
+      id: string;
+      download?: boolean;
+    }) => {
+      const { data, error } = await archestraApiSdk.downloadOpenAppaYell({
+        path: { id },
+        parseAs: "blob",
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      if (!(data instanceof Blob))
+        throw new Error("Diagnostic archive unavailable");
+      const file = new File([data], `openappa-yell-${id}.json.gz`, {
+        type: "application/gzip",
+      });
+      if (download) {
+        const url = URL.createObjectURL(file);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = file.name;
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        return null;
+      }
+      return {
+        type: "file" as const,
+        mediaType: file.type,
+        filename: file.name,
+        url: `data:${file.type};base64,${await readFileAsBase64(file)}`,
+      };
+    },
   });
 }

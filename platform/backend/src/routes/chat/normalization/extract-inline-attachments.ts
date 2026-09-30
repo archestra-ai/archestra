@@ -1,3 +1,5 @@
+import { promisify } from "node:util";
+import { gunzip } from "node:zlib";
 import {
   ApiError,
   type ChatUploadRejectionReason,
@@ -251,6 +253,32 @@ async function extractTextPreview(
   buffer: Buffer,
   conversationKey?: ConversationContentKey | null,
 ): Promise<void> {
+  if (mimeType === "application/gzip" || mimeType === "application/x-gzip") {
+    try {
+      // Decode JSON diagnostics only, with an expansion ceiling to reject zip
+      // bombs. Retain the original gzip as the downloadable attachment.
+      const plain = await promisify(gunzip)(buffer, {
+        maxOutputLength: 32 * 1024 * 1024,
+      });
+      const text = JSON.stringify(JSON.parse(plain.toString("utf8")), null, 2)
+        .replaceAll(String.fromCharCode(0), "")
+        .slice(0, TEXT_PREVIEW_MAX_CHARS);
+      await ConversationAttachmentModel.updateTextPreview(
+        attachmentId,
+        "ok",
+        text,
+        conversationKey,
+      );
+    } catch {
+      await ConversationAttachmentModel.updateTextPreview(
+        attachmentId,
+        "failed",
+        null,
+        conversationKey,
+      );
+    }
+    return;
+  }
   if (isTextLikeMimeType(mimeType)) {
     const text = buffer
       .toString("utf8")

@@ -434,6 +434,7 @@ function SlackAppSetup({
         bot={bot}
         newBotId={newBotId}
         webhookPath={webhookPath}
+        defaultAppName={isFirstApp ? appName : ""}
       />
       <NgrokSetupDialog
         open={ngrokDialogOpen}

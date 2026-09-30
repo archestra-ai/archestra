@@ -48,6 +48,12 @@ interface SlackSetupDialogProps {
    * un-prefixed URLs; every other app has its own.
    */
   webhookPath: string;
+  /**
+   * The name offered for a brand-new app. Only the organization's first app
+   * proposes the platform name; every further app must pick its own, since the
+   * name is also its slash-command prefix.
+   */
+  defaultAppName?: string;
 }
 
 export function SlackSetupDialog({
@@ -57,6 +63,7 @@ export function SlackSetupDialog({
   bot,
   newBotId,
   webhookPath,
+  defaultAppName = "",
 }: SlackSetupDialogProps) {
   const docsUrl = getFrontendDocsUrl("platform-slack");
   const configuredAppName = useAppName();
@@ -69,7 +76,7 @@ export function SlackSetupDialog({
   // A new app has no name yet: the admin picks one, and it is also the prefix
   // of the app's slash commands, so it must differ from the other apps.
   const [sharedAppName, setSharedAppName] = useState(
-    bot?.name ?? (newBotId ? "" : configuredAppName),
+    bot?.name ?? defaultAppName,
   );
 
   const [saving, setSaving] = useState(false);
@@ -95,7 +102,7 @@ export function SlackSetupDialog({
   const handleOpenChange = (value: boolean) => {
     onOpenChange(value);
     if (!value) {
-      setSharedAppName(bot?.name ?? (newBotId ? "" : configuredAppName));
+      setSharedAppName(bot?.name ?? defaultAppName);
       setSharedBotToken("");
       setSharedSigningSecret("");
       setSharedAppLevelToken("");
@@ -479,10 +486,8 @@ function StepManifestWebhook({
   onAppIdChange: (v: string) => void;
   onSigningSecretChange: (v: string) => void;
 }) {
-  const configuredAppName = useAppName();
-
   const manifest = buildSlackManifest({
-    appName: appName || configuredAppName,
+    appName: appName || NEW_APP_NAME_FALLBACK,
     connectionMode: "webhook",
     webhookUrl,
     interactiveUrl,
@@ -504,7 +509,7 @@ function StepManifestWebhook({
             id="manifest-app-name"
             value={appName}
             onChange={(e) => onAppNameChange(e.target.value)}
-            placeholder={configuredAppName}
+            placeholder={NEW_APP_NAME_PLACEHOLDER}
           />
         </div>
 
@@ -601,10 +606,8 @@ function StepManifestSocket({
   appId: string;
   onAppIdChange: (v: string) => void;
 }) {
-  const configuredAppName = useAppName();
-
   const manifest = buildSlackManifest({
-    appName: appName || configuredAppName,
+    appName: appName || NEW_APP_NAME_FALLBACK,
     connectionMode: "socket",
     webhookUrl: "",
     interactiveUrl: "",
@@ -626,7 +629,7 @@ function StepManifestSocket({
             id="manifest-app-name-socket"
             value={appName}
             onChange={(e) => onAppNameChange(e.target.value)}
-            placeholder={configuredAppName}
+            placeholder={NEW_APP_NAME_PLACEHOLDER}
           />
         </div>
 
@@ -713,3 +716,7 @@ function StepLink({
     </a>
   );
 }
+
+/** Manifest name while the field is still empty. */
+const NEW_APP_NAME_FALLBACK = "New Slack App";
+const NEW_APP_NAME_PLACEHOLDER = "e.g. Clode";

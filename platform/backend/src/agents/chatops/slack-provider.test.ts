@@ -35,6 +35,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { ChatOpsChannelBindingModel, UserModel } from "@/models";
 import { test } from "@/test";
+import type { ChatOpsEventHandler } from "@/types";
 import { markChannelThreadActive } from "./channel-activation";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import SlackProvider from "./slack-provider";
@@ -4248,5 +4249,425 @@ describe("SlackProvider — per-bot isolation", () => {
     } finally {
       config.chatops.signupWelcomeEnabled = signupWelcomeEnabled;
     }
+  });
+});
+
+// =============================================================================
+// Several managed Slack Apps in one workspace
+// =============================================================================
+
+describe("SlackProvider — several managed Slack Apps", () => {
+  const CHANNEL = "C_MANAGED_APPS";
+  const ROOT = "8888888888.000001";
+  const OTHER_BOT_USER = "UOTHERBOT";
+
+  /** The event handler as the manager exposes it to a provider. */
+  function createHandler(
+    overrides: { agentsUsingBot?: Array<{ id: string; name: string }> } = {},
+  ): ChatOpsEventHandler {
+    return {
+      handleIncomingMessage: vi.fn(),
+      handleInteractiveApprovalDecision: vi.fn(),
+      handleInteractiveSelection: vi.fn(),
+      getAccessibleChatopsAgents: vi.fn().mockResolvedValue([]),
+      getAgentsUsingBot: vi
+        .fn()
+        .mockResolvedValue(overrides.agentsUsingBot ?? []),
+      isOtherManagedBotUser: ({ userId }) => userId === OTHER_BOT_USER,
+    };
+  }
+
+  function withClient(provider: SlackProvider) {
+    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    const replies = vi.fn().mockResolvedValue({ messages: [{ ts: ROOT }] });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (provider as any).client = {
+      chat: { postMessage },
+      conversations: { replies },
+    };
+    return { postMessage, replies };
+  }
+
+  function channelMessage(text: string, ts: string, threadTs?: string) {
+    return makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: CHANNEL,
+        text,
+        ts,
+        ...(threadTs ? { thread_ts: threadTs } : {}),
+      },
+    );
+  }
+
+  test("a message that @mentions only another managed App is ignored, even in an active thread", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const bot = await makeChatOpsBot((await makeOrganization()).id);
+    const provider = createProvider({ botId: bot.id });
+    provider.setEventHandler(createHandler());
+    await markChannelThreadActive({
+      provider: "slack",
+      botId: bot.id,
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+
+    // The thread is active for this bot, so a plain follow-up is answered...
+    const plain = await provider.parseWebhookNotification(
+      channelMessage("and another thing", "8888888888.000002", ROOT),
+      {},
+    );
+    expect(plain?.text).toBe("and another thing");
+
+    // ...but one addressed to the other App belongs to that App alone.
+    const addressedElsewhere = await provider.parseWebhookNotification(
+      channelMessage(
+        `<@${OTHER_BOT_USER}> please take this one`,
+        "8888888888.000003",
+        ROOT,
+      ),
+      {},
+    );
+    expect(addressedElsewhere).toBeNull();
+  });
+
+  test("a message that @mentions only another managed App is ignored in an answer-all channel", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const bot = await makeChatOpsBot((await makeOrganization()).id);
+    const provider = createProvider({ botId: bot.id });
+    provider.setEventHandler(createHandler());
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: bot.organizationId,
+      provider: "slack",
+      botId: bot.id,
+      channelId: CHANNEL,
+      workspaceId: "T12345",
+    });
+    await ChatOpsChannelBindingModel.update(binding.id, {
+      answerAllMessages: true,
+    });
+
+    expect(
+      await provider.parseWebhookNotification(
+        channelMessage(`<@${OTHER_BOT_USER}> hello`, "8888888888.000010"),
+        {},
+      ),
+    ).toBeNull();
+    const plain = await provider.parseWebhookNotification(
+      channelMessage("hello everyone", "8888888888.000011"),
+      {},
+    );
+    expect(plain?.text).toBe("hello everyone");
+  });
+
+  test("a message that @mentions both Apps is still answered by each", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const bot = await makeChatOpsBot((await makeOrganization()).id);
+    const provider = createProvider({ botId: bot.id });
+    provider.setEventHandler(createHandler());
+
+    const result = await provider.parseWebhookNotification(
+      channelMessage(
+        `<@UBOT123> and <@${OTHER_BOT_USER}> what do you both think?`,
+        "8888888888.000020",
+      ),
+      {},
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.metadata).toMatchObject({ botMentioned: true });
+  });
+
+  test("without an event handler an @mention of another user never drops the message", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const bot = await makeChatOpsBot((await makeOrganization()).id);
+    const provider = createProvider({ botId: bot.id });
+    await markChannelThreadActive({
+      provider: "slack",
+      botId: bot.id,
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+
+    const result = await provider.parseWebhookNotification(
+      channelMessage(`<@${OTHER_BOT_USER}> hi`, "8888888888.000030", ROOT),
+      {},
+    );
+    expect(result).not.toBeNull();
+  });
+
+  describe("mute reactions", () => {
+    function reaction(itemUser: string | undefined) {
+      return makeEventPayload(
+        {},
+        {
+          type: "reaction_added",
+          channel: undefined,
+          ts: undefined,
+          reaction: "mute",
+          user: "U_REACTOR",
+          ...(itemUser ? { item_user: itemUser } : {}),
+          item: { type: "message", channel: CHANNEL, ts: "8888888888.000040" },
+        },
+      );
+    }
+
+    async function setup(
+      makeOrganization: () => Promise<{ id: string }>,
+      makeChatOpsBot: (orgId: string) => Promise<{ id: string }>,
+    ) {
+      const bot = await makeChatOpsBot((await makeOrganization()).id);
+      const provider = createProvider({ botId: bot.id });
+      provider.setEventHandler(createHandler());
+      const { postMessage } = withClient(provider);
+      await markChannelThreadActive({
+        provider: "slack",
+        botId: bot.id,
+        channelId: CHANNEL,
+        threadId: ROOT,
+      });
+      const isActive = async () =>
+        Boolean(
+          await cacheManager.get(
+            `${CacheKey.SlackThreadActive}-${bot.id}::${CHANNEL}::${ROOT}`,
+          ),
+        );
+      return { provider, postMessage, isActive };
+    }
+
+    test("a reaction on another managed App's reply does not mute this App", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const { provider, postMessage, isActive } = await setup(
+        makeOrganization,
+        makeChatOpsBot,
+      );
+
+      expect(
+        await provider.parseWebhookNotification(reaction(OTHER_BOT_USER), {}),
+      ).toBeNull();
+
+      expect(postMessage).not.toHaveBeenCalled();
+      expect(await isActive()).toBe(true);
+    });
+
+    test("a reaction on a human message mutes this App", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const { provider, postMessage, isActive } = await setup(
+        makeOrganization,
+        makeChatOpsBot,
+      );
+
+      await provider.parseWebhookNotification(reaction("U_TEAMMATE"), {});
+
+      expect(postMessage).toHaveBeenCalledTimes(1);
+      expect(await isActive()).toBe(false);
+    });
+
+    test("a reaction on this App's own reply mutes this App", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const { provider, postMessage, isActive } = await setup(
+        makeOrganization,
+        makeChatOpsBot,
+      );
+
+      await provider.parseWebhookNotification(reaction("UBOT123"), {});
+
+      expect(postMessage).toHaveBeenCalledTimes(1);
+      expect(await isActive()).toBe(false);
+    });
+  });
+
+  describe("getThreadHistory attribution", () => {
+    function historyProvider(messages: Array<Record<string, unknown>>) {
+      const provider = createProvider();
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+      (provider as any).client = {
+        conversations: { replies: vi.fn().mockResolvedValue({ messages }) },
+      };
+      return provider;
+    }
+
+    test("marks only this App's own messages as from self", async () => {
+      const provider = historyProvider([
+        { ts: "1000.001", user: "U_ALICE", text: "question" },
+        {
+          ts: "1000.002",
+          user: "UBOT123",
+          bot_id: "B_SELF",
+          text: "my answer",
+          bot_profile: { name: "Archestra" },
+        },
+        {
+          ts: "1000.003",
+          user: OTHER_BOT_USER,
+          bot_id: "B_OTHER",
+          text: "their answer",
+          bot_profile: { name: "Clode" },
+        },
+      ]);
+
+      const history = await provider.getThreadHistory({
+        channelId: CHANNEL,
+        workspaceId: "T12345",
+        threadId: "1000.001",
+      });
+
+      expect(
+        history.map((m) => [m.senderName, m.isFromBot, m.isFromSelf]),
+      ).toEqual([
+        ["U_ALICE", false, false],
+        ["Archestra", true, true],
+        ["Clode", true, false],
+      ]);
+    });
+
+    test("a bot message with no user is this App's own only when its bot id matches", async () => {
+      const provider = historyProvider([
+        { ts: "1000.001", bot_id: "B_SELF", text: "mine" },
+        { ts: "1000.002", bot_id: "B_OTHER", text: "theirs" },
+      ]);
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — set the auth.test bot id
+      (provider as any).slackBotId = "B_SELF";
+
+      const history = await provider.getThreadHistory({
+        channelId: CHANNEL,
+        workspaceId: "T12345",
+        threadId: "1000.001",
+      });
+
+      expect(history.map((m) => m.isFromSelf)).toEqual([true, false]);
+    });
+  });
+
+  describe("slash commands with a dedicated agent", () => {
+    function slashProvider(
+      botId: string,
+      handler: ChatOpsEventHandler,
+      email: string,
+    ) {
+      const provider = createProvider({ botId });
+      provider.setEventHandler(handler);
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — fake Slack client boundary
+      (provider as any).client = {
+        users: {
+          info: vi.fn().mockResolvedValue({
+            user: { real_name: "Dedicated", profile: { email } },
+          }),
+        },
+      };
+      return provider;
+    }
+
+    function slash(provider: SlackProvider, command: string) {
+      return provider.handleSlashCommand({
+        command,
+        text: "",
+        user_id: "U_DEDICATED",
+        user_name: "dedicated",
+        channel_id: CHANNEL,
+        team_id: "T12345",
+      });
+    }
+
+    test("STATUS and SELECT_AGENT say the bot always answers as its one agent", async ({
+      makeOrganization,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id);
+      const agent = await makeInternalAgent({
+        organizationId: org.id,
+        name: "Solo Agent",
+      });
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "slack",
+        botId: bot.id,
+        channelId: CHANNEL,
+        workspaceId: "T12345",
+        agentId: agent.id,
+      });
+      const handler = createHandler({
+        agentsUsingBot: [{ id: agent.id, name: "Solo Agent" }],
+      });
+      const provider = slashProvider(
+        bot.id,
+        handler,
+        `dedicated-${crypto.randomUUID()}@example.com`,
+      );
+
+      const signupWelcomeEnabled = config.chatops.signupWelcomeEnabled;
+      config.chatops.signupWelcomeEnabled = false;
+      try {
+        const status = await slash(provider, SLACK_SLASH_COMMANDS.STATUS);
+        expect(status?.text).toBe("This bot always answers as *Solo Agent*.");
+
+        const select = await slash(provider, SLACK_SLASH_COMMANDS.SELECT_AGENT);
+        expect(select?.text).toBe("This bot always answers as *Solo Agent*.");
+        expect(handler.getAgentsUsingBot).toHaveBeenCalledWith(bot.id);
+        // No picker card is offered when there is nothing to choose between.
+        expect(handler.getAccessibleChatopsAgents).not.toHaveBeenCalled();
+      } finally {
+        config.chatops.signupWelcomeEnabled = signupWelcomeEnabled;
+      }
+    });
+
+    test("STATUS keeps the switching tip when several agents use the bot", async ({
+      makeOrganization,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id);
+      const agent = await makeInternalAgent({
+        organizationId: org.id,
+        name: "First Agent",
+      });
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "slack",
+        botId: bot.id,
+        channelId: CHANNEL,
+        workspaceId: "T12345",
+        agentId: agent.id,
+      });
+      const provider = slashProvider(
+        bot.id,
+        createHandler({
+          agentsUsingBot: [
+            { id: agent.id, name: "First Agent" },
+            { id: crypto.randomUUID(), name: "Second Agent" },
+          ],
+        }),
+        `dedicated-${crypto.randomUUID()}@example.com`,
+      );
+
+      const signupWelcomeEnabled = config.chatops.signupWelcomeEnabled;
+      config.chatops.signupWelcomeEnabled = false;
+      try {
+        const status = await slash(provider, SLACK_SLASH_COMMANDS.STATUS);
+        expect(status?.text).toContain("First Agent");
+        expect(status?.text).toContain("AgentName >");
+        expect(status?.text).not.toContain("always answers as");
+      } finally {
+        config.chatops.signupWelcomeEnabled = signupWelcomeEnabled;
+      }
+    });
   });
 });

@@ -61,6 +61,7 @@ import {
   CHATOPS_NO_REPLY_SENTINEL,
   THREAD_MUTE_HINT,
 } from "./constants";
+import SlackProvider from "./slack-provider";
 import { buildHistorySkippedAttachmentsNote } from "./utils";
 
 /**
@@ -2123,6 +2124,16 @@ describe("ChatOpsManager security validation", () => {
         channelId: "test-channel-id",
         workspaceId: "test-workspace-id",
         agentId: defaultAgent.id,
+      });
+      // The prefix only switches among agents that use this bot: Sales uses it
+      // through a channel of its own.
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        botId: bot.id,
+        provider: "ms-teams",
+        channelId: "sales-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: salesAgent.id,
       });
 
       const mockProvider = createMockProvider({
@@ -4819,6 +4830,1036 @@ describe("ChatOpsManager with several Slack Apps", () => {
     expect(replyA).not.toHaveBeenCalled();
     expect(uploadA).not.toHaveBeenCalled();
     expect(replyB).toHaveBeenCalledTimes(1);
+  });
+});
+
+// =============================================================================
+// Bot-scoped agent resolution: an agent "uses" a bot when it has a card
+// =============================================================================
+
+describe("ChatOpsManager bot-scoped agent resolution", () => {
+  function createSlackBotProvider(overrides: {
+    botId: string;
+    sendReply?: (options: ChatReplyOptions) => Promise<string>;
+    sendAgentSelectionCard?: ChatOpsProvider["sendAgentSelectionCard"];
+    getThreadHistory?: ChatOpsProvider["getThreadHistory"];
+    getBotDisplayName?: () => string | null;
+  }): ChatOpsProvider {
+    return {
+      providerId: "slack",
+      botId: overrides.botId,
+      displayName: "Slack",
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification: async () => null,
+      sendReply: overrides.sendReply ?? (async () => "reply-id"),
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard:
+        overrides.sendAgentSelectionCard ?? (async () => {}),
+      getThreadHistory: overrides.getThreadHistory ?? (async () => []),
+      getUserEmail: async () => null,
+      getChannelName: async () => "shared-channel",
+      getWorkspaceId: () => "T_SCOPED",
+      getWorkspaceName: () => "Scoped Workspace",
+      hasMissingScopes: () => false,
+      notifyMissingScopes: async () => {},
+      downloadFiles: async () => [],
+      discoverChannels: async () => null,
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
+      ...(overrides.getBotDisplayName && {
+        getBotDisplayName: overrides.getBotDisplayName,
+      }),
+    };
+  }
+
+  function mockExecutor() {
+    return vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
+      text: "Done",
+      messageId: "msg-scoped",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "msg-scoped",
+        role: "assistant",
+        parts: [{ type: "text", text: "Done" }],
+      },
+    });
+  }
+
+  function slackMessage(
+    overrides: Partial<IncomingChatMessage> = {},
+  ): IncomingChatMessage {
+    return {
+      messageId: `scoped-${crypto.randomUUID()}`,
+      channelId: "C_SCOPED",
+      workspaceId: "T_SCOPED",
+      threadId: "1786400000.000100",
+      senderId: "U_SCOPED",
+      senderName: "Slack User",
+      senderEmail: "scoped@example.com",
+      text: "hello",
+      rawText: "hello",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: { channelType: "channel", conversationType: "channel" },
+      ...overrides,
+    };
+  }
+
+  /** A card on the agent's Messaging tab, without any channel under it. */
+  async function giveCard(agentId: string, botId: string): Promise<void> {
+    await db
+      .insert(schema.agentChatopsBotsTable)
+      .values({ agentId, botId })
+      .onConflictDoNothing();
+  }
+
+  function findBinding(botId: string, channelId = "C_SCOPED") {
+    return ChatOpsChannelBindingModel.findByChannel({
+      provider: "slack",
+      botId,
+      channelId,
+      workspaceId: "T_SCOPED",
+    });
+  }
+
+  async function setOrgDefaultAgent(organizationId: string, agentId: string) {
+    await db
+      .update(schema.organizationsTable)
+      .set({ defaultAgentId: agentId })
+      .where(eq(schema.organizationsTable.id, organizationId));
+  }
+
+  /** An organization, a member who can use its agents, and one unassigned Slack channel. */
+  async function setup(fixtures: {
+    makeOrganization: () => Promise<{ id: string }>;
+    makeUser: (overrides: { email: string }) => Promise<{ id: string }>;
+    makeMember: (userId: string, orgId: string) => Promise<unknown>;
+    makeChatOpsBot: (orgId: string) => Promise<{ id: string }>;
+  }) {
+    const org = await fixtures.makeOrganization();
+    const user = await fixtures.makeUser({ email: "scoped@example.com" });
+    await fixtures.makeMember(user.id, org.id);
+    const bot = await fixtures.makeChatOpsBot(org.id);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      botId: bot.id,
+      provider: "slack",
+      channelId: "C_SCOPED",
+      workspaceId: "T_SCOPED",
+    });
+    return { org, user, bot };
+  }
+
+  test("an org default agent that uses the bot is pinned on the unassigned channel", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeChatOpsBot,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockExecutor();
+    const { org, bot } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+    });
+    const preferred = await makeInternalAgent({ organizationId: org.id });
+    const other = await makeInternalAgent({ organizationId: org.id });
+    await giveCard(preferred.id, bot.id);
+    await giveCard(other.id, bot.id);
+    await setOrgDefaultAgent(org.id, preferred.id);
+
+    await new ChatOpsManager().processMessage({
+      message: slackMessage(),
+      provider: createSlackBotProvider({ botId: bot.id }),
+    });
+
+    expect((await findBinding(bot.id))?.agentId).toBe(preferred.id);
+    expect(executorSpy.mock.calls[0][0].agentId).toBe(preferred.id);
+  });
+
+  test("an org default agent that does not use the bot is skipped: the picker lists only the bot's agents", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeChatOpsBot,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockExecutor();
+    const { org, bot } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+    });
+    const orgDefault = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Org Default",
+    });
+    const first = await makeInternalAgent({
+      organizationId: org.id,
+      name: "First",
+    });
+    const second = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Second",
+    });
+    await giveCard(first.id, bot.id);
+    await giveCard(second.id, bot.id);
+    await setOrgDefaultAgent(org.id, orgDefault.id);
+
+    const cardSpy = vi.fn().mockResolvedValue(undefined);
+    const result = await new ChatOpsManager().processMessage({
+      message: slackMessage(),
+      provider: createSlackBotProvider({
+        botId: bot.id,
+        sendAgentSelectionCard: cardSpy,
+      }),
+    });
+
+    expect(result.success).toBe(true);
+    expect(executorSpy).not.toHaveBeenCalled();
+    expect((await findBinding(bot.id))?.agentId).toBeNull();
+    expect(cardSpy).toHaveBeenCalledTimes(1);
+    const offered = cardSpy.mock.calls[0][0].agents as Array<{ id: string }>;
+    expect(offered.map((agent) => agent.id).sort()).toEqual(
+      [first.id, second.id].sort(),
+    );
+  });
+
+  test("the sole agent using the bot answers and is pinned, whatever else the sender could use", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeChatOpsBot,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockExecutor();
+    const { org, bot } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+    });
+    const dedicated = await makeInternalAgent({ organizationId: org.id });
+    const orgDefault = await makeInternalAgent({ organizationId: org.id });
+    await makeInternalAgent({ organizationId: org.id });
+    await giveCard(dedicated.id, bot.id);
+    await setOrgDefaultAgent(org.id, orgDefault.id);
+
+    await new ChatOpsManager().processMessage({
+      message: slackMessage(),
+      provider: createSlackBotProvider({ botId: bot.id }),
+    });
+
+    expect((await findBinding(bot.id))?.agentId).toBe(dedicated.id);
+    expect(executorSpy.mock.calls[0][0].agentId).toBe(dedicated.id);
+  });
+
+  test("a sole personal agent answers but is not pinned onto the shared channel", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeChatOpsBot,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockExecutor();
+    const { org, user, bot } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+    });
+    const personal = await makeInternalAgent({
+      organizationId: org.id,
+      access: "personal",
+      authorId: user.id,
+    });
+    await giveCard(personal.id, bot.id);
+
+    await new ChatOpsManager().processMessage({
+      message: slackMessage(),
+      provider: createSlackBotProvider({ botId: bot.id }),
+    });
+
+    expect(executorSpy.mock.calls[0][0].agentId).toBe(personal.id);
+    expect((await findBinding(bot.id))?.agentId).toBeNull();
+  });
+
+  test("two bots in one channel each resolve to their own dedicated agent", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeChatOpsBot,
+    makeInternalAgent,
+  }) => {
+    mockExecutor();
+    const { org, bot: botA } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+    });
+    const botB = await makeChatOpsBot(org.id);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      botId: botB.id,
+      provider: "slack",
+      channelId: "C_SCOPED",
+      workspaceId: "T_SCOPED",
+    });
+    const agentA = await makeInternalAgent({ organizationId: org.id });
+    const agentB = await makeInternalAgent({ organizationId: org.id });
+    await giveCard(agentA.id, botA.id);
+    await giveCard(agentB.id, botB.id);
+
+    const manager = new ChatOpsManager();
+    await manager.processMessage({
+      message: slackMessage(),
+      provider: createSlackBotProvider({ botId: botA.id }),
+    });
+    await manager.processMessage({
+      message: slackMessage(),
+      provider: createSlackBotProvider({ botId: botB.id }),
+    });
+
+    expect((await findBinding(botA.id))?.agentId).toBe(agentA.id);
+    expect((await findBinding(botB.id))?.agentId).toBe(agentB.id);
+  });
+
+  test("a bot no agent uses behaves as before: the picker offers every usable agent", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeChatOpsBot,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockExecutor();
+    const { org, bot } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+    });
+    const first = await makeInternalAgent({ organizationId: org.id });
+    const second = await makeInternalAgent({ organizationId: org.id });
+    // An agent using some other bot must not make this bot look dedicated.
+    const otherBot = await makeChatOpsBot(org.id);
+    await giveCard(first.id, otherBot.id);
+
+    const cardSpy = vi.fn().mockResolvedValue(undefined);
+    await new ChatOpsManager().processMessage({
+      message: slackMessage(),
+      provider: createSlackBotProvider({
+        botId: bot.id,
+        sendAgentSelectionCard: cardSpy,
+      }),
+    });
+
+    expect(executorSpy).not.toHaveBeenCalled();
+    const offered = cardSpy.mock.calls[0][0].agents as Array<{ id: string }>;
+    expect(offered.map((agent) => agent.id)).toEqual(
+      expect.arrayContaining([first.id, second.id]),
+    );
+  });
+
+  test("getAccessibleChatopsAgents filters by the bot's agents and leaves unused bots unfiltered", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeChatOpsBot,
+    makeInternalAgent,
+  }) => {
+    const { org, bot } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+    });
+    const used = await makeInternalAgent({ organizationId: org.id });
+    const unused = await makeInternalAgent({ organizationId: org.id });
+    const emptyBot = await makeChatOpsBot(org.id);
+    await giveCard(used.id, bot.id);
+
+    const manager = new ChatOpsManager();
+    const forBot = await manager.getAccessibleChatopsAgents({
+      senderEmail: "scoped@example.com",
+      isDm: false,
+      botId: bot.id,
+    });
+    expect(forBot.map((agent) => agent.id)).toEqual([used.id]);
+
+    const forEmptyBot = await manager.getAccessibleChatopsAgents({
+      senderEmail: "scoped@example.com",
+      isDm: false,
+      botId: emptyBot.id,
+    });
+    expect(forEmptyBot.map((agent) => agent.id)).toEqual(
+      expect.arrayContaining([used.id, unused.id]),
+    );
+
+    const withoutBot = await manager.getAccessibleChatopsAgents({
+      senderEmail: "scoped@example.com",
+      isDm: false,
+    });
+    expect(withoutBot.map((agent) => agent.id)).toEqual(
+      expect.arrayContaining([used.id, unused.id]),
+    );
+  });
+
+  describe("AgentName > prefix on a bot with agents", () => {
+    async function assignedChannel(ctx: {
+      makeOrganization: () => Promise<{ id: string }>;
+      makeUser: (overrides: { email: string }) => Promise<{ id: string }>;
+      makeMember: (userId: string, orgId: string) => Promise<unknown>;
+      makeChatOpsBot: (orgId: string) => Promise<{ id: string }>;
+      makeInternalAgent: (overrides: {
+        organizationId: string;
+        name: string;
+      }) => Promise<{ id: string }>;
+    }) {
+      const { org, bot } = await setup(ctx);
+      const support = await ctx.makeInternalAgent({
+        organizationId: org.id,
+        name: "Support",
+      });
+      const outsider = await ctx.makeInternalAgent({
+        organizationId: org.id,
+        name: "Outsider",
+      });
+      const binding = await findBinding(bot.id);
+      if (!binding) throw new Error("binding missing");
+      await ChatOpsChannelBindingModel.update(binding.id, {
+        agentId: support.id,
+      });
+      await giveCard(support.id, bot.id);
+      return { org, bot, support, outsider };
+    }
+
+    test("naming an agent that does not use a single-agent bot is refused without running anyone", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const ctx = {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeChatOpsBot,
+        makeInternalAgent,
+      };
+      const executorSpy = mockExecutor();
+      const { bot } = await assignedChannel(ctx);
+      const sendReply = vi.fn().mockResolvedValue("reply-id");
+
+      const result = await new ChatOpsManager().processMessage({
+        message: slackMessage({ text: "Outsider > what's up?" }),
+        provider: createSlackBotProvider({ botId: bot.id, sendReply }),
+      });
+
+      expect(result.success).toBe(true);
+      expect(executorSpy).not.toHaveBeenCalled();
+      expect(sendReply).toHaveBeenCalledTimes(1);
+      expect(sendReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: "This bot always answers as *Support*, so it can't pass your message to *Outsider*.",
+        }),
+      );
+    });
+
+    test("naming an agent that does not use a multi-agent bot is refused with a short reply", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const ctx = {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeChatOpsBot,
+        makeInternalAgent,
+      };
+      const executorSpy = mockExecutor();
+      const { org, bot } = await assignedChannel(ctx);
+      const sales = await ctx.makeInternalAgent({
+        organizationId: org.id,
+        name: "Sales",
+      });
+      await giveCard(sales.id, bot.id);
+      const sendReply = vi.fn().mockResolvedValue("reply-id");
+
+      await new ChatOpsManager().processMessage({
+        message: slackMessage({ text: "Outsider > what's up?" }),
+        provider: createSlackBotProvider({ botId: bot.id, sendReply }),
+      });
+
+      expect(executorSpy).not.toHaveBeenCalled();
+      expect(sendReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: "*Outsider* isn't available through this bot.",
+        }),
+      );
+    });
+
+    test("naming another agent that uses the bot still switches, even with no channel of its own", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const ctx = {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeChatOpsBot,
+        makeInternalAgent,
+      };
+      const executorSpy = mockExecutor();
+      const { org, bot } = await assignedChannel(ctx);
+      const sales = await ctx.makeInternalAgent({
+        organizationId: org.id,
+        name: "Sales",
+      });
+      await giveCard(sales.id, bot.id);
+
+      await new ChatOpsManager().processMessage({
+        message: slackMessage({ text: "Sales > what's the status?" }),
+        provider: createSlackBotProvider({ botId: bot.id }),
+      });
+
+      expect(executorSpy.mock.calls[0][0].agentId).toBe(sales.id);
+      expect(JSON.stringify(executorSpy.mock.calls[0][0].message)).toContain(
+        "what's the status?",
+      );
+    });
+
+    test("the binding's own agent can be named even when it holds no card", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const ctx = {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeChatOpsBot,
+        makeInternalAgent,
+      };
+      const executorSpy = mockExecutor();
+      const { org, bot, support } = await assignedChannel(ctx);
+      // Drop Support's card: the binding still points at it.
+      await db
+        .delete(schema.agentChatopsBotsTable)
+        .where(eq(schema.agentChatopsBotsTable.agentId, support.id));
+      const sales = await ctx.makeInternalAgent({
+        organizationId: org.id,
+        name: "Sales",
+      });
+      await giveCard(sales.id, bot.id);
+
+      await new ChatOpsManager().processMessage({
+        message: slackMessage({ text: "Support > hello" }),
+        provider: createSlackBotProvider({ botId: bot.id }),
+      });
+
+      expect(executorSpy.mock.calls[0][0].agentId).toBe(support.id);
+    });
+  });
+
+  describe("thread history attribution", () => {
+    const HISTORY: ChatThreadMessage[] = [
+      {
+        messageId: "h1",
+        senderId: "U_ALICE",
+        senderName: "Alice",
+        text: "question for both bots",
+        timestamp: new Date(Date.now() - 90_000),
+        isFromBot: false,
+      },
+      {
+        messageId: "h2",
+        senderId: "U_SELF",
+        senderName: "Ildestra",
+        text: "my own earlier answer",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: true,
+        isFromSelf: true,
+      },
+      {
+        messageId: "h3",
+        senderId: "U_OTHER",
+        senderName: "Clode",
+        text: "the other bot's answer",
+        timestamp: new Date(Date.now() - 30_000),
+        isFromBot: true,
+        isFromSelf: false,
+      },
+    ];
+
+    async function runWithHistory(
+      ctx: Parameters<typeof setup>[0] & {
+        makeInternalAgent: (overrides: {
+          organizationId: string;
+        }) => Promise<{ id: string }>;
+      },
+      provider: (botId: string) => ChatOpsProvider,
+    ): Promise<string> {
+      const executorSpy = mockExecutor();
+      const { org, bot } = await setup(ctx);
+      const agent = await ctx.makeInternalAgent({ organizationId: org.id });
+      await giveCard(agent.id, bot.id);
+      await new ChatOpsManager().processMessage({
+        message: slackMessage({ isThreadReply: true, text: "and now?" }),
+        provider: provider(bot.id),
+      });
+      return JSON.stringify(executorSpy.mock.calls[0][0].message);
+    }
+
+    test("only this bot's own turns are 'You'; another bot's turn is named as another bot", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const ctx = {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeChatOpsBot,
+        makeInternalAgent,
+      };
+      const sent = await runWithHistory(ctx, (botId) =>
+        createSlackBotProvider({
+          botId,
+          getThreadHistory: async () => HISTORY,
+          getBotDisplayName: () => "Ildestra",
+        }),
+      );
+
+      expect(sent).toContain("Alice: question for both bots");
+      expect(sent).toContain("You (Ildestra): my own earlier answer");
+      expect(sent).toContain("Clode (another bot): the other bot's answer");
+      expect(sent).not.toContain("You (Ildestra): the other bot's answer");
+    });
+
+    test("the provider's own display name is used instead of the organization's app name", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const ctx = {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeChatOpsBot,
+        makeInternalAgent,
+      };
+      const sent = await runWithHistory(ctx, (botId) =>
+        createSlackBotProvider({
+          botId,
+          getThreadHistory: async () => HISTORY,
+          getBotDisplayName: () => "Second App",
+        }),
+      );
+
+      expect(sent).toContain("You (Second App): my own earlier answer");
+    });
+
+    test("a provider that never sets isFromSelf keeps treating every bot turn as its own", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const ctx = {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeChatOpsBot,
+        makeInternalAgent,
+      };
+      const sent = await runWithHistory(ctx, (botId) =>
+        createSlackBotProvider({
+          botId,
+          getBotDisplayName: () => "Ildestra",
+          getThreadHistory: async () =>
+            HISTORY.map(({ isFromSelf: _ignored, ...message }) => message),
+        }),
+      );
+
+      expect(sent).toContain("You (Ildestra): my own earlier answer");
+      expect(sent).toContain("You (Ildestra): the other bot's answer");
+      expect(sent).not.toContain("(another bot)");
+    });
+  });
+
+  describe("group conversation prompt", () => {
+    async function groupPrompt(
+      ctx: Parameters<typeof setup>[0] & {
+        makeInternalAgent: (overrides: {
+          organizationId: string;
+        }) => Promise<{ id: string }>;
+      },
+      receiving: "first" | "second",
+    ): Promise<string> {
+      const executorSpy = mockExecutor();
+      const { org, bot: first } = await setup(ctx);
+      const second = await ctx.makeChatOpsBot(org.id);
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        botId: second.id,
+        provider: "slack",
+        channelId: "C_SCOPED",
+        workspaceId: "T_SCOPED",
+      });
+      const agent = await ctx.makeInternalAgent({ organizationId: org.id });
+      await giveCard(agent.id, first.id);
+      await giveCard(agent.id, second.id);
+      const firstProvider = createSlackBotProvider({ botId: first.id });
+      const secondProvider = createSlackBotProvider({ botId: second.id });
+      const manager = new ChatOpsManager();
+      const running = (
+        manager as unknown as { slackProviders: Map<string, ChatOpsProvider> }
+      ).slackProviders;
+      running.set(first.id, firstProvider);
+      running.set(second.id, secondProvider);
+
+      await manager.processMessage({
+        message: slackMessage({
+          metadata: {
+            channelType: "channel",
+            conversationType: "channel",
+            botMentioned: true,
+          },
+        }),
+        provider: receiving === "first" ? firstProvider : secondProvider,
+      });
+      return JSON.stringify(executorSpy.mock.calls[0][0].message);
+    }
+
+    test("the first Slack App is told people also call it by the platform name", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const ctx = {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeChatOpsBot,
+        makeInternalAgent,
+      };
+      const prompt = await groupPrompt(ctx, "first");
+
+      expect(prompt).toContain("group conversation with multiple people");
+      expect(prompt).toContain(`address you as \\"Archestra\\"`);
+      expect(prompt).toContain("any of those names");
+    });
+
+    test("a second Slack App is never told it is called by the platform name", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeChatOpsBot,
+      makeInternalAgent,
+    }) => {
+      const ctx = {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeChatOpsBot,
+        makeInternalAgent,
+      };
+      const prompt = await groupPrompt(ctx, "second");
+
+      expect(prompt).toContain("group conversation with multiple people");
+      expect(prompt).not.toContain("address you as");
+      expect(prompt).not.toContain("Archestra");
+      expect(prompt).toContain("addressing you by your name");
+    });
+  });
+});
+
+// =============================================================================
+// Slack App identity pinning and env seeding
+// =============================================================================
+
+describe("ChatOpsManager Slack App identity", () => {
+  beforeEach(() => {
+    for (const name of [
+      "ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED",
+      "ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID",
+      "ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET",
+      "ARCHESTRA_CHATOPS_SLACK_ENABLED",
+      "ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN",
+      "ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET",
+      "ARCHESTRA_CHATOPS_SLACK_APP_ID",
+      "ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE",
+      "ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN",
+      "ARCHESTRA_CHATOPS_TELEGRAM_ENABLED",
+      "ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN",
+    ]) {
+      vi.stubEnv(name, "");
+    }
+    // Nothing below may reach Slack: channel discovery and name lookups are
+    // the provider's network calls besides auth.test.
+    vi.spyOn(SlackProvider.prototype, "discoverChannels").mockResolvedValue([]);
+    vi.spyOn(SlackProvider.prototype, "getUserName").mockResolvedValue("Bot");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  /**
+   * Slack's auth.test, by bot token: what the token authenticates as. A token
+   * missing from the table is rejected like an invalid one.
+   */
+  function stubAuthTest(
+    identities: Record<string, { user_id: string; team_id: string }>,
+  ) {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const authorization = (init?.headers as Record<string, string>)
+        ?.Authorization;
+      const identity = identities[authorization?.replace("Bearer ", "") ?? ""];
+      return new Response(
+        JSON.stringify(
+          identity
+            ? { ok: true, team: "Workspace", ...identity }
+            : { ok: false, error: "invalid_auth" },
+        ),
+        { headers: { "x-oauth-scopes": "chat:write" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  async function reloadBot(botId: string) {
+    const bot = await ChatOpsBotModel.findById(botId);
+    if (!bot) throw new Error("bot missing");
+    return bot;
+  }
+
+  async function slackApp(organizationId: string, botToken: string) {
+    const bot = await makeBot(organizationId, "slack");
+    await ChatOpsConfigModel.saveSlackConfig({
+      bot,
+      value: {
+        enabled: true,
+        botToken,
+        signingSecret: "signing-secret",
+        appId: `A_${botToken}`,
+        connectionMode: "webhook",
+      },
+    });
+    return bot;
+  }
+
+  test("a Slack App's identity is pinned on its bot row the first time it starts", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    stubAuthTest({ "xoxb-one": { user_id: "U_ONE", team_id: "T_ONE" } });
+    const bot = await slackApp(org.id, "xoxb-one");
+    expect(bot.externalBotUserId).toBeNull();
+
+    const manager = new ChatOpsManager();
+    await manager.startSlackApp(bot.id);
+
+    const pinned = await ChatOpsBotModel.findById(bot.id);
+    expect(pinned).toMatchObject({
+      externalBotUserId: "U_ONE",
+      externalWorkspaceId: "T_ONE",
+      externalAppId: "A_xoxb-one",
+    });
+    expect(manager.getSlackProvider(bot.id)).not.toBeNull();
+    await manager.cleanup();
+  });
+
+  test("a rotated token for the same Slack App is accepted", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const same = { user_id: "U_ONE", team_id: "T_ONE" };
+    stubAuthTest({ "xoxb-old": same, "xoxb-new": same });
+    const bot = await slackApp(org.id, "xoxb-old");
+    const manager = new ChatOpsManager();
+    await manager.startSlackApp(bot.id);
+
+    await ChatOpsConfigModel.saveSlackConfig({
+      bot: await reloadBot(bot.id),
+      value: {
+        enabled: true,
+        botToken: "xoxb-new",
+        signingSecret: "signing-secret",
+        appId: "A_xoxb-one",
+        connectionMode: "webhook",
+      },
+    });
+    await manager.startSlackApp(bot.id);
+
+    expect(manager.getSlackProvider(bot.id)?.getBotUserId()).toBe("U_ONE");
+    await manager.cleanup();
+  });
+
+  test("a later start whose token resolves to a different bot is refused and the app stops", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    stubAuthTest({
+      "xoxb-one": { user_id: "U_ONE", team_id: "T_ONE" },
+      "xoxb-stranger": { user_id: "U_STRANGER", team_id: "T_ONE" },
+    });
+    const bot = await slackApp(org.id, "xoxb-one");
+    const manager = new ChatOpsManager();
+    await manager.startSlackApp(bot.id);
+    expect(manager.getSlackProvider(bot.id)).not.toBeNull();
+
+    // An admin pastes another app's token into this app.
+    await ChatOpsConfigModel.saveSlackConfig({
+      bot: await reloadBot(bot.id),
+      value: {
+        enabled: true,
+        botToken: "xoxb-stranger",
+        signingSecret: "signing-secret",
+        appId: "A_xoxb-one",
+        connectionMode: "webhook",
+      },
+    });
+
+    await expect(manager.startSlackApp(bot.id)).rejects.toThrow(
+      /different bot/,
+    );
+    expect(manager.getSlackProvider(bot.id)).toBeNull();
+    expect(await ChatOpsBotModel.findById(bot.id)).toMatchObject({
+      externalBotUserId: "U_ONE",
+      externalWorkspaceId: "T_ONE",
+    });
+    await manager.cleanup();
+  });
+
+  test("a second app whose token resolves to an already pinned identity is refused", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const same = { user_id: "U_ONE", team_id: "T_ONE" };
+    stubAuthTest({ "xoxb-one": same, "xoxb-copy": same });
+    const first = await slackApp(org.id, "xoxb-one");
+    const second = await slackApp(org.id, "xoxb-copy");
+    const manager = new ChatOpsManager();
+    await manager.startSlackApp(first.id);
+
+    await expect(manager.startSlackApp(second.id)).rejects.toThrow(
+      /another Slack App already uses/,
+    );
+
+    expect(manager.getSlackProvider(second.id)).toBeNull();
+    expect(manager.getSlackProvider(first.id)).not.toBeNull();
+    expect(
+      (await ChatOpsBotModel.findById(second.id))?.externalBotUserId,
+    ).toBeNull();
+    await manager.cleanup();
+  });
+
+  test("initialize() keeps the pinned app running and drops one whose token changed identity", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    stubAuthTest({
+      "xoxb-one": { user_id: "U_ONE", team_id: "T_ONE" },
+      "xoxb-two": { user_id: "U_TWO", team_id: "T_ONE" },
+    });
+    const good = await slackApp(org.id, "xoxb-one");
+    // Pinned to U_PINNED, but its token now authenticates as U_TWO.
+    const drifted = await slackApp(org.id, "xoxb-two");
+    await ChatOpsBotModel.update(drifted.id, {
+      externalBotUserId: "U_PINNED",
+      externalWorkspaceId: "T_ONE",
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getSlackProvider(good.id)).not.toBeNull();
+    expect(manager.getSlackProvider(drifted.id)).toBeNull();
+    expect((await ChatOpsBotModel.findById(good.id))?.externalBotUserId).toBe(
+      "U_ONE",
+    );
+    await manager.cleanup();
+  });
+
+  describe("env seeding on initialize()", () => {
+    function slackEnv() {
+      vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
+      vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-env");
+      vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "env-signing");
+      vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "webhook");
+    }
+
+    test("seeds and starts a Slack App from env vars when no removal is recorded", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      slackEnv();
+      stubAuthTest({ "xoxb-env": { user_id: "U_ENV", team_id: "T_ENV" } });
+
+      const manager = new ChatOpsManager();
+      await manager.initialize();
+
+      const bots = await ChatOpsBotModel.findByProvider({
+        organizationId: org.id,
+        provider: "slack",
+      });
+      expect(bots).toHaveLength(1);
+      expect(manager.getSlackProvider(bots[0].id)).not.toBeNull();
+      expect(bots[0].externalBotUserId).toBe("U_ENV");
+      await manager.cleanup();
+    });
+
+    test("does not bring a removed Slack App back from env vars on restart", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      slackEnv();
+      const fetchMock = stubAuthTest({
+        "xoxb-env": { user_id: "U_ENV", team_id: "T_ENV" },
+      });
+      // What removing the last Slack App records.
+      await ChatOpsConfigModel.disableSlackEnvSeeding();
+
+      const manager = new ChatOpsManager();
+      await manager.initialize();
+
+      expect(
+        await ChatOpsBotModel.findByProvider({
+          organizationId: org.id,
+          provider: "slack",
+        }),
+      ).toEqual([]);
+      expect(manager.getSlackProviders()).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+      await manager.cleanup();
+    });
   });
 });
 

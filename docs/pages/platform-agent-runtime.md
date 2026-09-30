@@ -271,7 +271,7 @@ The Agent's **Runs** tab opens live terminals and completed recordings. Reattach
 
 Run ownership follows the user who started it, not the Agent creator. Sharing grants read-only output access, never an interactive terminal. Agent administrators can read output even without an explicit share. Project access also permits reading runs when paired with permission to read all project sessions.
 
-Recordings preserve earlier terminal output, including screens replaced by redraws. Run history remains available after the container and files are removed and follows the configured retention period. See [Deployment](/docs/platform-deployment#agent-runtime) for retention and transcript limits.
+Recordings preserve earlier terminal output, including screens replaced by redraws. Original layout preserves terminal columns and scrolls horizontally. Wrap lines fits the output to your browser width. The output panel handles vertical scrolling in both views. Links to published artifacts open in a new browser tab. Run history remains available after the container and files are removed and follows the configured retention period. See [Deployment](/docs/platform-deployment#agent-runtime) for retention and transcript limits.
 
 ## Monitor Runtime Health
 

@@ -249,6 +249,74 @@ describe("APPA GitHub sync", () => {
     });
   });
 
+  test.each([
+    {
+      githubStatus: 404,
+      apiStatus: 502,
+      message: "installed on that exact account",
+    },
+    {
+      githubStatus: 422,
+      apiStatus: 409,
+      message: "repository name may already exist",
+    },
+  ])("explains GitHub repository creation HTTP $githubStatus", async ({
+    githubStatus,
+    apiStatus,
+    message,
+  }) => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-template-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.post(
+        "https://api.github.com/repos/archestra-ai/openappa-config/generate",
+        () =>
+          HttpResponse.json(
+            { message: "GitHub rejected request" },
+            { status: githubStatus },
+          ),
+      ),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "new-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+      },
+    });
+    expect(response.statusCode).toBe(apiStatus);
+    expect(response.json().error.message).toContain(message);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
+  });
+
   test("an invalid upstream policy preserves the last accepted bytes and commit", async () => {
     await configure();
     await syncAppaGithubPolicy(organizationId);

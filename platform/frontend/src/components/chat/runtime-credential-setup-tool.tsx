@@ -2,6 +2,7 @@
 
 import { GithubIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { Button } from "@/components/ui/button";
@@ -37,13 +38,14 @@ export function RuntimeCredentialSetupTool({
       <InlineNotice variant="neutral" className="my-2 w-full max-w-2xl">
         <GithubIcon aria-hidden />
         <span className="font-medium">GitHub sync</span>
-        <InlineNoticeText>
-          Add an organization GitHub App to store your policy in a repository.
+        <InlineNoticeText className="flex-1">
+          Install an App on the future repository owner with Administration,
+          Contents, and Pull requests Read &amp; write.
         </InlineNoticeText>
         <Button
           size="sm"
-          variant="secondary"
-          className="ml-auto"
+          variant="outline"
+          className="ml-auto h-6 px-2 text-xs"
           onClick={() => setStep("define")}
         >
           <span>Connect GitHub App</span>
@@ -55,6 +57,7 @@ export function RuntimeCredentialSetupTool({
           initialKind="github_app"
           initialScope="organization"
           initialValues={OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES}
+          setupNotice={<OpenAppaGithubAppRequirements />}
           hideProvidedBy
           size="medium"
           onClose={() => setStep("closed")}

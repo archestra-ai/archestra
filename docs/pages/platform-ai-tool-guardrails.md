@@ -40,7 +40,7 @@ From then on, administrators can turn enforcement off and on with a switch. The 
 
 A policy controls every agent, so changes to it should be reviewed like code. Connect a GitHub repository and the configuration agent opens pull requests instead of saving changes. A change applies once it's merged.
 
-Administrators can create a private repository from the [OpenAPPA configuration template](https://github.com/archestra-ai/openappa-config). Start in the setup chat, on **OpenAPPA → Overview**, or under **Settings → OpenAPPA**. The chat uses a connected organization GitHub App, or opens the same credential dialog used in Settings to add one. The App needs repository administration, contents, and pull request permissions. It must have access to new repositories. Archestra copies the template and writes your current policy to `appa.toml`, including battery declarations. Sync starts immediately. You can also connect an existing repository.
+Administrators can create a private repository from the [OpenAPPA configuration template](https://github.com/archestra-ai/openappa-config). Start in the setup chat, on **OpenAPPA → Overview**, or under **Settings → OpenAPPA**. The chat uses a connected organization GitHub App, or opens the same credential dialog used in Settings to add one. Install the App on the GitHub account that will own the new repository. Select **All repositories** so it can access repositories created later. Give it **Read & write** access to Administration, Contents, and Pull requests. Enter that account's login as the GitHub owner and choose an unused repository name. Archestra copies the template and writes your current policy to `appa.toml`, including battery declarations. Sync starts immediately. You can also connect an existing repository.
 
 The template checks policy structure on each pull request. Add [trajectory tests](https://www.openappa.com/validation) under `traces/` to check allowed and refused decisions. Require the validation check in GitHub branch protection. The agent creates pull requests for later changes. The new policy takes effect after the pull request merges and sync succeeds. Changes that swap a battery's credential or drop a battery also need an administrator to accept them in Archestra.
 
@@ -48,7 +48,7 @@ Template updates apply to repositories created afterward. Existing repositories 
 
 ## Example Setup
 
-An administrator creates a starter policy for a new deployment, then connects the organization's GitHub App in chat. They create a private `openappa-config` repository. The current policy becomes its first `appa.toml`; the next requested rule change opens a pull request for review.
+An administrator creates a starter policy for a new deployment, then connects the organization's GitHub App in chat. They create a private `openappa-policy` repository. The current policy becomes its first `appa.toml`; the next requested rule change opens a pull request for review.
 
 ## MCP Servers and Tool Coverage
 

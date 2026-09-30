@@ -106,6 +106,15 @@ export async function createAppaGithubRepository(params: {
       private: true,
       include_all_branches: false,
     },
+    onHttpError: (status) =>
+      new ApiError(
+        status === 422 ? 409 : 502,
+        status === 422
+          ? `GitHub rejected ${params.owner}/${params.name} (HTTP 422). That repository name may already exist under this owner. Choose a different name.`
+          : status === 404
+            ? `GitHub could not create a repository under ${params.owner} (HTTP 404). Check that the selected App is installed on that exact account with All repositories access and the required permissions.`
+            : `GitHub returned HTTP ${status} while creating ${params.owner}/${params.name}. Check the App installation and permissions.`,
+      ),
   });
   const repo = `${params.owner}/${params.name}`;
   if (
@@ -455,6 +464,7 @@ async function githubJson<T = unknown>(params: {
   token: string;
   method?: "GET" | "POST" | "PUT";
   body?: object;
+  onHttpError?: (status: number) => ApiError;
 }): Promise<T> {
   let response: Response;
   try {
@@ -473,9 +483,12 @@ async function githubJson<T = unknown>(params: {
     throw new ApiError(502, "Could not reach GitHub");
   }
   if (!response.ok)
-    throw new ApiError(
-      response.status === 422 ? 409 : 502,
-      `GitHub returned HTTP ${response.status}. Check repository creation and App permissions.`,
+    throw (
+      params.onHttpError?.(response.status) ??
+      new ApiError(
+        response.status === 422 ? 409 : 502,
+        `GitHub returned HTTP ${response.status}. Check repository access and App permissions.`,
+      )
     );
   const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
   if (!bytes) throw new ApiError(502, "GitHub response is too large");

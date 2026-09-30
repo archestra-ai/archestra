@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft } from "lucide-react";
+import type { ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -39,6 +40,7 @@ export function RuntimeCredentialDefinitionDialog({
   initialKind,
   initialScope,
   initialValues,
+  setupNotice,
   hideProvidedBy = false,
   onCreated,
   backLabel,
@@ -49,6 +51,7 @@ export function RuntimeCredentialDefinitionDialog({
   initialKind?: "secret" | "github_app" | "github_app_user";
   initialScope?: "personal" | "organization";
   initialValues?: { name: string; description: string; icon: string };
+  setupNotice?: ReactNode;
   hideProvidedBy?: boolean;
   onCreated?: (id: string) => void;
   backLabel?: string;
@@ -180,6 +183,7 @@ export function RuntimeCredentialDefinitionDialog({
       }
     >
       <Form {...form}>
+        {setupNotice}
         <FormField
           control={form.control}
           name="name"

@@ -13,6 +13,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
@@ -303,7 +304,7 @@ export function OpenAppaCreateRepositoryDialog({
   const form = useForm({
     defaultValues: {
       owner: "",
-      name: "openappa-config",
+      name: "openappa-policy",
       githubAppConfigId: "",
       interval: "1h" as "15m" | "1h" | "1d",
     },
@@ -341,6 +342,7 @@ export function OpenAppaCreateRepositoryDialog({
         }
       >
         <div className="space-y-4">
+          <OpenAppaGithubAppRequirements />
           <div className="space-y-2">
             <Label htmlFor="new-appa-owner">GitHub owner</Label>
             <Input
@@ -351,6 +353,9 @@ export function OpenAppaCreateRepositoryDialog({
                 pattern: /^[a-zA-Z0-9][a-zA-Z0-9-]*$/,
               })}
             />
+            <p className="text-xs text-muted-foreground">
+              Enter the exact account login where the selected App is installed.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="new-appa-name">Repository name</Label>
@@ -361,9 +366,23 @@ export function OpenAppaCreateRepositoryDialog({
                 pattern: /^[a-zA-Z0-9_.-]+$/,
               })}
             />
+            <p className="text-xs text-muted-foreground">
+              Choose a name that does not already exist under this owner.
+            </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="new-appa-app">GitHub App</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="new-appa-app">Connected GitHub App</Label>
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto shrink-0 px-0 py-0 text-xs"
+                onClick={() => setCredentialStep("define")}
+              >
+                <span>Set up a new App</span>
+              </Button>
+            </div>
             <Select
               value={form.watch("githubAppConfigId")}
               onValueChange={(value) =>
@@ -371,7 +390,7 @@ export function OpenAppaCreateRepositoryDialog({
               }
             >
               <SelectTrigger id="new-appa-app" className="w-full">
-                <SelectValue placeholder="Select a connected GitHub App" />
+                <SelectValue placeholder="Select an existing App" />
               </SelectTrigger>
               <SelectContent>
                 {apps.map((app) => (
@@ -384,25 +403,12 @@ export function OpenAppaCreateRepositoryDialog({
             {!apps.length && (
               <InlineNotice variant="info">
                 <InlineNoticeText>
-                  Connect an organization GitHub App before creating a
-                  repository.
+                  Set up and connect an organization GitHub App before creating
+                  a repository.
                 </InlineNoticeText>
               </InlineNotice>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setCredentialStep("define")}
-            >
-              <span>Set up GitHub App</span>
-            </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            The App needs repository administration, contents, and pull request
-            permissions. Install it for all repositories so it can access the
-            new one.
-          </p>
         </div>
       </StandardFormDialog>
       {credentialStep === "define" && (
@@ -411,6 +417,7 @@ export function OpenAppaCreateRepositoryDialog({
           initialKind="github_app"
           initialScope="organization"
           initialValues={OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES}
+          setupNotice={<OpenAppaGithubAppRequirements />}
           hideProvidedBy
           backLabel="Back to repository"
           size="medium"
@@ -665,6 +672,7 @@ export function OpenAppaSourceForm({
           initialKind="github_app"
           initialScope="organization"
           initialValues={OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES}
+          setupNotice={<OpenAppaGithubAppRequirements />}
           hideProvidedBy
           backLabel="Back to GitHub sync"
           size="medium"

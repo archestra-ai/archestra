@@ -750,18 +750,23 @@ function AnswerSummary({
               aria-hidden
             />
           ) : null}
-          <span className="whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
+          <span className="min-w-0 flex-1 whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
             {member.question || "Question"}
           </span>
-          <span
-            className={
-              member.outcome?.status === "answered"
-                ? "font-medium text-foreground [overflow-wrap:anywhere]"
-                : "text-xs text-muted-foreground [overflow-wrap:anywhere]"
-            }
-          >
-            {getOutcomeSummary(member)}
-          </span>
+          {member.outcome?.status === "answered" ? (
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="ml-auto h-6 px-2 text-xs"
+            >
+              <span>{getOutcomeSummary(member)}</span>
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {getOutcomeSummary(member)}
+            </span>
+          )}
         </li>
       ))}
     </ul>

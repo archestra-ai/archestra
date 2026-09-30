@@ -919,7 +919,7 @@ describe("mcp server inspect route", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      name: "Runtime Identity Reproduction",
+      name: "Catalog-Owned Runtime Identity",
       serverType: "local",
       localConfig: {
         command: "node",
@@ -939,10 +939,10 @@ describe("mcp server inspect route", () => {
       method: "POST",
       url: "/api/mcp_server",
       payload: {
-        name: "Runtime Identity Reproduction",
+        name: "Catalog-Owned Runtime Identity",
         catalogId: catalog.id,
         scope: "personal",
-        serviceAccount: "untrusted-runtime-account",
+        serviceAccount: "request-supplied-runtime",
       },
     });
 

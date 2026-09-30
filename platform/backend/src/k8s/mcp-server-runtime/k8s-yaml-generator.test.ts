@@ -733,7 +733,7 @@ spec:
       const userYaml = `apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: runtime-reproduction
+  name: restricted-runtime-fields
 spec:
   selector:
     matchLabels:
@@ -743,7 +743,7 @@ spec:
       labels:
         app: ignored
     spec:
-      serviceAccountName: untrusted-runtime-account
+      serviceAccountName: request-supplied-runtime
       hostPID: true
       volumes:
         - name: host-root
@@ -768,7 +768,7 @@ spec:
       const userYaml = `apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: runtime-reproduction
+  name: catalog-owned-runtime
 spec:
   selector:
     matchLabels:

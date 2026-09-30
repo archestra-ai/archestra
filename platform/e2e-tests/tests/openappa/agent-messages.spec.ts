@@ -6,9 +6,9 @@
  * it while Guardrails enforcement was off, and sent its next turn once
  * enforcement was on again. That turn used to fail on every retry with
  * "OpenAPPA withheld an unverified child completion from the parent". Now the
- * lead continues with the messages it already read as it read them, marked
- * unchecked, anything the teammate sends later is withheld, and the teammate
- * itself is refused at once with a way forward.
+ * lead keeps the messages it already read, marked unchecked. Anything the
+ * teammate sends later is withheld, and the teammate itself is refused at once
+ * with a way forward.
  *
  * The requests are Claude Code's own shapes: its headers, its teammate launch
  * receipt, and the envelopes it delivers teammate messages in.

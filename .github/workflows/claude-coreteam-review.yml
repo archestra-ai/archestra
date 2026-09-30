@@ -18,9 +18,9 @@ jobs:
       contents: read
       pull-requests: write # Publish PR review comments.
       id-token: write # Support the reusable workflow's Claude GitHub App authentication.
-    uses: archestra-ai/.github/.github/workflows/claude-coreteam-review.yml@bd466714dcfb025381b58e897e5d5b07df70f626
+    uses: archestra-ai/.github/.github/workflows/claude-coreteam-review.yml@9c810e95deaf56033c4a7288c67c343e650a7b0d
     with:
-      setup_environment: true
+      setup_repository: true
     # Organization secrets must grant access to this calling repository.
     secrets:
       ILDAR_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.ILDAR_CLAUDE_CODE_OAUTH_TOKEN }}

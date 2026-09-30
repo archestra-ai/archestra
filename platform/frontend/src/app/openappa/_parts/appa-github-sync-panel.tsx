@@ -117,8 +117,8 @@ export function AppaGithubSyncPanel() {
             ) : // A row can exist for its declaration flags alone, with no source on it.
             source?.repo && source.path ? (
               <div className="overflow-hidden rounded-lg border bg-card">
-                <div className="space-y-3 p-4">
-                  <div className="flex items-start gap-3">
+                <div className="flex flex-wrap items-center gap-4 p-4">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
                       <Github className="size-5 text-muted-foreground" />
                     </div>
@@ -139,87 +139,85 @@ export function AppaGithubSyncPanel() {
                         </span>
                         <span className="font-mono">{source.path}</span>
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-3">
-                    <div
-                      className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground"
-                      aria-live="polite"
-                    >
-                      {source.lastSyncError ? (
-                        <InlineNotice variant="error">
-                          <AlertTriangle className="size-4 shrink-0" />
-                          <span className="font-medium">Sync failed</span>
-                          <InlineNoticeText>
-                            {source.lastSyncError}
-                          </InlineNoticeText>
-                        </InlineNotice>
-                      ) : (
-                        <p className="flex items-center gap-1.5">
-                          <CheckCircle2 className="size-3.5" />
-                          <span>
-                            {source.lastSyncedAt
-                              ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
-                              : connected
-                                ? "Waiting for the first sync"
-                                : "Automatic updates stopped"}
-                          </span>
-                        </p>
-                      )}
-                      {source.sourceCommit && (
-                        <a
-                          className="font-mono underline underline-offset-4"
-                          href={`https://github.com/${source.repo}/commit/${source.sourceCommit}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {source.sourceCommit.slice(0, 7)}
-                        </a>
-                      )}
-                    </div>{" "}
-                    {connected && (
-                      <div className="ml-auto flex items-center gap-2">
-                        <Select
-                          value={source.interval ?? "1h"}
-                          disabled={!canManage || update.isPending}
-                          onValueChange={(interval) =>
-                            update.mutate({
-                              action: "schedule",
-                              interval: interval as "15m" | "1h" | "1d",
-                            })
-                          }
-                        >
-                          <SelectTrigger
-                            id="appa-sync-frequency"
-                            aria-label="APPA sync frequency"
-                            size="sm"
-                            className="w-36 py-1 text-xs data-[size=sm]:h-7"
+                      <div
+                        className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground"
+                        aria-live="polite"
+                      >
+                        {source.lastSyncError ? (
+                          <InlineNotice variant="error">
+                            <AlertTriangle className="size-4 shrink-0" />
+                            <span className="font-medium">Sync failed</span>
+                            <InlineNoticeText>
+                              {source.lastSyncError}
+                            </InlineNoticeText>
+                          </InlineNotice>
+                        ) : (
+                          <p className="flex items-center gap-1.5">
+                            <CheckCircle2 className="size-3.5" />
+                            <span>
+                              {source.lastSyncedAt
+                                ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
+                                : connected
+                                  ? "Waiting for the first sync"
+                                  : "Automatic updates stopped"}
+                            </span>
+                          </p>
+                        )}
+                        {source.sourceCommit && (
+                          <a
+                            className="font-mono underline underline-offset-4"
+                            href={`https://github.com/${source.repo}/commit/${source.sourceCommit}`}
+                            target="_blank"
+                            rel="noreferrer"
                           >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent position="popper">
-                            {Object.entries(intervals).map(([value, label]) => (
-                              <SelectItem key={value} value={value}>
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {canManage && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            disabled={update.isPending}
-                            onClick={() => update.mutate({ action: "sync" })}
-                          >
-                            <RefreshCw className="size-3.5" />
-                            <span>Sync now</span>
-                          </Button>
+                            {source.sourceCommit.slice(0, 7)}
+                          </a>
                         )}
                       </div>
-                    )}
+                    </div>
                   </div>
+                  {connected && (
+                    <div className="ml-auto flex items-center gap-2">
+                      <Select
+                        value={source.interval ?? "1h"}
+                        disabled={!canManage || update.isPending}
+                        onValueChange={(interval) =>
+                          update.mutate({
+                            action: "schedule",
+                            interval: interval as "15m" | "1h" | "1d",
+                          })
+                        }
+                      >
+                        <SelectTrigger
+                          id="appa-sync-frequency"
+                          aria-label="APPA sync frequency"
+                          size="sm"
+                          className="w-36 py-1 text-xs data-[size=sm]:h-7"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper">
+                          {Object.entries(intervals).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {canManage && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={update.isPending}
+                          onClick={() => update.mutate({ action: "sync" })}
+                        >
+                          <RefreshCw className="size-3.5" />
+                          <span>Sync now</span>
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t bg-muted/30 px-4 py-2">
                   <p className="text-xs leading-relaxed text-muted-foreground">

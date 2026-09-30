@@ -20,7 +20,11 @@ import {
   mintChildReturnMarker,
 } from "@/openappa/child-return";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
-import { delegationEnabled, mintDelegationMarker } from "@/openappa/delegation";
+import {
+  delegationEnabled,
+  isDelegatedPrompt,
+  mintDelegationMarker,
+} from "@/openappa/delegation";
 import {
   getHitlAskUserArguments,
   getHitlReview,
@@ -979,12 +983,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Fail before dispatch if the marker cannot be created.
     const childNativeId = binding.child?.lineage?.childNativeId;
     const spawnCallId = await resolveSpawnCallId(binding);
-    if (!spawnCallId) {
-      throw new ApiError(
-        503,
-        "OpenAPPA cannot correlate the child return to its parent",
-      );
-    }
+    if (!spawnCallId) throw uncorrelatedChild();
     if (!childReturnMarkersConfigured()) {
       throw new ApiError(503, "OpenAPPA could not protect the child return");
     }
@@ -1443,6 +1442,11 @@ const SUBSTITUTED_CHILD_RETURN =
  * reaches the model; the rest is withheld where it stands. A message from
  * another session is always withheld: its sender's label cannot cross into
  * this session's family.
+ *
+ * A child's opening prompt can arrive as a message too: Claude Code hands a
+ * teammate its prompt as a message from its lead. That prompt crossed with
+ * the spawn, which opened the child at its parent's label; the delegation
+ * marker it carried binds its exact text.
  */
 async function admitRelayArrivals(params: {
   binding: AppaPluginBinding;
@@ -1452,6 +1456,7 @@ async function admitRelayArrivals(params: {
   const arrivals = params.binding.adapter?.relayArrivals?.(params.request);
   if (!arrivals?.length) return;
   const { session } = params;
+  const openingPrompt = params.binding.child?.lineage?.spawnPromptDigest;
   let crossed: Promise<string[]> | undefined;
   let addressed: Promise<string[]> | undefined;
   const crossings = () => {
@@ -1471,6 +1476,12 @@ async function admitRelayArrivals(params: {
     return addressed;
   };
   for (const arrival of arrivals) {
+    if (
+      openingPrompt &&
+      arrival.kind !== "session" &&
+      isDelegatedPrompt(arrival.body, openingPrompt)
+    )
+      continue;
     const records =
       arrival.kind === "session"
         ? []
@@ -1684,7 +1695,7 @@ const RELAY_BROADCAST =
 const RELAY_UNKNOWN_RECIPIENT =
   "OpenAPPA cannot identify the agent this message is for, so it did not send the message. Send it to a teammate by the name the teammate started with.";
 const RELAY_UNGOVERNED =
-  "OpenAPPA cannot check this message, because this agent did not start through a checked spawn. The message was not sent.";
+  "OpenAPPA cannot tell which spawn started this agent, so it cannot check this message. The message was not sent.";
 const RELAY_RESHAPED_PROTOCOL =
   "OpenAPPA changed the content of this protocol message to meet the return check, and the changed content does not fit the protocol. The message was not sent.";
 
@@ -1700,12 +1711,7 @@ async function admitChildHandback(params: {
   }
   const childNativeId = binding.child?.lineage?.childNativeId;
   const spawnCallId = await resolveSpawnCallId(binding);
-  if (!binding.session.parent_id || !spawnCallId) {
-    throw new ApiError(
-      503,
-      "OpenAPPA cannot correlate the child return to its parent",
-    );
-  }
+  if (!binding.session.parent_id || !spawnCallId) throw uncorrelatedChild();
   if (!binding.request.turnEndOperationId) {
     throw new ApiError(503, "OpenAPPA could not safely end the child turn");
   }
@@ -1749,6 +1755,19 @@ async function admitChildHandback(params: {
     },
     returnText,
   };
+}
+
+/**
+ * A child whose spawn no record names cannot return to its parent, however
+ * often it retries, so the client is told not to retry.
+ */
+function uncorrelatedChild(): ApiError {
+  const error = new ApiError(
+    409,
+    "OpenAPPA cannot tell which spawn started this subagent, so it cannot return the subagent's result to its parent. Start a new subagent.",
+  );
+  error.shouldRetry = false;
+  return error;
 }
 
 /**

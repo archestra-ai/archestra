@@ -42,6 +42,7 @@ describe("claudeCodeRelayArrivals", () => {
     expect(arrivals.map((arrival) => [arrival.kind, arrival.from])).toEqual([
       ["teammate", "auditor@team"],
     ]);
+    expect(arrivals[0].body).toBe(escaped);
     expect(arrivals[0].admit([sent])).toEqual({ withheld: false });
     expect(JSON.stringify(request)).not.toContain("[appa]");
   });
@@ -247,6 +248,55 @@ describe("the result of a message call", () => {
     ["No teammate named 'nobody' is currently on team 'session-1'."],
   ] as const)("is a receipt: %s", ([content]) => {
     expect(isClaudeCodeRelayReceipt(content)).toBe(true);
+  });
+
+  // Claude Code appends its reminders to the last result before a turn.
+  test.for([
+    [
+      "a block of its own",
+      [
+        {
+          type: "text",
+          text: `${JSON.stringify({ success: true, message: "Message sent to team-lead's inbox" })}\n`,
+        },
+        {
+          type: "text",
+          text: "<system-reminder>\nAvailable agent types for the Agent tool:\n- claude\n</system-reminder>",
+        },
+      ],
+    ],
+    [
+      "the end of its text",
+      "Message queued for the main conversation's next turn.\n\n<system-reminder>\nThe user sent a new message\n</system-reminder>",
+    ],
+  ] as const)("is a receipt with a reminder appended as %s", ([
+    _case,
+    content,
+  ]) => {
+    expect(isClaudeCodeRelayReceipt(content)).toBe(true);
+  });
+
+  test("keeps a crossed report with a reminder appended", () => {
+    const content = [
+      {
+        type: "text",
+        text: "Resumed agent a0123456789abcdef. Result:\nThe build is green.",
+      },
+      { type: "text", text: "<system-reminder>\nContext\n</system-reminder>" },
+    ];
+    expect(
+      admitClaudeCodeRelayReport(content, ["The build is green."]),
+    ).toEqual({ content, withheld: false });
+  });
+
+  test("is a receipt when the proxy hands its JSON over parsed", () => {
+    expect(
+      isClaudeCodeRelayReceipt({
+        success: true,
+        message: "Message sent to team-lead's inbox",
+        msg_id: "m1",
+      }),
+    ).toBe(true);
   });
 
   test("is a report when the message resumed a stopped agent", () => {

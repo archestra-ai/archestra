@@ -2925,7 +2925,7 @@ describe("AppaPluginArchestra", () => {
           response: {},
           responseText: "raw child return",
         }),
-      ).rejects.toMatchObject({ statusCode: 503 });
+      ).rejects.toMatchObject({ statusCode: 409, shouldRetry: false });
       expect(endChild).not.toHaveBeenCalled();
     } finally {
       endChild.mockRestore();
@@ -2958,6 +2958,44 @@ describe("AppaPluginArchestra", () => {
     trusted.request.turnEndOperationId = "turn_end:request-digest";
     const priorSecret = config.openappa.offerSigningSecret;
     config.openappa.offerSigningSecret = "";
+    // The child's spawn is on record, so only the missing marker key stops it.
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor("user:user|s1:a1"),
+      root: openappaActor("user:user|s1"),
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1:a1",
+      parentId: "user:user|s1",
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values([
+      {
+        organizationId: organization.id,
+        callerId: "user:user",
+        sessionId: "user:user|s1",
+        operationId: "call:spawn-one",
+        root: openappaActor("user:user|s1"),
+        status: "complete",
+        input: { semantic: { event: "tool_call", tool: "Agent", spawn: true } },
+        decision: { decision: "allow_call" },
+      },
+      {
+        organizationId: organization.id,
+        callerId: "user:user",
+        sessionId: "user:user|s1:a1",
+        operationId: "call:child-spawn-one",
+        root: openappaActor("user:user|s1"),
+        status: "complete",
+        input: {
+          semantic: {
+            event: "tool_call",
+            tool: "WebSearch",
+            spawn_call_id: "spawn-one",
+          },
+        },
+        decision: { decision: "deny_call" },
+      },
+    ]);
 
     try {
       await plugin.onSessionInit(context);
@@ -2967,7 +3005,10 @@ describe("AppaPluginArchestra", () => {
           response: {},
           responseText: "REPORT-RAW-KOALA-0831",
         }),
-      ).rejects.toMatchObject({ statusCode: 503 });
+      ).rejects.toMatchObject({
+        statusCode: 503,
+        message: "OpenAPPA could not protect the child return",
+      });
       expect(endChild).not.toHaveBeenCalled();
     } finally {
       config.openappa.offerSigningSecret = priorSecret;

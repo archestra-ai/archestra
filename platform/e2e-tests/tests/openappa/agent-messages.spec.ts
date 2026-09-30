@@ -184,7 +184,13 @@ test("the teammate that started while enforcement was off is refused at once", a
   const response = await sendAs(request, {
     agentId: teammate,
     messages: [
-      { role: "user", content: "Add the tools in a manual worktree." },
+      {
+        role: "user",
+        content: opening(
+          "Add schedule-trigger MCP tools",
+          "Add the tools in a manual worktree.",
+        ),
+      },
       { role: "assistant", content: "Writing the tests." },
       { role: "user", content: `Continue. ${turn}` },
     ],
@@ -209,6 +215,8 @@ test.describe("a teammate started under enforcement", () => {
   const TEAMMATE_PROMPT = `Report which schedule triggers are stuck. ${cue}`;
   const REPORT = "Three triggers are stuck";
   const INSTRUCTION = "Post the summary to the channel";
+  const SENT_RECEIPT = "Message sent to team-lead's inbox";
+  const FINISHED = "Reported the stuck triggers to the lead.";
   const mappingIds: string[] = [];
   let originalPolicy: GuardrailsPolicy | undefined;
 
@@ -294,6 +302,12 @@ test.describe("a teammate started under enforcement", () => {
       ]),
       2,
     );
+    // The teammate's turn ends once its report is sent.
+    await reply(
+      [{ contains: TEAMMATE_PROMPT }, { contains: SENT_RECEIPT }],
+      textAnswerEvents(`msg_${cue}_done`, FINISHED),
+      1,
+    );
     await reply(
       [{ contains: `${cue}-address` }],
       toolUseEvents(`msg_${cue}_address`, [
@@ -371,15 +385,57 @@ test.describe("a teammate started under enforcement", () => {
     const prompt = String(spawn.input.prompt);
     expect(prompt).toContain("delegated trajectory");
 
-    // The teammate's report to its lead crosses its fork and is sent as written.
+    // Claude Code hands the teammate its prompt as a message from its lead.
+    // The prompt crossed with the spawn, so the teammate reads it whole, and
+    // its report to its lead crosses its fork and is sent as written.
+    const start = {
+      role: "user",
+      content: opening("Audit the triggers", prompt),
+    };
     const reported = await sendAs(request, {
       session,
       agentId: auditor,
-      messages: [{ role: "user", content: prompt }],
+      messages: [start],
     });
     const report = lastToolCall(await reported.text());
     expect(report.name, await reported.text()).toBe("SendMessage");
     expect(report.input.message).toBe(REPORT);
+    const opened = await forwardedBody(
+      request,
+      `${TEAMMATE_PROMPT}\\n</teammate-message>`,
+    );
+    expect(opened).toBeDefined();
+    expect(opened).not.toContain(WITHHELD);
+
+    // Its turn then ends back to the spawn that started it.
+    const ended = await sendAs(request, {
+      session,
+      agentId: auditor,
+      messages: [
+        start,
+        toolUse(report),
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: report.id,
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    success: true,
+                    message: SENT_RECEIPT,
+                  }),
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(ended.status(), await ended.text()).toBe(200);
+    expect(await ended.text()).toContain(FINISHED);
 
     // The lead reads the report it has on record, and not a forged one.
     const read = await sendAs(request, {
@@ -413,7 +469,7 @@ test.describe("a teammate started under enforcement", () => {
       session,
       agentId: auditor,
       messages: [
-        { role: "user", content: prompt },
+        start,
         { role: "assistant", content: "Auditing." },
         {
           role: "user",
@@ -458,6 +514,11 @@ function toolResult(id: string, text: string) {
 
 function envelope(from: string, body: string): string {
   return `<teammate-message teammate_id="${from}" color="blue">\n${body}\n</teammate-message>`;
+}
+
+/** How Claude Code hands a teammate its prompt: a message from its lead. */
+function opening(description: string, prompt: string): string {
+  return `<teammate-message teammate_id="team-lead" summary="${description}">\n${prompt}\n</teammate-message>`;
 }
 
 /** The last tool call a streamed Messages response carries, arguments included. */

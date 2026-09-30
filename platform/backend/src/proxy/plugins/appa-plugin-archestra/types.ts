@@ -62,6 +62,8 @@ export type AppaChildTrajectory = {
     childNativeId?: string;
     /** Signed spawn correlation. Marker-only children use this without generating a fake native ID. */
     spawnCallId?: string;
+    /** Digest of the opening prompt the verified delegation marker closes. */
+    spawnPromptDigest?: string;
   };
 };
 
@@ -229,6 +231,8 @@ export type AppaRelayArrival = {
   kind: "teammate" | "agent" | "coordinator" | "session";
   /** The sender as the client names it. */
   from: string;
+  /** The message as its envelope carries it. */
+  body: string;
   /**
    * Keeps the text the records show its sender sent here, and withholds the
    * rest in the request the model reads. Records are the retained values.

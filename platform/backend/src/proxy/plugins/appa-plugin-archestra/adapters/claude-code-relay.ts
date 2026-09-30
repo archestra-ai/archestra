@@ -36,7 +36,9 @@ export function claudeCodeRelayArrivals(
  * carry the agent's final report: such a result is not a receipt.
  */
 export function isClaudeCodeRelayReceipt(content: unknown): boolean {
-  const text = contentText(content);
+  // The proxy hands a result that is JSON text over parsed.
+  if (typeof asRecord(content)?.success === "boolean") return true;
+  const text = resultText(content);
   if (text === undefined) return false;
   const receipt = asRecord(parseJson(text));
   if (typeof receipt?.success === "boolean") return true;
@@ -52,7 +54,7 @@ export function admitClaudeCodeRelayReport(
   content: unknown,
   records: readonly string[],
 ): { content: unknown; withheld: boolean } {
-  const text = contentText(content) ?? "";
+  const text = resultText(content) ?? "";
   const inline = /^Resumed agent[^\n]*Result:\n([\s\S]*)$/.exec(text)?.[1];
   const frame = text.indexOf("[Subagent hand-back]");
   const report =
@@ -91,6 +93,8 @@ const OPEN_BRACKETS = "<＜﹤〈⟨〈‹˂ᐸ❬❮❰⧼≮≺⋖";
 const COORDINATOR =
   /The coordinator sent a message(?: while you were working)?:\n([\s\S]*?)\n\nAddress this before completing your current task\./g;
 const HANDBACK_FRAME = /^\[Subagent hand-back\][^\n]*The report follows:\n/;
+const REMINDER_OPEN = "<system-reminder>";
+const REMINDER_CLOSE = "</system-reminder>";
 const HARNESS_NOTE = /^ {2}\[harness:[^\n]*\]\n(?: {2})?\n/;
 const TRUNCATION_NOTE = "[result truncated";
 const SHUTDOWN_REQUEST_NOTE = "\n\nThis is a shutdown request.";
@@ -160,6 +164,7 @@ function collectEnvelopes(
     arrivals.push({
       kind: envelope.kind,
       from: parseAttributes(attributes)[envelope.from] ?? "",
+      body,
       admit(records) {
         const admitted =
           envelope.kind === "session"
@@ -191,6 +196,7 @@ function collectCoordinatorMessages(
     arrivals.push({
       kind: "coordinator",
       from: "main",
+      body,
       admit(records) {
         // The notice rides a system reminder, whose closing tag is escaped inside it.
         const admitted = admitBody({
@@ -409,6 +415,25 @@ function* contentHolders(
       yield* contentHolders(record, "content");
     }
   }
+}
+
+/**
+ * The text the tool itself wrote into its result. Claude Code appends its
+ * reminders to the last result before a turn, as blocks of their own or at
+ * the end of the text.
+ */
+function resultText(content: unknown): string | undefined {
+  let text = contentText(content);
+  for (
+    let end = text?.trimEnd();
+    end?.endsWith(REMINDER_CLOSE);
+    end = text?.trimEnd()
+  ) {
+    const start = end.lastIndexOf(REMINDER_OPEN);
+    if (start < 0) break;
+    text = end.slice(0, start).trimEnd();
+  }
+  return text;
 }
 
 /** The text of a tool result: a string, or its text blocks joined. */

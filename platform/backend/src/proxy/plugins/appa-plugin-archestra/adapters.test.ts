@@ -512,6 +512,7 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         source: "marker",
         nativeParentId: "s1",
         spawnCallId: "spawn-call",
+        spawnPromptDigest: expect.any(String),
       },
     });
     expect(claudeCode.nativeSpawnParentId?.(authentic, "s1")).toBe("s1");
@@ -784,7 +785,12 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     ).toEqual({
       sessionId: "s1:a1:g1",
       parentId: "s1:a1",
-      lineage: { source: "marker", nativeParentId: "s1", childNativeId: "g1" },
+      lineage: {
+        source: "marker",
+        nativeParentId: "s1",
+        childNativeId: "g1",
+        spawnPromptDigest: expect.any(String),
+      },
     });
 
     // Codex reports only the immediate parent's thread.
@@ -990,6 +996,7 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         source: "marker",
         nativeParentId: "s1",
         spawnCallId: "spawn-call",
+        spawnPromptDigest: expect.any(String),
       },
     });
 

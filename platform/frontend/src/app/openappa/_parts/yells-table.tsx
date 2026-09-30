@@ -1,7 +1,14 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Megaphone, MessageCircle } from "lucide-react";
+import {
+  Check,
+  Clock3,
+  Megaphone,
+  MessageCircle,
+  RotateCcw,
+  Send,
+} from "lucide-react";
 import { useState } from "react";
 import {
   CollectionFilters,
@@ -15,13 +22,16 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DialogDescription } from "@/components/ui/dialog";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   type OpenAppaYell,
   useOpenAppaYells,
   useResolveOpenAppaYell,
 } from "@/lib/openappa-yells.query";
+import { formatDate } from "@/lib/utils/date-time";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 
 export function YellsTable() {
@@ -31,6 +41,7 @@ export function YellsTable() {
   );
   const [selected, setSelected] = useState<OpenAppaYell | null>(null);
   const pagination = useCursorPagination();
+  const isMobile = useIsMobile();
   const { data: canRead, isPending: permissionsLoading } = useHasPermissions({
     log: ["read"],
   });
@@ -57,20 +68,35 @@ export function YellsTable() {
     {
       accessorKey: "message",
       header: "Report",
+      size: isMobile ? 120 : 240,
       cell: ({ row }) => (
         <Button
           variant="ghost"
           size="sm"
-          className="h-auto max-w-lg justify-start whitespace-normal text-left"
+          className="-ml-1.5 h-auto w-full min-w-0 justify-start whitespace-normal px-1.5 text-left"
           onClick={() => setSelected(row.original)}
         >
-          <span className="line-clamp-2">{row.original.message}</span>
+          <span className="min-w-0 space-y-1">
+            <span className="line-clamp-2 break-words">
+              {row.original.message}
+            </span>
+            {isMobile && (
+              <span className="block text-xs font-normal text-muted-foreground">
+                {row.original.resolvedAt ? "Resolved" : "Unresolved"} ·{" "}
+                {formatDate({
+                  date: row.original.createdAt,
+                  dateFormat: "MMM d",
+                })}
+              </span>
+            )}
+          </span>
         </Button>
       ),
     },
     {
       id: "status",
       header: "Status",
+      size: 120,
       cell: ({ row }) => (
         <Badge variant="outline">
           {row.original.resolvedAt ? "Resolved" : "Unresolved"}
@@ -80,16 +106,23 @@ export function YellsTable() {
     {
       accessorKey: "createdAt",
       header: "Reported",
+      size: 170,
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-muted-foreground">
-          {new Date(row.original.createdAt).toLocaleString()}
+          {formatDate({
+            date: row.original.createdAt,
+            dateFormat: "MMM d, yyyy · h:mm a",
+          })}
         </span>
       ),
     },
     {
       id: "actions",
       header: "Actions",
-      cell: ({ row }) => <YellChatAction id={row.original.id} />,
+      size: isMobile ? 144 : 208,
+      cell: ({ row }) => (
+        <YellChatAction id={row.original.id} compact={isMobile} />
+      ),
     },
   ];
   if (!permissionsLoading && !canRead)
@@ -100,13 +133,6 @@ export function YellsTable() {
     );
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Yells</h2>
-        <p className="text-sm text-muted-foreground">
-          Investigate reported blocks and remedies, then mark them resolved when
-          the issue is fixed.
-        </p>
-      </div>
       <CollectionFilters>
         <FilterBar
           search={
@@ -156,7 +182,20 @@ export function YellsTable() {
         />
       ) : (
         <DataTable
-          columns={columns}
+          columns={
+            isMobile
+              ? columns.filter(
+                  (column) =>
+                    column.id !== "status" &&
+                    !(
+                      "accessorKey" in column &&
+                      column.accessorKey === "createdAt"
+                    ),
+                )
+              : columns
+          }
+          fixedWidthColumnIds={["status", "createdAt"]}
+          flexibleColumnIds={["message"]}
           data={yells.data?.data ?? []}
           getRowId={(row) => row.id}
           isLoading={permissionsLoading || yells.isFetching}
@@ -196,10 +235,10 @@ export function YellsTable() {
             if (!open) setSelected(null);
           }}
           title="OpenAPPA yell"
-          description={`Reported ${new Date(selected.createdAt).toLocaleString()}`}
+          bodyClassName="space-y-4"
           footer={
             <>
-              <YellChatAction id={selected.id} />
+              <YellChatAction id={selected.id} primary />
               {canResolve && (
                 <Button
                   size="sm"
@@ -216,43 +255,71 @@ export function YellsTable() {
                     )
                   }
                 >
-                  {selected.resolvedAt ? "Reopen" : "Mark resolved"}
+                  {selected.resolvedAt ? <RotateCcw /> : <Check />}
+                  <span>
+                    {selected.resolvedAt ? "Reopen" : "Mark resolved"}
+                  </span>
                 </Button>
               )}
             </>
           }
         >
-          <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <DialogDescription className="sr-only">
+              Review the reported issue, investigate it in chat, or update its
+              resolution status.
+            </DialogDescription>
             <Badge variant="outline">
               {selected.resolvedAt ? "Resolved" : "Unresolved"}
             </Badge>
-            <p className="whitespace-pre-wrap break-words text-sm">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock3 className="size-3.5" />
+              {formatDate({
+                date: selected.createdAt,
+                dateFormat: "MMM d, yyyy · h:mm a",
+              })}
+            </span>
+          </div>
+          <div className="rounded-md border bg-muted/30 p-3">
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
               {selected.message}
             </p>
-            <p className="text-xs text-muted-foreground">
-              {selected.reportFailed
-                ? "Saved here. External reporting failed."
-                : selected.reportedAt
-                  ? "Also sent to the OpenAPPA reporting service."
-                  : "External delivery has not been confirmed."}
-            </p>
           </div>
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Send className="size-3.5 shrink-0" />
+            <span>
+              {selected.reportFailed
+                ? "External report failed. Your report is saved here."
+                : selected.reportedAt
+                  ? "Sent to OpenAPPA developers"
+                  : "External report awaiting confirmation"}
+            </span>
+          </p>
         </StandardDialog>
       )}
     </div>
   );
 }
 
-function YellChatAction({ id }: { id: string }) {
+function YellChatAction({
+  id,
+  compact = false,
+  primary = false,
+}: {
+  id: string;
+  compact?: boolean;
+  primary?: boolean;
+}) {
   return (
     <OpenAppaChatButton
       promptKey="explainPolicy"
       yellId={id}
-      variant="outline"
+      variant={primary ? "default" : "outline"}
       size="sm"
+      aria-label="Investigate in chat"
     >
-      <MessageCircle />
-      Investigate in chat
+      {!compact && <MessageCircle />}
+      <span>{compact ? "Investigate" : "Investigate in chat"}</span>
     </OpenAppaChatButton>
   );
 }

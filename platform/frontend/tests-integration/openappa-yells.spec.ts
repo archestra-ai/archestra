@@ -99,6 +99,24 @@ for (const width of [1280, 390]) {
       await expect(
         page.getByRole("button", { name: yell.message }),
       ).toBeVisible();
+      await expect(
+        page.getByText(
+          "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed.",
+        ),
+      ).toBeVisible();
+      const table = page.getByRole("table");
+      await expect
+        .poll(() =>
+          table.evaluate((element) => {
+            const container = element.parentElement;
+            return container
+              ? container.scrollWidth <= container.clientWidth + 1
+              : false;
+          }),
+        )
+        .toBe(true);
+      const action = page.getByRole("link", { name: "Investigate in chat" });
+      await expect(action).toBeInViewport({ ratio: 1 });
       await page.getByPlaceholder("Search reports").fill("missing");
       await expect(
         page.getByText("No reports match these filters."),

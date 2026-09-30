@@ -34,7 +34,11 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
         </span>
       }
       documentTitle="Guardrails"
-      description={`${appName} runs unique deterministic guardrails that stop AI from leaking sensitive corporate data, built on OpenAPPA.`}
+      description={
+        pathname === "/openappa/yells"
+          ? "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed."
+          : `${appName} runs unique deterministic guardrails that stop AI from leaking sensitive corporate data, built on OpenAPPA.`
+      }
       tabs={
         firstStepOnly
           ? []

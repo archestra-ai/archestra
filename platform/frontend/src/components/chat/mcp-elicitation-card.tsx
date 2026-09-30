@@ -525,7 +525,10 @@ export function McpElicitationCard({
           : questionMessageId(activeQuestion.request.id)
       }
       className={cn(
-        "not-prose relative mb-4 w-full overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm",
+        "not-prose relative mb-4 overflow-hidden rounded-lg",
+        allMembersSettled
+          ? "w-fit max-w-full"
+          : "w-full border border-border/60 bg-card shadow-sm",
         isMultiple || activeQuestion?.request.kind === "openappa_review"
           ? "max-w-4xl"
           : "max-w-2xl",
@@ -728,16 +731,28 @@ function AnswerSummary({
   label?: string;
 }) {
   return (
-    <ul aria-label={label} className="flex min-w-0 flex-col gap-3 p-4">
+    <ul
+      aria-label={label}
+      className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
+    >
       {members.map((member) => (
-        <li key={member.toolCallId} className="flex min-w-0 flex-col gap-1">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
+        <li
+          key={member.toolCallId}
+          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-5"
+        >
+          {member.outcome?.status === "answered" ? (
+            <CheckIcon
+              className="size-3.5 shrink-0 text-emerald-600"
+              aria-hidden
+            />
+          ) : null}
+          <span className="whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
             {member.question || "Question"}
-          </p>
+          </span>
           <span
             className={
               member.outcome?.status === "answered"
-                ? "text-sm text-foreground [overflow-wrap:anywhere]"
+                ? "font-medium text-foreground [overflow-wrap:anywhere]"
                 : "text-xs text-muted-foreground [overflow-wrap:anywhere]"
             }
           >

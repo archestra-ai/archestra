@@ -52,7 +52,7 @@ it("opens credential setup from a completed tool call and resumes chat after con
   expect(
     screen.queryByRole("button", { name: "Create GitHub App" }),
   ).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Set up credential" }));
+  fireEvent.click(screen.getByRole("button", { name: "Connect GitHub App" }));
   expect(
     screen.getByRole("button", { name: "Create GitHub App" }),
   ).toBeTruthy();

@@ -1,9 +1,11 @@
 "use client";
 
+import { GithubIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 
 /** The same credential forms used in Settings, mounted in the chat tool result. */
@@ -31,14 +33,21 @@ export function RuntimeCredentialSetupTool({
 
   return (
     <>
-      <div className="flex items-center gap-3 py-2">
-        <span className="text-sm">
-          Set up an organization GitHub App credential.
-        </span>
-        <Button size="sm" variant="outline" onClick={() => setStep("define")}>
-          <span>Set up credential</span>
+      <InlineNotice variant="neutral" className="my-2 max-w-2xl">
+        <GithubIcon aria-hidden />
+        <span className="font-medium">GitHub sync</span>
+        <InlineNoticeText>
+          Add an organization GitHub App to store your policy in a repository.
+        </InlineNoticeText>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="ml-auto"
+          onClick={() => setStep("define")}
+        >
+          <span>Connect GitHub App</span>
         </Button>
-      </div>
+      </InlineNotice>
       {step === "define" && (
         <RuntimeCredentialDefinitionDialog
           definition={null}

@@ -2,6 +2,7 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  BUILT_IN_AGENT_IDS,
   type ChatExternalMcpSkillMetadata,
   ChatExternalMcpSkillMetadataSchema,
   type ChatMessageFeedback,
@@ -988,6 +989,9 @@ export function ChatPageContent({
   const activeSelectionAgent = conversationId
     ? conversationAgent
     : initialAgent;
+  const isOpenAppaConfigChat =
+    activeSelectionAgent?.builtInAgentConfig?.name ===
+    BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
   const suggestionPreview = resolveSuggestionPreview(
     initialAgent?.suggestedPrompts,
     hoveredSuggestionPrompt,
@@ -3562,6 +3566,7 @@ export function ChatPageContent({
                                   : undefined
                               }
                               selectorAgentId={activeAgentId}
+                              agentSelectorReadOnly={isOpenAppaConfigChat}
                               onAgentChange={handleConversationAgentChange}
                               modelSource={conversationModelSource}
                               onResetModelOverride={
@@ -3775,6 +3780,7 @@ export function ChatPageContent({
                                     initialPerUserConnect.provider
                                   }
                                   selectorAgentId={initialAgentId}
+                                  agentSelectorReadOnly={isOpenAppaConfigChat}
                                   onAgentChange={handleInitialAgentChange}
                                   lockedChat={
                                     isInitialRuntimeMode

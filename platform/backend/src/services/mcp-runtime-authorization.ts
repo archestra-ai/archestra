@@ -5,25 +5,17 @@ import {
   type InternalMcpCatalog,
   type UpdateInternalMcpCatalog,
 } from "@/types";
-import {
-  getCatalogSecretValues,
-  preserveCatalogSecretReference,
-} from "./mcp-catalog-secrets";
 
 type RuntimeDefinition = Partial<
   Pick<InternalMcpCatalog, (typeof RUNTIME_FIELDS)[number]>
 >;
 
-/** Object edit rights do not authorize Kubernetes identities or pod templates. */
+/** Compare the prepared definition that will be published, including staged bag IDs. */
 export async function assertMcpRuntimeChangeAllowed(params: {
   userId: string;
   organizationId: string;
   original: InternalMcpCatalog | null;
   updates: Partial<UpdateInternalMcpCatalog>;
-  secretUpdates?: {
-    localConfig?: Record<string, string>;
-    client?: Record<string, string>;
-  };
 }): Promise<void> {
   const proposed: RuntimeDefinition = {
     ...params.original,
@@ -34,112 +26,13 @@ export async function assertMcpRuntimeChangeAllowed(params: {
   if (!hasPrivilegedRuntime(params.original) && !hasPrivilegedRuntime(proposed))
     return;
 
-  const previous = structuredClone(params.original ?? {});
-  const next = structuredClone(proposed);
-  let secretsChanged = false;
-  if (params.updates.localConfig) {
-    const bag = {
-      ...Object.fromEntries(
-        (params.original?.localConfig?.environment ?? [])
-          .filter(
-            (env) =>
-              env.type === "secret" && !env.promptOnInstallation && env.value,
-          )
-          .map((env) => [env.key, env.value as string]),
-      ),
-      ...Object.fromEntries(
-        (params.original?.localConfig?.imagePullSecrets ?? []).flatMap(
-          (entry) =>
-            entry.source === "credentials" && entry.password
-              ? [
-                  [
-                    `__regcred_password:${entry.server}:${entry.username}`,
-                    entry.password,
-                  ],
-                ]
-              : [],
-        ),
-      ),
-      ...(await getCatalogSecretValues(params.original?.localConfigSecretId)),
-    };
-    for (const env of next.localConfig?.environment ?? []) {
-      if (env.type !== "secret" || env.promptOnInstallation) continue;
-      if (env.value && !env.credentialId) {
-        const retained = await preserveCatalogSecretReference({
-          secretId: params.original?.localConfigSecretId,
-          key: env.key,
-          value: env.value,
-          existingValues: bag,
-        });
-        if (retained !== bag[env.key]) secretsChanged = true;
-      }
-      delete env.value;
-    }
-    for (const entry of next.localConfig?.imagePullSecrets ?? []) {
-      if (entry.source !== "credentials") continue;
-      if (entry.password) {
-        const key = `__regcred_password:${entry.server}:${entry.username}`;
-        const retained = await preserveCatalogSecretReference({
-          secretId: params.original?.localConfigSecretId,
-          key,
-          value: entry.password,
-          existingValues: bag,
-        });
-        if (retained !== bag[key]) secretsChanged = true;
-      }
-      delete entry.password;
-    }
-  }
-  const clientBag: Record<string, string> = {
-    ...(params.original?.oauthConfig?.client_secret
-      ? { client_secret: params.original.oauthConfig.client_secret }
-      : {}),
-    ...(params.original?.enterpriseManagedConfig?.clientSecretOverride
-      ? {
-          enterprise_managed_client_secret_override:
-            params.original.enterpriseManagedConfig.clientSecretOverride,
-        }
-      : {}),
-    ...(params.updates.oauthConfig?.client_secret ||
-    params.updates.enterpriseManagedConfig?.clientSecretOverride
-      ? await getCatalogSecretValues(params.original?.clientSecretId)
-      : {}),
-  };
-  for (const entry of [
-    { value: next.oauthConfig?.client_secret, key: "client_secret" },
-    {
-      value: next.enterpriseManagedConfig?.clientSecretOverride,
-      key: "enterprise_managed_client_secret_override",
-    },
-  ]) {
-    if (!entry.value) continue;
-    const retained = await preserveCatalogSecretReference({
-      secretId: params.original?.clientSecretId,
-      key: entry.key,
-      value: entry.value,
-      existingValues: clientBag,
-    });
-    if (retained !== clientBag[entry.key]) secretsChanged = true;
-  }
-  if (next.oauthConfig) delete next.oauthConfig.client_secret;
-  if (next.enterpriseManagedConfig)
-    delete next.enterpriseManagedConfig.clientSecretOverride;
-
-  for (const [bag, secretId] of [
-    [params.secretUpdates?.localConfig, params.original?.localConfigSecretId],
-    [params.secretUpdates?.client, params.original?.clientSecretId],
-  ] as const) {
-    if (
-      bag !== undefined &&
-      !isDeepStrictEqual(bag, await getCatalogSecretValues(secretId))
+  if (
+    isDeepStrictEqual(
+      runtimeSnapshot(params.original ?? {}),
+      runtimeSnapshot(proposed),
     )
-      secretsChanged = true;
-  }
-
-  const changed =
-    secretsChanged ||
-    !isDeepStrictEqual(runtimeSnapshot(previous), runtimeSnapshot(next));
-  if (!changed) return;
+  )
+    return;
   if (
     !(await isMcpInstallationAdmin({
       userId: params.userId,
@@ -188,9 +81,7 @@ function runtimeSnapshot(definition: RuntimeDefinition) {
       envFrom: local.envFrom ?? [],
       imagePullSecrets: (local.imagePullSecrets ?? []).map((entry) =>
         entry.source === "credentials"
-          ? Object.fromEntries(
-              Object.entries(entry).filter(([key]) => key !== "password"),
-            )
+          ? entry
           : { source: "existing", name: entry.name },
       ),
       environment: (local.environment ?? []).map((env) =>
@@ -199,11 +90,6 @@ function runtimeSnapshot(definition: RuntimeDefinition) {
             ([key, value]) =>
               value !== undefined &&
               key !== "description" &&
-              !(
-                key === "value" &&
-                env.type === "secret" &&
-                !env.promptOnInstallation
-              ) &&
               !(key === "required" && value === false),
           ),
         ),
@@ -211,17 +97,16 @@ function runtimeSnapshot(definition: RuntimeDefinition) {
     };
   }
   fields.deploymentSpecYaml = definition.deploymentSpecYaml || null;
-  if (definition.oauthConfig)
-    fields.oauthConfig = Object.fromEntries(
-      Object.entries(definition.oauthConfig).filter(
-        ([key]) => key !== "client_secret",
-      ),
-    );
-  if (definition.enterpriseManagedConfig)
-    fields.enterpriseManagedConfig = Object.fromEntries(
-      Object.entries(definition.enterpriseManagedConfig).filter(
-        ([key]) => key !== "clientSecretOverride",
-      ),
+  if (definition.userConfig)
+    fields.userConfig = Object.fromEntries(
+      Object.entries(definition.userConfig).map(([key, field]) => [
+        key,
+        Object.fromEntries(
+          Object.entries(field).filter(
+            ([name]) => name !== "title" && name !== "description",
+          ),
+        ),
+      ]),
     );
   return fields;
 }

@@ -44,25 +44,18 @@ export class CatalogSecretStaging {
 }
 
 interface LocalConfigSecretExtraction {
-  /** Config with secret values removed; persist this, not the input. */
+  /** Prepared config; unchanged legacy inline values retain their representation. */
   localConfig: LocalConfig | null | undefined;
   secretId: string | null;
   /** Whether credential values changed, for callers restarting installations. */
   rotated: boolean;
 }
 
-/**
- * Moves credential values out of a catalog item's config and into its secret
- * bag, returning a sanitized config safe to persist in the jsonb column.
- *
- * Every writer of a catalog item must run this — the REST routes and the
- * Archestra MCP catalog tools alike. Persisting a config that still carries a
- * value leaves a plaintext credential in `internal_mcp_catalog`, and any read
- * that re-expands secrets will then serialize it back out.
- */
+/** Stages changed values separately while preserving unchanged legacy inline fields. */
 export async function extractLocalConfigSecrets(params: {
   localConfig: LocalConfig | null | undefined;
   existingSecretId: string | null | undefined;
+  existingLocalConfig?: LocalConfig | null;
   catalogName: string;
   staging?: CatalogSecretStaging;
 }): Promise<LocalConfigSecretExtraction> {
@@ -81,6 +74,21 @@ export async function extractLocalConfigSecrets(params: {
       continue;
     }
     if (envVar.type !== "secret" || envVar.promptOnInstallation) continue;
+    const previous = params.existingLocalConfig?.environment?.find(
+      (field) =>
+        field.key === envVar.key &&
+        field.type === "secret" &&
+        !field.promptOnInstallation &&
+        !field.credentialId,
+    );
+    if (
+      existingSecretValues[envVar.key] === undefined &&
+      previous?.value &&
+      (!envVar.value || envVar.value === previous.value)
+    ) {
+      envVar.value = previous.value;
+      continue;
+    }
     if (envVar.value) {
       const value = await preserveCatalogSecretReference({
         secretId: existingSecretId,
@@ -90,17 +98,36 @@ export async function extractLocalConfigSecrets(params: {
       });
       if (existingSecretValues[envVar.key] !== value) rotated = true;
       secretEnvVars[envVar.key] = value;
-      delete envVar.value;
+      if (previous?.value && existingSecretValues[envVar.key] === value)
+        envVar.value = previous.value;
+      else delete envVar.value;
     } else if (existingSecretValues[envVar.key]) {
       // Entry submitted without a value keeps whatever the bag already holds;
       // a key with neither is simply not stored.
       secretEnvVars[envVar.key] = existingSecretValues[envVar.key];
+      if (previous?.value) envVar.value = previous.value;
+      else delete envVar.value;
     }
   }
 
   for (const entry of localConfig?.imagePullSecrets ?? []) {
     if (entry.source !== "credentials") continue;
     const key = regcredPasswordKey(entry.server, entry.username);
+    const previous = params.existingLocalConfig?.imagePullSecrets?.find(
+      (field) =>
+        field.source === "credentials" &&
+        field.server === entry.server &&
+        field.username === entry.username,
+    );
+    if (
+      existingSecretValues[key] === undefined &&
+      previous?.source === "credentials" &&
+      previous.password &&
+      (!entry.password || entry.password === previous.password)
+    ) {
+      entry.password = previous.password;
+      continue;
+    }
     if (entry.password) {
       const value = await preserveCatalogSecretReference({
         secretId: existingSecretId,
@@ -110,9 +137,18 @@ export async function extractLocalConfigSecrets(params: {
       });
       if (existingSecretValues[key] !== value) rotated = true;
       secretEnvVars[key] = value;
-      delete entry.password;
+      if (
+        previous?.source === "credentials" &&
+        previous.password &&
+        existingSecretValues[key] === value
+      )
+        entry.password = previous.password;
+      else delete entry.password;
     } else if (existingSecretValues[key]) {
       secretEnvVars[key] = existingSecretValues[key];
+      if (previous?.source === "credentials" && previous.password)
+        entry.password = previous.password;
+      else delete entry.password;
     }
   }
 
@@ -157,18 +193,36 @@ export async function upsertCatalogClientSecretValue(params: {
   clientSecretId: string | null | undefined;
   catalogName: string;
   key: string;
-  value: string;
+  value: string | undefined;
+  existingInlineValue?: string;
   staging?: CatalogSecretStaging;
-}): Promise<{ id: string; rotated: boolean }> {
+}): Promise<{ id: string | null; rotated: boolean; inlineValue?: string }> {
   const existingSecretValues = await getCatalogClientSecretValues(
     params.clientSecretId,
   );
+  const submittedValue =
+    params.value ||
+    existingSecretValues[params.key] ||
+    params.existingInlineValue;
+  if (
+    existingSecretValues[params.key] === undefined &&
+    params.existingInlineValue &&
+    submittedValue === params.existingInlineValue
+  ) {
+    return {
+      id: params.clientSecretId ?? null,
+      rotated: false,
+      inlineValue: params.existingInlineValue,
+    };
+  }
+  if (!submittedValue)
+    return { id: params.clientSecretId ?? null, rotated: false };
   // For a new bag the caller's row diff already covers the cascade via the new
   // `clientSecretId`, so `rotated` only matters on an existing one.
   const value = await preserveCatalogSecretReference({
     secretId: params.clientSecretId,
     key: params.key,
-    value: params.value,
+    value: submittedValue,
     existingValues: existingSecretValues,
   });
   const rotated = existingSecretValues[params.key] !== value;
@@ -178,7 +232,11 @@ export async function upsertCatalogClientSecretValue(params: {
   };
 
   if (params.clientSecretId && !rotated) {
-    return { id: params.clientSecretId, rotated };
+    return {
+      id: params.clientSecretId,
+      rotated,
+      inlineValue: params.existingInlineValue,
+    };
   }
 
   const existing = params.clientSecretId
@@ -219,7 +277,7 @@ export async function getCatalogSecretValues(
 }
 
 /** An echoed resolved BYOS value must retain its original external reference. */
-export async function preserveCatalogSecretReference(params: {
+async function preserveCatalogSecretReference(params: {
   secretId: string | null | undefined;
   key: string;
   value: string;

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   type EnvironmentVariableSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
@@ -6,6 +7,7 @@ import type * as k8s from "@kubernetes/client-node";
 import * as yaml from "js-yaml";
 import type { z } from "zod";
 import config from "@/config";
+import type { InternalMcpCatalog } from "@/types/mcp-catalog";
 import { getMcpImagePullPolicy } from "./image-pull-policy";
 
 // Helper to create placeholder strings without triggering noTemplateCurlyInString lint rule
@@ -39,6 +41,10 @@ interface YamlValidationResult {
   errors: string[];
   warnings: string[];
 }
+
+type DeploymentYamlInputDefinitions = Partial<
+  Pick<InternalMcpCatalog, "localConfig" | "userConfig" | "oauthConfig">
+>;
 
 /**
  * Placeholder patterns used in the YAML template.
@@ -211,15 +217,17 @@ export function generateDeploymentYamlTemplate(
  */
 export function findUnsafeDeploymentYamlPlaceholders(
   yamlString: string,
+  inputDefinitions?: DeploymentYamlInputDefinitions,
 ): string[] {
   let parsed: unknown;
   try {
-    parsed = yaml.load(yamlString);
-  } catch {
-    // validateDeploymentYaml reports syntax errors separately.
-    return [];
+    parsed = parseDeploymentYamlTemplate(yamlString);
+  } catch (error) {
+    return [
+      `YAML syntax error: ${error instanceof Error ? error.message : String(error)}`,
+    ];
   }
-  return findUnsafePlaceholders(parsed);
+  return findUnsafePlaceholders({ parsed, inputDefinitions });
 }
 
 /**
@@ -230,6 +238,7 @@ export function findUnsafeDeploymentYamlPlaceholders(
  */
 export function validateDeploymentYaml(
   yamlString: string,
+  inputDefinitions?: DeploymentYamlInputDefinitions,
 ): YamlValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -237,7 +246,7 @@ export function validateDeploymentYaml(
   // Try to parse the YAML
   let parsed: unknown;
   try {
-    parsed = yaml.load(yamlString);
+    parsed = parseDeploymentYamlTemplate(yamlString);
   } catch (e) {
     const error = e as Error;
     errors.push(`YAML syntax error: ${error.message}`);
@@ -303,7 +312,13 @@ export function validateDeploymentYaml(
   // Validate placeholders
   const placeholderWarnings = validatePlaceholders(yamlString);
   warnings.push(...placeholderWarnings);
-  errors.push(...findUnsafePlaceholders(parsed));
+  errors.push(
+    ...findUnsafePlaceholders({
+      parsed,
+      inputDefinitions,
+      deferredWarnings: inputDefinitions === undefined ? warnings : undefined,
+    }),
+  );
 
   return {
     valid: errors.length === 0,
@@ -378,11 +393,15 @@ export function resolvePlaceholders(
     command?: string;
     arguments?: string[];
     serviceAccount?: string;
+    inputDefinitions?: DeploymentYamlInputDefinitions;
   },
   envValues: Record<string, string>,
 ): string {
-  const parsed: unknown = yaml.load(yamlString);
-  const errors = findUnsafePlaceholders(parsed);
+  const parsed = parseDeploymentYamlTemplate(yamlString);
+  const errors = findUnsafePlaceholders({
+    parsed,
+    inputDefinitions: context.inputDefinitions,
+  });
   if (errors.length > 0) {
     throw new Error(`Invalid deployment YAML: ${errors.join("; ")}`);
   }
@@ -436,8 +455,17 @@ export function resolvePlaceholders(
   return yaml.dump(resolved, { lineWidth: -1, noRefs: true });
 }
 
-function findUnsafePlaceholders(parsed: unknown): string[] {
+function findUnsafePlaceholders({
+  parsed,
+  inputDefinitions,
+  deferredWarnings,
+}: {
+  parsed: unknown;
+  inputDefinitions?: DeploymentYamlInputDefinitions;
+  deferredWarnings?: string[];
+}): string[] {
   const errors: string[] = [];
+  const isCatalogOwned = catalogOwnedEnvironmentPredicate(inputDefinitions);
   try {
     mapYamlStrings(parsed, ({ value, path, isKey }) => {
       if (errors.length >= 20) {
@@ -459,6 +487,7 @@ function findUnsafePlaceholders(parsed: unknown): string[] {
           throw new Error("Too many invalid deployment YAML placeholders");
         }
         if (prefix !== "env" && key !== "server_name") continue;
+        if (prefix === "env" && isCatalogOwned(key)) continue;
         const programInput =
           /^spec\.template\.spec\.(containers|initContainers)\.\d+\.(env\.\d+\.value|(command|args)\.\d+)$/.test(
             location,
@@ -468,6 +497,14 @@ function findUnsafePlaceholders(parsed: unknown): string[] {
           (location === "metadata.labels.mcp-server-name" ||
             location === "spec.template.metadata.labels.mcp-server-name");
         if (!programInput && !overwrittenNameLabel) {
+          if (prefix === "env" && deferredWarnings) {
+            if (deferredWarnings.length < 20) {
+              deferredWarnings.push(
+                `Placeholder ${token.slice(0, 200)} at ${displayedLocation} requires a static catalog value; its source is checked when saving the catalog`,
+              );
+            }
+            continue;
+          }
           errors.push(
             `Installer placeholder ${token.slice(0, 200)} is not supported at ${displayedLocation}; use a static catalog value or a container environment value, command, or argument`,
           );
@@ -481,6 +518,79 @@ function findUnsafePlaceholders(parsed: unknown): string[] {
     );
   }
   return errors;
+}
+
+/** Normalize template syntax only; supplied values are inserted after parsing. */
+function parseDeploymentYamlTemplate(source: string): unknown {
+  const prefix = `ARCHESTRA_TEMPLATE_${randomUUID().replaceAll("-", "")}_`;
+  const placeholders: string[] = [];
+  const tokenized = source.replace(
+    /\$\{(?:env|archestra)\.[\w.-]+\}/g,
+    (token) => {
+      const index = placeholders.push(token) - 1;
+      return `${prefix}${index}_END`;
+    },
+  );
+  const parsed: unknown = yaml.load(tokenized);
+  if (placeholders.length === 0) return parsed;
+  const tokenPattern = new RegExp(`${prefix}(\\d+)_END`, "g");
+  return mapYamlStrings(parsed, ({ value }) =>
+    value.replace(tokenPattern, (_token, index) => placeholders[Number(index)]),
+  );
+}
+
+/** Follow the same catalog and connection-field precedence as runtime inputs. */
+function catalogOwnedEnvironmentPredicate(
+  definitions?: DeploymentYamlInputDefinitions,
+): (key: string) => boolean {
+  const environment = new Map<
+    string,
+    z.infer<typeof EnvironmentVariableSchema>[]
+  >();
+  for (const field of definitions?.localConfig?.environment ?? []) {
+    const fields = environment.get(field.key) ?? [];
+    fields.push(field);
+    environment.set(field.key, fields);
+  }
+  const visiting = new Set<string>();
+  const resolved = new Map<string, boolean>();
+  function staticValue(value: string): boolean {
+    return [...value.matchAll(/\$\{user_config\.([^}]+)\}/g)].every(
+      ([, key]) => {
+        if (visiting.has(key) || visiting.size >= 100) return false;
+        if (resolved.has(key)) return resolved.get(key) === true;
+        visiting.add(key);
+        const field =
+          definitions?.userConfig && Object.hasOwn(definitions.userConfig, key)
+            ? definitions.userConfig[key]
+            : undefined;
+        const owned = field
+          ? field.promptOnInstallation === false &&
+            field.default != null &&
+            staticValue(String(field.default))
+          : key !== definitions?.oauthConfig?.access_token_env_var &&
+            staticEnvironment(key);
+        visiting.delete(key);
+        resolved.set(key, owned);
+        return owned;
+      },
+    );
+  }
+  function staticEnvironment(key: string): boolean {
+    const fields = environment.get(key);
+    return Boolean(
+      fields?.length &&
+        fields.every(
+          (field) =>
+            !field.promptOnInstallation &&
+            !field.credentialId &&
+            field.type !== "secret" &&
+            field.value !== undefined &&
+            staticValue(String(field.value)),
+        ),
+    );
+  }
+  return staticEnvironment;
 }
 
 /** Visit aliases at each use site: their permitted paths can differ. Bound the
@@ -535,8 +645,8 @@ function mapYamlStrings(
       : Object.fromEntries(
           Object.entries(node).map(([key, entry]) => {
             const childPath = [...path, key];
-            transformString(key, childPath, true);
-            return [key, visit(entry, childPath)];
+            const mappedKey = transformString(key, childPath, true);
+            return [mappedKey, visit(entry, childPath)];
           }),
         );
     ancestors.delete(node);
@@ -696,7 +806,10 @@ export function mergeLocalConfigIntoYaml(
     }
 
     const yamlContent = lines.slice(contentStartIndex).join("\n");
-    const parsed = yaml.load(yamlContent) as Record<string, unknown>;
+    const parsed = parseDeploymentYamlTemplate(yamlContent) as Record<
+      string,
+      unknown
+    >;
 
     if (!parsed || typeof parsed !== "object") {
       return yamlString;

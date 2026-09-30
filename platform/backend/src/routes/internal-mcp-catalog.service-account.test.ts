@@ -3,6 +3,7 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { customYamlToDeployment } from "@/k8s/mcp-server-runtime/k8s-yaml-generator";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -18,6 +19,50 @@ import routes from "./internal-mcp-catalog";
 const ordinaryConfig = { command: "node", arguments: ["server.js"] };
 const staticYaml =
   "apiVersion: apps/v1\nkind: Deployment\nspec:\n  template:\n    spec:\n      serviceAccount: approved-runtime\n      containers:\n        - name: server\n          image: example/server:1\n";
+const customYaml = `# Approved runtime configuration
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      serviceAccount: approved-runtime
+      volumes:
+        - name: custom-config
+          configMap:
+            name: approved-config
+      containers:
+        - name: server
+          image: example/server:1
+          env:
+            - name: MODE
+              value: pinned-mode
+          volumeMounts:
+            - name: custom-config
+              mountPath: /etc/runtime
+              readOnly: true
+`;
+const customYamlConfig = {
+  ...ordinaryConfig,
+  environment: [
+    {
+      key: "MODE",
+      type: "plain_text" as const,
+      promptOnInstallation: false,
+      value: "catalog-mode",
+      description: "Runtime mode",
+    },
+  ],
+};
+const userConfig = {
+  mode: {
+    type: "string" as const,
+    title: "Mode",
+    description: "Select a runtime mode",
+    default: "standard",
+    required: true,
+    promptOnInstallation: true,
+  },
+};
 
 describe("catalog runtime authoring permissions", () => {
   let app: FastifyInstanceWithZod;
@@ -208,6 +253,212 @@ describe("catalog runtime authoring permissions", () => {
     ).toBe(staticYaml);
   });
 
+  test.each([
+    { actor: "scoped author", editDescription: false },
+    { actor: "scoped author", editDescription: true },
+    { actor: "registry administrator", editDescription: false },
+    { actor: "registry administrator", editDescription: true },
+  ])("$actor preserves approved YAML on a local config roundtrip (description edit: $editDescription)", async ({
+    actor,
+    editDescription,
+  }) => {
+    await InternalMcpCatalogModel.update(catalog.id, {
+      localConfig: customYamlConfig,
+      deploymentSpecYaml: customYaml,
+    });
+    if (actor === "registry administrator") user = admin;
+    const localConfig = {
+      ...customYamlConfig,
+      environment: customYamlConfig.environment.map((env) => ({
+        ...env,
+        description: editDescription
+          ? "A clearer runtime mode"
+          : env.description,
+      })),
+    };
+
+    const response = await update({
+      description: "Updated catalog description",
+      localConfig,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const stored = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(stored?.description).toBe("Updated catalog description");
+    expect(stored?.localConfig?.environment?.[0].description).toBe(
+      localConfig.environment[0].description,
+    );
+    expect(stored?.deploymentSpecYaml).toBe(customYaml);
+    const deployment = customYamlToDeployment(
+      stored?.deploymentSpecYaml ?? "",
+      {
+        deploymentName: "catalog-roundtrip",
+        serverId: catalog.id,
+        serverName: catalog.name,
+        labels: {},
+        selectorLabels: {},
+      },
+    );
+    expect(deployment?.spec?.template.spec?.containers[0]).toMatchObject({
+      env: [{ name: "MODE", value: "pinned-mode" }],
+      volumeMounts: [
+        { name: "custom-config", mountPath: "/etc/runtime", readOnly: true },
+      ],
+    });
+    expect(deployment?.spec?.template.spec?.volumes).toEqual([
+      { name: "custom-config", configMap: { name: "approved-config" } },
+    ]);
+  });
+
+  test("an actual local runtime change on approved YAML requires registry-wide access", async () => {
+    await InternalMcpCatalogModel.update(catalog.id, {
+      localConfig: customYamlConfig,
+      deploymentSpecYaml: customYaml,
+    });
+    const payload = {
+      localConfig: {
+        ...customYamlConfig,
+        environment: customYamlConfig.environment.map((env) => ({
+          ...env,
+          value: "updated-mode",
+        })),
+      },
+    };
+
+    const denied = await update(payload);
+    expect(denied.statusCode, denied.body).toBe(403);
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.deploymentSpecYaml,
+    ).toBe(customYaml);
+
+    user = admin;
+    const allowed = await update(payload);
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.environment?.[0].value,
+    ).toBe("updated-mode");
+  });
+
+  test("a scoped author can edit user config title and description while preserving approved YAML", async () => {
+    await InternalMcpCatalogModel.update(catalog.id, {
+      localConfig: customYamlConfig,
+      deploymentSpecYaml: customYaml,
+      userConfig,
+    });
+    const metadataEdit = {
+      mode: {
+        ...userConfig.mode,
+        title: "Runtime mode",
+        description: "Choose the runtime mode for this installation",
+      },
+    };
+
+    const response = await update({
+      localConfig: customYamlConfig,
+      userConfig: metadataEdit,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const stored = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(stored?.userConfig).toEqual(metadataEdit);
+    expect(stored?.deploymentSpecYaml).toBe(customYaml);
+  });
+
+  test.each([
+    { default: "different" },
+    { required: false },
+    { promptOnInstallation: false },
+    { sensitive: true },
+    { headerName: "X-Runtime-Mode" },
+    { valuePrefix: "Mode " },
+  ])("a user config behavioral change requires registry-wide access: %j", async (change) => {
+    await InternalMcpCatalogModel.update(catalog.id, {
+      deploymentSpecYaml: customYaml,
+      userConfig,
+    });
+    const response = await update({
+      userConfig: { mode: { ...userConfig.mode, ...change } },
+    });
+    expect(response.statusCode, response.body).toBe(403);
+    const stored = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(stored?.userConfig).toEqual(userConfig);
+    expect(stored?.deploymentSpecYaml).toBe(customYaml);
+  });
+
+  test("a scoped author can echo legacy inline static secrets without changing their stored representation", async () => {
+    const legacyConfig = {
+      ...ordinaryConfig,
+      serviceAccount: "approved-runtime",
+      environment: [
+        {
+          key: "TOKEN",
+          type: "secret" as const,
+          promptOnInstallation: false,
+          value: "legacy-value",
+        },
+      ],
+    };
+    await InternalMcpCatalogModel.update(catalog.id, {
+      localConfig: legacyConfig,
+    });
+    const before = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    const secretCount = await SecretModel.count();
+
+    const response = await update({
+      description: "Legacy configuration description",
+      localConfig: legacyConfig,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const stored = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(stored?.description).toBe("Legacy configuration description");
+    expect(stored?.localConfig).toEqual(before?.localConfig);
+    expect(stored?.localConfigSecretId).toBe(before?.localConfigSecretId);
+    expect(await SecretModel.count()).toBe(secretCount);
+  });
+
+  test("a scoped author can echo a legacy inline OAuth secret without changing its stored representation", async () => {
+    const oauthConfig = {
+      name: "runtime-oauth",
+      server_url: "https://example.com/mcp",
+      client_id: "runtime-client",
+      client_secret: "legacy-client-value",
+      redirect_uris: [],
+      scopes: [],
+      default_scopes: [],
+      supports_resource_metadata: false,
+    };
+    await InternalMcpCatalogModel.update(catalog.id, {
+      localConfig: { ...ordinaryConfig, serviceAccount: "approved-runtime" },
+      oauthConfig,
+    });
+    const before = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    const secretCount = await SecretModel.count();
+
+    const response = await update({
+      description: "Legacy OAuth configuration description",
+      oauthConfig,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const stored = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(stored?.description).toBe("Legacy OAuth configuration description");
+    expect(stored?.oauthConfig).toEqual(before?.oauthConfig);
+    expect(stored?.clientSecretId).toBe(before?.clientSecretId);
+    expect(await SecretModel.count()).toBe(secretCount);
+  });
+
   test("scoped authors cannot create or reset custom deployment YAML", async () => {
     const create = await app.inject({
       method: "POST",
@@ -258,6 +509,7 @@ describe("catalog runtime authoring permissions", () => {
       localConfig: privileged,
       localConfigSecretId: bag.id,
     });
+    const secretCount = await SecretModel.count();
     const response = await update({
       name: "changed-name",
       localConfig: {
@@ -274,6 +526,7 @@ describe("catalog runtime authoring permissions", () => {
     expect((await SecretModel.findById(bag.id))?.secret).toEqual({
       TOKEN: "original-value",
     });
+    expect(await SecretModel.count()).toBe(secretCount);
     const echo = await update({
       description: "Metadata only",
       localConfig: {
@@ -291,6 +544,40 @@ describe("catalog runtime authoring permissions", () => {
         })
       )?.localConfigSecretId,
     ).toBe(bag.id);
+    expect(await SecretModel.count()).toBe(secretCount);
+  });
+
+  test("a denied new static secret leaves no unpublished bag or catalog change", async () => {
+    const privileged = {
+      ...ordinaryConfig,
+      serviceAccount: "approved-runtime",
+    };
+    await InternalMcpCatalogModel.update(catalog.id, {
+      localConfig: privileged,
+    });
+    const secretCount = await SecretModel.count();
+
+    const response = await update({
+      localConfig: {
+        ...privileged,
+        environment: [
+          {
+            key: "TOKEN",
+            type: "secret",
+            promptOnInstallation: false,
+            value: "new-value",
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(403);
+    const stored = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(stored?.localConfig).toEqual(privileged);
+    expect(stored?.localConfigSecretId).toBeNull();
+    expect(await SecretModel.count()).toBe(secretCount);
   });
 
   test("a PUT cannot restore an older secret bag when catalog state changes after its first read", async () => {

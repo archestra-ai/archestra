@@ -981,17 +981,8 @@ async function handleEditMcpConfig(
       );
     }
 
-    // Validate before touching the secret bag: rotating a live credential and
-    // then rejecting the edit would leave the bag ahead of the catalog row.
     const validatedUpdate =
       PartialUpdateInternalMcpCatalogSchema.parse(updateData);
-    assertDeploymentYamlPlaceholdersSafe(validatedUpdate.deploymentSpecYaml);
-    await assertMcpRuntimeChangeAllowed({
-      userId: context.userId,
-      organizationId,
-      original: existing,
-      updates: validatedUpdate,
-    });
     const staging = new CatalogSecretStaging();
     let updated: InternalMcpCatalog;
     try {
@@ -999,8 +990,21 @@ async function handleEditMcpConfig(
         staging,
         updateData: validatedUpdate as Record<string, unknown>,
         catalogName: existing.name,
-        existingLocalConfigSecretId: existing.localConfigSecretId,
-        existingClientSecretId: existing.clientSecretId,
+        original: existing,
+      });
+      assertDeploymentYamlPlaceholdersSafe({
+        ...existing,
+        ...Object.fromEntries(
+          Object.entries(validatedUpdate).filter(
+            ([, value]) => value !== undefined,
+          ),
+        ),
+      });
+      await assertMcpRuntimeChangeAllowed({
+        userId: context.userId,
+        organizationId,
+        original: existing,
+        updates: validatedUpdate,
       });
       ({ catalogItem: updated } = await InternalMcpCatalogModel.publishReviewed(
         {
@@ -1179,13 +1183,6 @@ async function handleCreateMcpServer(
       });
       // SPDX-SnippetEnd
     }
-    assertDeploymentYamlPlaceholdersSafe(validatedParams.deploymentSpecYaml);
-    await assertMcpRuntimeChangeAllowed({
-      userId: context.userId,
-      organizationId,
-      original: null,
-      updates: validatedParams,
-    });
     const staging = new CatalogSecretStaging();
     let created: InternalMcpCatalog;
     try {
@@ -1193,8 +1190,13 @@ async function handleCreateMcpServer(
         staging,
         updateData: validatedParams as Record<string, unknown>,
         catalogName: name,
-        existingLocalConfigSecretId: null,
-        existingClientSecretId: null,
+      });
+      assertDeploymentYamlPlaceholdersSafe(validatedParams);
+      await assertMcpRuntimeChangeAllowed({
+        userId: context.userId,
+        organizationId,
+        original: null,
+        updates: validatedParams,
       });
       created = await InternalMcpCatalogModel.create(validatedParams, {
         organizationId,
@@ -1891,22 +1893,16 @@ async function moveCatalogSecretsToBag(params: {
   staging: CatalogSecretStaging;
   updateData: Record<string, unknown>;
   catalogName: string;
-  existingLocalConfigSecretId: string | null;
-  existingClientSecretId: string | null;
+  original?: InternalMcpCatalog;
 }): Promise<void> {
-  const {
-    staging,
-    updateData,
-    catalogName,
-    existingLocalConfigSecretId,
-    existingClientSecretId,
-  } = params;
+  const { staging, updateData, catalogName, original } = params;
 
   if (updateData.localConfig !== undefined) {
     const { localConfig, secretId } = await extractLocalConfigSecrets({
       staging,
       localConfig: updateData.localConfig as LocalConfig,
-      existingSecretId: existingLocalConfigSecretId,
+      existingSecretId: original?.localConfigSecretId,
+      existingLocalConfig: original?.localConfig,
       catalogName,
     });
     updateData.localConfig = localConfig;
@@ -1923,29 +1919,45 @@ async function moveCatalogSecretsToBag(params: {
       string,
       unknown
     >;
-    if (typeof clientSecret === "string" && clientSecret) {
-      const { id } = await upsertCatalogClientSecretValue({
+    updateData.oauthConfig = rest;
+    if (
+      (typeof clientSecret === "string" && clientSecret) ||
+      original?.oauthConfig?.client_secret
+    ) {
+      const { id, inlineValue } = await upsertCatalogClientSecretValue({
         staging,
-        clientSecretId: existingClientSecretId,
+        clientSecretId: original?.clientSecretId,
         catalogName,
         key: "client_secret",
-        value: clientSecret,
+        value: typeof clientSecret === "string" ? clientSecret : undefined,
+        existingInlineValue: original?.oauthConfig?.client_secret,
       });
-      updateData.oauthConfig = rest;
+      updateData.oauthConfig =
+        inlineValue === undefined
+          ? rest
+          : { ...rest, client_secret: inlineValue };
       updateData.clientSecretId = id;
     }
   }
 }
 
 function assertDeploymentYamlPlaceholdersSafe(
-  yaml: string | null | undefined,
+  definition: Partial<
+    Pick<
+      InternalMcpCatalog,
+      "deploymentSpecYaml" | "localConfig" | "userConfig" | "oauthConfig"
+    >
+  >,
 ): void {
-  if (typeof yaml !== "string") return;
-  const problems = findUnsafeDeploymentYamlPlaceholders(yaml);
+  if (typeof definition.deploymentSpecYaml !== "string") return;
+  const problems = findUnsafeDeploymentYamlPlaceholders(
+    definition.deploymentSpecYaml,
+    definition,
+  );
   if (problems.length) {
     throw new ApiError(
       400,
-      `Custom deployment YAML uses installer inputs in protected fields: ${problems.join("; ")}`,
+      `Invalid custom deployment YAML: ${problems.join("; ")}`,
     );
   }
 }

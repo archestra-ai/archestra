@@ -30,6 +30,102 @@ function deployment({
 }
 
 describe("catalog installation input boundary", () => {
+  test("resolves fixed catalog fields in custom YAML with flow commands", () => {
+    const localConfig = {
+      command: "node",
+      environment: [
+        {
+          key: "ACCOUNT",
+          type: "plain_text" as const,
+          promptOnInstallation: false,
+          value: "${user_config.account}",
+        },
+        {
+          key: "IMAGE",
+          type: "plain_text" as const,
+          promptOnInstallation: false,
+          value: "example/server:2",
+        },
+      ],
+    };
+    const instance = deployment({
+      catalog: {
+        localConfig,
+        userConfig: {
+          account: {
+            type: "string",
+            title: "Account",
+            description: "",
+            promptOnInstallation: false,
+            default: "catalog-account",
+          },
+        },
+        deploymentSpecYaml:
+          "apiVersion: apps/v1\nkind: Deployment\nmetadata: {}\nspec:\n  template:\n    spec:\n      serviceAccountName: ${env.ACCOUNT}\n      containers:\n        - name: server\n          image: ${env.IMAGE}\n          command: [${archestra.command}]\n",
+      },
+      environmentValues: {
+        ACCOUNT: "installation-account",
+        IMAGE: "example/other:1",
+        account: "installation-default",
+      },
+      userConfigValues: { account: "installation-default" },
+    });
+    const pod = instance.generateDeploymentSpec(
+      "example/server:1",
+      localConfig,
+      false,
+      8080,
+    ).spec?.template.spec;
+    expect(pod?.serviceAccountName).toBe("catalog-account");
+    expect(pod?.containers[0]).toMatchObject({
+      image: "example/server:2",
+      command: ["node"],
+    });
+    expect(pod?.containers[0].env).toContainEqual({
+      name: "ACCOUNT",
+      value: "catalog-account",
+    });
+  });
+
+  test("rejects prompted defaults in custom YAML deployment fields", () => {
+    const localConfig = {
+      command: "node",
+      environment: [
+        {
+          key: "ACCOUNT",
+          type: "plain_text" as const,
+          promptOnInstallation: false,
+          value: "${user_config.account}",
+        },
+      ],
+    };
+    const instance = deployment({
+      catalog: {
+        localConfig,
+        userConfig: {
+          account: {
+            type: "string",
+            title: "Account",
+            description: "",
+            promptOnInstallation: true,
+            default: "catalog-account",
+          },
+        },
+        deploymentSpecYaml:
+          "apiVersion: apps/v1\nkind: Deployment\nmetadata: {}\nspec:\n  template:\n    spec:\n      serviceAccountName: ${env.ACCOUNT}\n      containers:\n        - name: server\n          image: example/server:1\n",
+      },
+      userConfigValues: { account: "installation-account" },
+    });
+    expect(() =>
+      instance.generateDeploymentSpec(
+        "example/server:1",
+        localConfig,
+        false,
+        8080,
+      ),
+    ).toThrow(/serviceAccountName/);
+  });
+
   test("does not invent environment variables when a catalog declares no inputs", () => {
     const instance = deployment({
       catalog: {

@@ -363,6 +363,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Fetch catalog item FIRST to determine server type
       let catalogItem = null;
+      let catalogSnapshot: InternalMcpCatalog | null = null;
       if (serverData.catalogId) {
         const isCatalogAdmin = await isMcpInstallationAdmin({
           userId: user.id,
@@ -373,7 +374,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // caller the item's scope does not admit before any secret is resolved,
         // and answers exactly as it does for an item that does not exist — so an
         // install attempt never reveals another user's personal-scope item.
-        const catalogSnapshot = await InternalMcpCatalogModel.findById(
+        catalogSnapshot = await InternalMcpCatalogModel.findById(
           serverData.catalogId,
           {
             accessAction: "use",
@@ -546,18 +547,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "This organization already has an installation of this MCP server",
             );
           }
-        }
-
-        // Identity selection changes the shared catalog, even for a personal
-        // install. Authorize and publish it before any install side effects.
-        if (serviceAccount && catalogItem.serverType === "local") {
-          catalogItem = await updateInstallServiceAccount({
-            catalogItem,
-            original: catalogSnapshot,
-            serviceAccount,
-            userId: user.id,
-            organizationId,
-          });
         }
 
         // Trusted-image-registry gate: a personal local catalog item whose
@@ -739,7 +728,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // If isByosVault flag is set, use vault references from environmentValues for secret env vars
+        // Validate storage compatibility before publishing the account or
+        // creating installation secrets.
         if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
           if (!isByosEnabled()) {
             throw new ApiError(
@@ -748,7 +738,35 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
             );
           }
+        } else if (
+          !secretId &&
+          isByosEnabled() &&
+          catalogItem.localConfig?.environment?.some(
+            (env) =>
+              env.type === "secret" &&
+              !env.credentialId &&
+              env.promptOnInstallation &&
+              environmentValues?.[env.key],
+          )
+        ) {
+          throw new ApiError(
+            400,
+            "Manual secret input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
+          );
+        }
 
+        // The earlier permission check also covers duplicate installs. Publish
+        // only after validation, against the original catalog snapshot.
+        if (serviceAccount && catalogSnapshot) {
+          catalogItem = await updateInstallServiceAccount({
+            catalogItem,
+            original: catalogSnapshot,
+            serviceAccount,
+          });
+        }
+
+        // If isByosVault flag is set, use vault references from environmentValues for secret env vars
+        if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
           // Collect secret env vars with vault references from environmentValues
           const secretEnvVars: Record<string, string> = {
             ...catalogStaticUserConfigValues,
@@ -789,7 +807,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...catalogStaticUserConfigValues,
             ...(installUserConfigValues ?? {}),
           };
-          let hasPromptedSecrets = false;
 
           // Collect all secret-type env vars (static and prompted).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
@@ -799,9 +816,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               if (envDef.promptOnInstallation) {
                 // Prompted during installation - get from environmentValues
                 value = environmentValues?.[envDef.key];
-                if (value) {
-                  hasPromptedSecrets = true;
-                }
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;
@@ -811,15 +825,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 secretEnvVars[envDef.key] = value;
               }
             }
-          }
-
-          // Block user-prompted secrets when Readonly Vault is enabled (they should use Vault)
-          // Static secrets from catalog are allowed since they're not manual user input
-          if (hasPromptedSecrets && isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Manual secret input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
-            );
           }
 
           // Create secret in database if there are any secret env vars
@@ -2343,9 +2348,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Empty strings retain the legacy reinstall clearing behavior; omitted
       // and equivalent accounts do not write shared catalog configuration.
       if (serviceAccount !== undefined && catalogItem.serverType === "local") {
-        catalogItem = await updateInstallServiceAccount({
+        await assertInstallServiceAccountChangeAllowed({
           catalogItem,
-          original: catalogSnapshot,
           serviceAccount,
           userId: user.id,
           organizationId,
@@ -2542,12 +2546,34 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const hasInstallInputs =
+        Object.keys(environmentValues ?? {}).length > 0 ||
+        Object.keys(userConfigValues ?? {}).length > 0;
+      if (hasInstallInputs && isByosVault && !isByosEnabled()) {
+        throw new ApiError(
+          400,
+          "Readonly Vault is not enabled. " +
+            "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+        );
+      }
+
+      if (catalogItem.serverType === "local") {
+        await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+      }
+
+      // Publish the already-authorized account after validation and immediately
+      // before changing installation secrets or state.
+      if (serviceAccount !== undefined && catalogItem.serverType === "local") {
+        catalogItem = await updateInstallServiceAccount({
+          catalogItem,
+          original: catalogSnapshot,
+          serviceAccount,
+        });
+      }
+
       // New env/userConfig values land in this install's secret bag. The
       // runtime reload below reads `secretId` to pick them up.
-      if (
-        (environmentValues && Object.keys(environmentValues).length > 0) ||
-        (userConfigValues && Object.keys(userConfigValues).length > 0)
-      ) {
+      if (hasInstallInputs) {
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem.userConfig,
         );
@@ -2559,14 +2585,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Update or create secret with new values
         if (isByosVault) {
           // BYOS mode: values are vault references
-          if (!isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Readonly Vault is not enabled. " +
-                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-            );
-          }
-
           // BYOS vault bags hold only vault references. Plain (non-secret) env
           // values are literals that belong on the install row's column
           // (persisted below); spreading them here would have vault resolution
@@ -4065,28 +4083,19 @@ async function validateScopeAndAuthorization(params: {
   }
 }
 
-/** Preserve legacy account overrides while protecting the shared catalog write. */
+/** Publish an already-authorized account after installation validation. */
 async function updateInstallServiceAccount(params: {
   catalogItem: InternalMcpCatalog;
   original: InternalMcpCatalog;
   serviceAccount: string;
-  userId: string;
-  organizationId: string;
 }): Promise<InternalMcpCatalog> {
-  const { catalogItem, original, serviceAccount, userId, organizationId } =
-    params;
+  const { catalogItem, original, serviceAccount } = params;
   if (
     (original.localConfig?.serviceAccount || "default") ===
     (serviceAccount || "default")
   ) {
     return catalogItem;
   }
-  await assertInstallServiceAccountChangeAllowed({
-    catalogItem: original,
-    serviceAccount,
-    userId,
-    organizationId,
-  });
   const published = await InternalMcpCatalogModel.publishReviewed({
     original,
     updates: { localConfig: { ...original.localConfig, serviceAccount } },

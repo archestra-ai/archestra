@@ -4,6 +4,7 @@ import { secretManager } from "@/secrets-manager";
 import {
   extractLocalConfigSecrets,
   getCatalogSecretValues,
+  upsertCatalogClientSecretValue,
 } from "./mcp-catalog-secrets";
 
 test("saved credential bindings never copy a value into the catalog or its secret bag", async () => {
@@ -143,4 +144,97 @@ test("copying a BYOS catalog retains external references", async () => {
     TOKEN: "secret/catalog#token",
   });
   expect((await SecretModel.findById(original.id))?.isByosVault).toBe(true);
+});
+
+test("hydrated values preserve legacy inline fields and the current bag", async () => {
+  const stored = await secretManager().createSecret(
+    {
+      TOKEN: "current-token",
+      "__regcred_password:registry.example:user": "current-password",
+    },
+    "existing-config",
+  );
+  const existingLocalConfig = {
+    environment: [
+      {
+        key: "TOKEN",
+        type: "secret" as const,
+        promptOnInstallation: false,
+        value: "legacy-token",
+      },
+    ],
+    imagePullSecrets: [
+      {
+        source: "credentials" as const,
+        server: "registry.example",
+        username: "user",
+        password: "legacy-password",
+      },
+    ],
+  };
+  const prepared = await extractLocalConfigSecrets({
+    catalogName: "Config roundtrip",
+    existingSecretId: stored.id,
+    existingLocalConfig,
+    localConfig: {
+      environment: [
+        { ...existingLocalConfig.environment[0], value: "current-token" },
+      ],
+      imagePullSecrets: [
+        {
+          ...existingLocalConfig.imagePullSecrets[0],
+          password: "current-password",
+        },
+      ],
+    },
+  });
+  expect(prepared.secretId).toBe(stored.id);
+  expect(prepared.rotated).toBe(false);
+  expect(prepared.localConfig).toEqual(existingLocalConfig);
+});
+
+test("client credential preparation retains unchanged inline values and stages changed values", async () => {
+  const inline = await upsertCatalogClientSecretValue({
+    catalogName: "Client roundtrip",
+    clientSecretId: null,
+    key: "client_secret",
+    value: undefined,
+    existingInlineValue: "legacy-client",
+  });
+  expect(inline).toEqual({
+    id: null,
+    rotated: false,
+    inlineValue: "legacy-client",
+  });
+  const stored = await secretManager().createSecret(
+    { client_secret: "current-client" },
+    "client-bag",
+  );
+  const unchanged = await upsertCatalogClientSecretValue({
+    catalogName: "Client roundtrip",
+    clientSecretId: stored.id,
+    key: "client_secret",
+    value: "current-client",
+    existingInlineValue: "legacy-client",
+  });
+  expect(unchanged).toEqual({
+    id: stored.id,
+    rotated: false,
+    inlineValue: "legacy-client",
+  });
+  const changed = await upsertCatalogClientSecretValue({
+    catalogName: "Client roundtrip",
+    clientSecretId: stored.id,
+    key: "client_secret",
+    value: "updated-client",
+    existingInlineValue: "legacy-client",
+  });
+  expect(changed.id).not.toBe(stored.id);
+  expect(changed.inlineValue).toBeUndefined();
+  expect((await secretManager().getSecret(stored.id))?.secret).toEqual({
+    client_secret: "current-client",
+  });
+  expect((await secretManager().getSecret(changed.id ?? ""))?.secret).toEqual({
+    client_secret: "updated-client",
+  });
 });

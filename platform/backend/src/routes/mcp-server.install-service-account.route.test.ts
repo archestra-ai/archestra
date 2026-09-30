@@ -7,6 +7,7 @@ import {
 import runtime from "@/k8s/mcp-server-runtime/manager";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpServerModel from "@/models/mcp-server";
+import OrganizationModel from "@/models/organization";
 import SecretModel from "@/models/secret";
 import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -113,7 +114,7 @@ describe("install account overrides use catalog administration permissions", () 
     ).toBe("approved-runtime");
   });
 
-  test("an existing personal install cannot bypass account authorization", async ({
+  test("an existing personal install still checks account permissions", async ({
     makeMcpServer,
   }) => {
     const server = await makeMcpServer({
@@ -142,6 +143,70 @@ describe("install account overrides use catalog administration permissions", () 
       (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
         ?.serviceAccount,
     ).toBe("approved-runtime");
+  });
+
+  test("administrator duplicate install returns the existing installation without publishing an account", async ({
+    makeMcpServer,
+  }) => {
+    user = admin;
+    const localConfig: NonNullable<InternalMcpCatalog["localConfig"]> = {
+      ...ordinaryConfig,
+      environment: [
+        {
+          key: "REQUIRED",
+          type: "plain_text",
+          promptOnInstallation: true,
+          required: true,
+        },
+      ],
+    };
+    await InternalMcpCatalogModel.update(catalog.id, { localConfig });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      scope: "personal",
+      serverType: "local",
+      localInstallationStatus: "success",
+    });
+    const response = await install({ serviceAccount: "replacement-runtime" });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().id).toBe(server.id);
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig,
+    ).toEqual(localConfig);
+    expect(await McpServerModel.findById(server.id)).toMatchObject(server);
+    expect(runtime.startServer).not.toHaveBeenCalled();
+  });
+
+  test.for([
+    undefined,
+    "approved-runtime",
+  ])("member reinstall preserves omitted or equal account %j", async (serviceAccount, {
+    makeMcpServer,
+  }) => {
+    const localConfig = {
+      ...ordinaryConfig,
+      serviceAccount: "approved-runtime",
+    };
+    await InternalMcpCatalogModel.update(catalog.id, { localConfig });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      scope: "personal",
+      serverType: "local",
+      localInstallationStatus: "success",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${server.id}/reinstall`,
+      payload: { serviceAccount },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    await drainBackgroundWork();
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig,
+    ).toEqual(localConfig);
+    expect(runtime.restartServer).toHaveBeenCalledOnce();
   });
 
   test("member reinstall cannot change or clear an account or mutate install state", async ({
@@ -227,7 +292,121 @@ describe("install account overrides use catalog administration permissions", () 
   });
 
   for (const operation of ["install", "reinstall"]) {
-    test(`administrator ${operation} cannot adopt a concurrent editor's executable before assigning privileges`, async ({
+    test.for([
+      "required environment",
+      "required connection setting",
+      "environment regex",
+      "image policy",
+      "unavailable vault",
+    ] as const)(`administrator ${operation} preserves the shared account after %s refusal`, async (reason, {
+      makeMcpServer,
+    }) => {
+      const memberId = user.id;
+      user = admin;
+      const localConfig: NonNullable<InternalMcpCatalog["localConfig"]> = {
+        ...ordinaryConfig,
+        serviceAccount: "original-runtime",
+        environment: [
+          {
+            key: "INPUT",
+            type: "plain_text",
+            promptOnInstallation: true,
+            required: reason === "required environment",
+          },
+        ],
+        ...(reason === "image policy"
+          ? { dockerImage: "registry.example.com/pending/server:1" }
+          : {}),
+      };
+      await InternalMcpCatalogModel.update(catalog.id, {
+        localConfig,
+        ...(reason === "image policy" ? { authorId: memberId } : {}),
+        ...(reason === "required connection setting"
+          ? {
+              userConfig: {
+                requiredSetting: {
+                  type: "string",
+                  title: "Required setting",
+                  description: "Connection setting",
+                  required: true,
+                  promptOnInstallation: true,
+                },
+              },
+            }
+          : {}),
+      });
+      if (reason === "environment regex") {
+        await OrganizationModel.patch(organizationId, {
+          defaultEnvironmentValidationRegex: "^allowed$",
+        });
+      }
+      if (reason === "image policy") {
+        await OrganizationModel.patch(organizationId, {
+          defaultEnvironmentTrustedImageRegistries: [
+            "registry.example.com/approved",
+          ],
+        });
+      }
+      const bag =
+        operation === "reinstall"
+          ? await secretManager().createSecret(
+              { TOKEN: "original-value" },
+              "existing-install-values",
+            )
+          : null;
+      const server =
+        operation === "reinstall"
+          ? await makeMcpServer({
+              catalogId: catalog.id,
+              ownerId: user.id,
+              scope: "personal",
+              serverType: "local",
+              secretId: bag?.id,
+              localInstallationStatus: "success",
+            })
+          : null;
+      const payload = {
+        serviceAccount: "replacement-runtime",
+        ...(reason === "environment regex"
+          ? { environmentValues: { INPUT: "other" } }
+          : {}),
+        ...(reason === "unavailable vault"
+          ? { isByosVault: true, environmentValues: { INPUT: "allowed" } }
+          : {}),
+      };
+      const response = server
+        ? await app.inject({
+            method: "POST",
+            url: `/api/mcp_server/${server.id}/reinstall`,
+            payload,
+          })
+        : await install({ ...payload, accessToken: "unused-value" });
+      expect(response.statusCode, response.body).toBe(
+        reason === "image policy" ? 403 : 400,
+      );
+      expect(
+        (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig,
+      ).toEqual(localConfig);
+      if (reason === "image policy") {
+        expect(
+          (await InternalMcpCatalogModel.findById(catalog.id))
+            ?.catalogItemApprovalStatus,
+        ).toBe("pending");
+      }
+      if (server && bag) {
+        expect(await McpServerModel.findById(server.id)).toMatchObject(server);
+        expect((await SecretModel.findById(bag.id))?.secret).toEqual({
+          TOKEN: "original-value",
+        });
+      } else {
+        expect(await McpServerModel.findByCatalogId(catalog.id)).toEqual([]);
+      }
+      expect(await SecretModel.count()).toBe(bag ? 1 : 0);
+      expect(runtime.startServer).not.toHaveBeenCalled();
+      expect(runtime.restartServer).not.toHaveBeenCalled();
+    });
+
+    test(`administrator ${operation} reports a concurrent catalog edit before publishing an account`, async ({
       makeMcpServer,
     }) => {
       user = admin;

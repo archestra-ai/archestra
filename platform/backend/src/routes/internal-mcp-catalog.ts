@@ -468,8 +468,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      assertDeploymentYamlPlaceholdersSafe(restBody.deploymentSpecYaml);
-
       // Secret FK columns are server-managed: clients submit secret values, never
       // ids. Trusting an inbound id would let a caller point the row at another
       // org's secret (which create()'s clone-secret merge would then read/write).
@@ -518,16 +516,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
-      await assertMcpRuntimeChangeAllowed({
-        userId: request.user.id,
-        organizationId: request.organizationId,
-        original: null,
-        updates: restBody,
-      });
-
       const staging = new CatalogSecretStaging();
       try {
-        let clientSecretId: string | undefined;
+        let clientSecretId: string | null | undefined;
         let localConfigSecretId: string | undefined;
 
         // Handle OAuth client secret - either via BYOS or direct value
@@ -716,6 +707,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             `An MCP server named "${restBody.name}" would share its tool names with the built-in ${archestraMcpBranding.catalogName} tools.`,
             "catalog_name_conflict",
           );
+
+        assertDeploymentYamlPlaceholdersSafe(restBody);
+        await assertMcpRuntimeChangeAllowed({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          original: null,
+          updates: restBody,
+        });
 
         const catalogItem = await withCatalogTeamFkErrorMapped(() =>
           InternalMcpCatalogModel.create(
@@ -995,8 +994,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.deploymentSpecYaml = undefined;
       }
 
-      assertDeploymentYamlPlaceholdersSafe(restBody.deploymentSpecYaml);
-
       // Gate the right to modify this item at its CURRENT scope. This lets an
       // admin of one of the item's `write` teams edit it, and still blocks
       // editing someone else's personal item or a `use`-only team's item.
@@ -1024,32 +1021,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       }
-
-      await assertMcpRuntimeChangeAllowed({
-        userId: request.user.id,
-        organizationId: request.organizationId,
-        original: originalCatalogItemForGate,
-        updates: restBody,
-        secretUpdates: {
-          ...(localConfigVaultPath && localConfigVaultKey
-            ? {
-                localConfig: {
-                  [localConfigVaultKey]: `${localConfigVaultPath}#${localConfigVaultKey}`,
-                },
-              }
-            : {}),
-          ...(oauthClientSecretVaultPath && oauthClientSecretVaultKey
-            ? {
-                client: {
-                  ...(await getCatalogClientSecretValues(
-                    originalCatalogItemForGate.clientSecretId,
-                  )),
-                  client_secret: `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`,
-                },
-              }
-            : {}),
-        },
-      });
 
       let rename:
         | {
@@ -1159,43 +1130,62 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           logger.info(
             "Created Readonly Vault external vault secret reference for OAuth client secret",
           );
-        } else if (
-          restBody.oauthConfig &&
-          "client_secret" in restBody.oauthConfig
-        ) {
-          // Direct client_secret value
+        } else if (restBody.oauthConfig) {
           const clientSecret = restBody.oauthConfig.client_secret;
-          if (clientSecret) {
+          if (
+            clientSecret ||
+            originalCatalogItemForGate.oauthConfig?.client_secret
+          ) {
             const result = await upsertCatalogClientSecretValue({
               staging,
               clientSecretId,
               catalogName: originalCatalogItem.name,
               key: "client_secret",
               value: clientSecret,
+              existingInlineValue:
+                originalCatalogItemForGate.oauthConfig?.client_secret,
             });
             clientSecretId = result.id;
             if (result.rotated) catalogSharedSecretValuesRotated = true;
 
             restBody.clientSecretId = clientSecretId;
+            if (result.inlineValue === undefined)
+              delete restBody.oauthConfig.client_secret;
+            else restBody.oauthConfig.client_secret = result.inlineValue;
+          } else {
+            delete restBody.oauthConfig.client_secret;
           }
-          delete restBody.oauthConfig.client_secret;
         }
 
         const enterpriseManagedClientSecretOverride =
           restBody.enterpriseManagedConfig?.clientSecretOverride;
-        if (enterpriseManagedClientSecretOverride) {
+        if (
+          restBody.enterpriseManagedConfig &&
+          (enterpriseManagedClientSecretOverride ||
+            originalCatalogItemForGate.enterpriseManagedConfig
+              ?.clientSecretOverride)
+        ) {
           const result = await upsertCatalogClientSecretValue({
             staging,
             clientSecretId,
             catalogName: originalCatalogItem.name,
             key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
             value: enterpriseManagedClientSecretOverride,
+            existingInlineValue:
+              originalCatalogItemForGate.enterpriseManagedConfig
+                ?.clientSecretOverride,
           });
           clientSecretId = result.id;
           if (result.rotated) catalogSharedSecretValuesRotated = true;
 
           restBody.clientSecretId = clientSecretId;
-          delete restBody.enterpriseManagedConfig?.clientSecretOverride;
+          if (result.inlineValue === undefined)
+            delete restBody.enterpriseManagedConfig.clientSecretOverride;
+          else
+            restBody.enterpriseManagedConfig.clientSecretOverride =
+              result.inlineValue;
+        } else if (restBody.enterpriseManagedConfig) {
+          delete restBody.enterpriseManagedConfig.clientSecretOverride;
         }
 
         // Handle local config secrets - either via Readonly Vault or direct values
@@ -1247,6 +1237,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             staging,
             localConfig: restBody.localConfig,
             existingSecretId: localConfigSecretId,
+            existingLocalConfig: originalCatalogItemForGate.localConfig,
             catalogName: originalCatalogItem.name,
           });
           if (extraction.localConfig !== undefined) {
@@ -1259,27 +1250,27 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // Merge environment variables into YAML in two cases:
-        // 1. YAML is explicitly provided in request (user editing via "Edit Deployment Yaml" dialog)
-        // 2. YAML already exists in database and env vars are being updated (main form edit)
         const yamlToUpdate =
           restBody.deploymentSpecYaml ?? originalCatalogItem.deploymentSpecYaml;
-
-        if (yamlToUpdate && restBody.localConfig?.environment) {
-          const environment = restBody.localConfig.environment;
-
-          // Build set of previously managed keys to detect removed env vars
-          const previouslyManagedKeys = new Set<string>(
-            (originalCatalogItem.localConfig?.environment ?? []).map(
-              (env) => env.key,
+        // Preserve authored overrides when the managed env/mount layout is unchanged.
+        if (
+          yamlToUpdate &&
+          restBody.localConfig?.environment &&
+          !isDeepStrictEqual(
+            managedEnvironmentLayout(
+              originalCatalogItem.localConfig?.environment,
             ),
-          );
-
-          // Merge current environment into the YAML
+            managedEnvironmentLayout(restBody.localConfig.environment),
+          )
+        ) {
           restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
             yamlToUpdate,
-            environment,
-            previouslyManagedKeys,
+            restBody.localConfig.environment,
+            new Set(
+              (originalCatalogItem.localConfig?.environment ?? []).map(
+                (env) => env.key,
+              ),
+            ),
           );
         }
 
@@ -1352,6 +1343,25 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           restBody.environmentId !== originalCatalogItem.environmentId &&
           originalCatalogItem.serverType === "local" &&
           mcpServerRuntimeManager.isEnabled;
+
+        const finalUpdates = {
+          ...restBody,
+          ...(rename ? { name: rename.newName } : {}),
+        };
+        assertDeploymentYamlPlaceholdersSafe({
+          ...originalCatalogItemForGate,
+          ...Object.fromEntries(
+            Object.entries(finalUpdates).filter(
+              ([, value]) => value !== undefined,
+            ),
+          ),
+        });
+        await assertMcpRuntimeChangeAllowed({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          original: originalCatalogItemForGate,
+          updates: finalUpdates,
+        });
 
         // Update the catalog item
         const { catalogItem, renamedTools } =
@@ -2731,15 +2741,33 @@ function assertMcpServerAlertingEnabled(): void {
 }
 
 function assertDeploymentYamlPlaceholdersSafe(
-  deploymentSpecYaml: string | null | undefined,
+  definition: Partial<
+    Pick<
+      InternalMcpCatalog,
+      "deploymentSpecYaml" | "localConfig" | "userConfig" | "oauthConfig"
+    >
+  >,
 ): void {
-  if (typeof deploymentSpecYaml !== "string") return;
-  const problems = findUnsafeDeploymentYamlPlaceholders(deploymentSpecYaml);
+  if (typeof definition.deploymentSpecYaml !== "string") return;
+  const problems = findUnsafeDeploymentYamlPlaceholders(
+    definition.deploymentSpecYaml,
+    definition,
+  );
   if (problems.length === 0) return;
   throw new ApiError(
     400,
-    `Custom deployment YAML uses installer inputs in protected fields: ${problems.join("; ")}`,
+    `Invalid custom deployment YAML: ${problems.join("; ")}`,
   );
+}
+
+function managedEnvironmentLayout(
+  environment: NonNullable<InternalMcpCatalog["localConfig"]>["environment"],
+) {
+  return (environment ?? []).map(({ key, type, mounted }) => ({
+    key,
+    type,
+    mounted: type === "secret" && Boolean(mounted),
+  }));
 }
 
 export default internalMcpCatalogRoutes;

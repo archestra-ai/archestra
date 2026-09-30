@@ -96,7 +96,7 @@ test("keeping the selected account cannot authorize an executable change", async
   ).rejects.toMatchObject({ statusCode: 403 });
 });
 
-test("metadata edits and unchanged hydrated configuration are permitted", async () => {
+test("metadata edits retain prepared credential references", async () => {
   const bag = await secretManager().createSecret(
     { TOKEN: "approved-value" },
     "catalog-secret",
@@ -115,37 +115,20 @@ test("metadata edits and unchanged hydrated configuration are permitted", async 
       original,
       updates: {
         description: "Changed description",
-        localConfig: {
-          ...original.localConfig,
-          environment: [
-            {
-              key: "TOKEN",
-              type: "secret",
-              promptOnInstallation: false,
-              value: "approved-value",
-            },
-          ],
-        },
+        localConfig: original.localConfig,
+        localConfigSecretId: bag.id,
       },
     }),
   ).resolves.toBeUndefined();
+  const changed = await secretManager().createSecret(
+    { TOKEN: "changed-value" },
+    "updated-catalog-secret",
+  );
   await expect(
     assertMcpRuntimeChangeAllowed({
       ...actor,
       original,
-      updates: {
-        localConfig: {
-          ...original.localConfig,
-          environment: [
-            {
-              key: "TOKEN",
-              type: "secret",
-              promptOnInstallation: false,
-              value: "changed-value",
-            },
-          ],
-        },
-      },
+      updates: { localConfigSecretId: changed.id },
     }),
   ).rejects.toMatchObject({ statusCode: 403 });
 });

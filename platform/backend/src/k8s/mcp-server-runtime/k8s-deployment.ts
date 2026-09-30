@@ -2406,6 +2406,7 @@ export default class K8sDeployment {
         command: localConfig.command,
         arguments: localConfig.arguments,
         serviceAccount: localConfig.serviceAccount,
+        inputDefinitions: this.catalogItem ?? undefined,
       },
       envValues,
     );
@@ -2825,15 +2826,6 @@ export default class K8sDeployment {
     // Add user config values as environment variables
     if (this.userConfigValues) {
       Object.entries(this.userConfigValues).forEach(([key, value]) => {
-        if (this.catalogItem) {
-          const definitions = this.catalogItem.userConfig ?? {};
-          if (!Object.hasOwn(definitions, key)) return;
-          const definition = definitions[key];
-          if (definition.promptOnInstallation === false) {
-            value =
-              definition.default != null ? String(definition.default) : "";
-          }
-        }
         // Convert to uppercase with underscores for environment variable convention
         const envKey = key.toUpperCase().replace(/[^A-Z0-9]/g, "_");
         envMap.set(envKey, value != null ? String(value) : "");

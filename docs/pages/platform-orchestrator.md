@@ -143,6 +143,8 @@ Registry-wide edit access is required to configure custom Kubernetes service acc
 
 Installers use the account configured by the registry administrator. They can supply the installation fields declared by the entry. In advanced YAML, installation placeholders can supply container environment values, commands, and arguments. They cannot select Kubernetes accounts, images, secret references, or pod security settings.
 
+Fixed, non-secret catalog environment values can supply these fields through `${env.KEY}` placeholders. These values cannot depend on installation prompts or credential bindings. Flow syntax such as `command: [${archestra.command}]` is supported. Saving checks placeholder sources against the current catalog configuration.
+
 ## Transports
 
 Self-hosted servers support two transports:

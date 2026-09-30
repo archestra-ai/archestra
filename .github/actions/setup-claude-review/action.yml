@@ -1,7 +1,0 @@
-name: Setup Archestra for Claude review
-description: Prepare the platform dependencies and environment for PR reviews
-runs:
-  using: composite
-  steps:
-    - name: Setup platform environment
-      uses: ./.github/actions/setup-env

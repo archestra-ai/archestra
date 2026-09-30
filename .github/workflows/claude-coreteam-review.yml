@@ -25,8 +25,6 @@ jobs:
       pull-requests: write # Publish PR review comments.
       id-token: write # Support the reusable workflow's Claude GitHub App authentication.
     uses: archestra-ai/.github/.github/workflows/claude-coreteam-review.yml@4c03ba23c1d1de1a34b9c8fcde33d07e97605583
-    with:
-      setup_repository: true
     # GitHub resolves this lookup before starting the called job; only the
     # matching token is passed, not the caller's complete secrets context.
     secrets:

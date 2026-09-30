@@ -2456,15 +2456,6 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES,
       180,
     ),
-    /**
-     * How long an unattended scheduled run may take before it is stopped and
-     * marked failed. Nobody watches a scheduled run, so without this a run that
-     * stops making progress blocks its schedule until the workspace expires.
-     */
-    scheduledRunTimeoutMinutes: parsePositiveInt(
-      process.env.ARCHESTRA_AGENT_RUNTIME_SCHEDULED_RUN_TIMEOUT_MINUTES,
-      240,
-    ),
     resources: {
       cpuRequest:
         process.env.ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST?.trim() || "500m",

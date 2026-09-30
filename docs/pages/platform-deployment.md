@@ -1058,7 +1058,6 @@ On GKE, custom Sandbox controllers can produce a â€œnot backed by a controllerâ€
 - **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Lifetime cap for runs whose Agent sets none. Kubernetes enforces it on the workload as well.
   - Default: `72`
 
-- **`ARCHESTRA_AGENT_RUNTIME_SCHEDULED_RUN_TIMEOUT_MINUTES`** - How long a scheduled Agent Runtime run can take. When a run is still going after this time, the platform stops it and marks it failed, so the next scheduled run can start. Default: `240`.
 - **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES`** - How long the built-in runtime agent waits for another steer after finishing its current work before the run exits. An Agent can override this value. Custom images receive the timeout as `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` and must implement the wait themselves.
   - Default: `180`
 

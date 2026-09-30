@@ -79,17 +79,6 @@ export async function cancelDetachedAgentTask(params: {
   });
 }
 
-/**
- * Fail an unfinished runtime task on the platform's own authority, for
- * example when it outlives a limit. Returns false when it already settled.
- */
-export async function failDetachedAgentTask(params: {
-  taskId: string;
-  statusReason: string;
-}): Promise<boolean> {
-  return await (await taskManager.get()).failTask(params);
-}
-
 // === Internal helpers ===
 
 /** Avoid the AgentModel -> MCP registry -> task tools import cycle. */

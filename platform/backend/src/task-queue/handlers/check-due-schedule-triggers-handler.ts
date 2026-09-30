@@ -1,19 +1,14 @@
-import config from "@/config";
 import logger from "@/logging";
 import {
-  AgentRunModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   TaskModel,
 } from "@/models";
 import { metrics } from "@/observability";
-import { cleanupAgentRun } from "@/services/agent-runtime/pod-run";
-import { failDetachedAgentTask } from "@/services/agent-runtime/start-task";
 import { taskQueueService } from "@/task-queue";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 
 export async function handleCheckDueScheduleTriggers(): Promise<void> {
-  const now = new Date();
   const runtimeRuns = await ScheduleTriggerRunModel.findRunningRuntimeTasks();
   // The unfinished run that blocks each trigger, named in a skip record.
   const activeRuntimeRuns = new Map<
@@ -22,13 +17,10 @@ export async function handleCheckDueScheduleTriggers(): Promise<void> {
   >();
   for (const run of runtimeRuns) {
     if (run.state && !isTerminalA2ATaskState(run.state)) {
-      const startedAt = run.startedAt ?? run.createdAt;
-      const overdue =
-        now.getTime() - startedAt.getTime() >=
-        config.agentRuntime.scheduledRunTimeoutMinutes * 60_000;
-      if (!overdue || (await stopOverdueRun(run))) {
-        activeRuntimeRuns.set(run.triggerId, { runId: run.runId, startedAt });
-      }
+      activeRuntimeRuns.set(run.triggerId, {
+        runId: run.runId,
+        startedAt: run.startedAt ?? run.createdAt,
+      });
       continue;
     }
     const status =
@@ -55,6 +47,7 @@ export async function handleCheckDueScheduleTriggers(): Promise<void> {
       );
   }
 
+  const now = new Date();
   const dueTriggers = await ScheduleTriggerModel.findDueTriggers(now);
   if (dueTriggers.length === 0) return;
 
@@ -126,64 +119,6 @@ export async function handleCheckDueScheduleTriggers(): Promise<void> {
 // Internal
 // =============================================================================
 
-/**
- * Stop a scheduled runtime run that outlived its limit: fail its task, stop
- * the workload, and settle the scheduled run. Returns whether the run still
- * blocks its schedule: only when stopping it failed. A task that settled
- * underneath us no longer blocks; the next tick records its outcome.
- */
-async function stopOverdueRun(run: {
-  runId: string;
-  runtimeTaskId: string | null;
-  agentName: string | null;
-}): Promise<boolean> {
-  if (!run.runtimeTaskId) return false;
-  const reason = `The scheduled run was stopped after ${formatMinutes(
-    config.agentRuntime.scheduledRunTimeoutMinutes,
-  )}, its time limit.`;
-  let failed: boolean;
-  try {
-    failed = await failDetachedAgentTask({
-      taskId: run.runtimeTaskId,
-      statusReason: reason,
-    });
-  } catch (error) {
-    logger.warn(
-      { error, runId: run.runId, taskId: run.runtimeTaskId },
-      "Could not stop an overdue scheduled run; will retry next tick",
-    );
-    return true;
-  }
-  if (!failed) return false;
-
-  logger.warn(
-    { runId: run.runId, taskId: run.runtimeTaskId },
-    "Stopped a scheduled Agent Runtime run that exceeded its time limit",
-  );
-  // The reconciler retries cleanup for any run still open, so a failure here
-  // must not keep the schedule blocked.
-  const session = await AgentRunModel.findByTaskId(run.runtimeTaskId);
-  if (session) {
-    await cleanupAgentRun(session, { requireTranscript: true }).catch((error) =>
-      logger.warn(
-        { error, taskId: run.runtimeTaskId },
-        "Cleanup of a stopped scheduled run will retry",
-      ),
-    );
-  }
-  const completed = await ScheduleTriggerRunModel.markCompleted({
-    runId: run.runId,
-    status: "failed",
-    error: reason,
-  });
-  if (completed)
-    metrics.scheduleTrigger.reportScheduleTriggerRun(
-      run.agentName ?? "unknown",
-      "failed",
-    );
-  return false;
-}
-
 function skippedForRuntimeRun(params: {
   runId: string;
   startedAt: Date;
@@ -192,7 +127,7 @@ function skippedForRuntimeRun(params: {
   const elapsedMinutes = Math.floor(
     (params.now.getTime() - params.startedAt.getTime()) / 60_000,
   );
-  return `Skipped: run ${params.runId} was still in progress (started ${params.startedAt.toISOString()}, ${formatMinutes(elapsedMinutes)} ago). A scheduled run is stopped after ${formatMinutes(config.agentRuntime.scheduledRunTimeoutMinutes)}.`;
+  return `Skipped: run ${params.runId} was still in progress (started ${params.startedAt.toISOString()}, ${formatMinutes(elapsedMinutes)} ago). A run that does not finish is stopped at the agent's Maximum duration.`;
 }
 
 function formatMinutes(minutes: number): string {

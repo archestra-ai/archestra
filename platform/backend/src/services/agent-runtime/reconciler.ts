@@ -308,6 +308,6 @@ export const agentRunReconciler = new AgentRunReconciler();
 
 const ADOPTION_DELAY_MS = 2 * 60 * 1_000;
 const WORKSPACE_EXPIRED_REASON =
-  "The run was stopped because its workspace reached the end of its retention period.";
+  "The run was stopped because it reached its Maximum duration.";
 const WORKSPACE_DELETED_REASON =
   "The run was stopped because its workspace was deleted.";

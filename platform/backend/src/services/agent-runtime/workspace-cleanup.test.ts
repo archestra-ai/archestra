@@ -186,7 +186,7 @@ test("expiry retains the workspace until final transcript capture succeeds", asy
   expect(await A2ATaskModel.findById(task.id)).toMatchObject({
     state: "TASK_STATE_FAILED",
     statusReason:
-      "The run was stopped because its workspace reached the end of its retention period.",
+      "The run was stopped because it reached its Maximum duration.",
   });
   expect(deletion).not.toHaveBeenCalled();
   expect(

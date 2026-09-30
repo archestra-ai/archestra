@@ -12,6 +12,7 @@ import {
 } from "@/models";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import type { AgentRunCompletion } from "@/services/agent-runtime/backends/types";
+import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { afterEach, expect, type TestFixtures, test, vi } from "@/test";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
@@ -127,7 +128,7 @@ test.for([
   });
 });
 
-test("a scheduled runtime run that never finishes is stopped at its time limit and the schedule resumes", async ({
+test("a scheduled runtime run that never finishes stops at its Maximum duration and the schedule resumes", async ({
   makeOrganization,
   makeAdmin,
   makeMember,
@@ -137,74 +138,73 @@ test("a scheduled runtime run that never finishes is stopped at its time limit a
   makeScheduleTrigger,
   makeScheduleTriggerRun,
 }) => {
-  const timeoutMinutes = config.agentRuntime.scheduledRunTimeoutMinutes;
-  try {
-    const { launch, org, trigger } = await setUpRuntimeSchedule({
-      makeOrganization,
-      makeAdmin,
-      makeMember,
-      makeSecret,
-      makeLlmProviderApiKey,
-      makeInternalAgent,
-      makeScheduleTrigger,
-    });
-    const stopRun = vi.mocked(backend.stopRun);
-    const run = await makeScheduleTriggerRun(trigger.id);
-    await handleScheduleTriggerRunExecution({ runId: run.id });
-    const taskId = (await ScheduleTriggerRunModel.findById(run.id))
-      ?.runtimeTaskId as string;
-    await expect.poll(() => launch.mock.calls.length).toBe(1);
-    // The workload never completes: the agent sits idle, as a client does
-    // when it returns to its prompt without ending the turn.
+  const { launch, org, trigger } = await setUpRuntimeSchedule({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeInternalAgent,
+    makeScheduleTrigger,
+  });
+  vi.spyOn(backend, "deleteWorkspace").mockResolvedValue();
+  const stopRun = vi.mocked(backend.stopRun);
+  const run = await makeScheduleTriggerRun(trigger.id);
+  await handleScheduleTriggerRunExecution({ runId: run.id });
+  const taskId = (await ScheduleTriggerRunModel.findById(run.id))
+    ?.runtimeTaskId as string;
+  await expect.poll(() => launch.mock.calls.length).toBe(1);
+  // The workload never completes: the agent sits idle, as a client does when
+  // it returns to its prompt without ending the turn.
 
-    config.agentRuntime.scheduledRunTimeoutMinutes = 240;
-    await makeDue(trigger.id);
-    await handleCheckDueScheduleTriggers();
-    const skipped = (
-      await ScheduleTriggerRunModel.listByTrigger({
-        organizationId: org.id,
-        triggerId: trigger.id,
-      })
-    ).find((candidate) => candidate.id !== run.id);
-    expect(skipped?.error).toMatch(
-      new RegExp(
-        `^Skipped: run ${run.id} was still in progress .*A scheduled run is stopped after 4 h\\.$`,
-      ),
-    );
-    expect(stopRun).not.toHaveBeenCalled();
-
-    // The run outlives the limit.
-    config.agentRuntime.scheduledRunTimeoutMinutes = 30;
-    await db
-      .update(schema.scheduleTriggerRunsTable)
-      .set({ startedAt: new Date(Date.now() - 31 * 60_000) })
-      .where(eq(schema.scheduleTriggerRunsTable.id, run.id));
-    await makeDue(trigger.id);
-    await handleCheckDueScheduleTriggers();
-
-    const reason =
-      "The scheduled run was stopped after 30 min, its time limit.";
-    expect(await A2ATaskModel.findById(taskId)).toMatchObject({
-      state: "TASK_STATE_FAILED",
-      statusReason: reason,
-    });
-    expect(await ScheduleTriggerRunModel.findById(run.id)).toMatchObject({
-      status: "failed",
-      error: reason,
-    });
-    expect(stopRun).toHaveBeenCalled();
-
-    // The same tick starts the next run instead of recording another skip.
-    const runs = await ScheduleTriggerRunModel.listByTrigger({
+  await makeDue(trigger.id);
+  await handleCheckDueScheduleTriggers();
+  const skipped = (
+    await ScheduleTriggerRunModel.listByTrigger({
       organizationId: org.id,
       triggerId: trigger.id,
-    });
-    expect(runs.filter((candidate) => candidate.status === "running")).toEqual([
-      expect.objectContaining({ runKind: "due" }),
-    ]);
-  } finally {
-    config.agentRuntime.scheduledRunTimeoutMinutes = timeoutMinutes;
-  }
+    })
+  ).find((candidate) => candidate.id !== run.id);
+  expect(skipped?.error).toMatch(
+    new RegExp(
+      `^Skipped: run ${run.id} was still in progress \\(started .*\\)\\. A run that does not finish is stopped at the agent's Maximum duration\\.$`,
+    ),
+  );
+  expect(stopRun).not.toHaveBeenCalled();
+
+  // The run reaches its Maximum duration.
+  const session = await AgentRunModel.findByTaskId(taskId);
+  await db
+    .update(schema.agentWorkspacesTable)
+    .set({ expiresAt: new Date(Date.now() - 1000) })
+    .where(
+      eq(
+        schema.agentWorkspacesTable.workloadName,
+        session?.workloadName as string,
+      ),
+    );
+  await agentRunReconciler.reconcile();
+  const reason = "The run was stopped because it reached its Maximum duration.";
+  expect(await A2ATaskModel.findById(taskId)).toMatchObject({
+    state: "TASK_STATE_FAILED",
+    statusReason: reason,
+  });
+  expect(stopRun).toHaveBeenCalled();
+
+  // The next due tick records the outcome and starts the next run.
+  await makeDue(trigger.id);
+  await handleCheckDueScheduleTriggers();
+  expect(await ScheduleTriggerRunModel.findById(run.id)).toMatchObject({
+    status: "failed",
+    error: reason,
+  });
+  const runs = await ScheduleTriggerRunModel.listByTrigger({
+    organizationId: org.id,
+    triggerId: trigger.id,
+  });
+  expect(runs.filter((candidate) => candidate.status === "running")).toEqual([
+    expect.objectContaining({ runKind: "due" }),
+  ]);
 });
 
 // =============================================================================

@@ -216,6 +216,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   // Tool
   "tool.deleted": "Tool deleted",
   // Tool invocation policy
+  "openappaYell.updated": "Updated OpenAPPA yell status",
   "guardrailsPolicy.updated": "Updated guardrails policy",
   // Guardrails batteries
   "openappaBatteryInstall.created": "Guardrails battery installed",

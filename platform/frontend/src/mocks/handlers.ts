@@ -128,6 +128,11 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
+  ...getJson("/api/openappa/yells", {
+    data: [],
+    pagination: { limit: 20, hasNext: false, nextCursor: null },
+  }),
   // Label lookups for every labelled entity (see LABELLED_ENTITY_PATHS).
   // First in the array so no entity-specific pattern can shadow them.
   ...LABELLED_ENTITY_PATHS.flatMap((entity) => [

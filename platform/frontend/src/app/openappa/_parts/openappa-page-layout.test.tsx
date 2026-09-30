@@ -77,21 +77,14 @@ test.each([
     "page",
   );
   expect(
-    screen.getByText(/deterministic guardrails that stop AI from leaking/),
-  ).toBeInTheDocument();
-  const configureLink = screen.queryByRole("link", {
-    name: "Configure with chat",
-  });
-  if (pathname === "/openappa/policy") {
-    expect(
-      await screen.findByRole("link", { name: "Configure with chat" }),
-    ).toHaveAttribute(
-      "href",
-      expect.stringMatching(/^\/chat\?agentId=appa-agent&user_prompt=Walk/),
-    );
-  } else {
-    expect(configureLink).not.toBeInTheDocument();
-  }
+    screen.getByRole("heading", {
+      level: 1,
+      name: `${pathname === "/openappa" ? "Guardrails" : tabName} Alpha`,
+    }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "Configure with chat" }),
+  ).not.toBeInTheDocument();
 });
 
 test("a fresh Overview hides the tabs until a policy is saved", () => {
@@ -132,5 +125,5 @@ test("the header labels the feature as Alpha on every tab", () => {
 
   expect(screen.getByText("Alpha")).toBeInTheDocument();
   // The browser tab keeps the plain name; the badge is only for the page.
-  expect(document.title).toBe("Guardrails - Archestra");
+  expect(document.title).toBe("Policy - Archestra");
 });

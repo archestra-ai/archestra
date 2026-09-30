@@ -1770,6 +1770,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
   // log:read sees the caller's own consults; log:admin lifts it org-wide in the handler.
+  [RouteId.GetOpenAppaYells]: { log: ["read"] },
+  [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
+  [RouteId.GetOpenAppaYell]: { log: ["read"] },
+  [RouteId.UpdateOpenAppaYell]: { log: ["read"], toolPolicy: ["update"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
   [RouteId.GetOpenappaCoverageEntities]: { toolPolicy: ["read"] },

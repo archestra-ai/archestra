@@ -33,6 +33,7 @@ export const TOOL_PERMISSIONS: Record<
   execute_remedy_plan: null,
   yell: null,
   get_remedy_plans: null,
+  get_openappa_yell: { resource: "log", action: "read" },
   get_guardrails_policy: { resource: "toolPolicy", action: "read" },
   list_guardrails_battery_fits: { resource: "toolPolicy", action: "read" },
   inspect_guardrails_server: { resource: "toolPolicy", action: "read" },

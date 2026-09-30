@@ -11,7 +11,6 @@ import {
   GitPullRequestArrow,
   KeyRound,
   Loader2,
-  LockKeyhole,
   Pencil,
   Plus,
   RefreshCw,
@@ -107,6 +106,7 @@ import {
   BATTERY_STATUS_GROUPS,
   type BatteryStatusGroup,
 } from "./battery-status";
+import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 import { batteryStatusBadge } from "./policy-decorations";
 
 type BatteryStatus = PolicyBattery["status"];
@@ -378,15 +378,7 @@ export function BatteriesPanel() {
           <InlineNoticeText>{lastError}</InlineNoticeText>
         </InlineNotice>
       )}
-      {managedInGithub && (
-        <InlineNotice variant="neutral">
-          <LockKeyhole />
-          <span className="font-medium">Managed in GitHub</span>
-          <InlineNoticeText>
-            The repository owns this policy. Change its batteries there.
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
+      {managedInGithub && <GithubManagedPolicyNotice />}
       {heldPull !== null && (
         <HeldPullNotice
           heldPull={heldPull}

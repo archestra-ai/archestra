@@ -41,6 +41,12 @@ export type ProxyCostQuery = z.infer<typeof ProxyCostQuerySchema>;
 export const StatisticsTimeSeriesPointSchema = z.object({
   timestamp: z.string(),
   value: z.number(),
+  requests: z.number().optional(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  cacheReadTokens: z.number().optional(),
+  billedCost: z.number().optional(),
+  subscriptionCost: z.number().optional(),
 });
 
 export const TeamStatisticsSchema = z.object({
@@ -94,6 +100,8 @@ export const UserModelUsageSchema = z.object({
   percentage: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
+  /** Present only when `includeModelTimeSeries` is set. */
+  timeSeries: z.array(StatisticsTimeSeriesPointSchema).optional(),
 });
 
 /** One client application's slice of the caller's usage. */
@@ -138,7 +146,7 @@ export const UserStatisticsSchema = z.object({
   /** Distinct UTC days with at least one request in the timeframe. */
   activeDays: z.number(),
   lastActiveAt: z.string().nullable(),
-  /** Present only when `includeModels` is set. */
+  /** Present when `includeModels` or `includeModelTimeSeries` is set. */
   models: z.array(UserModelUsageSchema).optional(),
   /** Present only when `includeTimeSeries` is set. */
   timeSeries: z.array(StatisticsTimeSeriesPointSchema).optional(),
@@ -537,9 +545,6 @@ export type StatisticsAgentTimeSeriesData = z.infer<
 >;
 export type StatisticsModelTimeSeriesData = z.infer<
   typeof StatisticsModelTimeSeriesDataSchema
->;
-export type StatisticsUserTimeSeriesData = z.infer<
-  typeof StatisticsUserTimeSeriesDataSchema
 >;
 export type StatisticsTimeSeriesData = z.infer<
   typeof StatisticsTimeSeriesDataSchema

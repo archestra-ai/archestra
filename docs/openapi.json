@@ -400349,6 +400349,24 @@
                             },
                             "value": {
                               "type": "number"
+                            },
+                            "requests": {
+                              "type": "number"
+                            },
+                            "inputTokens": {
+                              "type": "number"
+                            },
+                            "outputTokens": {
+                              "type": "number"
+                            },
+                            "cacheReadTokens": {
+                              "type": "number"
+                            },
+                            "billedCost": {
+                              "type": "number"
+                            },
+                            "subscriptionCost": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -400700,6 +400718,24 @@
                             },
                             "value": {
                               "type": "number"
+                            },
+                            "requests": {
+                              "type": "number"
+                            },
+                            "inputTokens": {
+                              "type": "number"
+                            },
+                            "outputTokens": {
+                              "type": "number"
+                            },
+                            "cacheReadTokens": {
+                              "type": "number"
+                            },
+                            "billedCost": {
+                              "type": "number"
+                            },
+                            "subscriptionCost": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -401046,6 +401082,24 @@
                             },
                             "value": {
                               "type": "number"
+                            },
+                            "requests": {
+                              "type": "number"
+                            },
+                            "inputTokens": {
+                              "type": "number"
+                            },
+                            "outputTokens": {
+                              "type": "number"
+                            },
+                            "cacheReadTokens": {
+                              "type": "number"
+                            },
+                            "billedCost": {
+                              "type": "number"
+                            },
+                            "subscriptionCost": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -401370,6 +401424,16 @@
           },
           {
             "schema": {
+              "default": false,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "includeModelTimeSeries",
+            "required": false,
+            "description": "Include usage time series for each user's models. Implies includeModels. Off by default: it multiplies the response by models and time buckets."
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -401500,6 +401564,43 @@
                                 },
                                 "subscriptionCost": {
                                   "type": "number"
+                                },
+                                "timeSeries": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "timestamp": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "requests": {
+                                        "type": "number"
+                                      },
+                                      "inputTokens": {
+                                        "type": "number"
+                                      },
+                                      "outputTokens": {
+                                        "type": "number"
+                                      },
+                                      "cacheReadTokens": {
+                                        "type": "number"
+                                      },
+                                      "billedCost": {
+                                        "type": "number"
+                                      },
+                                      "subscriptionCost": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "timestamp",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
                                 }
                               },
                               "required": [
@@ -401525,6 +401626,24 @@
                                   "type": "string"
                                 },
                                 "value": {
+                                  "type": "number"
+                                },
+                                "requests": {
+                                  "type": "number"
+                                },
+                                "inputTokens": {
+                                  "type": "number"
+                                },
+                                "outputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "billedCost": {
+                                  "type": "number"
+                                },
+                                "subscriptionCost": {
                                   "type": "number"
                                 }
                               },
@@ -401947,6 +402066,43 @@
                           },
                           "subscriptionCost": {
                             "type": "number"
+                          },
+                          "timeSeries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "timestamp": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "requests": {
+                                  "type": "number"
+                                },
+                                "inputTokens": {
+                                  "type": "number"
+                                },
+                                "outputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "billedCost": {
+                                  "type": "number"
+                                },
+                                "subscriptionCost": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "timestamp",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -401972,6 +402128,24 @@
                             "type": "string"
                           },
                           "value": {
+                            "type": "number"
+                          },
+                          "requests": {
+                            "type": "number"
+                          },
+                          "inputTokens": {
+                            "type": "number"
+                          },
+                          "outputTokens": {
+                            "type": "number"
+                          },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "billedCost": {
+                            "type": "number"
+                          },
+                          "subscriptionCost": {
                             "type": "number"
                           }
                         },

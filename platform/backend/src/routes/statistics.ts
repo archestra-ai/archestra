@@ -58,6 +58,13 @@ const UserStatisticsQuerySchema = StatisticsQuerySchema.extend({
     .describe(
       "Include each user's per-model usage breakdown. Off by default: it costs an extra aggregation.",
     ),
+  includeModelTimeSeries: z
+    .stringbool()
+    .optional()
+    .default(false)
+    .describe(
+      "Include usage time series for each user's models. Implies includeModels. Off by default: it multiplies the response by models and time buckets.",
+    ),
 })
   .merge(PaginationQuerySchema)
   .merge(createSortingQuerySchema(USER_STATISTICS_SORT_BY));
@@ -176,6 +183,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           timeframe,
           includeTimeSeries,
           includeModels,
+          includeModelTimeSeries,
           limit,
           offset,
           sortBy,
@@ -207,6 +215,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sortDirection,
           includeTimeSeries,
           includeModels,
+          includeModelTimeSeries,
           requestingUserId: user.id,
           canReadAllUsers,
         }),

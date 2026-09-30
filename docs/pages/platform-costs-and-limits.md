@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-09-16
+lastUpdated: 2026-09-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -65,7 +65,23 @@ A request only appears here when Archestra knows who made it. Identity comes fro
 
 Tokens and requests are the honest measure of adoption. Cost is not: a person whose traffic runs on a flat-rate subscription is billed nothing, however much they use. See [Subscription vs Metered Cost](#subscription-vs-metered-cost).
 
-The same data is available from the API at `GET /api/statistics/users`, which returns one row per user with their email, so you can join it to an external roster. The response is paginated. Two options are off by default because each one costs extra work: `includeModels` adds the per-model breakdown, and `includeTimeSeries` adds a cost series per user.
+`GET /api/statistics/users` returns paginated usage rows with user emails for joining an external roster. Three optional parameters control the detail returned:
+
+- `includeModels=true` adds each user's per-model totals.
+- `includeTimeSeries=true` adds a usage time series per user.
+- `includeModelTimeSeries=true` adds `timeSeries` inside each model entry and implies `includeModels=true`.
+
+User and model series include requests, input tokens, output tokens, cache-read tokens, and both cost totals. `value` and `billedCost` both report metered spend. `subscriptionCost` reports the list-price estimate of subscription-covered usage.
+
+For daily adoption reporting, request a custom range with `includeModelTimeSeries=true`:
+
+```http
+GET /api/statistics/users?timeframe=custom:2026-09-01T00:00:00.000Z_2026-09-29T23:59:59.999Z&includeModelTimeSeries=true&includeTimeSeries=true
+```
+
+This returns usage per user, model, and UTC day in one response per page. Custom ranges longer than 48 hours through 30 days use daily buckets. Longer ranges use weekly buckets; shorter ranges use minute or hourly buckets. Empty buckets are omitted. Requests without a recorded model appear only in user totals and user series.
+
+These options default to false. Model series increase response size by the number of models and time buckets.
 
 Per-user usage is employee-level data. Seeing other people's usage requires permission to read the member list; without it, both the UI and the API show you only your own.
 

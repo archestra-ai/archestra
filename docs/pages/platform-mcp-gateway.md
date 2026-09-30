@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-09-21
+lastUpdated: 2026-09-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,6 +27,10 @@ Every gateway has its own page, and that page is where you change it. The three 
 Tool assignments can point to a specific installed MCP server connection or use **Resolve at call time**. Resolve-at-call-time is useful when the same gateway should use the caller's own GitHub, Jira, or other upstream credential instead of a shared connection.
 
 After the gateway is configured, use its **Connect** tab to copy connection details for supported clients.
+
+## Personal Pins
+
+Pinned gateways appear first, with the most recently pinned gateway at the top. Pins belong to you and do not affect other members' lists. Search and visibility filters still apply to pinned gateways.
 
 ## Ownership Transfers
 

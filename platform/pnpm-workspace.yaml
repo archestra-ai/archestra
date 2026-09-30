@@ -137,7 +137,8 @@ overrides:
   # CVE-2026-13149 (HIGH, uncontrolled resource consumption) fixed in 5.0.7, then
   # CVE-2026-14257 (HIGH, same class) fixed in 5.0.8, then CVE-2026-69152 (HIGH,
   # same class again) fixed in 5.0.9.
-  brace-expansion: '>=5.0.9'
+  # CVE-2026-102276 and CVE-2026-102278 require the 5.0.11 fix.
+  brace-expansion: '>=5.0.11'
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
@@ -158,6 +159,10 @@ packageExtensions:
       zod: ^4.3.4
 
 patchedDependencies:
+  # Preserve function-call IDs across SDK responses and request history.
+  # OpenAPPA uses these IDs to match released calls to returned results.
+  # Remove when the provider preserves both functionCall.id and functionResponse.id.
+  '@ai-sdk/google@3.0.43': patches/@ai-sdk__google@3.0.43.patch
   # OAuth-only SSO (GitHub) has userinfo but no JWKS/discovery document.
   # Skip runtime discovery only with explicit non-OIDC scopes and complete
   # OAuth endpoints; retain OIDC discovery and URL/SSRF validation.

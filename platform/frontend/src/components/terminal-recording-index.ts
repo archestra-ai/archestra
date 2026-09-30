@@ -3,6 +3,7 @@
 export function indexTerminalRecording(content: string): number[] {
   const offsets = [0];
   let synchronized = false;
+  let clearEnd = -1;
   const controls =
     // biome-ignore lint/suspicious/noControlCharactersInRegex: terminal protocol bytes are intentional
     /\x1b\](?:[^\x07\x1b]|\x1b(?!\\))*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\r?\n/g;
@@ -11,6 +12,15 @@ export function indexTerminalRecording(content: string): number[] {
     if (token === "\x1b[?2026h") synchronized = true;
     if (token === "\x1b[?2026l") synchronized = false;
     if (synchronized) continue;
+    if (token === "\x1b[2J" || token === "\x1b[3J") {
+      clearEnd = match.index + token.length;
+    } else if (
+      (token === "\x1b[H" || token === "\x1b[1;1H") &&
+      match.index === clearEnd
+    ) {
+      // Seeking between clear and home would expose an empty transition.
+      continue;
+    }
     // A clear/home starts a new screen; retain the preceding one. Synchronized
     // output termination is a complete TUI frame. Newlines cover ordinary CLIs.
     // biome-ignore lint/suspicious/noControlCharactersInRegex: CSI screen controls delimit recorded frames

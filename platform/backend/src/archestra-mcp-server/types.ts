@@ -10,6 +10,8 @@ import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
  */
 export interface ArchestraContext {
   openappaSession?: import("@/openappa/service").OpenAppaSession;
+  /** A verified, short-lived connection setup session; authentication and RBAC still apply. */
+  connectionSetupBypass?: boolean;
   agent: {
     id: string;
     name: string;

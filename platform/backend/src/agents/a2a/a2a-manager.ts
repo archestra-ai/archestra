@@ -661,6 +661,7 @@ export class A2AManager {
               messages: requestMessages,
               organizationId: actor.organizationId,
               userId: actor.kind === "user" ? actor.id : "system",
+              actorTeamId: actor.kind === "team" ? actor.id : undefined,
               sessionId,
               source: systemParams?.source,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId

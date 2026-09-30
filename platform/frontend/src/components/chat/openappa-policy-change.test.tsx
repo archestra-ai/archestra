@@ -104,3 +104,21 @@ test.each([
   const { container } = render(<OpenAppaPolicyCompletion output={output} />);
   expect(container).toBeEmptyDOMElement();
 });
+
+test("published PR stays reviewable outside collapsed tool details", () => {
+  render(
+    <OpenAppaPolicyCompletion
+      output={{
+        delivery: "pull_request",
+        number: 17,
+        url: "https://github.com/example/policies/pull/17",
+        before: "old",
+        after: "new",
+      }}
+    />,
+  );
+  expect(
+    screen.getByRole("link", { name: "Review pull request" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
+  expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
+});

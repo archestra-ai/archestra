@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   CheckCircle2,
   FileText,
+  GitPullRequest,
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
@@ -91,6 +92,33 @@ export function OpenAppaPolicyChange({ output }: { output: unknown }) {
 export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
   const change = parsePolicyChange(output);
   if (
+    change?.stage !== "preview" &&
+    change?.delivery === "pull_request" &&
+    change.url?.startsWith("https://github.com/")
+  ) {
+    return (
+      <div className="mt-4 w-full max-w-2xl">
+        <InlineNotice variant="success">
+          <GitPullRequest />
+          <span className="font-medium">{`Opened PR #${change.number}`}</span>
+          <InlineNoticeText>
+            Review and merge it to apply this policy change.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto h-6 px-2 text-xs"
+            asChild
+          >
+            <a href={change.url} target="_blank" rel="noreferrer">
+              Review pull request
+            </a>
+          </Button>
+        </InlineNotice>
+      </div>
+    );
+  }
+  if (
     !change ||
     change.stage === "preview" ||
     change.delivery !== "revision" ||
@@ -104,7 +132,7 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
     change.effective.batteries.every((battery) => battery.status === "active");
   const active = healthy && change.enforcement?.enabled === true;
   return (
-    <div className="mt-4">
+    <div className="mt-4 w-full max-w-2xl">
       <InlineNotice variant={active ? "success" : "warning"}>
         {active ? <CheckCircle2 /> : <TriangleAlert />}
         <span className="font-medium">{`Saved revision ${change.revision}`}</span>
@@ -117,7 +145,12 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
                 ? "Enforcement is off. Check the Policy page."
                 : "Check composition and enforcement on the Policy page.")}
         </InlineNoticeText>
-        <Button variant="outline" size="sm" className="ml-auto" asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto h-6 px-2 text-xs"
+          asChild
+        >
           <Link href={active ? "/openappa" : "/openappa/policy"}>
             <span>{active ? "View Guardrails" : "Check policy"}</span>
           </Link>

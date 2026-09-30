@@ -16,7 +16,6 @@ const isChannelHidden = vi.fn().mockReturnValue(false);
 const refetchAgentNames = vi.fn();
 const refetchBindings = vi.fn();
 const refetchProviders = vi.fn();
-const updateBinding = vi.fn();
 const hasUpdatePermission = vi.fn(() => true);
 const hasAgentUpdatePermission = vi.fn(() => true);
 const hasCreatePermission = vi.fn(() => true);
@@ -42,10 +41,6 @@ vi.mock("@/lib/chatops/chatops.query", () => ({
   useChatOpsStatus: vi.fn(),
   useApplyChatOpsBindingPlan: () => ({
     mutate: applyBindingPlan,
-    isPending: false,
-  }),
-  useUpdateChatOpsBinding: () => ({
-    mutate: updateBinding,
     isPending: false,
   }),
 }));
@@ -549,7 +544,7 @@ describe("AgentChatAppsEditor", () => {
       }),
     );
 
-    expect(updateBinding).not.toHaveBeenCalled();
+    expect(applyBindingPlan).not.toHaveBeenCalled();
     expect(screen.getByText("Changes pending")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Save channel changes" }),

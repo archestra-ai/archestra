@@ -1,5 +1,8 @@
 import { requestOrigin } from "@/lib/request-origin";
 
+const opencodeRestartInstruction =
+  "Do not stop or restart OpenCode from inside this conversation. Finish your reply and ask the user to save work, close OpenCode normally, then launch `opencode` in a new terminal.";
+
 export function GET(request: Request) {
   const origin = requestOrigin(request);
   const client = new URL(request.url).searchParams.get("client");
@@ -45,7 +48,7 @@ under Settings > Plugins. Send a message to make sure that inference works.
 1. Run exactly one command below in the terminal. Replace CLIENT_ID with the
    current client ID.
    macOS/Linux:
-   p="$(mktemp)"; trap 'rm -f "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client CLIENT_ID
+   p="$(mktemp)"; trap 'unlink "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client CLIENT_ID
    Windows PowerShell:
    $p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client CLIENT_ID } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
 2. The public bootstrap validates the deployment URL, starts a browser approval,
@@ -108,10 +111,10 @@ under Settings > Plugins. Send a message to make sure that inference works.
    merely because the installer printed its settings.
    For other clients, close with one short, imperative user instruction, e.g.:
    "Open a new terminal, then run claude /mcp and select <server> to sign in."
-   OpenCode: "Close every OpenCode process, then start opencode again."
+   OpenCode: ${opencodeRestartInstruction}
 6. Verify the configured gateway can list tools before reporting a working connection —
    in the new session, after authentication. OpenCode can check its connection
-   now with opencode mcp list, but must restart to load new tools.
+   now with opencode mcp list. The user-started session loads newly configured tools.
    Configuration applied alone does not prove MCP authentication succeeded.
    For clients requiring a new session, verification is that session's job.
    Codex: make sure that config.toml selects the proxy provider at the top level.
@@ -119,7 +122,9 @@ under Settings > Plugins. Send a message to make sure that inference works.
    not show that inference uses the proxy. If OpenAPPA is enabled, the first text
    reply in a new protected session also shows a protected-session mark.
    If the provider is not selected or the prompt fails, report that the connection
-   is incomplete. Do not report that setup succeeded.
+   is incomplete. Do not report that setup succeeded. After verifying the gateway
+   and inference, report the connection status briefly without listing tool names
+   or quoting the test response.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.
 
@@ -171,7 +176,7 @@ If a localhost page cannot be fetched through a web tool, use the local terminal
 
 Run exactly one command in the client's terminal.
 macOS/Linux:
-p="$(mktemp)"; trap 'rm -f "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client ${client}
+p="$(mktemp)"; trap 'unlink "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client ${client}
 Windows PowerShell:
 $p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client ${client} } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
 
@@ -212,7 +217,7 @@ function focusedClientDetails(client: string): {
       return {
         label: "Codex",
         finish:
-          "Run codex mcp login SERVER_NAME, then open a new terminal and start Codex. Confirm config.toml selects the proxy provider at the top level. Verify gateway tools and send a short test prompt through the proxy. If either fails, report the connection as incomplete.",
+          "Run codex mcp login SERVER_NAME, then open a new terminal and start Codex. Confirm config.toml selects the proxy provider at the top level. Verify gateway tools and send a short test prompt through the proxy. Report the connection status briefly without listing tool names or quoting the test response. If either check fails, report the connection as incomplete.",
       };
     case "copilot-cli":
       return {
@@ -223,8 +228,7 @@ function focusedClientDetails(client: string): {
     case "opencode":
       return {
         label: "OpenCode",
-        finish:
-          "Run opencode mcp list. If SERVER_NAME is connected, skip authentication. Otherwise run opencode mcp auth list; if authentication is missing or expired, run CI=true opencode mcp auth SERVER_NAME and keep the process running while the user completes native OAuth consent. Do not start a second auth process while one is pending. Run opencode mcp list again, then close every OpenCode process and restart it to load new tools. Verify the gateway and any selected model proxy before reporting success.",
+        finish: `Run opencode mcp list. If SERVER_NAME is connected, skip authentication. Otherwise run opencode mcp auth list; if authentication is missing or expired, run CI=true opencode mcp auth SERVER_NAME and keep the process running while the user completes native OAuth consent. Do not start a second auth process while one is pending. Run opencode mcp list again. ${opencodeRestartInstruction} Ask the user to verify gateway tools and any selected model proxy in that new session. State that the connection remains unverified until those checks pass.`,
       };
     default:
       return null;

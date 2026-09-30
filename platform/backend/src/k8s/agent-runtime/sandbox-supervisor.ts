@@ -3,6 +3,7 @@ import {
   AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES,
 } from "@/services/agent-runtime/runtime-contract";
 import { buildRuntimeFailureEnvelopeScript } from "./failure-envelope";
+import { buildTerminalRecorderScript } from "./terminal-recorder";
 
 /**
  * PID 1 owns the workspace, not the agent command. Requests are published by
@@ -14,6 +15,9 @@ export function buildSandboxSupervisorScript(): string {
 umask 077
 root=/var/run/archestra
 mkdir -p "$root/turns"
+cat > "$root/record-terminal" <<'RECORDER'
+${buildTerminalRecorderScript()}
+RECORDER
 command -v tmux >/dev/null 2>&1 || { echo 'Agent Runtime requires tmux' >&2; exit 78; }
 trap 'tmux kill-server 2>/dev/null || true; exit 0' TERM INT
 
@@ -22,12 +26,27 @@ tmux set-option -t agent mouse on
 tmux set-option -t agent remain-on-exit on
 tmux set-option -t agent @archestra_attention 0
 tmux set-option -t agent status-left '#{?#{==:#{@archestra_attention},1},#[fg=yellow,bold]#{@archestra_attention_label}#[default] ,}[#S] '
-tmux set-hook -g client-detached 'run-shell "date +%s > /var/run/archestra/development-activity"'
+# Detached clients no longer have client_* formats. hook_client retains the
+# terminal path for humans; our pipe-based recorder has a client-<pid> name.
+tmux set-hook -g client-detached 'if-shell -F "#{m:/dev/*,#{hook_client}}" "run-shell \"date +%s > /var/run/archestra/development-activity\""'
+
+fail_recording() {
+  ${buildRuntimeFailureEnvelopeScript({
+    prefixVariable: "turn",
+    code: "runtime.recording_failed",
+    message:
+      "The terminal recording stopped unexpectedly. The turn was stopped to avoid losing further output. Review the retained output and saved work before retrying.",
+  })}
+  tmux set-option -t agent @archestra_retained_task "" 2>/dev/null || true
+  tmux respawn-pane -k -t agent 'while :; do sleep 1; done' 2>/dev/null || true
+  printf '75\n' > "$turn.result.tmp"
+  mv "$turn.result.tmp" "$turn.result"
+}
 
 while :; do
   # Record human input, not pane output: a logging daemon must not keep an idle
   # workspace alive. Persist it so detached clients still count at reaping time.
-  activity="$(tmux list-clients -F '#{client_activity}' 2>/dev/null | sort -nr | head -1)"
+  activity="$(tmux list-clients -F '#{?client_control_mode,,#{client_activity}}' 2>/dev/null | sort -nr | head -1)"
   case "$activity" in
     ''|*[!0-9]*) ;;
     *)
@@ -62,14 +81,42 @@ while :; do
     touch "$turn.log"
     tmux set-option -t agent @archestra_retained_task ""
     tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
-    tmux pipe-pane -t agent
-    tmux pipe-pane -t agent "tee -a '$turn.log' >> /proc/1/fd/1"
+    # One ordered stream captures live geometry and PTY bytes. A resize hook
+    # appending beside pipe-pane races its buffered output. The control client
+    # ignores its own size so it cannot shrink the human's terminal.
+    mkfifo "$turn.recording-input"
+    (
+      tmux -C attach-session -f ignore-size -t agent \; display-message -p 'archestra-recording-size #{pane_id} #{window_id} #{pane_width}x#{pane_height}' < "$turn.recording-input" &
+      transport=$!
+      printf '%s\n' "$transport" > "$turn.recording-client-pid"
+      wait "$transport"
+    ) | /bin/sh "$root/record-terminal" "$turn" >> /proc/1/fd/1 &
+    recorder=$!
+    exec 3> "$turn.recording-input"
+    recording_failed=0
+    recording_polls=0
+    while [ ! -f "$turn.recording-ready" ]; do
+      recording_polls=$((recording_polls + 1))
+      if ! kill -0 "$recorder" 2>/dev/null || [ "$recording_polls" -ge 100 ]; then
+        recording_failed=1
+        fail_recording
+        break
+      fi
+      sleep 0.1
+    done
     rm -f ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE}
-    printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
-    tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
+    if [ "$recording_failed" = 0 ]; then
+      printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
+      tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
+    fi
     startup_polls=0
     dead_polls=0
     while [ ! -f "$turn.result" ]; do
+      if ! kill -0 "$recorder" 2>/dev/null; then
+        recording_failed=1
+        fail_recording
+        break
+      fi
       if [ -f "$turn.cancel" ]; then
         tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
         printf '130\n' > "$turn.result.tmp"
@@ -97,6 +144,32 @@ while :; do
       fi
       sleep 1
     done
+    # tmux orders command responses after pending output. Detaching only this
+    # control client drains the recording before readers observe completion.
+    # A client can disappear between the liveness check and this write. Keep
+    # SIGPIPE inside a subshell, so PID 1 still publishes a durable failure.
+    if kill -0 "$recorder" 2>/dev/null; then
+      (printf 'detach-client\n' >&3) || recording_failed=1
+    else
+      recording_failed=1
+    fi
+    exec 3>&-
+    recording_polls=0
+    while kill -0 "$recorder" 2>/dev/null; do
+      recording_polls=$((recording_polls + 1))
+      if [ "$recording_polls" -ge 100 ]; then
+        kill "$recorder" 2>/dev/null || true
+        if [ -f "$turn.recording-client-pid" ]; then
+          tmux detach-client -t "client-$(cat "$turn.recording-client-pid")" 2>/dev/null || true
+        fi
+        recording_failed=1
+        break
+      fi
+      sleep 0.1
+    done
+    wait "$recorder" || recording_failed=1
+    if [ "$recording_failed" = 1 ]; then fail_recording; fi
+    rm -f "$turn.recording-input" "$turn.recording-ready" "$turn.recording-client-pid"
     # Publish the transcript before completion becomes visible to the backend.
     if [ -s ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE} ] && command -v base64 >/dev/null 2>&1 && [ "$(wc -c < ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE})" -le ${AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES} ]; then
       {

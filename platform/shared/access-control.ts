@@ -641,6 +641,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetClientConnection]: {},
   [RouteId.DecideClientConnection]: {},
   [RouteId.CreateConnectionSetup]: {},
+  // A signed-in member may start a short connection window for their own user.
+  [RouteId.BeginConnectionPromptSession]: {},
   // Reports whether a pre-built VAF Add On package exists for this
   // installation, so the connector form can offer a download link that is
   // never a known 404. Reads nothing protected — the answer is the same for
@@ -1748,6 +1750,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateGuardrailsDeployment]: { organization: ["update"] },
   [RouteId.GetAppaGithubSync]: { toolPolicy: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organization: ["update"] },
+  [RouteId.CreateAppaGithubRepository]: { organization: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
   [RouteId.GetOpenappaBatteries]: { toolPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { toolPolicy: ["read"] },
@@ -1767,6 +1770,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
   // log:read sees the caller's own consults; log:admin lifts it org-wide in the handler.
+  [RouteId.GetOpenAppaYells]: { log: ["read"] },
+  [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
+  [RouteId.DownloadOpenAppaYell]: { log: ["read"] },
+  [RouteId.GetOpenAppaYell]: { log: ["read"] },
+  [RouteId.UpdateOpenAppaYell]: { log: ["read"], toolPolicy: ["update"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
   [RouteId.GetOpenappaCoverageEntities]: { toolPolicy: ["read"] },

@@ -189,7 +189,29 @@ enum ExecutionMode {
 
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct YellReceiver {
+    port: u16,
+    token: String,
+}
+
+impl YellReceiver {
+    fn endpoint(&self) -> napi::Result<String> {
+        if self.port == 0
+            || self.token.len() != 64
+            || !self.token.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(error("invalid host yell receiver"));
+        }
+        Ok(format!("http://127.0.0.1:{}/{}", self.port, self.token))
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Input {
+    /// Host-only loopback capture endpoint; never part of model tool arguments.
+    #[serde(default)]
+    yell_receiver: Option<YellReceiver>,
     organization_id: String,
     #[serde(default)]
     caller_id: Option<String>,
@@ -1070,6 +1092,7 @@ pub async fn execute_remedy_by_offer(
         );
     };
     let input = Input {
+        yell_receiver: None,
         organization_id: owner.organization_id,
         // Scopes receipt to the authenticated spender to prevent replay.
         caller_id: input.caller_id.clone(),
@@ -1859,7 +1882,10 @@ impl State {
                 appa_runtime::yell::embedded::Request {
                     actor: actor.clone(),
                     harness: adapter::harness(),
-                    endpoint: reporting.endpoint.clone(),
+                    endpoint: match &input.yell_receiver {
+                        Some(receiver) => receiver.endpoint()?,
+                        None => reporting.endpoint.clone(),
+                    },
                     hostname: reporting.hostname.clone(),
                     message: args.message,
                     with_trajectory: args.with_trajectory,

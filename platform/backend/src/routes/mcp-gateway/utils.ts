@@ -100,6 +100,7 @@ import {
   appLaunchToolTitle,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { resolveConnectionSetupScope } from "@/services/connection-setup-scope";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
@@ -312,6 +313,8 @@ function isImplicitOpenAppaTool(shortName: string | null | undefined): boolean {
  */
 export async function createAgentServer(params: {
   openappaSession?: import("@/openappa/service").OpenAppaSession;
+  /** Short-lived proof minted only by an approved /connection installer. */
+  connectionSetupContext?: string;
   /** External JSON-RPC execution identity, scoped by native remedy receipts. */
   currentToolCallId?: string;
   agentId: string;
@@ -362,6 +365,24 @@ export async function createAgentServer(params: {
   // tools/teams/knowledge/connector hydration `findById` performs.
   const agent = await AgentModel.findGatewayAgentById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
+  const setupScope = params.connectionSetupContext
+    ? await resolveConnectionSetupScope({
+        principal: {
+          userId: tokenAuth?.userId,
+          organizationId: tokenAuth?.organizationId,
+          targetOrganizationId: agent.organizationId,
+          guardrailsActive:
+            !!tokenAuth?.userId && (await isGuardrailsV2Active()),
+        },
+        evidence: {
+          kind: "approved-installer",
+          token: params.connectionSetupContext,
+          gatewayId: agent.id,
+          signingSecret: config.openappa.offerSigningSecret,
+        },
+      })
+    : null;
+  const connectionSetupBypass = setupScope !== null;
 
   // Fetch the agent's teams and the calling user's teams (with labels) for
   // trace span team attributes.
@@ -931,27 +952,29 @@ export async function createAgentServer(params: {
             ? dynamicTool
             : undefined;
 
-        const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
-          agentId: agent.id,
-          toolName: name,
-          toolInput: args ?? {},
-          organizationId: tokenAuth?.organizationId,
-          contextIsTrusted,
-          // The only way this path starts untrusted is the agent's own
-          // "treat context as sensitive" setting, so name that origin in
-          // any sensitive-context block.
-          sensitiveContextOrigin: contextIsTrusted
-            ? undefined
-            : { kind: "agent_configured" },
-          ...(availableTool &&
-            assignedToolNames && {
-              enabledToolNames: new Set([...assignedToolNames, name]),
-            }),
-          // The dynamically-resolved All-mode row that will execute: evaluate the
-          // policy against it and ride its id along on a block so the "Edit
-          // policy" modal can resolve a tool with no agent_tools assignment.
-          resolvedToolId: availableTool?.id,
-        });
+        const policyBlock = connectionSetupBypass
+          ? null
+          : await evaluateSingleMcpToolInvocationPolicy({
+              agentId: agent.id,
+              toolName: name,
+              toolInput: args ?? {},
+              organizationId: tokenAuth?.organizationId,
+              contextIsTrusted,
+              // The only way this path starts untrusted is the agent's own
+              // "treat context as sensitive" setting, so name that origin in
+              // any sensitive-context block.
+              sensitiveContextOrigin: contextIsTrusted
+                ? undefined
+                : { kind: "agent_configured" },
+              ...(availableTool &&
+                assignedToolNames && {
+                  enabledToolNames: new Set([...assignedToolNames, name]),
+                }),
+              // The dynamically-resolved All-mode row that will execute: evaluate the
+              // policy against it and ride its id along on a block so the "Edit
+              // policy" modal can resolve a tool with no agent_tools assignment.
+              resolvedToolId: availableTool?.id,
+            });
         if (policyBlock) {
           // Carry the machine-readable policy_denied error alongside the prose
           // (in _meta + structuredContent) so MCP clients render the block
@@ -1036,6 +1059,7 @@ export async function createAgentServer(params: {
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 openappaSession: params.openappaSession,
+                connectionSetupBypass,
                 currentToolCallId: params.currentToolCallId,
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,

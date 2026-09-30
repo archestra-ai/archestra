@@ -1,6 +1,12 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, SkipBack, SkipForward } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  SkipBack,
+  SkipForward,
+  WrapText,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { TerminalPlayback } from "@/components/terminal-playback";
 import { indexTerminalRecording } from "@/components/terminal-recording-index";
@@ -11,31 +17,20 @@ import { Slider } from "@/components/ui/slider";
 export function TerminalRecording({ content }: { content: string }) {
   const positions = useMemo(() => indexTerminalRecording(content), [content]);
   const [selectedOffset, setSelectedOffset] = useState<number | null>(null);
+  const [wrapLines, setWrapLines] = useState(false);
   const last = positions.length - 1;
   const matchingPosition =
     selectedOffset === null
       ? -1
       : positions.findIndex((offset) => offset >= selectedOffset);
   const position = matchingPosition === -1 ? last : matchingPosition;
-  // Older recordings emit their geometry only with the final captured frame.
-  // Use that grid for earlier screens too, rather than refitting absolute cursor positions.
-  const geometry = useMemo(
-    () =>
-      Array.from(
-        // biome-ignore lint/suspicious/noControlCharactersInRegex: recorded terminal geometry uses OSC and BEL
-        content.matchAll(/\x1b\]777;archestra-terminal-size=\d+x\d+\x07/g),
-      ).at(-1)?.[0] ?? "",
-    [content],
-  );
   const replay =
-    selectedOffset === null
-      ? content
-      : geometry + content.slice(0, positions[position]);
+    selectedOffset === null ? content : content.slice(0, positions[position]);
   const seek = (next: number) =>
     setSelectedOffset(next >= last ? null : positions[Math.max(0, next)]);
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-1 text-slate-400">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-800 px-3 py-1 text-slate-400">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -86,8 +81,24 @@ export function TerminalRecording({ content }: { content: string }) {
             ? "End"
             : `${Math.round((position / Math.max(1, last)) * 100)}%`}
         </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Wrap lines"
+          aria-pressed={wrapLines}
+          title={
+            wrapLines
+              ? "Restore original layout"
+              : "Wrap lines to the available width"
+          }
+          onClick={() => setWrapLines((value) => !value)}
+          className="shrink-0 text-xs aria-pressed:bg-slate-800 aria-pressed:text-slate-200"
+        >
+          <WrapText />
+          <span className="hidden sm:inline">Wrap lines</span>
+        </Button>
       </div>
-      <TerminalPlayback content={replay} />
+      <TerminalPlayback content={replay} wrapLines={wrapLines} />
     </div>
   );
 }

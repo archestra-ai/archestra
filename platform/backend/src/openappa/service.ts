@@ -17,6 +17,7 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   expandCommandExecutionPolicyRules,
@@ -25,6 +26,7 @@ import {
 import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
 import { openappaFailure } from "@/openappa/failure";
+import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
@@ -231,13 +233,55 @@ export async function executeYell(params: {
 }): Promise<CallToolResult> {
   if (!openappaYellEnabled())
     throw new ApiError(404, "OpenAPPA reporting is disabled");
-  return runtimeToolResult(
-    await dispatch(params.session, {
-      event: "yell",
-      operation_id: `yell:${params.toolCallId}`,
-      arguments: params.args,
-    }),
-  );
+  const record = await OpenAppaYellModel.record({
+    organizationId: params.session.organization_id,
+    callerId: params.session.caller_id ?? "unknown",
+    sessionId: params.session.session_id,
+    toolCallId: params.toolCallId,
+    message: params.args.message,
+    withTrajectory: params.args.with_trajectory,
+  });
+  try {
+    const result = await captureYellReport({
+      id: record.id,
+      organizationId: record.organizationId,
+      send: async (receiver) =>
+        runtimeToolResult(
+          await dispatch(params.session, {
+            event: "yell",
+            operation_id: `yell:${params.toolCallId}`,
+            arguments: params.args,
+            yell_receiver: receiver,
+          }),
+        ),
+    });
+    if (config.analytics.enabled) {
+      await OpenAppaYellModel.recordDelivery({
+        id: record.id,
+        organizationId: record.organizationId,
+        failed: Boolean(result.isError),
+      });
+    }
+    if (!result.isError) {
+      return {
+        ...result,
+        content: [
+          {
+            type: "text",
+            text: "Report saved. You can download it or investigate it in chat from Guardrails → Yells.",
+          },
+        ],
+      };
+    }
+    return result;
+  } catch (error) {
+    await OpenAppaYellModel.recordDelivery({
+      id: record.id,
+      organizationId: record.organizationId,
+      failed: true,
+    });
+    throw error;
+  }
 }
 
 /** The A2A executor identifies nested runs with a chain of agent UUIDs. */

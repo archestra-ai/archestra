@@ -1,12 +1,18 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { NativeSessionClientId } from "@archestra/shared/connection-setup";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { organizationKeys } from "@/lib/organization.query";
-import { getApiErrorMessage, handleApiError } from "@/lib/utils/api";
+import {
+  getApiErrorMessage,
+  handleApiError,
+  throwOnApiError,
+} from "@/lib/utils/api";
 
 const {
   createConnectionSetup,
   createConnectionVirtualKey,
   createConnectionPassthroughKey,
+  beginConnectionPromptSession,
 } = archestraApiSdk;
 
 export type CreateConnectionSetupBody =
@@ -17,6 +23,24 @@ type CreateConnectionVirtualKeyBody =
   archestraApiTypes.CreateConnectionVirtualKeyData["body"];
 type CreateConnectionPassthroughKeyBody =
   archestraApiTypes.CreateConnectionPassthroughKeyData["body"];
+
+export function useConnectionPromptSession(
+  clientId: NativeSessionClientId | undefined,
+  origin: string,
+) {
+  return useQuery({
+    queryKey: ["connection-prompt-session", clientId, origin],
+    enabled: false,
+    queryFn: async () => {
+      if (!clientId) return null;
+      const { data, error } = await beginConnectionPromptSession({
+        body: { clientId, origin },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+  });
+}
 
 export function useCreateConnectionSetup() {
   const queryClient = useQueryClient();

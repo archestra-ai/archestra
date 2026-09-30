@@ -2,14 +2,17 @@ import {
   AGENT_CATALOG_IMAGE_REGISTRY,
   type AgentCatalogId,
   getAgentCatalogImages,
+  isIntegrationHidden,
 } from "@archestra/shared";
 import { Bot, Network } from "lucide-react";
 import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { ProviderIcon } from "@/components/provider-icon";
+import { QueryLoadError } from "@/components/query-load-error";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useOrganization } from "@/lib/organization.query";
 
 export interface AgentCatalogTemplate {
   id: AgentCatalogId;
@@ -103,6 +106,29 @@ export function getAgentCatalogTemplates(
   ] as const;
 }
 
+/** One saved selection controls catalog suggestions and runtime image choices. */
+export function useAvailableAgentCatalogTemplates() {
+  const appName = useAppName();
+  const images = useAgentCatalogImages();
+  const {
+    data: organization,
+    isError,
+    isFetching,
+    refetch,
+  } = useOrganization(true, { fresh: true });
+  const templates =
+    organization && !isError && !isFetching
+      ? getAgentCatalogTemplates(images, appName).filter(
+          (item) =>
+            !isIntegrationHidden(
+              organization.popularAgentOverrides ?? null,
+              item.id,
+            ),
+        )
+      : [];
+  return { templates, isError, isFetching, refetch };
+}
+
 export function AgentCatalog({
   canAddExternalAgent,
   canCreateAgent,
@@ -118,8 +144,8 @@ export function AgentCatalog({
   onSelect: (template: AgentCatalogTemplate) => void;
   showPopularAgents: boolean;
 }) {
-  const appName = useAppName();
-  const templates = getAgentCatalogTemplates(useAgentCatalogImages(), appName);
+  const { templates, isError, isFetching, refetch } =
+    useAvailableAgentCatalogTemplates();
   return (
     <div className="space-y-8">
       <div className="space-y-3">
@@ -136,22 +162,29 @@ export function AgentCatalog({
         </div>
       </div>
 
-      {showPopularAgents ? (
+      {showPopularAgents && !isFetching && (isError || templates.length > 0) ? (
         <div className="space-y-3">
           <h2 className="text-base font-semibold">Popular agents</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {templates.map((item) => (
-              <CatalogSourceCard
-                key={item.id}
-                icon={<CatalogAgentIcon id={item.id} />}
-                title={item.name}
-                description={item.description}
-                onClick={() => onSelect(item)}
-                disabled={!canCreateAgent}
-                disabledReason="Requires permission to create agents."
-              />
-            ))}
-          </div>
+          {isError ? (
+            <QueryLoadError
+              title="Could not load popular agents"
+              onRetry={() => refetch()}
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {templates.map((item) => (
+                <CatalogSourceCard
+                  key={item.id}
+                  icon={<CatalogAgentIcon id={item.id} />}
+                  title={item.name}
+                  description={item.description}
+                  onClick={() => onSelect(item)}
+                  disabled={!canCreateAgent}
+                  disabledReason="Requires permission to create agents."
+                />
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
 

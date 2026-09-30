@@ -1,5 +1,5 @@
 {
-  "id": "9b29d216-47a3-437c-9da2-3f2255ea7ef6",
+  "id": "d69024f8-4c73-4d28-88bd-869dd44817c7",
   "prevId": "cd069bf4-a81f-4fd3-a1ad-752beb45aade",
   "version": "7",
   "dialect": "postgresql",
@@ -18174,6 +18174,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "popular_agent_overrides": {
+          "name": "popular_agent_overrides",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "preset_entity_name": {
           "name": "preset_entity_name",
           "type": "text",
@@ -27051,59 +27057,6 @@
           "columns": [
             "organization_id",
             "actor"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.openappa_withheld_arrivals": {
-      "name": "openappa_withheld_arrivals",
-      "schema": "",
-      "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "caller_id": {
-          "name": "caller_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "digest": {
-          "name": "digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "openappa_withheld_arrivals_pk": {
-          "name": "openappa_withheld_arrivals_pk",
-          "columns": [
-            "organization_id",
-            "session_id",
-            "digest"
           ]
         }
       },

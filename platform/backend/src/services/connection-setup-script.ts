@@ -198,12 +198,15 @@ export function claudeCodeOAuthNextStep(serverName: string): string {
  * OpenCode's post-install OAuth step, shared by the bash and PowerShell
  * renderers. Unlike Claude Code's in-session `/mcp`, `opencode mcp auth` is its
  * own process that reads the updated config, so the connection agent can run it
- * before restarting. The running OpenCode session still never reloads its
- * config, so the renderers close with a restart step.
+ * before asking the user to restart. The running OpenCode session still never
+ * reloads its config, so the renderers close with a user-controlled handoff.
  */
 export function opencodeOAuthNextStep(serverName: string): string {
   return `Run \`opencode mcp list\` first. If "${serverName}" is connected (OAuth), skip sign-in. Otherwise check \`opencode mcp auth list\`: if "${serverName}" is authenticated but not connected, report the connection error rather than forcing re-authentication. If authentication is missing or expired, run \`opencode mcp auth ${serverName}\` with CI=true set for the process so its browser URL stays visible in captured output. Keep it running while the user completes sign-in — this browser approval is the gateway's native OAuth flow, not a repeat of connection setup. If no browser opens, relay the URL printed by the command. OpenCode does not start this sign-in on its own.`;
 }
+
+export const opencodeRestartNextStep =
+  "Do not stop or restart OpenCode from inside this running conversation. Finish your reply, then tell the user to save work, close all OpenCode windows normally, and launch `opencode` in a new terminal. The startup guard checks these remotes on that launch.";
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
   if (rawCtx.clientId === "claude-desktop") {
@@ -527,9 +530,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
         }
       }
       if (ctx.mcp || ctx.proxy || ctx.skills) {
-        steps.push(
-          "Close every running OpenCode process. Then open a new terminal (or source your shell profile) and start `opencode`. The startup guard checks these remotes before every launch.",
-        );
+        steps.push(opencodeRestartNextStep);
       }
       break;
     case "cursor":

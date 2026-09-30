@@ -41,6 +41,11 @@ vi.mock("@/lib/connection-setup.query", () => ({
     mutateAsync: createSetupMock,
     isPending: false,
   }),
+  useConnectionPromptSession: (clientId?: string) => ({
+    data: clientId ? { expiresAt: "2099-01-01" } : undefined,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock("./skills-marketplace-step", () => ({
@@ -308,9 +313,11 @@ describe("ConnectCommandPanel", () => {
         expect(
           screen.getByRole("heading", { name: `Connect ${label}` }),
         ).toBeVisible();
+        const prompt = `Read ${window.location.origin}/connect.md?client=${selectedClient.id} and connect ${label}.`;
         expect(
           screen.getByText(
-            `Read ${window.location.origin}/connect.md?client=${selectedClient.id} and connect ${label}.`,
+            (_content, node) =>
+              node?.tagName === "CODE" && node.textContent === prompt,
           ),
         ).toBeVisible();
       }

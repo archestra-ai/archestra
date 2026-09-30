@@ -443,6 +443,35 @@ const ALL_CLIENTS = [
 ] as const;
 
 describe("renderSetupScript", () => {
+  const signedGatewayUrl = `${MCP.url}?archestra_setup_ctx=cs1_example.signature`;
+
+  test.each(
+    ALL_CLIENTS,
+  )("%s: retains the approved setup context in both shell installers", (clientId) => {
+    for (const platform of ["linux", "windows"] as const) {
+      const script = renderSetupScript({
+        ...fullContext(clientId, platform),
+        mcp: { ...MCP, url: signedGatewayUrl },
+      });
+      expect(script).toContain(signedGatewayUrl);
+    }
+  });
+
+  test.each([
+    "linux",
+    "windows",
+  ] as const)("Claude Desktop (%s): carries the approved setup context in its encoded installer", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("claude-desktop", platform),
+      mcp: { ...MCP, url: signedGatewayUrl },
+      proxy: PROXY,
+    });
+    const encoded = script.match(/base64\.b64decode\('([^']+)'\)/)?.[1];
+    expect(encoded).toBeDefined();
+    const context = JSON.parse(Buffer.from(encoded ?? "", "base64").toString());
+    expect(context.mcp.url).toBe(signedGatewayUrl);
+  });
+
   test.each([
     { clientId: "claude-code" as const, binary: "claude", mode: "-p" },
     { clientId: "codex" as const, binary: "codex", mode: "exec" },
@@ -1128,7 +1157,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
   test.each([
     "macos",
     "windows",
-  ] as const)("opencode (%s): next steps check authentication before restarting", (platform) => {
+  ] as const)("opencode (%s): next steps leave restart to the user", (platform) => {
     const script = renderSetupScript(fullContext("opencode", platform));
     expect(script).toContain("Run `opencode mcp list` first");
     expect(script).toContain("connected (OAuth), skip sign-in");
@@ -1142,9 +1171,15 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     );
     expect(script).toContain("If no browser opens, relay the URL");
     const signInAt = script.indexOf(`opencode mcp auth ${MCP.serverName}`);
-    const restartAt = script.indexOf("Close every running OpenCode process");
+    const restartAt = script.indexOf(
+      "Do not stop or restart OpenCode from inside this running conversation",
+    );
     expect(signInAt).toBeGreaterThan(-1);
     expect(restartAt).toBeGreaterThan(signInAt);
+    expect(script).toContain(
+      "tell the user to save work, close all OpenCode windows normally",
+    );
+    expect(script).not.toContain("Close every running OpenCode process");
   });
 
   test("opencode: rerunning setup preserves a connected gateway and LLM proxy without requiring OAuth again", async () => {

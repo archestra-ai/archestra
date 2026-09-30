@@ -18,6 +18,7 @@ export { default as chatRoutes } from "./chat/routes";
 export { default as chatopsRoutes } from "./chatops";
 export { default as clientConnectionRoutes } from "./client-connection/client-connection.routes";
 export { default as configRoutes } from "./config";
+export { default as connectionPromptSessionRoutes } from "./connection-prompt-session/connection-prompt-session.routes";
 export { default as connectionSetupRoutes } from "./connection-setup/connection-setup.routes";
 export { default as defaultUserLimitRoutes } from "./default-user-limit";
 export { default as environmentRoutes } from "./environment";

@@ -4415,6 +4415,79 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(message).toContain("tool call toolu_unprotected_agent");
     });
 
+    // Claude Code acknowledges a teammate or a cloud agent when it starts. The
+    // acknowledgement carries no subagent output, so no retained return exists
+    // for it, and later requests of the session must not be refused for it.
+    test.for([
+      [
+        "a teammate",
+        "Spawned successfully. (This tool result is internal metadata — never quote or paste any part of it, including the ID below, into a user-facing reply.)\nagent_id: sched-tools@audit\nname: sched-tools\nThe agent is now running and will receive instructions via mailbox.",
+        "agent_id: sched-tools@audit\\nname: sched-tools",
+        "via mailbox",
+      ],
+      [
+        "a cloud agent",
+        "Cloud agent launched. (This tool result is internal metadata — never quote or paste any part of it, including the ID below, into a user-facing reply.)\ntaskId: r1\nsession_url: https://claude.ai/code/session_01\noutput_file: /tmp/r1.output (final results land here only after the completion notification; until then it holds a partial, still-growing event log)\nThe agent is running in the cloud. You will be notified automatically when it completes. Do not report or predict its results before that notification arrives.\nIn your own words, briefly tell the user what you launched — do not echo this tool result — and end your response.",
+        "Cloud agent launched.\\ntaskId: r1",
+        "session_url",
+      ],
+    ] as const)("forwards only the status and ids of the launch acknowledgement of %s", async ([
+      _kind,
+      acknowledgement,
+      forwarded,
+      dropped,
+    ]) => {
+      config.openappa.offerSigningSecret = secret;
+      const body = payload(true, [
+        { role: "user", content: "Add the tools on a separate branch" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_launched_agent",
+              name: "Agent",
+              input: {
+                name: "sched-tools",
+                description: "Add the tools",
+                prompt: spawnPrompt,
+              },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_launched_agent",
+              content: [{ type: "text", text: acknowledgement }],
+            },
+          ],
+        },
+      ]);
+      body.tools.push({
+        name: "Agent",
+        description: "Launch a subagent",
+        input_schema: { type: "object", properties: {} },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.277 (external, cli)",
+          "x-claude-code-session-id": "launched-agent",
+        },
+        payload: body,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      // Other text never crosses as a launch, so a launch cannot carry output.
+      expect(JSON.stringify(providerRequests)).toContain(forwarded);
+      expect(JSON.stringify(providerRequests)).not.toContain(dropped);
+    });
+
     // Retained returns are looked up by the session that ran the subagent, so
     // a fork that carries the parent's history cannot verify them.
     test("names the source session when a fork carries a subagent return retained there", async () => {

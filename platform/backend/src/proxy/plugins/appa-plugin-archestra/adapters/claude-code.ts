@@ -27,6 +27,15 @@ const CHILD_PATHS = [
   { prefix: "subagents/agent-", suffix: ".jsonl" },
 ] as const;
 const ASYNC_LAUNCH_STATUS = "Async agent launched successfully.";
+/**
+ * The Agent tool also acknowledges a teammate and a cloud agent when they
+ * start. Like the background launch, these carry no child output: the child
+ * reports later, so no retained return exists for them.
+ */
+const LAUNCH_ACKNOWLEDGEMENTS = [
+  { status: "Spawned successfully.", labels: ["agent_id", "name"] },
+  { status: "Cloud agent launched.", labels: ["taskId"] },
+] as const;
 const MAX_CHILD_ID_LENGTH = 128;
 
 /** Identifies Claude Code Messages requests and normalizes local tool names. */
@@ -137,7 +146,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     const identifier = childLaunchIdentifier(result.content);
     return identifier
       ? `${ASYNC_LAUNCH_STATUS}\n${identifier.label}: ${identifier.value}`
-      : undefined;
+      : launchAcknowledgement(result.content);
   }
 
   isChildCompletionResult(result: CommonToolResult): boolean {
@@ -239,17 +248,7 @@ function childAgentId(context: AppaMatchContext): string | undefined {
 function childLaunchIdentifier(
   content: unknown,
 ): { label: "agentId" | "taskId"; value: string } | undefined {
-  const block =
-    Array.isArray(content) && content.length === 1
-      ? asRecord(content[0])
-      : undefined;
-  const text = (
-    typeof content === "string"
-      ? content
-      : block?.type === "text"
-        ? stringField(block.text)
-        : undefined
-  )?.trim();
+  const text = launchText(content);
   const record =
     asRecord(content) ?? (text ? asRecord(parseJson(text)) : undefined);
   if (record?.status === "async_launched") {
@@ -262,6 +261,41 @@ function childLaunchIdentifier(
     );
   if (!match?.[1] || !match[2]) return undefined;
   return launchIdentifier(match[1], match[2]);
+}
+
+/**
+ * Keeps only the status line and the validated ids of a teammate or cloud
+ * agent acknowledgement, so no other text crosses as a launch.
+ */
+function launchAcknowledgement(content: unknown): string | undefined {
+  const text = launchText(content);
+  const acknowledgement = LAUNCH_ACKNOWLEDGEMENTS.find(({ status }) =>
+    text?.startsWith(status),
+  );
+  if (!text || !acknowledgement) return undefined;
+  const lines: string[] = [acknowledgement.status];
+  for (const label of acknowledgement.labels) {
+    const value = new RegExp(`^${label}:[ \\t]*(\\S+)[ \\t]*$`, "m").exec(
+      text,
+    )?.[1];
+    if (!value || !isChildId(value)) return undefined;
+    lines.push(`${label}: ${value}`);
+  }
+  return lines.join("\n");
+}
+
+function launchText(content: unknown): string | undefined {
+  const block =
+    Array.isArray(content) && content.length === 1
+      ? asRecord(content[0])
+      : undefined;
+  return (
+    typeof content === "string"
+      ? content
+      : block?.type === "text"
+        ? stringField(block.text)
+        : undefined
+  )?.trim();
 }
 
 function launchIdentifierFromRecord(
@@ -278,16 +312,19 @@ function launchIdentifier(
   field: string,
   value: string,
 ): { label: "agentId" | "taskId"; value: string } | undefined {
-  if (
-    value.length > MAX_CHILD_ID_LENGTH ||
-    !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)
-  ) {
-    return undefined;
-  }
+  if (!isChildId(value)) return undefined;
   return {
     label: field.toLowerCase().startsWith("task") ? "taskId" : "agentId",
     value,
   };
+}
+
+/** A teammate id names its team after an `@`. */
+function isChildId(value: string): boolean {
+  return (
+    value.length <= MAX_CHILD_ID_LENGTH &&
+    /^[A-Za-z0-9][A-Za-z0-9._:@-]*$/.test(value)
+  );
 }
 
 function parseJson(value: string): unknown {

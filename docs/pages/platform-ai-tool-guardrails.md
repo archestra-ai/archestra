@@ -36,7 +36,7 @@ On a fresh install, the page asks you to create a policy. A chat drafts one from
 
 From then on, administrators can turn enforcement off and on with a switch. The policy stays as it is. Ask about the policy explains what it does.
 
-Turning enforcement on also applies to sessions that are already running. If such a session ran a subagent while enforcement was off, the proxy refuses its later requests. Start a new session to continue — or rewind the conversation to before the subagent ran.
+Turning enforcement on also applies to sessions that are already running. If a subagent in such a session finished while enforcement was off, the proxy refuses the session's later requests. Start a new session to continue — or rewind the conversation to before the subagent ran.
 
 ## Client Support Matrix
 

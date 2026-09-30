@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   CheckCircle2,
   FileText,
+  GitPullRequest,
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
@@ -90,6 +91,33 @@ export function OpenAppaPolicyChange({ output }: { output: unknown }) {
 /** A published result stays visible even when tool details are collapsed. */
 export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
   const change = parsePolicyChange(output);
+  if (
+    change?.stage !== "preview" &&
+    change?.delivery === "pull_request" &&
+    change.url?.startsWith("https://github.com/")
+  ) {
+    return (
+      <div className="mt-4 w-full max-w-2xl">
+        <InlineNotice variant="success">
+          <GitPullRequest />
+          <span className="font-medium">{`Opened PR #${change.number}`}</span>
+          <InlineNoticeText>
+            Review and merge it to apply this policy change.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto h-6 px-2 text-xs"
+            asChild
+          >
+            <a href={change.url} target="_blank" rel="noreferrer">
+              Review pull request
+            </a>
+          </Button>
+        </InlineNotice>
+      </div>
+    );
+  }
   if (
     !change ||
     change.stage === "preview" ||

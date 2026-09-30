@@ -258,7 +258,7 @@ describe("APPA GitHub sync", () => {
     {
       githubStatus: 422,
       apiStatus: 409,
-      message: "repository name may already exist",
+      message: "retry setup",
     },
   ])("explains GitHub repository creation HTTP $githubStatus", async ({
     githubStatus,
@@ -315,6 +315,135 @@ describe("APPA GitHub sync", () => {
     expect(response.statusCode).toBe(apiStatus);
     expect(response.json().error.message).toContain(message);
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
+  });
+
+  test.each([
+    {
+      scenario: "pristine private template",
+      isPrivate: true,
+      template: "archestra-ai/openappa-config",
+      fileSha: "b",
+      resumes: true,
+    },
+    {
+      scenario: "modified policy",
+      isPrivate: true,
+      template: "archestra-ai/openappa-config",
+      fileSha: "d",
+      resumes: false,
+    },
+    {
+      scenario: "public repository",
+      isPrivate: false,
+      template: "archestra-ai/openappa-config",
+      fileSha: "b",
+      resumes: false,
+    },
+    {
+      scenario: "unrelated repository",
+      isPrivate: true,
+      template: "example/other",
+      fileSha: "b",
+      resumes: false,
+    },
+  ])("setup recovery protects existing work: $scenario", async ({
+    isPrivate,
+    template,
+    fileSha,
+    resumes,
+  }) => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-template-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    let seeded = "";
+    let seedAttempts = 0;
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.post(
+        "https://api.github.com/repos/archestra-ai/openappa-config/generate",
+        () => HttpResponse.json({ message: "exists" }, { status: 422 }),
+      ),
+      http.get("https://api.github.com/repos/example/new-policy", () =>
+        HttpResponse.json({
+          full_name: "example/new-policy",
+          default_branch: "main",
+          private: isPrivate,
+          template_repository: { full_name: template },
+        }),
+      ),
+      http.get(
+        "https://api.github.com/repos/archestra-ai/openappa-config/contents/appa.toml",
+        () => HttpResponse.json({ sha: "b".repeat(40) }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/new-policy/contents/appa.toml",
+        ({ request }) =>
+          new URL(request.url).searchParams.has("ref")
+            ? HttpResponse.text(seeded)
+            : HttpResponse.json({ sha: fileSha.repeat(40) }),
+      ),
+      http.put(
+        "https://api.github.com/repos/example/new-policy/contents/appa.toml",
+        async ({ request }) => {
+          seedAttempts++;
+          if (seedAttempts === 1)
+            return HttpResponse.json({ message: "Conflict" }, { status: 409 });
+          seeded = Buffer.from(
+            ((await request.json()) as { content: string }).content,
+            "base64",
+          ).toString();
+          return HttpResponse.json({ content: { sha: "c".repeat(40) } });
+        },
+      ),
+      http.get(
+        "https://api.github.com/repos/example/new-policy/commits/main",
+        () => HttpResponse.json({ sha: commit }),
+      ),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "new-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+      },
+    });
+    if (!resumes) {
+      expect(response.statusCode).toBe(409);
+      expect(seedAttempts).toBe(0);
+      expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
+      return;
+    }
+    expect(response.statusCode).toBe(200);
+    expect(seedAttempts).toBe(2);
+    expect(seeded).toBe(
+      (await guardrailsPolicyService.get(organizationId)).content,
+    );
+    expect(response.json().source.repo).toBe("example/new-policy");
   });
 
   test("an invalid upstream policy preserves the last accepted bytes and commit", async () => {

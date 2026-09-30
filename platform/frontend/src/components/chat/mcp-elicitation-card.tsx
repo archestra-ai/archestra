@@ -754,14 +754,9 @@ function AnswerSummary({
             {member.question || "Question"}
           </span>
           {member.outcome?.status === "answered" ? (
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="ml-auto h-6 px-2 text-xs"
-            >
-              <span>{getOutcomeSummary(member)}</span>
-            </Button>
+            <span className="ml-auto shrink-0 font-medium text-foreground">
+              {getOutcomeSummary(member)}
+            </span>
           ) : (
             <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
               {getOutcomeSummary(member)}

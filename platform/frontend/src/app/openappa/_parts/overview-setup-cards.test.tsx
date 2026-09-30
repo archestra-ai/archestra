@@ -200,7 +200,7 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
   enabled = true;
   const { container } = show();
   const connect = await screen.findByRole("button", {
-    name: "Create GitHub repository",
+    name: "Create repository",
   });
   expect(screen.getByText("Step 2 of 2")).toBeInTheDocument();
   expect(nextStep(container)).toHaveTextContent("GitHub sync");

@@ -101,7 +101,7 @@ test("confirms disconnect, stops automatic updates and preserves the accepted po
     await screen.findByRole("button", { name: "Reconnect GitHub" }),
   ).toBeVisible();
   expect(
-    screen.getByText(/You can edit the current policy above/),
+    screen.getByText(/Your last synced policy stays active/),
   ).toBeVisible();
 });
 
@@ -110,7 +110,7 @@ test("read-only users see status without mutation controls", async () => {
     typeof useHasPermissions
   >);
   show();
-  expect(await screen.findByText("GitHub connected")).toBeVisible();
+  expect(await screen.findByText("Connected")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Sync now" }),
   ).not.toBeInTheDocument();
@@ -131,14 +131,23 @@ test("a load failure stays an error until the user retries", async () => {
   ).not.toBeInTheDocument();
   server.use(http.get(url, () => HttpResponse.json(state)));
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-  expect(await screen.findByText("GitHub connected")).toBeVisible();
+  expect(await screen.findByText("Connected")).toBeVisible();
 });
 
-test("connects a public repository and renders the saved source", async () => {
+test("connects an existing repository with an App and renders the saved source", async () => {
   state = { enabled: true, hasPolicy: false, source: null };
+  const appId = "11111111-1111-4111-8111-111111111111";
   server.use(
     http.get("http://localhost:9000/api/credentials", () =>
-      HttpResponse.json([]),
+      HttpResponse.json([
+        {
+          id: appId,
+          name: "Policy App",
+          kind: "github_app",
+          allowOrganization: true,
+          organizationConfigured: true,
+        },
+      ]),
     ),
     http.put(url, async ({ request }) => {
       expect(await request.json()).toEqual({
@@ -147,7 +156,7 @@ test("connects a public repository and renders the saved source", async () => {
         path: "appa.toml",
         interval: "1h",
         githubPatId: null,
-        githubAppConfigId: null,
+        githubAppConfigId: appId,
       });
       state = {
         enabled: true,
@@ -172,6 +181,8 @@ test("connects a public repository and renders the saved source", async () => {
   fireEvent.change(screen.getByLabelText("Repository"), {
     target: { value: "example/policies" },
   });
+  fireEvent.click(screen.getByRole("combobox", { name: "GitHub App" }));
+  fireEvent.click(await screen.findByRole("option", { name: "Policy App" }));
   fireEvent.click(screen.getByRole("button", { name: "Save source and sync" }));
   expect(await screen.findByText("Waiting for the first sync")).toBeVisible();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -211,8 +222,8 @@ test("creates a repository with a connected App and shows the synced source", as
   fireEvent.click(
     await screen.findByRole("button", { name: "Create GitHub repository" }),
   );
-  fireEvent.change(screen.getByLabelText("GitHub owner"), {
-    target: { value: "example" },
+  fireEvent.change(screen.getByLabelText("Repository"), {
+    target: { value: "example/openappa-policy" },
   });
   expect(
     screen.getByRole("button", { name: "Create and sync" }),

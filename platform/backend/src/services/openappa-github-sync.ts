@@ -93,30 +93,37 @@ export async function createAppaGithubRepository(params: {
       "The current policy exceeds the 1 MiB GitHub sync limit",
     );
 
-  const created = await githubJson<{
+  let created: {
     full_name?: string;
     default_branch?: string;
-  }>({
-    url: `https://api.github.com/repos/${TEMPLATE_REPO}/generate`,
-    token,
-    method: "POST",
-    body: {
-      owner: params.owner,
-      name: params.name,
-      private: true,
-      include_all_branches: false,
-    },
-    onHttpError: (status) =>
-      new ApiError(
-        status === 422 ? 409 : 502,
-        status === 422
-          ? `GitHub rejected ${params.owner}/${params.name} (HTTP 422). That repository name may already exist under this owner. Choose a different name.`
-          : status === 404
-            ? `GitHub could not create a repository under ${params.owner} (HTTP 404). Check that the selected App is installed on that exact account with All repositories access and the required permissions.`
-            : `GitHub returned HTTP ${status} while creating ${params.owner}/${params.name}. Check the App installation and permissions.`,
-      ),
-  });
+    private?: boolean;
+  };
   const repo = `${params.owner}/${params.name}`;
+  try {
+    created = await githubJson({
+      url: `https://api.github.com/repos/${TEMPLATE_REPO}/generate`,
+      token,
+      method: "POST",
+      body: {
+        owner: params.owner,
+        name: params.name,
+        private: true,
+        include_all_branches: false,
+      },
+      onHttpError: (status) =>
+        new ApiError(
+          status === 422 ? 409 : 502,
+          status === 422
+            ? `GitHub rejected ${repo} (HTTP 422). If this is a new repository from an earlier attempt, retry setup after the App can access it. Otherwise choose a different name.`
+            : status === 404
+              ? `GitHub could not create a repository under ${params.owner} (HTTP 404). Check that the selected App is installed on that exact account with All repositories access and the required permissions.`
+              : `GitHub returned HTTP ${status} while creating ${repo}. Check the App installation and permissions.`,
+        ),
+    });
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.statusCode !== 409) throw error;
+    created = await recoverPristineTemplateRepository({ repo, token, error });
+  }
   if (
     created.full_name?.toLowerCase() !== repo.toLowerCase() ||
     !created.default_branch ||
@@ -125,25 +132,48 @@ export async function createAppaGithubRepository(params: {
     throw new ApiError(502, "GitHub returned an unexpected repository");
   try {
     const path = `https://api.github.com/repos/${repo}/contents/appa.toml`;
-    const existing = await githubJson<{ sha?: string }>({ url: path, token });
-    if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
-      throw new ApiError(502, "The template has no appa.toml file");
-    await githubJson({
-      url: path,
-      token,
-      method: "PUT",
-      body: {
-        message: "Seed current OpenAPPA policy",
-        content: Buffer.from(policy.content).toString("base64"),
-        sha: existing.sha,
-        branch: created.default_branch,
-      },
-    });
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const existing = await githubJson<{ sha?: string }>({
+          url: path,
+          token,
+        });
+        if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
+          throw new ApiError(502, "The template has no appa.toml file");
+        await githubJson({
+          url: path,
+          token,
+          method: "PUT",
+          body: {
+            message: "Seed current OpenAPPA policy",
+            content: Buffer.from(policy.content).toString("base64"),
+            sha: existing.sha,
+            branch: created.default_branch,
+          },
+          onHttpError: (status, message) =>
+            new ApiError(
+              status === 409 ? 409 : 502,
+              status === 409
+                ? `GitHub could not commit the policy: ${message ?? "HTTP 409 conflict"}.`
+                : `GitHub returned HTTP ${status}. Check repository access and App permissions.`,
+            ),
+        });
+        break;
+      } catch (error) {
+        if (
+          !(error instanceof ApiError) ||
+          ![409, 502].includes(error.statusCode) ||
+          attempt === 3
+        )
+          throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
   } catch (error) {
     if (error instanceof ApiError)
       throw new ApiError(
         error.statusCode,
-        `Repository ${repo} was created, but its policy was not seeded: ${error.message} Connect it manually after fixing access.`,
+        `Repository ${repo} exists, but its policy was not seeded: ${error.message}`,
       );
     throw error;
   }
@@ -464,7 +494,7 @@ async function githubJson<T = unknown>(params: {
   token: string;
   method?: "GET" | "POST" | "PUT";
   body?: object;
-  onHttpError?: (status: number) => ApiError;
+  onHttpError?: (status: number, message?: string) => ApiError;
 }): Promise<T> {
   let response: Response;
   try {
@@ -482,20 +512,73 @@ async function githubJson<T = unknown>(params: {
   } catch {
     throw new ApiError(502, "Could not reach GitHub");
   }
-  if (!response.ok)
+  if (!response.ok) {
+    const errorBody = await readResponseBodyWithLimit(response, 4096);
+    let message: string | undefined;
+    if (errorBody) {
+      try {
+        const parsed = JSON.parse(errorBody.toString()) as {
+          message?: unknown;
+        };
+        if (typeof parsed.message === "string")
+          message = parsed.message.slice(0, 200);
+      } catch {
+        // GitHub does not always return JSON for upstream failures.
+      }
+    }
     throw (
-      params.onHttpError?.(response.status) ??
+      params.onHttpError?.(response.status, message) ??
       new ApiError(
         response.status === 422 ? 409 : 502,
         `GitHub returned HTTP ${response.status}. Check repository access and App permissions.`,
       )
     );
+  }
   const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
   if (!bytes) throw new ApiError(502, "GitHub response is too large");
   try {
     return JSON.parse(bytes.toString()) as T;
   } catch {
     throw new ApiError(502, "GitHub returned an invalid response");
+  }
+}
+
+async function recoverPristineTemplateRepository(params: {
+  repo: string;
+  token: string;
+  error: ApiError;
+}) {
+  try {
+    const repository = await githubJson<{
+      full_name?: string;
+      default_branch?: string;
+      private?: boolean;
+      template_repository?: { full_name?: string };
+    }>({
+      url: `https://api.github.com/repos/${params.repo}`,
+      token: params.token,
+    });
+    if (
+      !repository.private ||
+      repository.full_name?.toLowerCase() !== params.repo.toLowerCase() ||
+      repository.template_repository?.full_name?.toLowerCase() !==
+        TEMPLATE_REPO.toLowerCase()
+    )
+      throw params.error;
+    const [existing, template] = await Promise.all([
+      githubJson<{ sha?: string }>({
+        url: `https://api.github.com/repos/${params.repo}/contents/appa.toml`,
+        token: params.token,
+      }),
+      githubJson<{ sha?: string }>({
+        url: `https://api.github.com/repos/${TEMPLATE_REPO}/contents/appa.toml`,
+        token: params.token,
+      }),
+    ]);
+    if (!existing.sha || existing.sha !== template.sha) throw params.error;
+    return repository;
+  } catch {
+    throw params.error;
   }
 }
 

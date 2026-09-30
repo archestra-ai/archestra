@@ -50,7 +50,6 @@ export function useCreateAppaGithubRepository() {
         body,
       });
       if (error) {
-        handleApiError(error);
         throw toApiError(error);
       }
       return data;

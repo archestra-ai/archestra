@@ -260,6 +260,13 @@ export function RuntimeCredentialsSection() {
         <RuntimeCredentialDefinitionDialog
           definition={definitionDialog === "new" ? null : definitionDialog}
           onClose={() => setDefinitionDialog(null)}
+          onCreated={async (id) => {
+            setDefinitionDialog(null);
+            const { data } = await definitions.refetch();
+            const created = data?.find((entry) => entry.id === id);
+            if (created?.kind === "secret" && created.allowOrganization)
+              setConnecting(created);
+          }}
         />
       )}
       {connecting && (

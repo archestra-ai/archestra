@@ -62,15 +62,12 @@ it.each([
       <RuntimeCredentialDefinitionDialog definition={null} onClose={() => {}} />
     </QueryClientProvider>,
   );
-  expect(
-    await screen.findByText(
-      /GitHub user connections need an organization GitHub App first/,
-    ),
-  ).toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Credential type" }));
-  expect(
-    screen.getByRole("option", { name: "GitHub user connection" }),
-  ).toHaveAttribute("aria-disabled", "true");
+  const userConnection = screen.getByRole("option", {
+    name: /GitHub user connection/,
+  });
+  expect(userConnection).toHaveAttribute("aria-disabled", "true");
+  expect(userConnection).toHaveTextContent(/OAuth client ID/);
   expect(
     screen.getByRole("option", { name: "GitHub App" }),
   ).not.toHaveAttribute("aria-disabled", "true");
@@ -105,7 +102,7 @@ it("enables a personal connection after an organization OAuth App is connected",
   );
   await user.click(screen.getByRole("combobox", { name: "Credential type" }));
   await user.click(
-    screen.getByRole("option", { name: "GitHub user connection" }),
+    screen.getByRole("option", { name: /GitHub user connection/ }),
   );
   expect(
     screen.getByRole("combobox", { name: "Organization GitHub App" }),

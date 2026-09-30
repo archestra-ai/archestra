@@ -18,6 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -44,7 +45,7 @@ export function RuntimeCredentialDefinitionDialog({
   hideProvidedBy = false,
   onCreated,
   backLabel,
-  size = "small",
+  size = "medium",
 }: {
   definition: RuntimeCredentialDefinition | null;
   onClose: () => void;
@@ -60,8 +61,8 @@ export function RuntimeCredentialDefinitionDialog({
   const create = useCreateRuntimeCredential();
   const {
     data: credentials = [],
-    isPending: loadingCredentials,
     isError: credentialsFailed,
+    refetch: refetchCredentials,
   } = useRuntimeCredentials();
   const githubApps = credentials.filter(
     (entry) =>
@@ -246,6 +247,12 @@ export function RuntimeCredentialDefinitionDialog({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Credential type</FormLabel>
+              {field.value === "github_app" && initialKind !== "github_app" && (
+                <FormDescription>
+                  Add the App details, then connect its private key after
+                  saving.
+                </FormDescription>
+              )}
               <Select
                 value={field.value}
                 onValueChange={(value) => {
@@ -297,6 +304,7 @@ export function RuntimeCredentialDefinitionDialog({
                   <SelectItem
                     value="github_app_user"
                     disabled={githubApps.length === 0}
+                    description="Requires a connected organization GitHub App with an OAuth client ID."
                     icon={
                       <RuntimeCredentialIcon
                         icon="logo:github"
@@ -310,33 +318,22 @@ export function RuntimeCredentialDefinitionDialog({
               </Select>
               {!definition &&
                 initialKind !== "github_app" &&
-                githubApps.length === 0 && (
-                  <FormDescription>
-                    {loadingCredentials ? (
-                      <span>Checking available GitHub Apps…</span>
-                    ) : credentialsFailed ? (
-                      <span>
-                        Couldn’t check GitHub Apps. Reopen this dialog to try
-                        again.
-                      </span>
-                    ) : (
-                      <span>
-                        GitHub user connections need an organization GitHub App
-                        first. Choose GitHub App, add its OAuth client ID, then
-                        save and connect its private key and client secret. Each
-                        user can then connect their GitHub account once for all
-                        agents.
-                      </span>
-                    )}
-                  </FormDescription>
+                credentialsFailed && (
+                  <InlineNotice variant="error">
+                    <InlineNoticeText>
+                      Couldn&apos;t check GitHub Apps.
+                    </InlineNoticeText>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="ml-auto h-auto p-0 text-xs"
+                      onClick={() => refetchCredentials()}
+                    >
+                      Retry
+                    </Button>
+                  </InlineNotice>
                 )}
-              {field.value === "github_app" && initialKind !== "github_app" && (
-                <FormDescription>
-                  Add the app details below, then connect its private key after
-                  saving. Integrations use an installation token; the private
-                  key stays in the secrets manager.
-                </FormDescription>
-              )}
               <FormMessage />
             </FormItem>
           )}
@@ -344,7 +341,7 @@ export function RuntimeCredentialDefinitionDialog({
         {form.watch("kind") === "github_app" && (
           <div
             className={
-              size === "medium" ? "grid grid-cols-2 gap-4" : "space-y-4"
+              size === "medium" ? "grid gap-4 sm:grid-cols-2" : "space-y-4"
             }
           >
             {(
@@ -360,14 +357,7 @@ export function RuntimeCredentialDefinitionDialog({
                 control={form.control}
                 name={name}
                 render={({ field }) => (
-                  <FormItem
-                    className={
-                      size === "medium" &&
-                      (name === "githubUrl" || name === "githubClientId")
-                        ? "col-span-2"
-                        : undefined
-                    }
-                  >
+                  <FormItem>
                     <FormLabel>
                       {name === "githubUrl"
                         ? "GitHub API URL"

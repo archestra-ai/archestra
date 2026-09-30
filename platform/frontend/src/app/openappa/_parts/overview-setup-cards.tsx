@@ -218,7 +218,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
         }
         learnMore={{
           href: openAppaUrl("/validation"),
-          label: "Test changes in CI",
+          label: "CI checks",
         }}
         action={
           !sync.data?.enabled ? null : !canManage ? (
@@ -246,7 +246,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
               onClick={() => setCreating(true)}
             >
               <Github />
-              <span>Create GitHub repository</span>
+              <span>Create repository</span>
             </Button>
           )
         }
@@ -323,7 +323,10 @@ function StatusCard({
       <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
         {action}
         {learnMore && (
-          <ExternalDocsLink href={learnMore.href} className="text-sm">
+          <ExternalDocsLink
+            href={learnMore.href}
+            className="shrink-0 text-xs text-muted-foreground"
+          >
             {learnMore.label}
           </ExternalDocsLink>
         )}

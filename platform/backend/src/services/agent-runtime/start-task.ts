@@ -67,6 +67,17 @@ export async function startDetachedAgentTask(params: {
   return task;
 }
 
+/**
+ * Move a detached task to failed with a reason the task's viewers see. Returns
+ * false when the task already reached a terminal state.
+ */
+export async function failDetachedAgentTask(params: {
+  taskId: string;
+  statusReason: string;
+}): Promise<boolean> {
+  return await (await taskManager.get()).failTask(params);
+}
+
 export async function cancelDetachedAgentTask(params: {
   actor: A2AActor;
   agentId: string;

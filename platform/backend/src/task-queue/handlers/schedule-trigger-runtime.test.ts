@@ -207,6 +207,85 @@ test("a scheduled runtime run that never finishes stops at its Maximum duration 
   ]);
 });
 
+test("the next due time replaces a run that already took longer than every recent successful run", async ({
+  makeOrganization,
+  makeAdmin,
+  makeMember,
+  makeSecret,
+  makeLlmProviderApiKey,
+  makeInternalAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const { launch, org, trigger } = await setUpRuntimeSchedule({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeInternalAgent,
+    makeScheduleTrigger,
+  });
+  // A normal run of this schedule takes 30 minutes.
+  const earlier = await makeScheduleTriggerRun(trigger.id);
+  await ScheduleTriggerRunModel.markCompleted({
+    runId: earlier.id,
+    status: "success",
+  });
+  await setRunTimes(earlier.id, {
+    startedAt: minutesAgo(26 * 60),
+    completedAt: minutesAgo(26 * 60 - 30),
+  });
+
+  const run = await makeScheduleTriggerRun(trigger.id);
+  await handleScheduleTriggerRunExecution({ runId: run.id });
+  const taskId = (await ScheduleTriggerRunModel.findById(run.id))
+    ?.runtimeTaskId as string;
+  await expect.poll(() => launch.mock.calls.length).toBe(1);
+
+  // Ten minutes in, the run is still within a normal duration: skip.
+  await setRunTimes(run.id, { startedAt: minutesAgo(10) });
+  await makeDue(trigger.id);
+  await handleCheckDueScheduleTriggers();
+  expect((await ScheduleTriggerRunModel.findById(run.id))?.status).toBe(
+    "running",
+  );
+  expect((await A2ATaskModel.findById(taskId))?.state).not.toBe(
+    "TASK_STATE_FAILED",
+  );
+  expect(backend.stopRun).not.toHaveBeenCalled();
+
+  // A day later it is still in progress, so the next due time replaces it.
+  await setRunTimes(run.id, { startedAt: minutesAgo(24 * 60) });
+  await makeDue(trigger.id);
+  await handleCheckDueScheduleTriggers();
+  const runs = await ScheduleTriggerRunModel.listByTrigger({
+    organizationId: org.id,
+    triggerId: trigger.id,
+  });
+  const replacement = runs.find((candidate) => candidate.status === "running");
+  expect(replacement?.id).not.toBe(run.id);
+  const reason = expect.stringMatching(
+    new RegExp(
+      `^Replaced by run ${replacement?.id}: this run was still in progress at the next scheduled time \\(started .*, 24 h ago\\)\\. Recent successful runs took at most 30 min\\.$`,
+    ),
+  );
+  expect(await ScheduleTriggerRunModel.findById(run.id)).toMatchObject({
+    status: "failed",
+    error: reason,
+  });
+  expect(await A2ATaskModel.findById(taskId)).toMatchObject({
+    state: "TASK_STATE_FAILED",
+    statusReason: reason,
+  });
+
+  // The reconciler stops the replaced workload.
+  await agentRunReconciler.reconcile();
+  await expect
+    .poll(() => vi.mocked(backend.stopRun).mock.calls.length)
+    .toBeGreaterThan(0);
+});
+
 // =============================================================================
 // Internal
 // =============================================================================
@@ -319,4 +398,18 @@ async function makeDue(triggerId: string) {
     enabled: true,
     lastExecutedAt: new Date(Date.now() - 120_000),
   });
+}
+
+async function setRunTimes(
+  runId: string,
+  times: { startedAt: Date; completedAt?: Date },
+) {
+  await db
+    .update(schema.scheduleTriggerRunsTable)
+    .set(times)
+    .where(eq(schema.scheduleTriggerRunsTable.id, runId));
+}
+
+function minutesAgo(minutes: number) {
+  return new Date(Date.now() - minutes * 60_000);
 }

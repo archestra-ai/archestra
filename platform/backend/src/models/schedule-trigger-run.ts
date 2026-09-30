@@ -217,6 +217,7 @@ class ScheduleTriggerRunModel {
       .select({
         runId: schema.scheduleTriggerRunsTable.id,
         triggerId: schema.scheduleTriggerRunsTable.triggerId,
+        runtimeTaskId: schema.scheduleTriggerRunsTable.runtimeTaskId,
         startedAt: schema.scheduleTriggerRunsTable.startedAt,
         createdAt: schema.scheduleTriggerRunsTable.createdAt,
         state: schema.a2aTasksTable.state,
@@ -241,6 +242,38 @@ class ScheduleTriggerRunModel {
           isNotNull(schema.scheduleTriggerRunsTable.runtimeTaskId),
         ),
       );
+  }
+
+  /**
+   * Longest duration among a trigger's most recent successful runs, or null
+   * when the trigger has no successful run yet.
+   */
+  static async findLongestRecentSuccessMs(
+    triggerId: string,
+  ): Promise<number | null> {
+    const runs = await db
+      .select({
+        startedAt: schema.scheduleTriggerRunsTable.startedAt,
+        completedAt: schema.scheduleTriggerRunsTable.completedAt,
+      })
+      .from(schema.scheduleTriggerRunsTable)
+      .where(
+        and(
+          eq(schema.scheduleTriggerRunsTable.triggerId, triggerId),
+          eq(schema.scheduleTriggerRunsTable.status, "success"),
+          isNotNull(schema.scheduleTriggerRunsTable.startedAt),
+          isNotNull(schema.scheduleTriggerRunsTable.completedAt),
+        ),
+      )
+      .orderBy(desc(schema.scheduleTriggerRunsTable.completedAt))
+      .limit(RECENT_SUCCESS_SAMPLE);
+    if (runs.length === 0) return null;
+    return Math.max(
+      ...runs.map(
+        (run) =>
+          (run.completedAt?.getTime() ?? 0) - (run.startedAt?.getTime() ?? 0),
+      ),
+    );
   }
 
   static async markCompleted(params: {
@@ -291,3 +324,6 @@ class ScheduleTriggerRunModel {
 }
 
 export default ScheduleTriggerRunModel;
+
+/** How many recent successful runs set the expected duration of a run. */
+const RECENT_SUCCESS_SAMPLE = 10;

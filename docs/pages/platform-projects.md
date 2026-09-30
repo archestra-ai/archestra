@@ -46,7 +46,12 @@ Every project has an `instructions.md` file, pinned at the top of the Files pane
 
 A schedule runs an agent for you on a recurring basis. Agents with a dedicated runtime start an Agent Runtime session in the project. Other agents start a chat. Open a scheduled run to follow its work and review the result. Runtime runs stay in progress until their task finishes.
 
-A schedule runs one run at a time. When a run is due while the previous run is still in progress, the new run is skipped, and the skipped entry names the run that blocked it. A runtime run that is still in progress at the agent's **Maximum duration** is stopped and marked failed, so the schedule continues at its next time. For a scheduled agent, set **Maximum duration** a little above how long a normal run takes.
+A schedule runs one run at a time. When a run is due while the previous runtime run is still in progress, Archestra compares that run with the schedule's recent successful runs:
+
+- If the previous run has already taken longer than every one of the last 10 successful runs, it is stopped and marked failed, and the new run starts. The failed run names the run that replaced it.
+- Otherwise, or when the schedule has no successful run yet, the new run is skipped. The skipped entry names the run that blocked it.
+
+A runtime run that is still in progress at the agent's **Maximum duration** is also stopped and marked failed. For a scheduled agent, set **Maximum duration** a little above how long a normal run takes.
 
 You can add several schedules to one project. Each can use a different agent, prompt, and time zone. Pause a schedule to stop automatic runs while keeping its settings. You can still run it manually, then resume it later. Deleting a schedule also removes its run history. Chats and sessions created by earlier runs remain in the project.
 

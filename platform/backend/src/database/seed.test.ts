@@ -122,7 +122,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(19);
+    expect(originalToolIds).toHaveLength(20);
     const extraTools = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("whoami"),
     ]);
@@ -279,7 +279,7 @@ describe("syncBuiltInAgents", () => {
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(19);
+    ).toHaveLength(20);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (

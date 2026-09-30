@@ -3165,7 +3165,7 @@ async function handleNonStreaming<
           source,
         );
       }
-      const adapter = provider.createResponseAdapter(result);
+      const adapter = provider.createResponseAdapter(result, request);
 
       // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
       // usage here so the span cost and the downstream cost/persistence (which

@@ -32,6 +32,7 @@ describe("APPA child trajectory adapters", () => {
     expect(codex.isSpawnTool("builtin:spawn_agent")).toBe(true);
     expect(codex.isSpawnTool("spawn_agent", "functions")).toBe(true);
     expect(codex.isSpawnTool("spawn_agent", "multi_agent_v1")).toBe(true);
+    expect(codex.isSpawnTool("spawn_agent", "collaboration")).toBe(true);
     expect(codex.isSpawnTool("spawn_agent", "mcp__foreign")).toBe(false);
     expect(codex.isSpawnTool("wait_agent")).toBe(false);
     expect(codex.isSpawnTool("resume_agent")).toBe(false);
@@ -233,7 +234,12 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
       }),
     ).toBe(false);
     expect(JSON.stringify(foreignPayload)).toBe(beforeForeign);
-    for (const namespace of [undefined, "functions", "multi_agent_v1"]) {
+    for (const namespace of [
+      undefined,
+      "functions",
+      "multi_agent_v1",
+      "collaboration",
+    ]) {
       expect(
         codex.isChildCompletionResult?.({
           id: `native-${namespace ?? "flat"}`,
@@ -548,6 +554,79 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
       sessionId: "thread-parent:thread-child",
       parentId: "thread-parent",
     });
+  });
+
+  test("does not open a Codex guardian auto-review as an unprepared child", () => {
+    const context = {
+      headers: {
+        "user-agent": "codex_cli_rs/0.99.0",
+        "x-openai-subagent": "guardian",
+        "x-codex-turn-metadata": JSON.stringify({
+          session_id: "requester-session",
+          thread_id: "review-thread",
+          parent_thread_id: "requester-session",
+          request_kind: "turn",
+          turn_trigger: "guardian_review",
+          thread_source: "guardian_review",
+          subagent_kind: "guardian",
+          model: "codex-auto-review",
+        }),
+      },
+      requestBody: {
+        model: "codex-auto-review",
+        tools: undefined,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "codex_output_schema",
+          },
+        },
+        client_metadata: {
+          session_id: "requester-session",
+          thread_id: "review-thread",
+          "x-codex-parent-thread-id": "requester-session",
+          "x-openai-subagent": "guardian",
+          "x-codex-turn-metadata": JSON.stringify({
+            session_id: "requester-session",
+            thread_id: "review-thread",
+            parent_thread_id: "requester-session",
+            turn_trigger: "guardian_review",
+            thread_source: "guardian_review",
+            subagent_kind: "guardian",
+          }),
+        },
+        input: [
+          {
+            type: "additional_tools",
+            role: "developer",
+            tools: [
+              {
+                type: "namespace",
+                name: "functions",
+                tools: [{ type: "function", name: "exec_command" }],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expect(codex.bindChildTrajectory(context)).toBeUndefined();
+    expect(codex.extractSessionIdentity(context)).toMatchObject({
+      sessionId: "review-thread",
+      provenance: "codex-turn-metadata",
+    });
+    expect(
+      codex.bindChildTrajectory({
+        headers: { "user-agent": "codex_cli_rs/0.99.0" },
+        requestBody: {
+          model: "codex-auto-review",
+          client_metadata: {
+            thread_id: "review-thread",
+            parent_thread_id: "requester-session",
+          },
+        },
+      }),
+    ).toBeUndefined();
   });
 
   test("mints OpenCode child ids from the child session under the parent session", () => {

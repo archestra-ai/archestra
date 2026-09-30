@@ -244,6 +244,11 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 
   bindChildTrajectory(context: AppaMatchContext) {
+    // Guardian auto-review names the requester thread as parent_thread_id and
+    // its own thread as thread_id. That pair is a side review, not a spawn.
+    // Opening it as a child is refused: no spawn prepared a fork, and the
+    // refusal is classified as an unavailable runtime.
+    if (isGuardianReview(context)) return undefined;
     const parentNativeId = parentThreadId(context);
     const childNativeId = childThreadId(context, parentNativeId);
     return bindMintedChildTrajectory({
@@ -275,10 +280,34 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 }
 
+/**
+ * Codex auto-review is an out-of-band Responses call. It carries the
+ * requester session as parent metadata and a fresh thread id, plus an empty
+ * top-level tools list, additional_tools, and a json_schema verdict. None of
+ * that is a prepared child trajectory.
+ */
+function isGuardianReview(context: AppaMatchContext): boolean {
+  if (readHeader(context.headers, "x-openai-subagent") === "guardian")
+    return true;
+  const body = asRecord(context.requestBody);
+  if (body?.model === "codex-auto-review") return true;
+  const metadata = asRecord(body?.client_metadata) ?? asRecord(body?.metadata);
+  if (stringField(metadata?.["x-openai-subagent"]) === "guardian") return true;
+  const turn =
+    parseJsonHeader(context.headers, "x-codex-turn-metadata") ??
+    turnMetadataRecord(metadata?.["x-codex-turn-metadata"]);
+  return (
+    turn?.turn_trigger === "guardian_review" ||
+    turn?.thread_source === "guardian_review" ||
+    turn?.subagent_kind === "guardian"
+  );
+}
+
 function isNativeCodexNamespace(namespace: string | undefined): boolean {
   return (
     namespace === undefined ||
     namespace === "functions" ||
+    namespace === "collaboration" ||
     namespace === "multi_agent_v1"
   );
 }

@@ -47,13 +47,14 @@ test("Windows npm Codex shim preserves multiword handoff config at launch", asyn
     await writeFile(shim, "npm shim placeholder");
     await writeFile(
       entry,
-      "require('node:fs').writeFileSync(process.env.CODEX_TEST_RESULT, JSON.stringify({args:process.argv.slice(2),marker:process.env.ARCHESTRA_CODEX_LAUNCH_MARKER})); process.exit(23);",
+      "require('node:fs').writeFileSync(process.env.CODEX_TEST_RESULT, JSON.stringify({args:process.argv.slice(2),marker:process.env.ARCHESTRA_CODEX_LAUNCH_MARKER,codexHome:process.env.CODEX_HOME,path:process.env.PATH})); process.exit(23);",
     );
     await writeFile(helper, CODEX_HANDOFF_HELPER);
     await expect(
       exec(process.execPath, [helper, "--launch", shim], {
         env: {
           ...process.env,
+          CODEX_HOME: home,
           CODEX_TEST_RESULT: result,
           ARCHESTRA_CODEX_LAUNCH_MARKER: marker,
           ARCHESTRA_CODEX_LAUNCH_ARGS: Buffer.from(
@@ -62,7 +63,11 @@ test("Windows npm Codex shim preserves multiword handoff config at launch", asyn
         },
       }),
     ).rejects.toMatchObject({ code: 23 });
-    expect(JSON.parse(await readFile(result, "utf8"))).toEqual({ args });
+    expect(JSON.parse(await readFile(result, "utf8"))).toEqual({
+      args,
+      codexHome: home,
+      path: process.env.PATH,
+    });
     expect(await readFile(marker, "utf8")).toBe("");
 
     await writeFile(entry, "process.exit(125);");

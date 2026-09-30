@@ -332,6 +332,7 @@ export interface StreamAccumulatorState {
     id: string;
     name: string;
     arguments: string;
+    namespace?: string;
     /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
     wireId?: string;
   }>;
@@ -557,7 +558,10 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   ): LLMRequestAdapter<TRequest, TMessages>;
 
   /** Create a response adapter */
-  createResponseAdapter(response: TResponse): LLMResponseAdapter<TResponse>;
+  createResponseAdapter(
+    response: TResponse,
+    request?: TRequest,
+  ): LLMResponseAdapter<TResponse>;
 
   /** Create a stream adapter. Request is optional and used by some providers (e.g., Bedrock for tool name mapping) */
   createStreamAdapter(request?: TRequest): LLMStreamAdapter<TChunk, TResponse>;

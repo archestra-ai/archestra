@@ -3446,7 +3446,10 @@ describe("delegation markers", () => {
       expect(JSON.stringify(notice)).not.toContain("delegated trajectory");
     });
 
-    test("appends to a Codex spawn_agent message or pushes onto its items, keeping the namespace", async () => {
+    test.each([
+      "multi_agent_v1",
+      "collaboration",
+    ])("appends to a Codex spawn_agent message or pushes onto its items, keeping %s", async (namespace) => {
       const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
       const context = clientContext({
         sessionId: "user:user|t0",
@@ -3468,13 +3471,13 @@ describe("delegation markers", () => {
           {
             id: "call_1",
             name: "spawn_agent",
-            namespace: "multi_agent_v1",
+            namespace,
             arguments: JSON.stringify({ message: SPAWN_PROMPT }),
           },
           {
             id: "call_2",
             name: "spawn_agent",
-            namespace: "multi_agent_v1",
+            namespace,
             arguments: JSON.stringify({ items }),
           },
         ]),
@@ -3496,13 +3499,13 @@ describe("delegation markers", () => {
       expect(message).toMatchObject({
         id: "call_1",
         name: "spawn_agent",
-        namespace: "multi_agent_v1",
+        namespace,
       });
       expect(typeof message.arguments).toBe("string");
       expect(JSON.parse(String(message.arguments)).message).toMatch(
         markedPrompt("t0"),
       );
-      expect(withItems.namespace).toBe("multi_agent_v1");
+      expect(withItems.namespace).toBe(namespace);
       const pushed = JSON.parse(String(withItems.arguments)).items;
       expect(pushed.slice(0, 1)).toEqual(items);
       expect(pushed[1]).toEqual({

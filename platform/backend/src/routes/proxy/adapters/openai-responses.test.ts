@@ -590,6 +590,334 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
     ).toBe("let me checkblocked message");
   });
 
+  test("non-streaming calls retain declared namespaces without guessing ambiguous names", () => {
+    const call = {
+      type: "function_call",
+      id: "item-native",
+      call_id: "native-call",
+      name: "spawn_agent",
+      arguments: '{"message":"Research"}',
+    };
+    const request = {
+      model: "test-model",
+      input: [
+        {
+          type: "additional_tools",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              tools: [{ type: "function", name: "spawn_agent" }],
+            },
+          ],
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+    const response = {
+      id: "response-native",
+      model: "test-model",
+      status: "completed",
+      output: [call],
+    } as unknown as OpenAi.Types.ResponsesResponse;
+    const adapter = openAiResponsesAdapterFactory.createResponseAdapter(
+      response,
+      request,
+    );
+    expect(adapter.getToolCalls()[0]).toMatchObject({
+      name: "spawn_agent",
+      namespace: "collaboration",
+    });
+    expect(adapter.getOriginalResponse().output[0]).toMatchObject({
+      namespace: "collaboration",
+    });
+    expect(response.output[0]).not.toHaveProperty("namespace");
+    const explicit = openAiResponsesAdapterFactory.createResponseAdapter(
+      {
+        ...response,
+        output: [{ ...call, namespace: "multi_agent_v1" }],
+      } as never,
+      request,
+    );
+    expect(explicit.getToolCalls()[0]).toMatchObject({
+      namespace: "multi_agent_v1",
+    });
+    const ambiguous = openAiResponsesAdapterFactory.createResponseAdapter(
+      response,
+      {
+        ...request,
+        tools: [{ type: "function", name: "spawn_agent" }],
+      } as never,
+    );
+    expect(ambiguous.getToolCalls()[0]).not.toHaveProperty("namespace");
+  });
+
+  test("stamps a unique additional_tools namespace onto a call the model left bare", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter({
+      model: "gpt-6-luna",
+      input: [
+        {
+          type: "additional_tools",
+          role: "developer",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              tools: [{ type: "function", name: "spawn_agent" }],
+            },
+            {
+              type: "namespace",
+              name: "functions",
+              tools: [{ type: "function", name: "exec_command" }],
+            },
+            {
+              type: "namespace",
+              name: "other",
+              tools: [{ type: "function", name: "spawn_agent" }],
+            },
+          ],
+        },
+      ],
+    } as never);
+    // spawn_agent is declared in two namespaces, so it must not be guessed.
+    // Rebuild with a unique collaboration declaration for the dispatch case.
+    const dispatch = openAiResponsesAdapterFactory.createStreamAdapter({
+      model: "gpt-6-luna",
+      input: [
+        {
+          type: "additional_tools",
+          role: "developer",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              description: "Tools for spawning and managing sub-agents.",
+              tools: [{ type: "function", name: "spawn_agent" }],
+            },
+            {
+              type: "namespace",
+              name: "functions",
+              tools: [{ type: "custom", name: "exec_command" }],
+            },
+          ],
+        },
+      ],
+    } as never);
+
+    const bareSpawn = {
+      id: "fc_spawn",
+      call_id: "call_spawn",
+      type: "function_call",
+      name: "spawn_agent",
+      arguments: "",
+      status: "in_progress",
+    };
+    dispatch.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: bareSpawn,
+    } as never);
+    dispatch.processChunk({
+      type: "response.function_call_arguments.delta",
+      item_id: "fc_spawn",
+      output_index: 0,
+      sequence_number: 2,
+      delta: '{"message":"investigate"}',
+    } as never);
+    dispatch.processChunk({
+      type: "response.function_call_arguments.done",
+      item_id: "fc_spawn",
+      output_index: 0,
+      sequence_number: 3,
+      name: "spawn_agent",
+      arguments: '{"message":"investigate"}',
+    } as never);
+    dispatch.processChunk({
+      type: "response.output_item.done",
+      output_index: 0,
+      sequence_number: 4,
+      item: {
+        ...bareSpawn,
+        arguments: '{"message":"investigate"}',
+        status: "completed",
+      },
+    } as never);
+    dispatch.processChunk({
+      type: "response.completed",
+      sequence_number: 5,
+      response: {
+        id: "resp_spawn",
+        object: "response",
+        status: "completed",
+        model: "gpt-6-luna",
+        output: [
+          {
+            id: "fc_spawn",
+            call_id: "call_spawn",
+            type: "function_call",
+            name: "spawn_agent",
+            arguments: '{"message":"investigate"}',
+            status: "completed",
+          },
+        ],
+      },
+    } as never);
+
+    expect(dispatch.state.toolCalls).toEqual([
+      {
+        id: "call_spawn",
+        name: "spawn_agent",
+        arguments: '{"message":"investigate"}',
+        namespace: "collaboration",
+      },
+    ]);
+    const replay = dispatch
+      .getRawToolCallEvents()
+      .map((frame) =>
+        JSON.parse(
+          (typeof frame === "string"
+            ? frame
+            : new TextDecoder().decode(frame)
+          ).replace(/^data: /, ""),
+        ),
+      );
+    const added = replay.find(
+      (event) => event.type === "response.output_item.added",
+    );
+    const argumentsDone = replay.find(
+      (event) => event.type === "response.function_call_arguments.done",
+    );
+    const itemDone = replay.find(
+      (event) => event.type === "response.output_item.done",
+    );
+    const completed = replay.find(
+      (event) => event.type === "response.completed",
+    );
+    expect(added.item.namespace).toBe("collaboration");
+    expect(argumentsDone).not.toHaveProperty("namespace");
+    expect(itemDone.item.namespace).toBe("collaboration");
+    expect(completed.response.output[0].namespace).toBe("collaboration");
+    expect(dispatch.toProviderResponse().output[0]).toMatchObject({
+      name: "spawn_agent",
+      namespace: "collaboration",
+    });
+
+    const released = (
+      dispatch.formatToolCallsSSE?.(dispatch.state.toolCalls) ?? []
+    ).map((frame) =>
+      JSON.parse(
+        (typeof frame === "string"
+          ? frame
+          : new TextDecoder().decode(frame)
+        ).replace(/^data: /, ""),
+      ),
+    );
+    expect(
+      released.find((event) => event.type === "response.output_item.done")
+        ?.item,
+    ).toMatchObject({ name: "spawn_agent", namespace: "collaboration" });
+    expect(
+      released.find((event) => event.type === "response.completed")?.response
+        .output[0],
+    ).toMatchObject({ name: "spawn_agent", namespace: "collaboration" });
+
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: bareSpawn,
+    } as never);
+    expect(adapter.state.toolCalls[0]).not.toHaveProperty("namespace");
+  });
+
+  test("keeps a namespace that arrives only on output_item.done when synthesizing the stored turn", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: {
+        id: "fc_1",
+        call_id: "call_spawn",
+        type: "function_call",
+        name: "spawn_agent",
+        arguments: "",
+        status: "in_progress",
+      },
+    } as never);
+    adapter.processChunk({
+      type: "response.output_item.done",
+      output_index: 0,
+      sequence_number: 2,
+      item: {
+        id: "fc_1",
+        call_id: "call_spawn",
+        type: "function_call",
+        name: "spawn_agent",
+        arguments: '{"message":"go"}',
+        namespace: "collaboration",
+        status: "completed",
+      },
+    } as never);
+    adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 3,
+      response: {
+        id: "resp_empty",
+        object: "response",
+        status: "completed",
+        model: "gpt-6-luna",
+        output: [],
+      },
+    } as never);
+
+    expect(adapter.state.toolCalls[0]).toMatchObject({
+      name: "spawn_agent",
+      namespace: "collaboration",
+    });
+    expect(adapter.toProviderResponse().output).toContainEqual(
+      expect.objectContaining({
+        type: "function_call",
+        name: "spawn_agent",
+        namespace: "collaboration",
+      }),
+    );
+  });
+
+  test("does not replace a namespace the model already named", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter({
+      model: "gpt-6-luna",
+      input: [
+        {
+          type: "additional_tools",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              tools: [{ type: "function", name: "spawn_agent" }],
+            },
+          ],
+        },
+      ],
+    } as never);
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: {
+        id: "fc_1",
+        call_id: "call_spawn",
+        type: "function_call",
+        name: "spawn_agent",
+        arguments: "{}",
+        namespace: "multi_agent_v1",
+        status: "in_progress",
+      },
+    } as never);
+
+    expect(adapter.state.toolCalls[0]?.namespace).toBe("multi_agent_v1");
+  });
+
   test("keeps the namespace a streamed call names, for the plugins that record it", () => {
     const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
 

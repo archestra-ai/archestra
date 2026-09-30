@@ -21,7 +21,8 @@ dependencies = [
   "python-multipart>=0.0.30",
   # Transitive constraints (pulled in via mcp[cli]):
   # pyjwt < 2.13.0: CVE-2026-48526 (improper authentication)
-  "pyjwt>=2.13.0",
+  # CVE-2026-102266 through CVE-2026-102271 require 2.14.0.
+  "pyjwt>=2.14.0",
   # cryptography < 48.0.1: GHSA-537c-gmf6-5ccf (out-of-bounds read)
   # cryptography < 50.0.0: CVE-2026-69247 (observable timing discrepancy)
   "cryptography>=50.0.0",

@@ -40,3 +40,13 @@ test("indexes all ordinary output and never splits OSC titles or synchronized fr
   expect(lines.slice(0, positions[1])).toBe("line 0\n");
   expect(positions.at(-1)).toBe(lines.length);
 });
+
+test("treats clear and its following cursor home as one redraw boundary", () => {
+  const earlier = "Earlier screen";
+  const redraw = "\x1b[2J\x1b[HNext screen";
+  expect(indexTerminalRecording(earlier + redraw)).toEqual([
+    0,
+    earlier.length,
+    earlier.length + redraw.length,
+  ]);
+});

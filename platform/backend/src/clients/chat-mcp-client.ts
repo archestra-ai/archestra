@@ -286,13 +286,34 @@ export const __test = {
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
+ * @param actorTeamId - Set when a team token made the call; uses that team's token
  * @returns Token value and metadata, or null if no token available
  */
 export async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   organizationId: string,
+  actorTeamId?: string,
 ): Promise<McpGatewayToken | null> {
+  if (actorTeamId) {
+    const teamToken = await TeamTokenModel.findTeamToken(actorTeamId);
+    if (teamToken) {
+      const tokenValue = await TeamTokenModel.getTokenValue(teamToken.id);
+      if (tokenValue) {
+        logger.info(
+          { agentId, actorTeamId, tokenId: teamToken.id },
+          "Using the requesting team's own token for chat MCP client",
+        );
+        return {
+          tokenValue,
+          tokenId: teamToken.id,
+          teamId: actorTeamId,
+          isOrganizationToken: false,
+        };
+      }
+    }
+  }
+
   // Get user's team IDs and profile's team IDs (needed for fallback token selection)
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
   const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
@@ -806,6 +827,7 @@ export async function getChatMcpTools({
   agentId,
   userId,
   organizationId,
+  actorTeamId,
   chatOpsBindingId,
   chatOpsThreadId,
   enabledToolIds,
@@ -832,6 +854,8 @@ export async function getChatMcpTools({
   agentId: string;
   userId: string;
   organizationId: string;
+  /** Set when a team token made the call (userId is then "system") */
+  actorTeamId?: string;
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
@@ -963,6 +987,7 @@ export async function getChatMcpTools({
     agentId,
     userId,
     organizationId,
+    actorTeamId,
   );
   if (!mcpGwToken) {
     logger.warn(

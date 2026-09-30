@@ -217,6 +217,7 @@ export const AuditEventNameSchema = z.enum([
   "teamToken.rotated",
   "tool.deleted",
   "guardrailsPolicy.updated",
+  "openappaYell.updated",
   "openappaBatteryInstall.created",
   "openappaBatteryInstall.updated",
   "openappaBatteryInstall.deleted",

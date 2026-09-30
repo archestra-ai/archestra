@@ -3,7 +3,7 @@ title: Guardrails
 category: LLM Proxy
 order: 5
 description: Enable and operate OpenAPPA tool guardrails in Archestra
-lastUpdated: 2026-09-29
+lastUpdated: 2026-09-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -105,6 +105,14 @@ curl http://localhost:9000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
+
+## Yells
+
+Yells report confusing blocks or remedies. Archestra saves new reports locally before attempting external delivery. Existing OpenAPPA reporting to Slack continues.
+
+The overview counts unresolved reports. You can search reports and investigate them with the configuration agent. Opening a chat leaves the report unresolved. Mark it resolved after verifying the fix; you can reopen it later.
+
+Existing reports sent before native storage was enabled are not imported.
 
 ## Connect GitHub
 

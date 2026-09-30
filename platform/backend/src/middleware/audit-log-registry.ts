@@ -29,6 +29,7 @@ import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
@@ -144,6 +145,12 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  "/api/openappa/yells/:id": {
+    resourceType: "openappaYell",
+    action: "openappaYell.updated",
+    fetchById: (id, organizationId) =>
+      OpenAppaYellModel.findByIdForAudit(id, organizationId),
+  },
   "/api/guardrails-policy": {
     resourceType: "guardrailsPolicy",
     action: "guardrailsPolicy.updated",

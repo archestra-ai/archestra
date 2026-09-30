@@ -9,6 +9,7 @@ import * as database from "@/database";
 import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
 import {
@@ -18,6 +19,7 @@ import {
   evaluateHostedToolCalls,
   evaluateToolCalls,
   executeRemedyByOffer,
+  executeYell,
   loadChildReturns,
   loadOfferReview,
   processProxyResults,
@@ -216,6 +218,21 @@ describe("APPA feature boundary", () => {
     expect(result.content).toEqual([
       { type: "text", text: "Receipt report-1" },
     ]);
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      message: args.message,
+      withTrajectory: args.with_trajectory,
+      callerId: session.caller_id,
+      sessionId: session.session_id,
+      reportFailed: false,
+      reportedAt: expect.any(Date),
+      resolvedAt: null,
+    });
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
     ).toEqual([
@@ -238,6 +255,87 @@ describe("APPA feature boundary", () => {
         arguments: args,
       },
     ]);
+  });
+
+  test("keeps a report when external delivery fails and deduplicates a retry", async () => {
+    config.openappa.yellEnabled = true;
+    const params = {
+      session,
+      toolCallId: "retry-report",
+      args: { message: "A block needs investigation", with_trajectory: false },
+    };
+    native.dispatchHook.mockRejectedValueOnce(
+      new Error("Reporting unavailable"),
+    );
+    await expect(executeYell(params)).rejects.toThrow(
+      "policy runtime is unavailable",
+    );
+    let saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      reportFailed: true,
+      reportedAt: null,
+      message: params.args.message,
+    });
+    await OpenAppaYellModel.setResolved({
+      id: saved.data[0].id,
+      organizationId,
+      userId: "alice",
+      resolved: true,
+    });
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "Receipt" }] },
+      }),
+    );
+    await executeYell(params);
+    saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      reportFailed: false,
+      reportedAt: expect.any(Date),
+      resolvedAt: expect.any(Date),
+    });
+  });
+
+  test("records a native reporting refusal as failed delivery without resolving the yell", async () => {
+    config.openappa.yellEnabled = true;
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: {
+          isError: true,
+          content: [{ type: "text", text: "Reporting service unavailable" }],
+        },
+      }),
+    );
+    const result = await executeYell({
+      session,
+      toolCallId: "failed-delivery",
+      args: { message: "A confusing remedy", with_trajectory: false },
+    });
+    expect(result.isError).toBe(true);
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "unresolved",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      message: "A confusing remedy",
+      reportFailed: true,
+      reportedAt: null,
+      resolvedAt: null,
+    });
   });
 
   test("a gateway yell reports under the session and call the proxy allowed", async () => {
@@ -271,6 +369,21 @@ describe("APPA feature boundary", () => {
     expect(result.content).toEqual([
       { type: "text", text: "Receipt report-1" },
     ]);
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      message: args.message,
+      withTrajectory: args.with_trajectory,
+      callerId: session.caller_id,
+      sessionId: session.session_id,
+      reportFailed: false,
+      reportedAt: expect.any(Date),
+      resolvedAt: null,
+    });
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
     ).toEqual([

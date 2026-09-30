@@ -7,6 +7,7 @@ import {
   CircleDashed,
   CircleX,
   Github,
+  Megaphone,
   MessageCircle,
   ShieldCheck,
 } from "lucide-react";
@@ -33,6 +34,7 @@ import {
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
   OpenAppaCreateRepositoryDialog,
@@ -45,12 +47,13 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 /**
  * Where OpenAPPA setup stands. A fresh organization sees only the first step,
  * saving a policy in the policy chat (which turns enforcement on). After that,
- * three compact cards report enforcement (with its switch) and GitHub sync
+ * four compact cards report enforcement, GitHub sync, and unresolved yells
  * and link to the docs, and the first unfinished one is highlighted as the next step.
  */
 export function OverviewSetupCards() {
   const { enabled, isFresh } = useOpenAppaSetupState();
   const sync = useAppaGithubSync();
+  const { data: canReadYells } = useHasPermissions({ log: ["read"] });
   if (isFresh === undefined) return null;
   if (isFresh) return <PolicyStep />;
   const source = sync.data?.source;
@@ -61,9 +64,15 @@ export function OverviewSetupCards() {
       ? "github"
       : null;
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <div
+      className={cn(
+        "grid gap-4",
+        canReadYells ? "xl:grid-cols-2" : "lg:grid-cols-3",
+      )}
+    >
       <EnforcementCard next={next === "enforcement"} />
       <GithubSyncCard next={next === "github"} />
+      {canReadYells && <YellsCard />}
       <LearnMoreCard />
     </div>
   );
@@ -269,6 +278,37 @@ function GithubSyncCard({ next }: { next: boolean }) {
         />
       )}
     </>
+  );
+}
+
+function YellsCard() {
+  const summary = useOpenAppaYellsSummary();
+  return (
+    <StatusCard
+      icon={<Megaphone />}
+      title="Yells"
+      description="Reports of confusing blocks or remedies. Investigate them with the configuration agent."
+      action={
+        <Button size="sm" variant="outline" asChild>
+          <Link href="/openappa/yells">
+            Review yells <ArrowRight />
+          </Link>
+        </Button>
+      }
+    >
+      {summary.isError ? (
+        <Button variant="ghost" size="sm" onClick={() => summary.refetch()}>
+          Could not load yells. Retry
+        </Button>
+      ) : (
+        <p className="flex items-baseline gap-2">
+          <span className="text-3xl font-semibold tabular-nums">
+            {summary.data?.unresolved ?? "—"}
+          </span>
+          <span className="text-sm text-muted-foreground">unresolved</span>
+        </p>
+      )}
+    </StatusCard>
   );
 }
 

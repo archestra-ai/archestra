@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { BatteriesUploadAction } from "./batteries-panel";
 import { OpenAppaChatButton } from "./openappa-chat-button";
@@ -12,6 +13,7 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { data: canReadYells } = useHasPermissions({ log: ["read"] });
   const appName = useAppName();
   const { isFresh } = useOpenAppaSetupState();
   // Until a policy is saved, the Overview shows only that first step.
@@ -40,10 +42,14 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
               { label: "Overview", href: "/openappa" },
               { label: "Batteries", href: "/openappa/batteries" },
               { label: "Policy", href: "/openappa/policy" },
+              ...(canReadYells
+                ? [{ label: "Yells", href: "/openappa/yells" }]
+                : []),
             ]
       }
       actionButton={
-        firstStepOnly ? null : pathname === "/openappa/policy" ? (
+        firstStepOnly || pathname === "/openappa/yells" ? null : pathname ===
+          "/openappa/policy" ? (
           <OpenAppaChatButton promptKey="explainPolicy">
             <MessageCircle />
             <span>Configure with chat</span>

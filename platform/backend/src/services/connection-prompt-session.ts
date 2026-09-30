@@ -231,6 +231,7 @@ function sessionKey(
 }
 
 function digest(...values: string[]): string {
+  // codeql[js/insufficient-password-hash] Digests user, organization, and session ids into a cache key. Not a password hash and never stored as a credential.
   return createHash("sha256").update(values.join("\0")).digest("hex");
 }
 

@@ -146,6 +146,10 @@ import {
   type LlmProxyToolCallRefusal,
   type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
+import {
+  nativeSetupClientFromProvenance,
+  resolveConnectionSetupScope,
+} from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -219,6 +223,7 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   openappaSession?: OpenAppaSession;
+  connectionSetupBypass: boolean;
   sessionReceipt?: SessionReceiptOutput;
   childTrajectoryReceipt?: ChildTrajectoryReceiptOutput;
   childCompactionContext?: string;
@@ -1541,6 +1546,7 @@ export async function handleLLMProxy<
     let childCompactionContext: string | undefined;
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
+    let connectionSetupBypass = false;
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
@@ -1617,11 +1623,8 @@ export async function handleLLMProxy<
             })
           : {};
         hasNativeClientSession =
-          appaIdentity.provenance === "claude-code-header" ||
-          appaIdentity.provenance === "claude-code-metadata" ||
-          appaIdentity.provenance === "codex-turn-metadata" ||
-          appaIdentity.provenance === "opencode-session-header" ||
-          appaIdentity.provenance === "opencode-hosted-header";
+          nativeSetupClientFromProvenance(appaIdentity.provenance) !==
+          undefined;
         if (
           hasNativeClientSession &&
           appaIdentity.sessionId !== undefined &&
@@ -1632,19 +1635,48 @@ export async function handleLLMProxy<
             "OpenAPPA requires a valid client-native session ID",
           );
         }
+        if (
+          !isInternalChat &&
+          authenticatedUserId &&
+          appaIdentity.sessionId &&
+          hasNativeClientSession
+        ) {
+          const setupScope = await resolveConnectionSetupScope({
+            principal: {
+              userId: authenticatedUserId,
+              organizationId: resolvedAgent.organizationId,
+              targetOrganizationId: resolvedAgent.organizationId,
+              guardrailsActive: appaActive,
+            },
+            evidence: {
+              kind: "native-session",
+              identity: appaIdentity,
+              requestBody: body,
+            },
+          });
+          connectionSetupBypass = setupScope !== null;
+          if (setupScope?.kind === "native-session") {
+            logger.info(
+              { clientId: setupScope.clientId },
+              "Connection setup APPA bypass active",
+            );
+          }
+        }
         // Receipts were stripped from history above, before any forwarding or
         // logging. APPA now resolves the collected codes into lineage evidence
         // owned by this caller.
-        const receiptSessions = callerId
-          ? await sessionReceiptEvidence({
-              organizationId: resolvedAgent.organizationId,
-              callerId,
-              codes: strippedReceiptCodes,
-            })
-          : [];
+        const receiptSessions =
+          !connectionSetupBypass && callerId
+            ? await sessionReceiptEvidence({
+                organizationId: resolvedAgent.organizationId,
+                callerId,
+                codes: strippedReceiptCodes,
+              })
+            : [];
         // History carrying verified stamps or session receipts identifies
         // parent context. A new session opens as a fork of its deepest ancestor.
         const traceable =
+          !connectionSetupBypass &&
           appaCallerId &&
           appaIdentity.sessionId &&
           appaFamily &&
@@ -1692,42 +1724,46 @@ export async function handleLLMProxy<
           headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] =
             appaIdentity.parentId;
         }
-        openappaSession = sessionFromHeaders({
-          headers: headersForExtraction,
-          organizationId: resolvedAgent.organizationId,
-          callerId,
-          // Chat sessions use conversation IDs with verified ownership.
-          ...(isInternalChat
-            ? {}
-            : {
-                // Scope external sessions to the authenticated principal.
-                scope:
-                  isInternalRequest &&
-                  !authenticatedUserId &&
-                  !authenticatedApp &&
-                  !virtualKeyId &&
-                  incomingAppaSessionHeader !== undefined
-                    ? undefined
-                    : callerId,
-                // Bind fallback root if no session was provided.
-                fallbackSessionId: callerId
-                  ? `${callerId}@${resolvedAgent.id}`
-                  : undefined,
-              }),
-        });
-        if (!openappaSession)
+        // Reading connect.md can taint the rest of setup, so the verified
+        // session bypasses APPA trust and invocation decisions together.
+        openappaSession = connectionSetupBypass
+          ? undefined
+          : sessionFromHeaders({
+              headers: headersForExtraction,
+              organizationId: resolvedAgent.organizationId,
+              callerId,
+              // Chat sessions use conversation IDs with verified ownership.
+              ...(isInternalChat
+                ? {}
+                : {
+                    // Scope external sessions to the authenticated principal.
+                    scope:
+                      isInternalRequest &&
+                      !authenticatedUserId &&
+                      !authenticatedApp &&
+                      !virtualKeyId &&
+                      incomingAppaSessionHeader !== undefined
+                        ? undefined
+                        : callerId,
+                    // Bind fallback root if no session was provided.
+                    fallbackSessionId: callerId
+                      ? `${callerId}@${resolvedAgent.id}`
+                      : undefined,
+                  }),
+            });
+        if (!openappaSession && !connectionSetupBypass)
           throw new ApiError(
             400,
             "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
           );
-        if (forkOf && callerId)
+        if (forkOf && callerId && openappaSession)
           openappaSession = {
             ...openappaSession,
             fork_of: scopedSessionId(callerId, forkOf),
           };
         if (
           callerId &&
-          openappaSession.session_id === `${callerId}@${resolvedAgent.id}`
+          openappaSession?.session_id === `${callerId}@${resolvedAgent.id}`
         ) {
           // Every conversation of this credential on this agent now shares one
           // root: a turn ending in one releases the offers of the others.
@@ -1858,10 +1894,16 @@ export async function handleLLMProxy<
         };
       }
     }
-    const trustedDataOutcome =
-      legacyTrustOutcome ??
-      pluginToolResultsOutcome?.contextTrust ??
-      (await evaluateLegacyTrust());
+    const trustedDataOutcome = connectionSetupBypass
+      ? {
+          toolResultUpdates: {},
+          contextIsTrusted: true,
+          dualLlmAnalyses: [],
+          unsafeContextBoundary: undefined,
+        }
+      : (legacyTrustOutcome ??
+        pluginToolResultsOutcome?.contextTrust ??
+        (await evaluateLegacyTrust()));
     const { contextIsTrusted, dualLlmAnalyses, unsafeContextBoundary } =
       trustedDataOutcome;
     const toolResultUpdates = {
@@ -2071,6 +2113,7 @@ export async function handleLLMProxy<
 
     const ctx: LLMProxyContext<TRequest> = {
       openappaSession,
+      connectionSetupBypass,
       ...(sessionReceipt ? { sessionReceipt } : {}),
       ...(childTrajectoryReceipt ? { childTrajectoryReceipt } : {}),
       ...(childCompactionContext ? { childCompactionContext } : {}),
@@ -2664,25 +2707,27 @@ async function handleStreaming<
         rewrittenToolCalls ?? toolCalls,
         streamAdapter.formatToolCallsSSE !== undefined,
         async (calls) =>
-          await utils.toolInvocation.evaluatePolicies(
-            toolCallsForPolicyEvaluation({
-              toolCalls: [...calls],
-              toolIdentity,
-              discoveredToolDefault: discoveredToolInvocationDefault,
-            }),
-            agent.id,
-            {
-              teamIds: teamIds ?? [],
-              externalAgentId,
-              sensitiveContextOrigin:
-                utils.trustedData.sensitiveContextOriginFromBoundary(
-                  unsafeContextBoundary,
-                ),
-            },
-            contextIsTrusted,
-            enabledToolNames,
-            { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-          ),
+          ctx.connectionSetupBypass
+            ? null
+            : await utils.toolInvocation.evaluatePolicies(
+                toolCallsForPolicyEvaluation({
+                  toolCalls: [...calls],
+                  toolIdentity,
+                  discoveredToolDefault: discoveredToolInvocationDefault,
+                }),
+                agent.id,
+                {
+                  teamIds: teamIds ?? [],
+                  externalAgentId,
+                  sensitiveContextOrigin:
+                    utils.trustedData.sensitiveContextOriginFromBoundary(
+                      unsafeContextBoundary,
+                    ),
+                },
+                contextIsTrusted,
+                enabledToolNames,
+                { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+              ),
       );
       if (policyOutcome.wasRewritten)
         rewrittenToolCalls = policyOutcome.toolCalls;
@@ -3291,25 +3336,27 @@ async function handleNonStreaming<
       rewrittenToolCalls ?? emittedToolCalls,
       responseAdapter.withRewrittenToolCalls !== undefined,
       async (calls) =>
-        await utils.toolInvocation.evaluatePolicies(
-          toolCallsForPolicyEvaluation({
-            toolCalls: [...calls],
-            toolIdentity,
-            discoveredToolDefault: discoveredToolInvocationDefault,
-          }),
-          agent.id,
-          {
-            teamIds: teamIds ?? [],
-            externalAgentId,
-            sensitiveContextOrigin:
-              utils.trustedData.sensitiveContextOriginFromBoundary(
-                unsafeContextBoundary,
-              ),
-          },
-          contextIsTrusted,
-          enabledToolNames,
-          { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-        ),
+        ctx.connectionSetupBypass
+          ? null
+          : await utils.toolInvocation.evaluatePolicies(
+              toolCallsForPolicyEvaluation({
+                toolCalls: [...calls],
+                toolIdentity,
+                discoveredToolDefault: discoveredToolInvocationDefault,
+              }),
+              agent.id,
+              {
+                teamIds: teamIds ?? [],
+                externalAgentId,
+                sensitiveContextOrigin:
+                  utils.trustedData.sensitiveContextOriginFromBoundary(
+                    unsafeContextBoundary,
+                  ),
+              },
+              contextIsTrusted,
+              enabledToolNames,
+              { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+            ),
     );
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;

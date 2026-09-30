@@ -21,6 +21,7 @@ import {
   opencodeOAuthNextStep,
   opencodeProviderTarget,
   opencodeProxyHeaders,
+  opencodeRestartNextStep,
   type SetupScriptContext,
   type SetupScriptProxySection,
 } from "./connection-setup-script";
@@ -284,9 +285,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
         }
       }
       if (ctx.mcp || ctx.proxy || ctx.skills) {
-        steps.push(
-          "Close every running OpenCode process. Then open a new PowerShell session and start `opencode`. The startup guard checks these remotes before every launch.",
-        );
+        steps.push(opencodeRestartNextStep);
       }
       break;
     case "claude-code":

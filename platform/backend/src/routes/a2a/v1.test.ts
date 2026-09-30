@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { AgentModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const { mockExecuteA2AMessage, mockValidateMCPGatewayToken } = vi.hoisted(
@@ -104,6 +105,31 @@ describe("a2a routes", () => {
         parts: [{ kind: "text", text: "agent-response" }],
       },
     });
+  });
+
+  test("a team token carries its team id into execution", async () => {
+    const agentId = (app as FastifyInstanceWithZod & { __agentId: string })
+      .__agentId;
+    const agent = await AgentModel.findById(agentId);
+    mockValidateMCPGatewayToken.mockResolvedValue({
+      organizationId: agent?.organizationId,
+      userId: null,
+      teamId: "team-1",
+      isOrganizationToken: false,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/a2a/${agentId}`,
+      headers: { authorization: "Bearer test-token" },
+      payload: { event: "ping" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+    const call = mockExecuteA2AMessage.mock.calls[0][0];
+    expect(call.userId).toBe("system");
+    expect(call.actorTeamId).toBe("team-1");
   });
 
   test("passes through stringified body when payload is not JSON-RPC", async () => {

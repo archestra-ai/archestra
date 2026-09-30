@@ -1479,6 +1479,52 @@ export class A2AManager {
   }
 
   /**
+   * Fail an unfinished task on the platform's own authority — a limit or a
+   * retention deadline, not a client request — and stop its local run.
+   * Returns false when the task already settled.
+   */
+  public async failTask(params: {
+    taskId: string;
+    statusReason: string;
+  }): Promise<boolean> {
+    const task = await A2ATaskModel.findById(params.taskId);
+    if (!task || isTerminalA2ATaskState(task.state)) return false;
+
+    const failed = await A2ATaskModel.transitionStateWithEvent({
+      id: task.id,
+      to: A2AProtocolTaskState.Failed,
+      allowedFrom: [
+        A2AProtocolTaskState.Submitted,
+        A2AProtocolTaskState.Working,
+        A2AProtocolTaskState.InputRequired,
+        A2AProtocolTaskState.AuthRequired,
+        A2AProtocolTaskState.Unspecified,
+      ],
+      statusReason: params.statusReason,
+      clearApprovals: true,
+      eventPayload: {
+        statusUpdate: {
+          taskId: task.id,
+          contextId: task.contextId,
+          status: {
+            state: A2AProtocolTaskState.Failed,
+            message: buildStatusReasonMessage({
+              taskId: task.id,
+              contextId: task.contextId,
+              reason: params.statusReason,
+            }),
+          },
+        },
+      },
+    });
+    if (!failed) return false;
+
+    a2aTaskRunService.abortLocal(task.id);
+    a2aTaskRunService.wakeSubscribers(task.id);
+    return true;
+  }
+
+  /**
    * A2A `SubscribeToTask` validation + snapshot: returns the authorized task
    * (throwing -32004 when it is already terminal, per spec — finished work is
    * fetched with GetTask) together with the event-sequence watermark bound to

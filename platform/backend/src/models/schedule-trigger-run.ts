@@ -217,6 +217,9 @@ class ScheduleTriggerRunModel {
       .select({
         runId: schema.scheduleTriggerRunsTable.id,
         triggerId: schema.scheduleTriggerRunsTable.triggerId,
+        runtimeTaskId: schema.scheduleTriggerRunsTable.runtimeTaskId,
+        startedAt: schema.scheduleTriggerRunsTable.startedAt,
+        createdAt: schema.scheduleTriggerRunsTable.createdAt,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
         agentName: schema.agentsTable.name,

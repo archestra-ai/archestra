@@ -46,6 +46,8 @@ Every project has an `instructions.md` file, pinned at the top of the Files pane
 
 A schedule runs an agent for you on a recurring basis. Agents with a dedicated runtime start an Agent Runtime session in the project. Other agents start a chat. Open a scheduled run to follow its work and review the result. Runtime runs stay in progress until their task finishes.
 
+A schedule runs one run at a time. When a run is due while the previous run is still in progress, the new run is skipped, and the skipped entry names the run that blocked it. A runtime run that is still in progress after four hours is stopped and marked failed, so the schedule continues at its next time. Administrators change this limit with [`ARCHESTRA_AGENT_RUNTIME_SCHEDULED_RUN_TIMEOUT_MINUTES`](./platform-deployment#agent-runtime).
+
 You can add several schedules to one project. Each can use a different agent, prompt, and time zone. Pause a schedule to stop automatic runs while keeping its settings. You can still run it manually, then resume it later. Deleting a schedule also removes its run history. Chats and sessions created by earlier runs remain in the project.
 
 ![New schedule dialog](/docs/automated_screenshots/platform-projects_schedule-dialog.webp)

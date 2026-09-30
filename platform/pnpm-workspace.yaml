@@ -159,6 +159,10 @@ packageExtensions:
       zod: ^4.3.4
 
 patchedDependencies:
+  # Preserve function-call IDs across SDK responses and request history.
+  # OpenAPPA uses these IDs to match released calls to returned results.
+  # Remove when the provider preserves both functionCall.id and functionResponse.id.
+  '@ai-sdk/google@3.0.43': patches/@ai-sdk__google@3.0.43.patch
   # OAuth-only SSO (GitHub) has userinfo but no JWKS/discovery document.
   # Skip runtime discovery only with explicit non-OIDC scopes and complete
   # OAuth endpoints; retain OIDC discovery and URL/SSRF validation.

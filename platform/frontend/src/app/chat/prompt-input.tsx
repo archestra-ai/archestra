@@ -264,6 +264,7 @@ const PromptInputContent = ({
   isContextCompacting = false,
   onCompactConversation,
   selectorAgentId,
+  agentSelectorReadOnly,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -1124,6 +1125,7 @@ const PromptInputContent = ({
             maxContextLength={maxContextLength}
             agentLlmApiKeyId={agentLlmApiKeyId}
             selectorAgentId={selectorAgentId}
+            agentSelectorReadOnly={agentSelectorReadOnly}
             onAgentChange={onAgentChange}
             modelSource={modelSource}
             toolsUnavailable={toolsUnavailable}
@@ -1240,6 +1242,7 @@ const ArchestraPromptInput = ({
   isContextCompacting,
   onCompactConversation,
   selectorAgentId,
+  agentSelectorReadOnly,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -1357,6 +1360,7 @@ const ArchestraPromptInput = ({
           isContextCompacting={isContextCompacting}
           onCompactConversation={onCompactConversation}
           selectorAgentId={selectorAgentId}
+          agentSelectorReadOnly={agentSelectorReadOnly}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}

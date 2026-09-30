@@ -34,7 +34,10 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { cn } from "@/lib/utils/tailwind";
-import { OpenAppaSourceForm } from "./appa-github-sync-panel";
+import {
+  OpenAppaCreateRepositoryDialog,
+  OpenAppaSourceForm,
+} from "./appa-github-sync-panel";
 import { UnsupportedClientActionSelect } from "./guardrails-deployment-toggle";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
@@ -178,6 +181,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
   const { data: canManage } = useHasPermissions({ organization: ["update"] });
   const appName = useAppName();
   const [editing, setEditing] = useState(false);
+  const [creating, setCreating] = useState(false);
   const source = sync.data?.source ?? null;
   const connected = Boolean(source?.interval);
   const failed = source?.lastSyncError;
@@ -218,10 +222,8 @@ function GithubSyncCard({ next }: { next: boolean }) {
           )
         }
         learnMore={{
-          href: openAppaUrl(
-            "/validation#make-policy-tests-a-required-ci-check",
-          ),
-          label: "Test changes in CI",
+          href: openAppaUrl("/validation"),
+          label: "CI checks",
         }}
         action={
           !sync.data?.enabled ? null : !canManage ? (
@@ -246,16 +248,25 @@ function GithubSyncCard({ next }: { next: boolean }) {
             <Button
               size="sm"
               variant={next ? "default" : "outline"}
-              onClick={() => setEditing(true)}
+              onClick={() => setCreating(true)}
             >
               <Github />
-              <span>Connect GitHub</span>
+              <span>Create repository</span>
             </Button>
           )
         }
       />
       {editing && (
         <OpenAppaSourceForm source={source} onOpenChange={setEditing} />
+      )}
+      {creating && (
+        <OpenAppaCreateRepositoryDialog
+          onOpenChange={setCreating}
+          onConnectExisting={() => {
+            setCreating(false);
+            setEditing(true);
+          }}
+        />
       )}
     </>
   );
@@ -321,7 +332,10 @@ function StatusCard({
         <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
           {action}
           {learnMore && (
-            <ExternalDocsLink href={learnMore.href} className="text-sm">
+            <ExternalDocsLink
+              href={learnMore.href}
+              className="shrink-0 text-xs text-muted-foreground"
+            >
               {learnMore.label}
             </ExternalDocsLink>
           )}

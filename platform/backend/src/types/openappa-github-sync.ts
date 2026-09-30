@@ -54,6 +54,20 @@ export const AppaGithubSourceSchema = z
     "Choose only one GitHub credential",
   );
 export type AppaGithubSource = z.infer<typeof AppaGithubSourceSchema>;
+export const CreateAppaGithubRepositorySchema = z
+  .object({
+    owner: z
+      .string()
+      .regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/)
+      .max(39),
+    name: z
+      .string()
+      .regex(/^[a-zA-Z0-9_.-]+$/)
+      .max(100),
+    githubAppConfigId: z.string().uuid(),
+    interval: AppaSyncIntervalSchema,
+  })
+  .strict();
 const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
   interval: z.union([AppaSyncIntervalSchema, z.null()]),
   heldReasons: z.array(HeldPullReasonSchema),

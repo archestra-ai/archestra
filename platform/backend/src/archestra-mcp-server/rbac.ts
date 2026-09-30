@@ -46,6 +46,16 @@ export const TOOL_PERMISSIONS: Record<
     resource: "toolPolicy",
     action: "read",
   },
+  create_guardrails_repository: { resource: "toolPolicy", action: "update" },
+  list_runtime_credentials: { resource: "credential", action: "read" },
+  get_runtime_credential: { resource: "credential", action: "read" },
+  create_runtime_credential: { resource: "credential", action: "create" },
+  update_runtime_credential: { resource: "credential", action: "update" },
+  delete_runtime_credential: { resource: "credential", action: "delete" },
+  request_runtime_credential_setup: {
+    resource: "credential",
+    action: "create",
+  },
 
   // Agents
   create_agent: { resource: "agent", action: "create" },

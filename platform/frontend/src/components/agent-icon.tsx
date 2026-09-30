@@ -7,6 +7,7 @@ import {
   getBuiltInServiceIconPath,
   isAgentImageIcon,
 } from "@/components/agent-icon.utils";
+import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { imageToneClassName, useImageTone } from "@/lib/hooks/use-image-tone";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -65,6 +66,15 @@ export function AgentIcon({
           imageToneClassName(imageTone),
           className,
         )}
+      />
+    );
+  }
+
+  if (icon === "logo:openappa") {
+    return (
+      <OpenAppaSolidIcon
+        className={cn("shrink-0", className)}
+        style={{ width: size, height: size }}
       />
     );
   }

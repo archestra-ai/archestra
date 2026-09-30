@@ -122,7 +122,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(12);
+    expect(originalToolIds).toHaveLength(19);
     const extraTools = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("whoami"),
     ]);
@@ -212,6 +212,14 @@ describe("syncBuiltInAgents", () => {
     expect((await AgentModel.findById(previous.id))?.systemPrompt).toBe(
       BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG],
     );
+    await AgentModel.update(previous.id, {
+      systemPrompt:
+        "Configure this deployment's OpenAPPA policy. Load the appa-guide skill before policy work and follow its current workflow. Use your assigned policy and discovery tools to inspect the current effective policy and relevant agents, MCP gateways, and MCP server tools. When the user identifies a target, look it up by its ID before explaining or changing its rules; ask for clarification when the target is missing or unavailable, and keep changes scoped to it unless the user says otherwise. Preview proposed changes and explain their effects before publishing, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it.",
+    });
+    await syncBuiltInAgents();
+    expect((await AgentModel.findById(previous.id))?.systemPrompt).toBe(
+      BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG],
+    );
     expect(
       await ResourcePermissionPolicyModel.find({
         organizationId: organization.id,
@@ -271,7 +279,7 @@ describe("syncBuiltInAgents", () => {
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(12);
+    ).toHaveLength(19);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (

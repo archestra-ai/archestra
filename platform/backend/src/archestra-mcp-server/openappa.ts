@@ -44,7 +44,10 @@ import {
   turnOnForFirstPolicy,
 } from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { getAppaGithubSync } from "@/services/openappa-github-sync";
+import {
+  createAppaGithubRepository,
+  getAppaGithubSync,
+} from "@/services/openappa-github-sync";
 import {
   getOpenAppaPolicyChangeStatus,
   publishOpenAppaPolicyChange,
@@ -91,6 +94,29 @@ const HITL_RULING_SCHEMA = {
 const MAX_PRECHECK_REFUSAL_BYTES = 64 * 1024;
 
 const registry = defineArchestraTools([
+  defineArchestraTool({
+    shortName: "create_guardrails_repository",
+    title: "Create OpenAPPA GitHub repository",
+    description:
+      "Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. List credentials first and choose a connected organization GitHub App. Ask the user for the GitHub owner and repository name before calling. Future policy edits open pull requests.",
+    schema: z.strictObject({
+      owner: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/),
+      name: z.string().regex(/^[a-zA-Z0-9_.-]+$/),
+      githubAppConfigId: z.string().uuid(),
+      interval: z.enum(["15m", "1h", "1d"]).default("1h"),
+    }),
+    async handler({ args, context }) {
+      if (!context.organizationId || !context.userId)
+        throw new ApiError(401, "Organization and user context are required");
+      return result(
+        await createAppaGithubRepository({
+          organizationId: context.organizationId,
+          userId: context.userId,
+          ...args,
+        }),
+      );
+    },
+  }),
   defineArchestraTool({
     shortName: "yell",
     title: "Report OpenAPPA feedback",
@@ -847,6 +873,7 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
     shortName === "validate_guardrails_policy" ||
     shortName === "preview_guardrails_policy_change" ||
     shortName === "update_guardrails_policy" ||
-    shortName === "get_guardrails_policy_change_status"
+    shortName === "get_guardrails_policy_change_status" ||
+    shortName === "create_guardrails_repository"
   );
 }

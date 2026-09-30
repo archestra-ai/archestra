@@ -95,6 +95,7 @@ overrides:
 packageExtensionsChecksum: sha256-OtX37i1Ryo9P6g4B33ec8l4gf38qd6EPAZjHSLupRlQ=
 
 patchedDependencies:
+  '@ai-sdk/google@3.0.43': 7528f63c986be41787e9d94b4cc1c16d8cc0c71df8080c382e57009d512e453d
   '@better-auth/sso@1.6.22': f83af50d9872ec2d3740d10d7508a5d129ec740360da3d3542ef21f61e8ea177
   ollama-ai-provider-v2@3.6.0: 98b56e2b73bf66546c2a30b64828a038f17206a826311e6249b506fe4488a5ca
   opus-decoder@0.7.11: 56051d0697914c234dba3419dbbdf41d5f0c8461c8ed89501a06a8c83af4e59d
@@ -184,7 +185,7 @@ importers:
         version: 3.0.25(zod@4.3.6)
       '@ai-sdk/google':
         specifier: ^3.0.43
-        version: 3.0.43(zod@4.3.6)
+        version: 3.0.43(patch_hash=7528f63c986be41787e9d94b4cc1c16d8cc0c71df8080c382e57009d512e453d)(zod@4.3.6)
       '@ai-sdk/google-vertex':
         specifier: ^4.0.80
         version: 4.0.80(zod@4.3.6)
@@ -11140,7 +11141,7 @@ snapshots:
   '@ai-sdk/google-vertex@4.0.80(zod@4.3.6)':
     dependencies:
       '@ai-sdk/anthropic': 3.0.58(zod@4.3.6)
-      '@ai-sdk/google': 3.0.43(zod@4.3.6)
+      '@ai-sdk/google': 3.0.43(patch_hash=7528f63c986be41787e9d94b4cc1c16d8cc0c71df8080c382e57009d512e453d)(zod@4.3.6)
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.19(zod@4.3.6)
       google-auth-library: 10.5.0
@@ -11148,7 +11149,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@ai-sdk/google@3.0.43(zod@4.3.6)':
+  '@ai-sdk/google@3.0.43(patch_hash=7528f63c986be41787e9d94b4cc1c16d8cc0c71df8080c382e57009d512e453d)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.19(zod@4.3.6)

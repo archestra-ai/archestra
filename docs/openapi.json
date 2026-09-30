@@ -78717,8 +78717,8 @@
                 "type": "object",
                 "properties": {
                   "message": {
+                    "default": "",
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 100000
                   },
                   "attachments": {
@@ -78749,10 +78749,7 @@
                       ]
                     }
                   }
-                },
-                "required": [
-                  "message"
-                ]
+                }
               }
             }
           }

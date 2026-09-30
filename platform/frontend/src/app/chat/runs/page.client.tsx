@@ -4,7 +4,9 @@ import {
   Bot,
   Copy,
   Info,
+  Loader2,
   MoreHorizontal,
+  Play,
   Share2,
   Square,
   TerminalSquare,
@@ -19,7 +21,6 @@ import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
 import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
-import { ContinueAgentRunDialog } from "@/components/continue-agent-run-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExecTerminalStatus } from "@/components/exec/exec-terminal-progress";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -33,6 +34,7 @@ import {
 import { WorkspaceRetention } from "@/components/workspace-retention";
 import {
   useCancelAgentRun,
+  useContinueAgentRun,
   useDeleteAgentWorkspace,
   useMyAgentRun,
 } from "@/lib/agent-runtime.query";
@@ -42,7 +44,14 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 export function AgentRunChatSession({ taskId }: { taskId: string }) {
-  const query = useMyAgentRun(taskId);
+  const [resumedRun, setResumedRun] = useState<{
+    sourceId: string;
+    taskId: string;
+  } | null>(null);
+  const activeTaskId =
+    resumedRun?.sourceId === taskId ? resumedRun.taskId : taskId;
+  const query = useMyAgentRun(activeTaskId);
+  const continuation = useContinueAgentRun();
   const capabilities = useScopedCapabilities();
   const canManageAccess = capabilities.data?.some(
     (grant) =>
@@ -55,7 +64,6 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [deleteWorkspaceDialogOpen, setDeleteWorkspaceDialogOpen] =
     useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
-  const [continueDialogOpen, setContinueDialogOpen] = useState(false);
   const [reattachedTaskId, setReattachedTaskId] = useState<string | null>(null);
   const reattached = reattachedTaskId === taskId;
   const [showHistory, setShowHistory] = useState(false);
@@ -161,15 +169,35 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
               {canContinue && !showLiveTerminal && (
                 <Button
                   size="sm"
-                  onClick={() =>
-                    canReattach
-                      ? setReattachedTaskId(taskId)
-                      : setContinueDialogOpen(true)
-                  }
+                  disabled={continuation.isPending}
+                  onClick={() => {
+                    if (canReattach) {
+                      setReattachedTaskId(taskId);
+                      setShowHistory(false);
+                      return;
+                    }
+                    continuation.mutate(
+                      { taskId: activeTaskId },
+                      {
+                        onSuccess: (result) => {
+                          if (!result) return;
+                          // Follow the accepted turn, not the session's stale completed snapshot.
+                          setResumedRun({
+                            sourceId: taskId,
+                            taskId: result.taskId,
+                          });
+                          setShowHistory(false);
+                        },
+                      },
+                    );
+                  }}
                 >
-                  <span>
-                    {canReattach ? "Continue" : "Resume conversation"}
-                  </span>
+                  {continuation.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Play className="size-3.5" />
+                  )}
+                  <span>{continuation.isPending ? "Resuming…" : "Resume"}</span>
                 </Button>
               )}
               {reattached && showLiveTerminal && (
@@ -271,7 +299,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         )}
         {showLiveTerminal ? (
           <AgentRunTerminal
-            taskId={run?.taskId ?? taskId}
+            taskId={run?.taskId ?? activeTaskId}
             active
             title={live ? "Live terminal" : "Output"}
             showManualCommand={false}
@@ -314,16 +342,12 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         confirmLabel="Stop run"
         pendingLabel="Stopping…"
         onConfirm={() =>
-          cancelRun.mutate(taskId, {
+          cancelRun.mutate(activeTaskId, {
             onSuccess: () => setStopDialogOpen(false),
           })
         }
       />
-      <ContinueAgentRunDialog
-        taskId={taskId}
-        open={continueDialogOpen}
-        onOpenChange={setContinueDialogOpen}
-      />
+
       <DeleteConfirmDialog
         open={deleteWorkspaceDialogOpen}
         onOpenChange={setDeleteWorkspaceDialogOpen}
@@ -338,7 +362,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         }
       />
       <ShareAgentRunDialog
-        taskId={run?.taskId ?? taskId}
+        taskId={run?.taskId ?? activeTaskId}
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
       />

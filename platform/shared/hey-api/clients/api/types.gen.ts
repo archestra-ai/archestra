@@ -22057,7 +22057,7 @@ export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRu
 
 export type ContinueAgentRunData = {
     body: {
-        message: string;
+        message?: string;
         attachments?: Array<{
             name: string;
             contentType: string;

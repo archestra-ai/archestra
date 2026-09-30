@@ -16,7 +16,7 @@ This reference is for custom image authors. For maintained image targets and bui
 | Completion | Exit `0` only after the turn is complete. Any non-zero exit marks the run failed. The workspace supervisor does not replay an interrupted turn after Pod replacement. |
 | Storage | `/home/node` and `/var/run/archestra` are persisted on a workspace PVC. Privileged runtimes also persist `/var/lib/docker` there. Other container paths are ephemeral. Export final deliverables before the workspace's retention deadline. |
 
-The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
+The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. When `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` and the mode is `interactive`, an absent or empty task means reopen the saved conversation without submitting a prompt. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
 
 ## Failure Reasons
 

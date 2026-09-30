@@ -6,13 +6,13 @@ import {
   CircleDashed,
   CircleX,
   Github,
-  Megaphone,
   MessageCircle,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { OpenAppaMascot } from "@/components/openappa-mascot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ import {
   OpenAppaCreateRepositoryDialog,
   OpenAppaSourceForm,
 } from "./appa-github-sync-panel";
+import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 import { UnsupportedClientActionSelect } from "./guardrails-deployment-toggle";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
@@ -63,15 +64,18 @@ export function OverviewSetupCards() {
       ? "github"
       : null;
   return (
-    <div
-      className={cn(
-        "grid gap-4",
-        canReadYells ? "xl:grid-cols-3" : "lg:grid-cols-2",
-      )}
-    >
-      <EnforcementCard next={next === "enforcement"} />
-      <GithubSyncCard next={next === "github"} />
-      {canReadYells && <YellsCard />}
+    <div className="space-y-4">
+      {source?.lastSyncError && <GithubManagedPolicyNotice />}
+      <div
+        className={cn(
+          "grid gap-4",
+          canReadYells ? "xl:grid-cols-3" : "lg:grid-cols-2",
+        )}
+      >
+        <EnforcementCard next={next === "enforcement"} />
+        <GithubSyncCard next={next === "github"} />
+        {canReadYells && <YellsCard />}
+      </div>
     </div>
   );
 }
@@ -212,11 +216,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
           )
         }
         description={
-          failed ? (
-            <span title={failed} className="line-clamp-3">
-              {failed}
-            </span>
-          ) : connected && source?.repo ? (
+          connected && source?.repo ? (
             <span>
               {appName} pulls the policy from{" "}
               <span className="font-mono text-foreground">{source.repo}</span>.
@@ -239,12 +239,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
                 Ask an administrator to connect a repository.
               </p>
             )
-          ) : failed ? (
-            <Button size="sm" onClick={() => setEditing(true)}>
-              <Github />
-              <span>Edit connection</span>
-            </Button>
-          ) : connected ? (
+          ) : connected || failed ? (
             <Button size="sm" variant="outline" asChild>
               <Link href="/settings/openappa">
                 <span>Sync settings</span>
@@ -283,7 +278,11 @@ function YellsCard() {
   const summary = useOpenAppaYellsSummary();
   return (
     <StatusCard
-      icon={<Megaphone />}
+      icon={
+        <span className="w-6">
+          <OpenAppaAlertIcon className="w-full" />
+        </span>
+      }
       title="Yells"
       description="Reports of confusing blocks or remedies. Investigate them with the configuration agent."
       action={

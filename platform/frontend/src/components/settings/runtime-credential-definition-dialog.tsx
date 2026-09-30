@@ -38,6 +38,8 @@ export function RuntimeCredentialDefinitionDialog({
   onClose,
   initialKind,
   initialScope,
+  initialValues,
+  hideProvidedBy = false,
   onCreated,
   backLabel,
   size = "small",
@@ -46,6 +48,8 @@ export function RuntimeCredentialDefinitionDialog({
   onClose: () => void;
   initialKind?: "secret" | "github_app" | "github_app_user";
   initialScope?: "personal" | "organization";
+  initialValues?: { name: string; description: string; icon: string };
+  hideProvidedBy?: boolean;
   onCreated?: (id: string) => void;
   backLabel?: string;
   size?: "small" | "medium";
@@ -68,15 +72,15 @@ export function RuntimeCredentialDefinitionDialog({
   const form = useForm<DefinitionFormValues>({
     resolver: zodResolver(DefinitionFormSchema),
     defaultValues: {
-      name: definition?.name ?? "",
+      name: definition?.name ?? initialValues?.name ?? "",
       kind: definition?.kind ?? initialKind ?? "secret",
       githubUrl: definition?.githubUrl ?? "https://api.github.com",
       appId: definition?.appId ?? "",
       installationId: definition?.installationId ?? "",
       githubClientId: definition?.githubClientId ?? "",
       githubAppCredentialKey: definition?.githubAppCredentialKey ?? "",
-      description: definition?.description ?? "",
-      icon: definition?.icon ?? null,
+      description: definition?.description ?? initialValues?.description ?? "",
+      icon: definition?.icon ?? initialValues?.icon ?? null,
       scope: definition?.allowOrganization
         ? "organization"
         : (initialScope ?? "personal"),
@@ -148,8 +152,18 @@ export function RuntimeCredentialDefinitionDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={definition ? `Edit ${definition.name}` : "Add credential"}
-      description="Choose the credential type and who provides its value. Use it across the platform."
+      title={
+        definition
+          ? `Edit ${definition.name}`
+          : initialKind === "github_app"
+            ? "Add GitHub App credential"
+            : "Add credential"
+      }
+      description={
+        initialKind === "github_app" && !definition
+          ? "Enter the App details, then connect its private key."
+          : "Choose the credential type and who provides its value. Use it across the platform."
+      }
       size={size}
       onSubmit={form.handleSubmit(save)}
       bodyClassName="space-y-4"
@@ -290,27 +304,29 @@ export function RuntimeCredentialDefinitionDialog({
                   </SelectItem>
                 </SelectContent>
               </Select>
-              {!definition && githubApps.length === 0 && (
-                <FormDescription>
-                  {loadingCredentials ? (
-                    <span>Checking available GitHub Apps…</span>
-                  ) : credentialsFailed ? (
-                    <span>
-                      Couldn’t check GitHub Apps. Reopen this dialog to try
-                      again.
-                    </span>
-                  ) : (
-                    <span>
-                      GitHub user connections need an organization GitHub App
-                      first. Choose GitHub App, add its OAuth client ID, then
-                      save and connect its private key and client secret. Each
-                      user can then connect their GitHub account once for all
-                      agents.
-                    </span>
-                  )}
-                </FormDescription>
-              )}
-              {field.value === "github_app" && (
+              {!definition &&
+                initialKind !== "github_app" &&
+                githubApps.length === 0 && (
+                  <FormDescription>
+                    {loadingCredentials ? (
+                      <span>Checking available GitHub Apps…</span>
+                    ) : credentialsFailed ? (
+                      <span>
+                        Couldn’t check GitHub Apps. Reopen this dialog to try
+                        again.
+                      </span>
+                    ) : (
+                      <span>
+                        GitHub user connections need an organization GitHub App
+                        first. Choose GitHub App, add its OAuth client ID, then
+                        save and connect its private key and client secret. Each
+                        user can then connect their GitHub account once for all
+                        agents.
+                      </span>
+                    )}
+                  </FormDescription>
+                )}
+              {field.value === "github_app" && initialKind !== "github_app" && (
                 <FormDescription>
                   Add the app details below, then connect its private key after
                   saving. Integrations use an installation token; the private
@@ -322,7 +338,11 @@ export function RuntimeCredentialDefinitionDialog({
           )}
         />
         {form.watch("kind") === "github_app" && (
-          <div className="space-y-4">
+          <div
+            className={
+              size === "medium" ? "grid grid-cols-2 gap-4" : "space-y-4"
+            }
+          >
             {(
               [
                 "githubUrl",
@@ -336,7 +356,14 @@ export function RuntimeCredentialDefinitionDialog({
                 control={form.control}
                 name={name}
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem
+                    className={
+                      size === "medium" &&
+                      (name === "githubUrl" || name === "githubClientId")
+                        ? "col-span-2"
+                        : undefined
+                    }
+                  >
                     <FormLabel>
                       {name === "githubUrl"
                         ? "GitHub API URL"
@@ -386,49 +413,50 @@ export function RuntimeCredentialDefinitionDialog({
             )}
           />
         )}
-        {!definition && (
-          <FormField
-            control={form.control}
-            name="scope"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Provided by</FormLabel>
-                {form.watch("kind") === "github_app" && (
-                  <FormDescription>
-                    GitHub Apps use an organization-managed installation and
-                    private key.
-                  </FormDescription>
-                )}
-                <Select
-                  value={field.value}
-                  onValueChange={field.onChange}
-                  disabled={form.watch("kind") !== "secret"}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent position="popper">
-                    <SelectItem
-                      value="personal"
-                      description="Each person connects a private value for runs they start."
-                    >
-                      Each user
-                    </SelectItem>
-                    <SelectItem
-                      value="organization"
-                      description="Admins connect one value used by everyone in the organization."
-                    >
-                      The organization
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
+        {!definition &&
+          (!hideProvidedBy || form.watch("kind") !== "github_app") && (
+            <FormField
+              control={form.control}
+              name="scope"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Provided by</FormLabel>
+                  {form.watch("kind") === "github_app" && (
+                    <FormDescription>
+                      GitHub Apps use an organization-managed installation and
+                      private key.
+                    </FormDescription>
+                  )}
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={form.watch("kind") !== "secret"}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent position="popper">
+                      <SelectItem
+                        value="personal"
+                        description="Each person connects a private value for runs they start."
+                      >
+                        Each user
+                      </SelectItem>
+                      <SelectItem
+                        value="organization"
+                        description="Admins connect one value used by everyone in the organization."
+                      >
+                        The organization
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
       </Form>
     </StandardFormDialog>
   );

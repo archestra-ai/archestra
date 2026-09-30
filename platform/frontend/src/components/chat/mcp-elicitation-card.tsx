@@ -525,13 +525,17 @@ export function McpElicitationCard({
           : questionMessageId(activeQuestion.request.id)
       }
       className={cn(
-        "not-prose relative mb-4 overflow-hidden rounded-lg",
+        "not-prose relative mb-4 w-full overflow-hidden rounded-lg",
         allMembersSettled
-          ? "w-fit max-w-full"
-          : "w-full border border-border/60 bg-card shadow-sm",
-        isMultiple || activeQuestion?.request.kind === "openappa_review"
-          ? "max-w-4xl"
-          : "max-w-2xl",
+          ? "max-w-2xl"
+          : "border border-border/60 bg-card shadow-sm",
+        !allMembersSettled &&
+          (isMultiple || activeQuestion?.request.kind === "openappa_review") &&
+          "max-w-4xl",
+        !allMembersSettled &&
+          !isMultiple &&
+          activeQuestion?.request.kind !== "openappa_review" &&
+          "max-w-2xl",
       )}
       onPointerDown={() => {
         lastInputRef.current = "pointer";

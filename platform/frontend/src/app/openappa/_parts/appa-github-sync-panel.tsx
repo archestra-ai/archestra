@@ -38,6 +38,7 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
+import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
   useConfigureAppaGithubSync,
@@ -409,6 +410,8 @@ export function OpenAppaCreateRepositoryDialog({
           definition={null}
           initialKind="github_app"
           initialScope="organization"
+          initialValues={OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES}
+          hideProvidedBy
           backLabel="Back to repository"
           size="medium"
           onClose={() => setCredentialStep("repository")}
@@ -661,6 +664,8 @@ export function OpenAppaSourceForm({
           definition={null}
           initialKind="github_app"
           initialScope="organization"
+          initialValues={OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES}
+          hideProvidedBy
           backLabel="Back to GitHub sync"
           size="medium"
           onClose={() => setCredentialStep("source")}

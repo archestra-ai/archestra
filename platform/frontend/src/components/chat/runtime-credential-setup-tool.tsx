@@ -6,6 +6,7 @@ import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credenti
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 
 /** The same credential forms used in Settings, mounted in the chat tool result. */
@@ -33,7 +34,7 @@ export function RuntimeCredentialSetupTool({
 
   return (
     <>
-      <InlineNotice variant="neutral" className="my-2 max-w-2xl">
+      <InlineNotice variant="neutral" className="my-2 w-full max-w-2xl">
         <GithubIcon aria-hidden />
         <span className="font-medium">GitHub sync</span>
         <InlineNoticeText>
@@ -53,6 +54,9 @@ export function RuntimeCredentialSetupTool({
           definition={null}
           initialKind="github_app"
           initialScope="organization"
+          initialValues={OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES}
+          hideProvidedBy
+          size="medium"
           onClose={() => setStep("closed")}
           onCreated={(id) => {
             setNewId(id);

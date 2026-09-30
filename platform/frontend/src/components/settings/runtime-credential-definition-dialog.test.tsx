@@ -111,3 +111,62 @@ it("enables a personal connection after an organization OAuth App is connected",
     screen.getByRole("combobox", { name: "Organization GitHub App" }),
   ).toBeInTheDocument();
 });
+
+it("creates the guided OpenAPPA GitHub App with its organization identity", async () => {
+  server.use(
+    http.get("http://localhost:9000/api/credentials", () =>
+      HttpResponse.json([]),
+    ),
+    http.post("http://localhost:9000/api/credentials", async ({ request }) => {
+      const body = await request.json();
+      expect(body).toMatchObject({
+        name: "OpenAPPA GitHub sync",
+        description:
+          "Creates the OpenAPPA policy repository and opens pull requests for policy changes.",
+        icon: "logo:openappa",
+        kind: "github_app",
+        allowOrganization: true,
+        allowPersonal: false,
+        appId: "123",
+        installationId: "456",
+      });
+      return HttpResponse.json({ id: "new-credential" });
+    }),
+  );
+  const onCreated = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RuntimeCredentialDefinitionDialog
+        definition={null}
+        initialKind="github_app"
+        initialScope="organization"
+        initialValues={{
+          name: "OpenAPPA GitHub sync",
+          description:
+            "Creates the OpenAPPA policy repository and opens pull requests for policy changes.",
+          icon: "logo:openappa",
+        }}
+        hideProvidedBy
+        size="medium"
+        onClose={() => {}}
+        onCreated={onCreated}
+      />
+    </QueryClientProvider>,
+  );
+
+  expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+    "OpenAPPA GitHub sync",
+  );
+  expect(screen.queryByText("Provided by")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(/GitHub user connections need/),
+  ).not.toBeInTheDocument();
+  await user.type(screen.getByRole("textbox", { name: "App ID" }), "123");
+  await user.type(
+    screen.getByRole("textbox", { name: "Installation ID" }),
+    "456",
+  );
+  await user.click(screen.getByRole("button", { name: "Add" }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-credential"));
+});

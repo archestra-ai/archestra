@@ -104,7 +104,7 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
     change.effective.batteries.every((battery) => battery.status === "active");
   const active = healthy && change.enforcement?.enabled === true;
   return (
-    <div className="mt-4">
+    <div className="mt-4 w-full max-w-2xl">
       <InlineNotice variant={active ? "success" : "warning"}>
         {active ? <CheckCircle2 /> : <TriangleAlert />}
         <span className="font-medium">{`Saved revision ${change.revision}`}</span>

@@ -20,7 +20,7 @@ export function getBuiltInServiceIconPath(
 export function isBuiltInServiceIcon(
   icon: string | null | undefined,
 ): icon is string {
-  return getBuiltInServiceIconPath(icon) !== null;
+  return icon === "logo:openappa" || getBuiltInServiceIconPath(icon) !== null;
 }
 
 /**

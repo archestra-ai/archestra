@@ -49,6 +49,7 @@ import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import SecretModel from "./secret";
+import TaskModel from "./task";
 import ToolModel, { toolUiResourceUriSql } from "./tool";
 
 type CatalogListOptions = {
@@ -1080,6 +1081,29 @@ class InternalMcpCatalogModel {
           .update(schema.internalMcpCatalogTable)
           .set(values)
           .where(eq(schema.internalMcpCatalogTable.id, original.id));
+      }
+      const retiredSecretIds = Array.from(
+        new Set(
+          (["clientSecretId", "localConfigSecretId"] as const)
+            .filter(
+              (slot) =>
+                values[slot] !== undefined && values[slot] !== current[slot],
+            )
+            .flatMap((slot) => (current[slot] ? [current[slot]] : [])),
+        ),
+      );
+      if (retiredSecretIds.length > 0) {
+        // Readers can still be resolving a pre-publication snapshot. Retain
+        // old bags for a day, then recheck all owners before reclaiming them.
+        // Queue in this transaction so a crash cannot lose the retirement.
+        await TaskModel.create(
+          {
+            taskType: "mcp_catalog_secret_retirement",
+            payload: { secretIds: retiredSecretIds },
+            scheduledFor: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          },
+          tx,
+        );
       }
       return toolRenames;
     });

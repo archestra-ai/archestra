@@ -397,7 +397,8 @@ export function resolvePlaceholders(
   },
   envValues: Record<string, string>,
 ): string {
-  const parsed = parseDeploymentYamlTemplate(yamlString);
+  const plainScalarPaths = new Set<string>();
+  const parsed = parseDeploymentYamlTemplate(yamlString, plainScalarPaths);
   const errors = findUnsafePlaceholders({
     parsed,
     inputDefinitions: context.inputDefinitions,
@@ -427,6 +428,9 @@ export function resolvePlaceholders(
     service_account: context.serviceAccount || "default",
   };
 
+  const isCatalogOwned = catalogOwnedEnvironmentPredicate(
+    context.inputDefinitions,
+  );
   const resolved = mapYamlStrings(parsed, ({ value, path, isKey }) => {
     if (isKey) return value;
     // This documented placeholder represents the whole args sequence. Quoted
@@ -440,13 +444,38 @@ export function resolvePlaceholders(
       return [...(context.arguments ?? [])];
     }
     let expandedLength = value.length;
-    return value.replace(RESOLVABLE_PLACEHOLDER, (token, prefix, key) => {
-      const values = prefix === "env" ? envValues : archestraMap;
-      const replacement = Object.hasOwn(values, key) ? values[key] : "";
-      expandedLength += replacement.length - token.length;
-      assertYamlExpansionSize(0, expandedLength);
-      return replacement;
-    });
+    const expanded = value.replace(
+      RESOLVABLE_PLACEHOLDER,
+      (token, prefix, key) => {
+        const values = prefix === "env" ? envValues : archestraMap;
+        const replacement = Object.hasOwn(values, key) ? values[key] : "";
+        expandedLength += replacement.length - token.length;
+        assertYamlExpansionSize(0, expandedLength);
+        return replacement;
+      },
+    );
+    const placeholders = [...value.matchAll(RESOLVABLE_PLACEHOLDER)];
+    if (
+      plainScalarPaths.has(JSON.stringify(path)) &&
+      placeholders.length > 0 &&
+      placeholders.every(
+        ([, prefix, key]) => prefix === "env" && isCatalogOwned(key),
+      ) &&
+      /^[\w.+~-]*$/.test(expanded.trim())
+    ) {
+      // Only primitive spellings reach the YAML parser: never collections,
+      // aliases, tags or newlines supplied by a placeholder value.
+      const scalar = expanded.trim()
+        ? yaml.load(expanded.trim(), { schema: yaml.JSON_SCHEMA })
+        : null;
+      if (
+        scalar === null ||
+        typeof scalar === "number" ||
+        typeof scalar === "boolean"
+      )
+        return scalar;
+    }
+    return expanded;
   });
 
   // Note: secret placeholders are not resolved here - they remain as secretKeyRef in the YAML
@@ -521,7 +550,10 @@ function findUnsafePlaceholders({
 }
 
 /** Normalize template syntax only; supplied values are inserted after parsing. */
-function parseDeploymentYamlTemplate(source: string): unknown {
+function parseDeploymentYamlTemplate(
+  source: string,
+  plainScalarPaths?: Set<string>,
+): unknown {
   const prefix = `ARCHESTRA_TEMPLATE_${randomUUID().replaceAll("-", "")}_`;
   const placeholders: string[] = [];
   const tokenized = source.replace(
@@ -531,12 +563,36 @@ function parseDeploymentYamlTemplate(source: string): unknown {
       return `${prefix}${index}_END`;
     },
   );
-  const parsed: unknown = yaml.load(tokenized);
+  const plainScalars = new Set<string>();
+  const schema = plainScalarPaths
+    ? yaml.DEFAULT_SCHEMA.extend({
+        implicit: [
+          new yaml.Type("!archestra-template", {
+            kind: "scalar",
+            resolve(value: unknown) {
+              // Implicit resolvers run only for plain scalars. Each template
+              // occurrence has its own token, so quoted twins stay distinct.
+              if (typeof value === "string" && value.includes(prefix)) {
+                plainScalars.add(value);
+              }
+              return false;
+            },
+          }),
+        ],
+      })
+    : yaml.DEFAULT_SCHEMA;
+  const parsed: unknown = yaml.load(tokenized, { schema });
   if (placeholders.length === 0) return parsed;
   const tokenPattern = new RegExp(`${prefix}(\\d+)_END`, "g");
-  return mapYamlStrings(parsed, ({ value }) =>
-    value.replace(tokenPattern, (_token, index) => placeholders[Number(index)]),
-  );
+  return mapYamlStrings(parsed, ({ value, path, isKey }) => {
+    if (!isKey && plainScalars.has(value)) {
+      plainScalarPaths?.add(JSON.stringify(path));
+    }
+    return value.replace(
+      tokenPattern,
+      (_token, index) => placeholders[Number(index)],
+    );
+  });
 }
 
 /** Follow the same catalog and connection-field precedence as runtime inputs. */
@@ -601,7 +657,7 @@ function mapYamlStrings(
     value: string;
     path: string[];
     isKey: boolean;
-  }) => string | string[],
+  }) => string | string[] | number | boolean | null,
 ): unknown {
   const ancestors = new Set<object>();
   let nodes = 0;
@@ -618,7 +674,7 @@ function mapYamlStrings(
       spend(transformed.length, 0);
       for (const entry of transformed) spend(0, entry.length);
     } else {
-      spend(0, transformed.length);
+      spend(0, String(transformed).length);
     }
     return transformed;
   }

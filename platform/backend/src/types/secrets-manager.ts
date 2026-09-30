@@ -9,6 +9,8 @@ import type { SecretValue, SelectSecret } from "./secret";
 export const SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE =
   "secrets_manager_unavailable";
 
+export type SecretDeletionOptions = { onlyIfUnreferenced?: boolean };
+
 /**
  * SecretManager interface for managing secrets
  * Can be implemented for different secret storage backends (database, AWS Secrets Manager, etc.)
@@ -36,7 +38,10 @@ export interface ISecretManager {
    * @param secretId - The unique identifier of the secret
    * @returns True if deletion was successful, false otherwise
    */
-  deleteSecret(secretId: string): Promise<boolean>;
+  deleteSecret(
+    secretId: string,
+    options?: SecretDeletionOptions,
+  ): Promise<boolean>;
 
   /**
    * Remove a secret by ID (alias for deleteSecret)

@@ -1,13 +1,191 @@
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import {
   CatalogSecretStaging,
   extractLocalConfigSecrets,
 } from "@/services/mcp-catalog-secrets";
+import { handleMcpCatalogSecretRetirement } from "@/task-queue/handlers/mcp-catalog-secret-retirement-handler";
 import { expect, test } from "@/test";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
+import TaskModel from "./task";
+
+test("publication retires both replaced bags after the snapshot grace period", async ({
+  makeInternalMcpCatalog,
+}) => {
+  const originalLocal = await secretManager().createSecret(
+    { TOKEN: "old-token" },
+    "old-local",
+  );
+  const originalClient = await secretManager().createSecret(
+    { client_secret: "old-client" },
+    "old-client",
+  );
+  const replacementLocal = await secretManager().createSecret(
+    { TOKEN: "new-token" },
+    "new-local",
+  );
+  const replacementClient = await secretManager().createSecret(
+    { client_secret: "new-client" },
+    "new-client",
+  );
+  const catalog = await makeInternalMcpCatalog();
+  await InternalMcpCatalogModel.update(catalog.id, {
+    localConfigSecretId: originalLocal.id,
+    clientSecretId: originalClient.id,
+  });
+  const original = await InternalMcpCatalogModel.findById(catalog.id, {
+    expandSecrets: false,
+  });
+  if (!original) throw new Error("Missing fixture");
+  const beforePublication = Date.now();
+  await InternalMcpCatalogModel.publishReviewed({
+    original,
+    updates: {
+      localConfigSecretId: replacementLocal.id,
+      clientSecretId: replacementClient.id,
+    },
+  });
+  const tasks = await db
+    .select()
+    .from(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "mcp_catalog_secret_retirement"));
+  expect(tasks).toHaveLength(1);
+  expect(tasks[0].payload).toEqual({
+    secretIds: [originalClient.id, originalLocal.id],
+  });
+  expect(tasks[0].scheduledFor.getTime()).toBeGreaterThanOrEqual(
+    beforePublication + 24 * 60 * 60 * 1000,
+  );
+  // A reader may still be resolving a snapshot captured before publication.
+  expect((await SecretModel.findById(originalLocal.id))?.secret).toEqual(
+    originalLocal.secret,
+  );
+  expect((await SecretModel.findById(originalClient.id))?.secret).toEqual(
+    originalClient.secret,
+  );
+  expect(await TaskModel.dequeue(["mcp_catalog_secret_retirement"])).toBeNull();
+  await db
+    .update(schema.tasksTable)
+    .set({ scheduledFor: new Date(Date.now() - 1000) })
+    .where(eq(schema.tasksTable.id, tasks[0].id));
+  const due = await TaskModel.dequeue(["mcp_catalog_secret_retirement"]);
+  if (!due) throw new Error("Missing due retirement");
+  await handleMcpCatalogSecretRetirement(due.payload);
+  expect(await SecretModel.findById(originalLocal.id)).toBeNull();
+  expect(await SecretModel.findById(originalClient.id)).toBeNull();
+  expect(await secretManager().getSecret(originalLocal.id)).toBeNull();
+  expect((await SecretModel.findById(replacementLocal.id))?.secret).toEqual(
+    replacementLocal.secret,
+  );
+  expect((await SecretModel.findById(replacementClient.id))?.secret).toEqual(
+    replacementClient.secret,
+  );
+});
+
+test("late staging cleanup preserves a published bag retired by a concurrent edit", async ({
+  makeInternalMcpCatalog,
+}) => {
+  const staging = new CatalogSecretStaging();
+  const bag = await staging.createSecret(
+    { TOKEN: "published-then-replaced" },
+    "concurrent-bag",
+  );
+  const catalog = await makeInternalMcpCatalog({ localConfigSecretId: bag.id });
+  const original = await InternalMcpCatalogModel.findById(catalog.id, {
+    expandSecrets: false,
+  });
+  if (!original) throw new Error("Missing fixture");
+  await InternalMcpCatalogModel.publishReviewed({
+    original,
+    updates: { localConfigSecretId: null },
+  });
+  await staging.publish();
+  await staging.dispose();
+  expect((await SecretModel.findById(bag.id))?.secret).toEqual(bag.secret);
+});
+
+test("removing a shared bag schedules it once while failed publication schedules nothing", async ({
+  makeInternalMcpCatalog,
+}) => {
+  const bag = await secretManager().createSecret(
+    { TOKEN: "old-token" },
+    "old-local",
+  );
+  const catalog = await makeInternalMcpCatalog({ localConfigSecretId: bag.id });
+  await InternalMcpCatalogModel.update(catalog.id, { clientSecretId: bag.id });
+  const original = await InternalMcpCatalogModel.findById(catalog.id, {
+    expandSecrets: false,
+  });
+  if (!original) throw new Error("Missing fixture");
+  await expect(
+    InternalMcpCatalogModel.publishReviewed({
+      original,
+      updates: {
+        clientSecretId: null,
+        localConfigSecretId: null,
+        environmentId: crypto.randomUUID(),
+      },
+    }),
+  ).rejects.toThrow();
+  expect(
+    await db
+      .select()
+      .from(schema.tasksTable)
+      .where(eq(schema.tasksTable.taskType, "mcp_catalog_secret_retirement")),
+  ).toEqual([]);
+  expect(
+    (
+      await InternalMcpCatalogModel.findById(catalog.id, {
+        expandSecrets: false,
+      })
+    )?.localConfigSecretId,
+  ).toBe(bag.id);
+  await InternalMcpCatalogModel.publishReviewed({
+    original,
+    updates: { clientSecretId: null, localConfigSecretId: null },
+  });
+  const tasks = await db
+    .select()
+    .from(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "mcp_catalog_secret_retirement"));
+  expect(tasks).toHaveLength(1);
+  expect(tasks[0].payload).toEqual({ secretIds: [bag.id] });
+});
+
+test.for([
+  { owner: "clientSecretId", deleted: false },
+  { owner: "localConfigSecretId", deleted: true },
+  { owner: "presetSecretId", deleted: true },
+  { owner: "installation", deleted: false },
+  { owner: "installation", deleted: true },
+] as const)("retirement retains a $owner reference (soft-deleted: $deleted)", async ({
+  owner,
+  deleted,
+}, { makeInternalMcpCatalog, makeMcpServer }) => {
+  const bag = await secretManager().createSecret(
+    { TOKEN: "still-owned" },
+    "shared-bag",
+  );
+  const catalog = await makeInternalMcpCatalog();
+  if (owner === "installation") {
+    await makeMcpServer({
+      catalogId: catalog.id,
+      secretId: bag.id,
+      deletedAt: deleted ? new Date() : null,
+    });
+  } else {
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({ [owner]: bag.id, deletedAt: deleted ? new Date() : null })
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+  }
+  await handleMcpCatalogSecretRetirement({ secretIds: [bag.id] });
+  expect((await SecretModel.findById(bag.id))?.secret).toEqual(bag.secret);
+});
 
 test("stale ordinary authoring cannot publish over newly privileged YAML or change its secret bag", async ({
   makeInternalMcpCatalog,

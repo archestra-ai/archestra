@@ -51,6 +51,127 @@ function resolved(source: string, input: string): k8s.V1Deployment {
 }
 
 describe("deployment YAML installation placeholders", () => {
+  test("preserves primitive types of unquoted catalog-owned placeholders", () => {
+    const source = [
+      "apiVersion: apps/v1",
+      "kind: Deployment",
+      "metadata: {}",
+      "spec:",
+      "  replicas: ${env.REPLICAS}",
+      "  template:",
+      "    spec:",
+      "      automountServiceAccountToken: ${env.MOUNT_TOKEN}",
+      "      securityContext: {runAsUser: ${env.USER_ID}, runAsGroup: ${env.GROUP_ID}, fsGroup: ${env.FS_GROUP}}",
+      "      containers:",
+      "        - name: mcp-server",
+      "          image: test:1",
+      "          ports: [{containerPort: ${env.PORT}}]",
+    ].join("\n");
+    const values = {
+      REPLICAS: "3",
+      MOUNT_TOKEN: "false",
+      PORT: "8080",
+      USER_ID: "null",
+      GROUP_ID: "~",
+      FS_GROUP: "",
+    };
+    const inputDefinitions = {
+      localConfig: {
+        environment: Object.entries(values).map(([key, value]) => ({
+          key,
+          value,
+          type: "plain_text" as const,
+          promptOnInstallation: false,
+        })),
+      },
+    };
+    expect(validateDeploymentYaml(source, inputDefinitions).valid).toBe(true);
+    expect(
+      yaml.load(
+        resolvePlaceholders(source, { ...context, inputDefinitions }, values),
+      ),
+    ).toMatchObject({
+      spec: {
+        replicas: 3,
+        template: {
+          spec: {
+            automountServiceAccountToken: false,
+            securityContext: {
+              runAsUser: null,
+              runAsGroup: null,
+              fsGroup: null,
+            },
+            containers: [{ ports: [{ containerPort: 8080 }] }],
+          },
+        },
+      },
+    });
+  });
+
+  test("keeps quoted, explicitly tagged and block catalog placeholders as strings", () => {
+    const source = `${template()}values:\n  plain: &number \${env.NUMBER}\n  alias: *number\n  single: '\${env.NUMBER}'\n  double: "\${env.NUMBER}"\n  tagged: !!str \${env.NUMBER}\n  block: |-\n    \${env.NUMBER}\n`;
+    const inputDefinitions = {
+      localConfig: {
+        environment: [
+          {
+            key: "NUMBER",
+            value: "3",
+            type: "plain_text" as const,
+            promptOnInstallation: false,
+          },
+        ],
+      },
+    };
+    expect(
+      yaml.load(
+        resolvePlaceholders(
+          source,
+          { ...context, inputDefinitions },
+          { NUMBER: "3" },
+        ),
+      ),
+    ).toMatchObject({
+      values: {
+        plain: 3,
+        alias: 3,
+        single: "3",
+        double: "3",
+        tagged: "3",
+        block: "3",
+      },
+    });
+  });
+
+  test.each([
+    "[1, 2]",
+    "!!bool false",
+    "*alias",
+    "3\ninjected: true",
+  ])("does not interpret catalog placeholder data as YAML structure: %s", (value) => {
+    const source = `${template()}value: \${env.VALUE}\n`;
+    const inputDefinitions = {
+      localConfig: {
+        environment: [
+          {
+            key: "VALUE",
+            value,
+            type: "plain_text" as const,
+            promptOnInstallation: false,
+          },
+        ],
+      },
+    };
+    const output = yaml.load(
+      resolvePlaceholders(
+        source,
+        { ...context, inputDefinitions },
+        { VALUE: value },
+      ),
+    );
+    expect(output).toHaveProperty("value", value);
+    expect(output).not.toHaveProperty("injected");
+  });
+
   test("a generated template keeps multiline input inside its environment value", () => {
     const source = generateDeploymentYamlTemplate({
       ...context,

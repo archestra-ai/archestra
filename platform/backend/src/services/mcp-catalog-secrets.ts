@@ -29,9 +29,7 @@ export class CatalogSecretStaging {
       try {
         // A commit may have succeeded before its response failed. Never erase
         // a bag already referenced by a published catalog in that case.
-        if (!(await SecretModel.isReferencedByMcpCatalog(id))) {
-          await secretManager().deleteSecret(id);
-        }
+        await secretManager().deleteSecret(id, { onlyIfUnreferenced: true });
       } catch (error) {
         logger.warn(
           { err: error, secretId: id },

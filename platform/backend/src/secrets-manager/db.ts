@@ -3,6 +3,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import SecretModel from "@/models/secret";
 import type {
   ISecretManager,
+  SecretDeletionOptions,
   SecretsConnectivityResult,
   SecretValue,
   SelectSecret,
@@ -33,7 +34,15 @@ export class DbSecretsManager implements ISecretManager {
     return secret;
   }
 
-  async deleteSecret(secid: string): Promise<boolean> {
+  async deleteSecret(
+    secid: string,
+    options?: SecretDeletionOptions,
+  ): Promise<boolean> {
+    if (options?.onlyIfUnreferenced) {
+      const deleted = await SecretModel.deleteIfUnreferenced({ id: secid });
+      if (deleted) this.secretsCache.delete(secid);
+      return deleted;
+    }
     this.secretsCache.delete(secid);
     return await SecretModel.delete(secid);
   }

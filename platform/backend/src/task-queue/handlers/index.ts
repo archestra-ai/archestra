@@ -17,6 +17,7 @@ import { handleContentEncryptionBackfill } from "./content-encryption-backfill-h
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, gated at boot by the retention license gate
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
+import { handleMcpCatalogSecretRetirement } from "./mcp-catalog-secret-retirement-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
 import { handlePermissionSync } from "./permission-sync-handler";
 import { handlePluginGithubSync } from "./plugin-github-sync-handler";
@@ -46,6 +47,10 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   );
   taskQueueService.registerHandler("p4_shim_reconcile", handleP4ShimReconcile);
   taskQueueService.registerHandler("audit_log_cleanup", handleAuditLogCleanup);
+  taskQueueService.registerHandler(
+    "mcp_catalog_secret_retirement",
+    handleMcpCatalogSecretRetirement,
+  );
   taskQueueService.registerHandler(
     "kb_bm25_stats_refresh",
     handleKbBm25StatsRefresh,

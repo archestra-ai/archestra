@@ -5,6 +5,7 @@ import {
   ApiError,
   type ISecretManager,
   SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+  type SecretDeletionOptions,
   type SecretsConnectivityResult,
   type SecretValue,
   type SelectSecret,
@@ -125,25 +126,22 @@ export default class VaultSecretManager
     };
   }
 
-  async deleteSecret(secid: string): Promise<boolean> {
+  async deleteSecret(
+    secid: string,
+    options?: SecretDeletionOptions,
+  ): Promise<boolean> {
+    if (options?.onlyIfUnreferenced) {
+      return SecretModel.deleteIfUnreferenced({
+        id: secid,
+        deleteExternal: (secret) => this.deleteExternalSecret(secret),
+      });
+    }
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
       return false;
     }
 
-    if (dbRecord.isVault) {
-      const deletePath = this.getVaultMetadataPath(dbRecord.name, secid);
-      try {
-        await this.deleteAtPath(deletePath);
-        logger.info(
-          { deletePath, kvVersion: this.config.kvVersion },
-          `VaultSecretManager.deleteSecret: secret ${this.config.kvVersion === "1" ? "deleted" : "permanently deleted"}`,
-        );
-      } catch (error) {
-        this.handleVaultError(error, "deleteSecret", { deletePath });
-      }
-    }
-
+    await this.deleteExternalSecret(dbRecord);
     return await SecretModel.delete(secid);
   }
 
@@ -260,6 +258,23 @@ export default class VaultSecretManager
   // ============================================================
   // Private methods
   // ============================================================
+
+  private async deleteExternalSecret(
+    dbRecord: Pick<SelectSecret, "id" | "name" | "isVault">,
+  ): Promise<void> {
+    if (dbRecord.isVault) {
+      const deletePath = this.getVaultMetadataPath(dbRecord.name, dbRecord.id);
+      try {
+        await this.deleteAtPath(deletePath);
+        logger.info(
+          { deletePath, kvVersion: this.config.kvVersion },
+          `VaultSecretManager.deleteSecret: secret ${this.config.kvVersion === "1" ? "deleted" : "permanently deleted"}`,
+        );
+      } catch (error) {
+        this.handleVaultError(error, "deleteSecret", { deletePath });
+      }
+    }
+  }
 
   private getVaultPath(name: string, id: string): string {
     const basePath = this.config.secretPath;

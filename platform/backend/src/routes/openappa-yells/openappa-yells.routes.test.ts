@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { ADMIN_ROLE_NAME, RouteId } from "@archestra/shared";
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { eq } from "drizzle-orm";
@@ -67,6 +68,37 @@ describe("OpenAPPA yells", () => {
       withTrajectory: false,
       ...overrides,
     });
+
+  test("downloads identical gzip bytes and keeps archives out of metadata", async () => {
+    const yell = await record("Diagnostic report");
+    const archive = gzipSync(JSON.stringify({ message: "A tool was blocked" }));
+    expect(
+      (await app.inject({ url: `/api/openappa/yells/${yell.id}/archive` }))
+        .statusCode,
+    ).toBe(404);
+    await OpenAppaYellModel.storeArchive({
+      id: yell.id,
+      organizationId,
+      archive,
+    });
+    const result = await app.inject({
+      url: `/api/openappa/yells/${yell.id}/archive`,
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.rawPayload).toEqual(archive);
+    expect(result.headers["content-type"]).toBe("application/gzip");
+    expect(result.headers["content-disposition"]).toContain(
+      `openappa-yell-${yell.id}.json.gz`,
+    );
+    const metadata = (
+      await app.inject({ url: `/api/openappa/yells/${yell.id}` })
+    ).json();
+    expect(metadata.hasArchive).toBe(true);
+    expect(metadata).not.toHaveProperty("archive");
+    expect(
+      (await app.inject({ url: "/api/openappa/yells" })).json().data[0],
+    ).not.toHaveProperty("archive");
+  });
 
   test("lists and counts only the active organization's reports and paginates search", async ({
     makeOrganization,
@@ -152,9 +184,18 @@ describe("OpenAPPA yells", () => {
       permission: { log: ["read"] },
     });
     const other = await record("Private report");
+    await OpenAppaYellModel.storeArchive({
+      id: other.id,
+      organizationId,
+      archive: gzipSync("private"),
+    });
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });
     const own = await record("Own report");
+    expect(
+      (await app.inject({ url: `/api/openappa/yells/${other.id}/archive` }))
+        .statusCode,
+    ).toBe(404);
     const list = await app.inject({ url: "/api/openappa/yells" });
     expect(list.statusCode).toBe(200);
     expect(list.json().data.map((row: { id: string }) => row.id)).toEqual([
@@ -200,6 +241,15 @@ describe("OpenAPPA yells", () => {
     const yell = await record("Other organization", {
       organizationId: (await makeOrganization()).id,
     });
+    await OpenAppaYellModel.storeArchive({
+      id: yell.id,
+      organizationId: yell.organizationId,
+      archive: gzipSync("private"),
+    });
+    expect(
+      (await app.inject({ url: `/api/openappa/yells/${yell.id}/archive` }))
+        .statusCode,
+    ).toBe(404);
     expect(
       (await app.inject({ url: `/api/openappa/yells/${yell.id}` })).statusCode,
     ).toBe(404);

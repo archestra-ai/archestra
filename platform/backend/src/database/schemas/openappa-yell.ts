@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   index,
   pgTable,
   text,
@@ -8,6 +9,10 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
+
+const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
+  dataType: () => "bytea",
+});
 
 export const openappaYellsTable = pgTable(
   "openappa_yells",
@@ -19,6 +24,7 @@ export const openappaYellsTable = pgTable(
     callerId: text("caller_id").notNull(),
     sessionId: text("session_id").notNull(),
     toolCallId: text("tool_call_id").notNull(),
+    archive: bytea("archive"),
     message: text("message").notNull(),
     withTrajectory: boolean("with_trajectory").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })

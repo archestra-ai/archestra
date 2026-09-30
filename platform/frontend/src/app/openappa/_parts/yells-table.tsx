@@ -4,11 +4,12 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Check,
   Clock3,
+  Download,
   Megaphone,
   MessageCircle,
   RotateCcw,
-  Send,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   CollectionFilters,
@@ -24,20 +25,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogDescription } from "@/components/ui/dialog";
-
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   type OpenAppaYell,
+  useOpenAppaYellArchive,
   useOpenAppaYells,
   useResolveOpenAppaYell,
 } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import {
-  OpenAppaChatButton,
-  useOpenAppaChatLaunch,
-} from "./openappa-chat-button";
+import { useOpenAppaChatLaunch } from "./openappa-chat-button";
 
 export function YellsTable() {
   const [search, setSearch] = useState("");
@@ -64,6 +63,7 @@ export function YellsTable() {
     !!canRead,
   );
   const resolve = useResolveOpenAppaYell();
+  const archive = useOpenAppaYellArchive();
   const clearFilters = () => {
     setSearch("");
     setStatus("unresolved");
@@ -264,75 +264,88 @@ export function YellsTable() {
           bodyClassName="space-y-4"
           footer={
             <>
-              <YellChatAction id={selected.id} primary />
-              {canResolve && (
+              {selected.hasArchive && (
                 <Button
-                  size="sm"
                   variant="outline"
-                  disabled={resolve.isPending}
+                  size="sm"
+                  disabled={archive.isPending}
                   onClick={() =>
-                    resolve.mutate(
-                      { id: selected.id, resolved: !selected.resolvedAt },
-                      {
-                        onSuccess: (row) => {
-                          if (row) setSelected(row);
-                        },
-                      },
-                    )
+                    archive.mutate({ id: selected.id, download: true })
                   }
                 >
-                  {selected.resolvedAt ? <RotateCcw /> : <Check />}
-                  <span>
-                    {selected.resolvedAt ? "Reopen" : "Mark resolved"}
-                  </span>
+                  <Download />
+                  <span>Download report</span>
                 </Button>
               )}
+              <YellChatAction yell={selected} primary />
             </>
           }
         >
           <DialogDescription className="sr-only">
-            Review the reported issue, investigate it in chat, or update its
-            resolution status.
+            Review the reported issue, investigate it in chat, or download its
+            diagnostic report.
           </DialogDescription>
           <div className="rounded-md border bg-muted/30 p-3">
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
               {selected.message}
             </p>
           </div>
-          {(selected.reportFailed || selected.reportedAt) && (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Send className="size-3.5 shrink-0" />
-              <span>
-                {selected.reportFailed
-                  ? "Could not send to OpenAPPA developers. This report is saved here."
-                  : "Sent to OpenAPPA developers"}
-              </span>
-            </p>
-          )}
         </StandardDialog>
       )}
     </div>
   );
 }
 
+function useYellInvestigation(yell: OpenAppaYell) {
+  const router = useRouter();
+  const { href, agents } = useOpenAppaChatLaunch({
+    promptKey: "explainPolicy",
+    yellId: yell.id,
+  });
+  const archive = useOpenAppaYellArchive();
+  return {
+    disabled: archive.isPending || (!href && !agents.isError),
+    launch: () => {
+      if (!href) {
+        void agents.refetch();
+        return;
+      }
+      if (!yell.hasArchive) {
+        router.push(href);
+        return;
+      }
+      archive.mutate(
+        { id: yell.id },
+        {
+          onSuccess: (file) => {
+            if (!file) return;
+            setPendingChatHandoffFiles([file]);
+            router.push(`${href}&attachments=1`);
+          },
+        },
+      );
+    },
+  };
+}
+
 function YellChatAction({
-  id,
+  yell,
   primary = false,
 }: {
-  id: string;
+  yell: OpenAppaYell;
   primary?: boolean;
 }) {
+  const investigation = useYellInvestigation(yell);
   return (
-    <OpenAppaChatButton
-      promptKey="explainPolicy"
-      yellId={id}
+    <Button
       variant={primary ? "default" : "outline"}
       size="sm"
-      aria-label="Investigate in chat"
+      disabled={investigation.disabled}
+      onClick={investigation.launch}
     >
       <MessageCircle />
       <span>Investigate in chat</span>
-    </OpenAppaChatButton>
+    </Button>
   );
 }
 
@@ -347,25 +360,16 @@ function YellRowActions({
   pending: boolean;
   onResolve: () => void;
 }) {
-  const { href, agents } = useOpenAppaChatLaunch({
-    promptKey: "explainPolicy",
-    yellId: yell.id,
-  });
+  const investigation = useYellInvestigation(yell);
+  const archive = useOpenAppaYellArchive();
   return (
     <TableRowActions
       actions={[
         {
           icon: <MessageCircle className="size-4" />,
           label: "Investigate in chat",
-          href: href ?? undefined,
-          disabled: !href && !agents.isError,
-          disabledTooltip: "OpenAPPA Configuration Agent is unavailable",
-          tooltip: agents.isError
-            ? "Could not load the chat agent. Click to retry."
-            : undefined,
-          onClick: () => {
-            void agents.refetch();
-          },
+          disabled: investigation.disabled,
+          onClick: investigation.launch,
         },
         ...(canResolve
           ? [
@@ -378,6 +382,16 @@ function YellRowActions({
                 label: yell.resolvedAt ? "Reopen" : "Mark resolved",
                 disabled: pending,
                 onClick: onResolve,
+              },
+            ]
+          : []),
+        ...(yell.hasArchive
+          ? [
+              {
+                icon: <Download className="size-4" />,
+                label: "Download report",
+                disabled: archive.isPending,
+                onClick: () => archive.mutate({ id: yell.id, download: true }),
               },
             ]
           : []),

@@ -58,7 +58,7 @@ This tool takes no arguments.
 |------|-------------|--------------------------|
 | `get_openappa_yell` | Read a saved OpenAPPA report visible to the current user. | `log:read` |
 | `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | `toolPolicy:update` |
-| `yell` | Save confusing OpenAPPA blocks or remedies for review in the Guardrails Yells tab and report them to the OpenAPPA developers. | None (no additional RBAC permission required) |
+| `yell` | Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `toolPolicy:read` |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | `toolPolicy:read` |
 | `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is given. | `toolPolicy:read` |

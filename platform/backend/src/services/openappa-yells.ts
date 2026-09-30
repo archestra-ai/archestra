@@ -30,3 +30,17 @@ export async function getOpenAppaYell(params: {
   if (!row) throw new ApiError(404, "Yell not found");
   return row;
 }
+
+export async function downloadOpenAppaYell(params: {
+  organizationId: string;
+  userId: string;
+  id: string;
+}) {
+  const archive = await OpenAppaYellModel.findArchive({
+    ...(await yellVisibility(params)),
+    id: params.id,
+  });
+  if (!archive)
+    throw new ApiError(404, "Diagnostic archive not available for this yell");
+  return archive;
+}

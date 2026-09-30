@@ -108,9 +108,11 @@ curl http://localhost:9000/v1/chat/completions \
 
 ## Yells
 
-Yells report confusing blocks or remedies. Archestra saves new reports locally before attempting external delivery. Existing OpenAPPA reporting to Slack continues.
+Yells report confusing blocks or remedies. Archestra saves each report and its compressed diagnostic archive locally. When analytics is enabled, reports also go to the shared OpenAPPA reporting service. Set `ARCHESTRA_ANALYTICS=disabled` to keep reports in your deployment.
 
-The overview counts unresolved reports. You can search reports and investigate them with the configuration agent. Opening a chat leaves the report unresolved. Mark it resolved after verifying the fix; you can reopen it later.
+Archestra also saves a local diagnostic when a blocked client cannot receive a remedy. These automatic reports stay in your deployment.
+
+The overview counts unresolved reports. You can search reports, download their diagnostic archive, and investigate them with the configuration agent. **Investigate in chat** attaches the archive to a new chat, where the agent can read its diagnostic contents. Opening a chat leaves the report unresolved. Mark it resolved after verifying the fix; you can reopen it later.
 
 Existing reports sent before native storage was enabled are not imported.
 

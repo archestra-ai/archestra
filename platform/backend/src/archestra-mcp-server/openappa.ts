@@ -140,7 +140,7 @@ const registry = defineArchestraTools([
     shortName: "yell",
     title: "Report OpenAPPA feedback",
     description:
-      "Save confusing OpenAPPA blocks or remedies for review in the Guardrails Yells tab and report them to the OpenAPPA developers. Sends your message and filtered policy diagnostics to the shared OpenAPPA reporting service (GCS and Slack). with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: do not include secrets, personal data, or task content. This does not change policy or grant permission.",
+      "Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: do not include secrets, personal data, or task content. This does not change policy or grant permission.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
       const id = context.sessionId ?? context.conversationId;

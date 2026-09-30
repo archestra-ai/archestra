@@ -1778,7 +1778,7 @@ const RELAY_BROADCAST =
 const RELAY_UNKNOWN_RECIPIENT =
   "OpenAPPA cannot identify the agent this message is for, so it did not send the message. Send it to a teammate by the name the teammate started with.";
 const RELAY_UNCHECKED =
-  "OpenAPPA cannot check this teammate: it started while Guardrails enforcement was off, so OpenAPPA refuses its requests and did not send the message. To continue its work, start a new teammate with the Agent tool and give it the task; OpenAPPA checks that spawn.";
+  "OpenAPPA cannot check this teammate: it started while Guardrails enforcement was off, so OpenAPPA refuses its requests and did not send the message. To continue its work, start a new teammate with the Agent tool and give it the task. OpenAPPA checks that spawn.";
 const RELAY_UNGOVERNED =
   "OpenAPPA cannot tell which spawn started this agent, so it cannot check this message. The message was not sent.";
 const RELAY_RESHAPED_PROTOCOL =

@@ -268,7 +268,7 @@ export async function executeYell(params: {
         content: [
           {
             type: "text",
-            text: "Report saved in Archestra. You can download it or investigate it in chat from Guardrails → Yells.",
+            text: "Report saved. You can download it or investigate it in chat from Guardrails → Yells.",
           },
         ],
       };

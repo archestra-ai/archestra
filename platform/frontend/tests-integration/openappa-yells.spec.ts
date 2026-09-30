@@ -31,6 +31,7 @@ for (const width of [1280, 390]) {
         message:
           "Reading the project notes was blocked after opening a public page.",
         withTrajectory: true,
+        hasArchive: false,
         createdAt: "2026-09-30T12:00:00Z",
         reportedAt: "2026-09-30T12:00:01Z",
         reportFailed: false,
@@ -76,6 +77,16 @@ for (const width of [1280, 390]) {
         { method: "get", url: "/api/agents/all", body: [agent] },
         {
           method: "get",
+          url: `/api/chat/agents/${agent.id}/mcp-tools`,
+          body: [],
+        },
+        {
+          method: "get",
+          url: "/api/members/default-model",
+          body: { modelId: null, chatApiKeyId: null },
+        },
+        {
+          method: "get",
           url: "/api/openappa/yells",
           body: { data: [yell], pagination },
         },
@@ -115,7 +126,7 @@ for (const width of [1280, 390]) {
           }),
         )
         .toBe(true);
-      const action = page.getByRole("link", { name: "Investigate in chat" });
+      const action = page.getByRole("button", { name: "Investigate in chat" });
       await expect(action).toBeInViewport({ ratio: 1 });
       await mswControl.registerMany([
         {
@@ -176,17 +187,22 @@ for (const width of [1280, 390]) {
       await page.getByRole("button", { name: yell.message }).click();
       const dialog = page.getByRole("dialog", { name: /OpenAPPA yell/ });
       await expect(dialog.getByText(yell.message)).toBeVisible();
-      await dialog.getByRole("button", { name: "Mark resolved" }).click();
       await expect(
-        dialog.getByRole("button", { name: "Reopen" }),
-      ).toBeVisible();
-      const chat = dialog.getByRole("link", { name: "Investigate in chat" });
-      const href = await chat.getAttribute("href");
-      expect(href).toContain("openappa-configuration-agent");
-      expect(decodeURIComponent(href ?? "")).toContain(yell.id);
-      expect(decodeURIComponent(href ?? "")).not.toContain(yell.message);
+        dialog.getByRole("button", { name: /Mark resolved|Reopen/ }),
+      ).toHaveCount(0);
+      const chat = dialog.getByRole("button", { name: "Investigate in chat" });
       await expect(chat).toBeVisible();
       await expect(dialog).toBeInViewport();
+      await chat.click();
+      await expect(page).toHaveURL(
+        (url) =>
+          url.pathname === "/chat" &&
+          url.searchParams.get("agentId") === agent.id &&
+          (url.searchParams.get("user_prompt")?.includes(yell.id) ?? false) &&
+          !(
+            url.searchParams.get("user_prompt")?.includes(yell.message) ?? false
+          ),
+      );
     });
   });
 }

@@ -220,7 +220,7 @@ describe("APPA feature boundary", () => {
     expect(result.content).toEqual([
       {
         type: "text",
-        text: expect.stringContaining("Report saved in Archestra"),
+        text: expect.stringContaining("Report saved"),
       },
     ]);
     const saved = await OpenAppaYellModel.list({
@@ -378,7 +378,7 @@ describe("APPA feature boundary", () => {
     expect(result.content).toEqual([
       {
         type: "text",
-        text: expect.stringContaining("Report saved in Archestra"),
+        text: expect.stringContaining("Report saved"),
       },
     ]);
     const saved = await OpenAppaYellModel.list({

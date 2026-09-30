@@ -8382,7 +8382,7 @@ export const updateConnectionSettings = <ThrowOnError extends boolean = false>(o
 });
 
 /**
- * Customize the built-in integration catalogs: hide model providers, messaging channels, or knowledge connectors, and override how they are labelled. Omitted catalogs are left unchanged; null clears a catalog's overrides.
+ * Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or popular agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.
  *
  * Authentication:
  *

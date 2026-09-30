@@ -45792,6 +45792,7 @@ export type GetGuardrailsDeploymentResponses = {
      */
     200: {
         enabled: boolean;
+        unsupportedClientAction: 'bypass' | 'block';
         featureEnabled: boolean;
         active: boolean;
     };
@@ -45801,7 +45802,8 @@ export type GetGuardrailsDeploymentResponse = GetGuardrailsDeploymentResponses[k
 
 export type UpdateGuardrailsDeploymentData = {
     body: {
-        enabled: boolean;
+        enabled?: boolean;
+        unsupportedClientAction?: 'bypass' | 'block';
     };
     path?: never;
     query?: never;
@@ -45879,6 +45881,7 @@ export type UpdateGuardrailsDeploymentResponses = {
      */
     200: {
         enabled: boolean;
+        unsupportedClientAction: 'bypass' | 'block';
         featureEnabled: boolean;
         active: boolean;
     };
@@ -87570,6 +87573,11 @@ export type GetOrganizationResponses = {
                 hidden?: boolean;
             };
         } | null;
+        popularAgentOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -87890,6 +87898,11 @@ export type UpdateAppearanceSettingsResponses = {
                 hidden?: boolean;
             };
         } | null;
+        popularAgentOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -88093,6 +88106,11 @@ export type UpdateSecuritySettingsResponses = {
                 hidden?: boolean;
             };
         } | null;
+        popularAgentOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -88287,6 +88305,11 @@ export type UpdateMcpSettingsResponses = {
             };
         } | null;
         knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
+        popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
             };
@@ -88489,6 +88512,11 @@ export type UpdateSkillsSettingsResponses = {
                 hidden?: boolean;
             };
         } | null;
+        popularAgentOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -88684,6 +88712,11 @@ export type UpdateAgentSettingsResponses = {
             };
         } | null;
         knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
+        popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
             };
@@ -88902,6 +88935,11 @@ export type UpdateConnectionSettingsResponses = {
                 hidden?: boolean;
             };
         } | null;
+        popularAgentOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -88925,6 +88963,23 @@ export type UpdateConnectionSettingsResponse = UpdateConnectionSettingsResponses
 
 export type UpdateIntegrationSettingsData = {
     body: {
+        popularAgentOverrides?: {
+            'claude-code'?: {
+                hidden?: boolean;
+            };
+            codex?: {
+                hidden?: boolean;
+            };
+            opencode?: {
+                hidden?: boolean;
+            };
+            hermes?: {
+                hidden?: boolean;
+            };
+            openclaw?: {
+                hidden?: boolean;
+            };
+        } | null;
         modelProviderOverrides?: {
             [key: string]: {
                 hidden?: boolean;
@@ -89110,6 +89165,11 @@ export type UpdateIntegrationSettingsResponses = {
             };
         } | null;
         knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
+        popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
             };
@@ -89322,6 +89382,11 @@ export type UpdateDefaultEnvironmentResponses = {
                 hidden?: boolean;
             };
         } | null;
+        popularAgentOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -89521,6 +89586,11 @@ export type UpdateAuthSettingsResponses = {
             };
         } | null;
         knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
+        popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
             };
@@ -89730,6 +89800,11 @@ export type UpdateKnowledgeSettingsResponses = {
                 hidden?: boolean;
             };
         } | null;
+        popularAgentOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -89921,6 +89996,11 @@ export type DropEmbeddingConfigResponses = {
             };
         } | null;
         knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
+        popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
             };
@@ -90466,6 +90546,11 @@ export type CompleteOnboardingResponses = {
             };
         } | null;
         knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+            };
+        } | null;
+        popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
             };

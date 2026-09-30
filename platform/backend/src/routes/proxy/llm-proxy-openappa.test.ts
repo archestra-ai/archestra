@@ -960,10 +960,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ),
     );
 
-  test("governs a client that sends no session header", async () => {
-    // Every client the Connect page configures is one of these: it has no way
-    // to know about OpenAPPA, and refusing it took the whole deployment down.
-    // The wire adapter reads the session off the request instead.
+  test("bypasses Guardrails v2 for an unsupported client by default", async () => {
     const response = await app.inject({
       method: "POST",
       url: url(),
@@ -974,10 +971,85 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     expect(providerRequests).toHaveLength(1);
-    // Still governed, not waved through: the runtime saw the session open and
-    // the call evaluated.
-    expect(events).toContainEqual(
-      expect.objectContaining({ event: "tool_call" }),
+    expect(events).toHaveLength(0);
+  });
+
+  test("blocks an unsupported client before the provider when configured", async () => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: externalClientHeaders(),
+      payload: {
+        ...(payload(false) as Record<string, unknown>),
+        metadata: { user_id: "generic-session" },
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "Send X-Appa-Session-ID to use guardrails",
+    );
+    expect(response.json().error.message).toContain(
+      "choose Bypass on the Guardrails Overview tab",
+    );
+    expect(providerRequests).toHaveLength(0);
+    expect(events).toHaveLength(0);
+  });
+
+  test("blocks a credentialed remote client with no adapter or APPA headers", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      name: "unsupported-client",
+      providerApiKeys: [
+        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+      ],
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "203.0.113.20",
+      headers: {
+        authorization: `Bearer ${virtualKey}`,
+        "anthropic-version": "2023-06-01",
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "This client cannot use Guardrails",
+    );
+    expect(providerRequests).toHaveLength(0);
+    expect(events).toHaveLength(0);
+  });
+
+  test("block mode still governs a known client and an explicit APPA session", async () => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    for (const extraHeaders of [
+      { "x-claude-code-session-id": "known-session" },
+      { "x-appa-session-id": "explicit-session" },
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: { ...externalClientHeaders(), ...extraHeaders },
+        payload: payload(false) as Record<string, unknown>,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    expect(providerRequests).toHaveLength(2);
+    expect(events.filter((event) => event.event === "tool_call")).toHaveLength(
+      2,
     );
   });
 
@@ -2823,9 +2895,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(events).toHaveLength(0);
   });
 
-  test("binds a client whose reported session cannot be read to the credential's own root", async () => {
-    // The client sent no header to be wrong about; a metadata value the
-    // adapter cannot read as a session is no session, not a refusal.
+  test("bypasses an unsupported client even when generic metadata names a session", async () => {
     const response = await app.inject({
       method: "POST",
       url: url(),
@@ -2833,16 +2903,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       headers: externalClientHeaders(),
       payload: {
         ...(payload(false) as Record<string, unknown>),
-        metadata: { user_id: "x".repeat(600) },
+        metadata: { user_id: "generic-session" },
       },
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        session_id: expect.stringMatching(/^user:.*@/),
-      }),
-    );
+    expect(providerRequests).toHaveLength(1);
+    expect(events).toHaveLength(0);
   });
 
   test("still refuses a malformed session header", async () => {
@@ -7491,7 +7558,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     expect(events).toHaveLength(0);
   });
 
-  test("a bare affinity header leaves a generic client on its fallback root", async () => {
+  test("a bare affinity header does not identify a supported client", async () => {
     const response = await app.inject({
       method: "POST",
       url: `/v1/openai/${agent.id}/chat/completions`,
@@ -7505,16 +7572,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        session_id: `user:${userId}@${agent.id}`,
-      }),
-    );
-    expect(events).not.toContainEqual(
-      expect.objectContaining({
-        session_id: `user:${userId}|${OPENCODE_SESSION}`,
-      }),
-    );
+    expect(events).toHaveLength(0);
   });
 
   test("Codex compaction stays on the thread and a new thread opens a fresh root with no parent id", async () => {

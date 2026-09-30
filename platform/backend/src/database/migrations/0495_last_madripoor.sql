@@ -1,0 +1,1 @@
+ALTER TABLE "guardrails_deployment" ADD COLUMN "unsupported_client_action" varchar(16) DEFAULT 'bypass' NOT NULL;

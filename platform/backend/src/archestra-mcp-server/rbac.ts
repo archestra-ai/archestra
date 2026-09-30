@@ -175,6 +175,23 @@ export const TOOL_PERMISSIONS: Record<
   list_projects: { resource: "project", action: "read" },
   get_project: { resource: "project", action: "read" },
 
+  // Scheduled tasks — mirror the /api/schedule-triggers routes. As with the
+  // project reads the permission is only the floor: every handler runs the
+  // same owner / `scheduledTask:*` / project-member gate the REST routes use
+  // (services/schedule-trigger-access.ts), so `scheduledTask:read` never
+  // widens visibility past the caller's own schedules.
+  create_schedule_trigger: { resource: "scheduledTask", action: "create" },
+  update_schedule_trigger: { resource: "scheduledTask", action: "update" },
+  delete_schedule_trigger: { resource: "scheduledTask", action: "delete" },
+  list_schedule_triggers: { resource: "scheduledTask", action: "read" },
+  get_schedule_trigger: { resource: "scheduledTask", action: "read" },
+  list_schedule_trigger_runs: { resource: "scheduledTask", action: "read" },
+  get_schedule_trigger_run: { resource: "scheduledTask", action: "read" },
+  enable_schedule_trigger: { resource: "scheduledTask", action: "update" },
+  disable_schedule_trigger: { resource: "scheduledTask", action: "update" },
+  // Starting a run creates a run row, matching RunScheduleTriggerNow.
+  run_schedule_trigger_now: { resource: "scheduledTask", action: "create" },
+
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,
   run_tool: null,

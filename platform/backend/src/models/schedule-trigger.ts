@@ -10,8 +10,10 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { decodeCursor } from "@/database/utils/pagination";
 import type {
   InsertScheduleTrigger,
   ScheduleTrigger,
@@ -29,6 +31,7 @@ type ScheduleTriggerListFilters = {
   organizationId: string;
   limit?: number;
   offset?: number;
+  cursor?: string;
   enabled?: boolean;
   agentIds?: string[];
   actorUserId?: string;
@@ -65,13 +68,26 @@ class ScheduleTriggerModel {
 
   static async listByOrganization(
     params: ScheduleTriggerListFilters,
-  ): Promise<ScheduleTrigger[]> {
+  ): Promise<(ScheduleTrigger & { cursorCreatedAt: string })[]> {
     const filters = buildListFilters(params);
     if (!filters) return [];
+
+    const position = decodeCursor(params.cursor);
+    if (
+      position &&
+      z.uuid().safeParse(position.id).success &&
+      !Number.isNaN(Date.parse(position.value))
+    ) {
+      filters.push(
+        sql`(${schema.scheduleTriggersTable.createdAt}, ${schema.scheduleTriggersTable.id}) < (${position.value}::timestamptz, ${position.id}::uuid)`,
+      );
+    }
 
     let query = db
       .select({
         ...triggerColumns(),
+        // Preserve PostgreSQL microseconds when encoding the next page.
+        cursorCreatedAt: sql<string>`${schema.scheduleTriggersTable.createdAt}::text`,
         actor: actorColumns(),
         agent: agentColumns(),
       })
@@ -88,7 +104,10 @@ class ScheduleTriggerModel {
         ),
       )
       .where(and(...filters))
-      .orderBy(desc(schema.scheduleTriggersTable.createdAt))
+      .orderBy(
+        desc(schema.scheduleTriggersTable.createdAt),
+        desc(schema.scheduleTriggersTable.id),
+      )
       .$dynamic();
 
     if (params.limit !== undefined) {
@@ -168,9 +187,10 @@ class ScheduleTriggerModel {
   static async delete(id: string): Promise<boolean> {
     const result = await db
       .delete(schema.scheduleTriggersTable)
-      .where(eq(schema.scheduleTriggersTable.id, id));
+      .where(eq(schema.scheduleTriggersTable.id, id))
+      .returning({ id: schema.scheduleTriggersTable.id });
 
-    return (result.rowCount ?? 0) > 0;
+    return result.length > 0;
   }
 
   static async findDueTriggers(now: Date): Promise<ScheduleTrigger[]> {
@@ -241,6 +261,7 @@ class ScheduleTriggerModel {
     return {
       id: trigger.id,
       name: trigger.name,
+      projectId: trigger.projectId,
       agentId: trigger.agentId,
       agentName: trigger.agent?.name ?? null,
       messageTemplate: trigger.messageTemplate,
@@ -285,7 +306,8 @@ function buildListFilters(
     )`,
     // Triggers of a soft-deleted project are hidden with it, like the deleted
     // agents above. Direct-by-id access (incl. run-now) is closed off separately
-    // in `findAccessibleTriggerOrThrow` (routes/schedule-trigger.ts).
+    // in `findAccessibleScheduleTriggerOrThrow`
+    // (services/schedule-trigger-access.ts).
     belongsToLiveProject(schema.scheduleTriggersTable.projectId),
   ];
 

@@ -139,6 +139,26 @@ export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
 // client on a gateway can pull a project's context into its own session.
 export const TOOL_LIST_PROJECTS_SHORT_NAME = "list_projects";
 export const TOOL_GET_PROJECT_SHORT_NAME = "get_project";
+// Scheduled tasks — the cron-driven agent triggers that live inside a project.
+// Tools manage project schedules and inspect their execution history.
+export const TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "create_schedule_trigger";
+export const TOOL_UPDATE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "update_schedule_trigger";
+export const TOOL_DELETE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "delete_schedule_trigger";
+export const TOOL_LIST_SCHEDULE_TRIGGERS_SHORT_NAME = "list_schedule_triggers";
+export const TOOL_GET_SCHEDULE_TRIGGER_SHORT_NAME = "get_schedule_trigger";
+export const TOOL_LIST_SCHEDULE_TRIGGER_RUNS_SHORT_NAME =
+  "list_schedule_trigger_runs";
+export const TOOL_GET_SCHEDULE_TRIGGER_RUN_SHORT_NAME =
+  "get_schedule_trigger_run";
+export const TOOL_ENABLE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "enable_schedule_trigger";
+export const TOOL_DISABLE_SCHEDULE_TRIGGER_SHORT_NAME =
+  "disable_schedule_trigger";
+export const TOOL_RUN_SCHEDULE_TRIGGER_NOW_SHORT_NAME =
+  "run_schedule_trigger_now";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
@@ -305,6 +325,16 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_LIST_PROJECTS_SHORT_NAME,
   TOOL_GET_PROJECT_SHORT_NAME,
+  TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_UPDATE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_DELETE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_LIST_SCHEDULE_TRIGGERS_SHORT_NAME,
+  TOOL_GET_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_LIST_SCHEDULE_TRIGGER_RUNS_SHORT_NAME,
+  TOOL_GET_SCHEDULE_TRIGGER_RUN_SHORT_NAME,
+  TOOL_ENABLE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_DISABLE_SCHEDULE_TRIGGER_SHORT_NAME,
+  TOOL_RUN_SCHEDULE_TRIGGER_NOW_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -513,6 +543,18 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   create_project_from_conversation: "projects",
   list_projects: "projects",
   get_project: "projects",
+  // Scheduled tasks are a project surface in the product (a project's
+  // Schedules section and its run history), so they group with Projects.
+  create_schedule_trigger: "projects",
+  update_schedule_trigger: "projects",
+  delete_schedule_trigger: "projects",
+  list_schedule_triggers: "projects",
+  get_schedule_trigger: "projects",
+  list_schedule_trigger_runs: "projects",
+  get_schedule_trigger_run: "projects",
+  enable_schedule_trigger: "projects",
+  disable_schedule_trigger: "projects",
+  run_schedule_trigger_now: "projects",
 
   search_tools: "meta",
   run_tool: "meta",

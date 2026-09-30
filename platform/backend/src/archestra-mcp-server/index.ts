@@ -25,6 +25,7 @@ import {
 } from "@/openappa/service";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { trackBackgroundWork } from "@/utils/background-work";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import {
@@ -97,6 +98,10 @@ import {
   toolEntries as sandboxToolEntries,
   tools as sandboxTools,
 } from "./sandbox";
+import {
+  toolEntries as scheduleTriggerToolEntries,
+  tools as scheduleTriggerTools,
+} from "./schedule-triggers";
 import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
@@ -173,6 +178,7 @@ function getToolEntries(): Partial<
       ...knowledgeManagementToolEntries,
       ...chatToolEntries,
       ...projectToolEntries,
+      ...scheduleTriggerToolEntries,
       ...searchToolEntries,
       ...runToolEntries,
       ...skillToolEntries,
@@ -211,6 +217,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...knowledgeManagementTools,
       ...chatTools,
       ...projectTools,
+      ...scheduleTriggerTools,
       ...searchToolTools,
       ...runToolTools,
       ...skillTools,
@@ -388,12 +395,14 @@ export async function executeArchestraTool(
     }
 
     if (auditCapture) {
-      void recordToolAudit({
-        capture: auditCapture,
-        toolName: resolvedToolName,
-        args: admitted.args,
-        result: finalResult,
-      });
+      trackBackgroundWork(
+        recordToolAudit({
+          capture: auditCapture,
+          toolName: resolvedToolName,
+          args: admitted.args,
+          result: finalResult,
+        }),
+      );
     }
 
     return finalResult;

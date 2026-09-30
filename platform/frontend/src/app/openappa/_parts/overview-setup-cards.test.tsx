@@ -58,6 +58,10 @@ const source = {
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
@@ -67,7 +71,12 @@ beforeEach(() => {
   sync = { enabled: true, hasPolicy: false, source: null };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
-      HttpResponse.json({ enabled, featureEnabled: true, active: enabled }),
+      HttpResponse.json({
+        enabled,
+        featureEnabled: true,
+        active: enabled,
+        unsupportedClientAction: "bypass",
+      }),
     ),
     http.get(`${api}/guardrails-policy`, () =>
       HttpResponse.json({
@@ -145,8 +154,8 @@ test("a saved policy with enforcement off makes enforcement the next step", asyn
   expect(toggle).toBeEnabled();
   expect(nextStep(container)).toHaveTextContent("Enforcement");
   expect(
-    screen.queryByRole("link", { name: "Ask about the policy" }),
-  ).not.toBeInTheDocument();
+    screen.getByRole("link", { name: "Ask about the policy" }),
+  ).toBeInTheDocument();
   expect(screen.getByText("How it works")).toBeInTheDocument();
   expect(
     screen.queryByRole("heading", { name: "Turn on the guardrail" }),
@@ -191,7 +200,7 @@ test("members who cannot manage enforcement see the switch disabled", async () =
     await screen.findByRole("switch", { name: "Enforce the policy" }),
   ).toBeDisabled();
   expect(
-    screen.getByText(/Only administrators can turn enforcement on or off/),
+    screen.getByText(/Only administrators can change enforcement settings/),
   ).toBeInTheDocument();
 });
 
@@ -205,6 +214,9 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
   expect(screen.getByText("Step 2 of 2")).toBeInTheDocument();
   expect(nextStep(container)).toHaveTextContent("GitHub sync");
   expect(screen.getByText("On")).toBeInTheDocument();
+  expect(
+    screen.getByText(/checks tool calls against your policy/),
+  ).toBeInTheDocument();
   expect(
     screen.getByRole("link", { name: "Ask about the policy" }),
   ).toHaveAttribute(
@@ -268,4 +280,33 @@ test("once sync is connected the cards stay as status with no next step", async 
   );
   expect(nextStep(container)).toBeNull();
   expect(screen.queryByText("Step 2 of 2")).not.toBeInTheDocument();
+});
+
+test("the enforcement card lets administrators configure unsupported client behavior", async () => {
+  revision = 3;
+  const updates: unknown[] = [];
+  server.use(
+    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
+      const body = (await request.json()) as {
+        unsupportedClientAction: "bypass" | "block";
+      };
+      updates.push(body);
+      return HttpResponse.json({
+        enabled,
+        featureEnabled: true,
+        active: enabled,
+        unsupportedClientAction: body.unsupportedClientAction,
+      });
+    }),
+  );
+  show();
+  const selector = await screen.findByRole("combobox", {
+    name: "Unsupported clients",
+  });
+  expect(selector).toHaveTextContent("Bypass");
+  fireEvent.click(selector);
+  fireEvent.click(screen.getByRole("option", { name: "Block" }));
+  await waitFor(() =>
+    expect(updates).toEqual([{ unsupportedClientAction: "block" }]),
+  );
 });

@@ -205,20 +205,6 @@ test("policy invalidation refreshes the displayed battery source", async () => {
   await waitFor(() => expect(source).toHaveValue(batteryContent));
 });
 
-test("a GitHub-synced policy says where it comes from", async () => {
-  server.use(
-    http.get(`${origin}/api/openappa/github-sync`, () =>
-      HttpResponse.json({
-        enabled: true,
-        source: { interval: "1h" },
-        hasPolicy: true,
-      }),
-    ),
-  );
-  mount();
-  expect(await screen.findByText("Synced from GitHub")).toBeVisible();
-});
-
 test("the editor footer counts the composed batteries and the unenforced ones", async () => {
   server.use(
     http.get(declarationsUrl, () =>

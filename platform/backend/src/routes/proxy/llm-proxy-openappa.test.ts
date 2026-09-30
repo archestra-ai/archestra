@@ -1221,6 +1221,100 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
+  ])("the user's answer to Claude Code's own question reaches the model as given (stream=%s)", async (stream) => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    const question = {
+      questions: [
+        {
+          question: "Scout can't be reached. How do you want the report?",
+          header: "Next step",
+          options: [{ label: "Spawn a new scout" }, { label: "Leave it" }],
+          multiSelect: false,
+        },
+      ],
+    };
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: { name: "AskUserQuestion", input: question },
+      streamingToolUse: { name: "AskUserQuestion", input: question },
+    };
+    const claudeCode = {
+      ...externalClientHeaders(),
+      "user-agent": "claude-code/2.1.286",
+      "x-claude-code-session-id": "5b0e8a3c-2f4d-4c7a-9e1b-6d2f8a4c1e07",
+    };
+    const request = (messages: unknown[]) => {
+      const body = payload(stream, messages);
+      body.tools.push({
+        name: "AskUserQuestion",
+        description: "Ask the user a question",
+        input_schema: { type: "object", properties: {} },
+      });
+      return body as Record<string, unknown>;
+    };
+    const opening = [{ role: "user", content: "Get scout's report again" }];
+
+    const asked = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: claudeCode,
+      payload: request(opening),
+    });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const call = noticeFrom(asked.body, stream);
+    expect(call.name).toBe("AskUserQuestion");
+
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    events.length = 0;
+    providerRequests.length = 0;
+    const answer =
+      'User has answered your questions: "Scout can\'t be reached. How do you want the report?"="Spawn a new scout". You can now continue with the user\'s answers in mind.';
+    const answered = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: claudeCode,
+      payload: request([
+        ...opening,
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: call.id,
+              name: call.name,
+              input: call.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: call.id, content: answer },
+          ],
+        },
+      ]),
+    });
+
+    expect(answered.statusCode, answered.body).toBe(200);
+    // The runtime released no question call; the proxy's signed id vouches
+    // for the answer, so the runtime never rules on it.
+    expect(events.filter((event) => event.event === "tool_result")).toEqual([]);
+    const forwarded = JSON.stringify(providerRequests.at(-1));
+    expect(forwarded).toContain(
+      "You can now continue with the user's answers in mind.",
+    );
+    expect(forwarded).not.toContain("APPROVED REPLACEMENT");
+  });
+
+  test.each([
+    true,
+    false,
   ])("a summarizer run in a session of its own opens as a fork of the session its stamped history came from (stream=%s)", async (stream) => {
     config.openappa = {
       ...config.openappa,

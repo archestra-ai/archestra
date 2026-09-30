@@ -267,10 +267,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           !binding.adapter?.isChildHandbackTool?.(result.name) &&
           !binding.adapter?.isRelayTool?.(result.name),
       )
-      .map((result) => ({
-        ...result,
-        content: childResultUpdates[result.id] ?? result.content,
-      }));
+      // An answer to an issued question is recognized as the very result the
+      // client sent, so a result nothing rewrote goes on as that object.
+      .map((result) => {
+        const content = childResultUpdates[result.id];
+        return content === undefined ? result : { ...result, content };
+      });
     const result = await processProxyResults({
       session: this.governedSession(binding),
       results: nonHandbackResults,

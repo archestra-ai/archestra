@@ -48,8 +48,8 @@ FROM ${NODE_IMAGE} AS node-builder
 # picomatch CVE-2026-33671, sigstore CVE-2026-48815, and undici CVE-2026-12151
 # (bundle ships 6.27.0, which previously required a manual bundle swap on 11.17.0).
 # npm 11.18.0 was published 2026-06-29 and has cleared the 7-day release-age practice.
-# Three of npm's OWN bundled dependencies carry HIGH CVEs that no npm release fixes,
-# so all three are swapped in place. 11.19.0 (the newest 11.x) bundles the exact same
+# Four of npm's OWN bundled dependencies carry CVEs requiring bundle swaps,
+# so all four are swapped in place. 11.19.0 bundles the same vulnerable
 # versions of all three, and 12.x requires Node >=22 while this stage is node:20-alpine,
 # so upgrading npm is not the way out. Every swap stays within the same major and
 # satisfies the bundled consumers' ranges, and this is also what the final stage ships
@@ -57,8 +57,11 @@ FROM ${NODE_IMAGE} AS node-builder
 #
 #   brace-expansion  CVE-2026-14257, then CVE-2026-69152 (uncontrolled resource
 #     consumption). The bundle ships 5.0.7 via minimatch 10.2.5, which asks ^5.0.5;
-#     5.0.9 keeps 5.0.7's `balanced-match: ^4.0.2` (satisfied by the bundled 4.0.4)
+#     5.0.11 fixes CVE-2026-102276 and CVE-2026-102278 and keeps
+#     `balanced-match: ^4.0.2` (satisfied by the bundled 4.0.4)
 #     and declares `node: 20 || >=22`.
+#   undici CVE-2026-19534 (uncaught exception) requires 6.28.1 rather than
+#     the bundled 6.27.0. The replacement stays on the Node 18-compatible 6.x line.
 #   ip-address  CVE-2026-69192 (improper input validation, affects <=10.3.0). The
 #     bundle ships 10.2.0 via socks 2.8.9, which asks ^10.1.1; 10.3.1 is in range and
 #     declares `node: >= 12`. The package.json override next to this file only governs
@@ -77,11 +80,16 @@ FROM ${NODE_IMAGE} AS node-builder
 # calls are the shell's busybox tar, not this module, so they are unaffected.
 RUN npm install -g npm@11.18.0 && \
     cd /usr/local/lib/node_modules/npm/node_modules && \
-    npm pack brace-expansion@5.0.9 && \
+    npm pack brace-expansion@5.0.11 && \
     rm -rf brace-expansion && \
-    tar -xzf brace-expansion-5.0.9.tgz && \
+    tar -xzf brace-expansion-5.0.11.tgz && \
     mv package brace-expansion && \
-    rm brace-expansion-5.0.9.tgz && \
+    rm brace-expansion-5.0.11.tgz && \
+    npm pack undici@6.28.1 && \
+    rm -rf undici && \
+    tar -xzf undici-6.28.1.tgz && \
+    mv package undici && \
+    rm undici-6.28.1.tgz && \
     npm pack ip-address@10.3.1 && \
     rm -rf ip-address && \
     tar -xzf ip-address-10.3.1.tgz && \
@@ -148,6 +156,9 @@ RUN apk add --no-cache \
    # upstream), so this moves to the same 1.26.6 toolchain the platform image's
    # go-builder stage already uses.
    apk upgrade --no-cache nodejs bind openssl zlib expat sqlite-libs && \
+   # The pinned build can keep bind 9.20.26-r0 after Alpine publishes security
+   # fixes. Require the 9.20.29-r0 release that fixes its seven HIGH CVEs.
+   apk add --no-cache --upgrade "bind>=9.20.29-r0" && \
    apk add --no-cache --upgrade "curl>=8.22.0-r0" "libcurl>=8.22.0-r0" \
        "util-linux>=2.41.6-r1" && \
    # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,

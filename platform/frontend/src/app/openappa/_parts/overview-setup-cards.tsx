@@ -280,7 +280,7 @@ function YellsCard() {
     <StatusCard
       icon={
         <span className="w-6">
-          <OpenAppaAlertIcon className="w-full" />
+          <OpenAppaAlertIcon animated className="w-full overflow-visible" />
         </span>
       }
       title="Yells"

@@ -4,10 +4,18 @@ import type { CommonToolResult } from "@/types/common-llm-format";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
+  AppaRelayArrival,
+  AppaRelayMessage,
+  AppaRelayRecipient,
   AppaSpawnPromptField,
   AskUserArguments,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
+import {
+  admitClaudeCodeRelayReport,
+  claudeCodeRelayArrivals,
+  isClaudeCodeRelayReceipt,
+} from "./claude-code-relay";
 import { structuredQuestionRuling } from "./native-question-ruling";
 import {
   asRecord,
@@ -32,10 +40,21 @@ const ASYNC_LAUNCH_STATUS = "Async agent launched successfully.";
  * start. Like the background launch, these carry no child output: the child
  * reports later, so no retained return exists for them.
  */
+const TEAMMATE_LAUNCH_STATUS = "Spawned successfully.";
 const LAUNCH_ACKNOWLEDGEMENTS = [
-  { status: "Spawned successfully.", labels: ["agent_id", "name"] },
+  { status: TEAMMATE_LAUNCH_STATUS, labels: ["agent_id", "name"] },
   { status: "Cloud agent launched.", labels: ["taskId"] },
 ] as const;
+/** Claude Code's messages between a lead, its teammates, and other agents. */
+const RELAY_TOOLS = new Set(["SendMessage"]);
+/**
+ * The names a child uses for the agent that started it: a teammate's lead,
+ * and the main conversation a background subagent reports to.
+ */
+const PARENT_NAMES = new Set(["team-lead", "main"]);
+/** Explicit addresses of another session: a socket, a bridge, or a listed name with its ref. */
+const SESSION_ADDRESS =
+  /^(?:uds:|bridge:|local_|\/|\\\\\.\\pipe\\)|\s\[[0-9a-f]{6,12}\]$/;
 const MAX_CHILD_ID_LENGTH = 128;
 
 /** Identifies Claude Code Messages requests and normalizes local tool names. */
@@ -107,6 +126,56 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
 
   isSpawnTool(name: string): boolean {
     return CHILD_SPAWN_TOOLS.has(localToolName(name));
+  }
+
+  relayMessage(call: {
+    name: string;
+    arguments: unknown;
+  }): AppaRelayMessage | undefined {
+    if (!RELAY_TOOLS.has(localToolName(call.name))) return undefined;
+    const args = argumentRecord(call.arguments);
+    const to = stringField(args?.to)?.trim();
+    const message = args?.message;
+    if (!to || message === undefined || message === null) return undefined;
+    return {
+      to: relayRecipient(to),
+      value: typeof message === "string" ? message : JSON.stringify(message),
+      structured: typeof message !== "string",
+    };
+  }
+
+  isRelayTool(name: string): boolean {
+    return RELAY_TOOLS.has(localToolName(name));
+  }
+
+  isRelayReceipt(content: unknown): boolean {
+    return isClaudeCodeRelayReceipt(content);
+  }
+
+  admitRelayReport(
+    content: unknown,
+    records: readonly string[],
+  ): { content: unknown; withheld: boolean } {
+    return admitClaudeCodeRelayReport(content, records);
+  }
+
+  rewriteRelayMessage(args: unknown, value: string): string {
+    return JSON.stringify({ ...argumentRecord(args), message: value });
+  }
+
+  relayArrivals(requestBody: unknown): AppaRelayArrival[] {
+    return claudeCodeRelayArrivals(requestBody);
+  }
+
+  teammateIds(requestBody: unknown): Map<string, string> {
+    const ids = new Map<string, string>();
+    for (const text of toolResultTexts(requestBody)) {
+      if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) continue;
+      const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
+      const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
+      if (id && name && isChildId(id) && isChildId(name)) ids.set(name, id);
+    }
+    return ids;
   }
 
   isChildHandbackTool(name: string): boolean {
@@ -282,6 +351,34 @@ function launchAcknowledgement(content: unknown): string | undefined {
     lines.push(`${label}: ${value}`);
   }
   return lines.join("\n");
+}
+
+function relayRecipient(to: string): AppaRelayRecipient {
+  if (PARENT_NAMES.has(to)) return { kind: "lead" };
+  if (to === "*") return { kind: "broadcast" };
+  if (SESSION_ADDRESS.test(to)) return { kind: "session", id: to };
+  return { kind: "teammate", name: to };
+}
+
+function argumentRecord(args: unknown): Record<string, unknown> | undefined {
+  const raw = stringField(args);
+  return asRecord(args) ?? (raw ? asRecord(parseJson(raw)) : undefined);
+}
+
+/** The text of every tool result in a Messages request, in order. */
+function toolResultTexts(requestBody: unknown): string[] {
+  const texts: string[] = [];
+  const messages = asRecord(requestBody)?.messages;
+  for (const message of Array.isArray(messages) ? messages : []) {
+    const content = asRecord(message)?.content;
+    for (const block of Array.isArray(content) ? content : []) {
+      const record = asRecord(block);
+      if (record?.type !== "tool_result") continue;
+      const text = launchText(record.content);
+      if (text) texts.push(text);
+    }
+  }
+  return texts;
 }
 
 function launchText(content: unknown): string | undefined {

@@ -36,7 +36,15 @@ On a fresh install, the page asks you to create a policy. A chat drafts one from
 
 From then on, administrators can turn enforcement off and on with a switch. The policy stays as it is. Ask about the policy explains what it does.
 
-Turning enforcement on also applies to sessions that are already running. If a subagent in such a session finished while enforcement was off, the proxy refuses the session's later requests. Start a new session to continue — or rewind the conversation to before the subagent ran.
+Turning enforcement on also applies to sessions that are already running. If a subagent in such a session finished while enforcement was off, the proxy refuses the session's later requests. Start a new session to continue — or rewind the conversation to before the subagent ran. A teammate that started while enforcement was off is refused, and its earlier messages are withheld from the lead. Start a new teammate to continue its work.
+
+## Subagents and Teammates
+
+A subagent's answer reaches its session only through a return check. Before the subagent starts, the session declares what the answer may carry.
+
+Claude Code teammates pass the same check. A teammate's message to its lead crosses the check, and the lead takes on the message's restrictions. A lead's message to a teammate carries the lead's restrictions to the teammate — after the lead reads a private report, for example, the teammate it messages cannot post it publicly either.
+
+The model reads a message only if it passed the check on its way. Any other message is withheld, and the model reads a notice in its place. Messages from other sessions are always withheld.
 
 ## Client Support Matrix
 

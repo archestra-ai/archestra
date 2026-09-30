@@ -11,6 +11,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { clientSessionId } from "@/openappa/actor";
 import {
@@ -36,12 +37,14 @@ import {
 import { underscoreLabeledPlatformToolName } from "@/openappa/request";
 import {
   type AppaChildReturnRecord,
+  addressChild,
   approveSpawnReturn,
   cancelCalls,
   endChild,
   endTurn,
   evaluateHostedToolCalls,
   evaluateToolCalls,
+  loadChildAddresses,
   loadChildReturns,
   notePrompt,
   type OpenAppaSession,
@@ -79,6 +82,7 @@ import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaChildTrajectory,
   type AppaClientAdapter,
+  type AppaRelayMessage,
   type AppaTrustedContext,
   type AskUserArguments,
 } from "./types";
@@ -211,6 +215,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         results,
       }),
     );
+    await admitRelayReports({
+      binding,
+      session: this.governedSession(binding),
+      results,
+      updates: childResultUpdates,
+    });
     // Requests with results submit them to runtime even if current request
     // declares no tools. Proxy-only sessions declared local tools, so their
     // session still starts; a session that declared nothing has nothing to do.
@@ -245,8 +255,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       results: context.toolResults,
       verifiedNativeQuestionResults,
     });
+    // A handback's result and a message's delivery receipt are the client's
+    // acknowledgements of calls the runtime already governed as crossings.
     const nonHandbackResults = results
-      .filter((result) => !binding.adapter?.isChildHandbackTool?.(result.name))
+      .filter(
+        (result) =>
+          !binding.adapter?.isChildHandbackTool?.(result.name) &&
+          !binding.adapter?.isRelayTool?.(result.name),
+      )
       .map((result) => ({
         ...result,
         content: childResultUpdates[result.id] ?? result.content,
@@ -315,6 +331,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
     const binding = this.bindings.get(context.resources);
     binding?.adapter?.stripCarrierMetadata(context.request);
+    // A compaction summarizes the history, so an unchecked message would
+    // survive into the summary: messages are admitted before either turn.
+    if (binding) {
+      await admitRelayArrivals({
+        binding,
+        session: this.governedSession(binding),
+        request: context.request,
+      });
+    }
     if (binding?.compaction) return;
     if (binding && binding.adapter?.id !== "archestra-chat") {
       if (binding.request.tools?.control) {
@@ -684,9 +709,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
       }
     }
+    // Messages between agents cross or address before any other call of the
+    // batch opens: a crossing settles the sender's open calls.
+    const relays = await governRelays({
+      binding,
+      calls: calls.filter(
+        (call) =>
+          !handbackIds.has(call.id) && !blockedTranscriptCalls.has(call.id),
+      ),
+      session,
+    });
     const rest = calls.filter(
       (call) =>
-        !handbackIds.has(call.id) && !blockedTranscriptCalls.has(call.id),
+        !handbackIds.has(call.id) &&
+        !blockedTranscriptCalls.has(call.id) &&
+        !relays.has(call.id),
     );
     const policy = sharedPolicy(session.organization_id);
     const decisions = rest.length
@@ -732,6 +769,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
       });
     }
+    for (const [id, relay] of relays) {
+      if (relay.kind === "deny") {
+        decisionById.set(id, { kind: "deny", feedback: relay.feedback });
+      }
+    }
 
     const notice = binding.request.tools?.notice;
     const blocked: { id: string; name: string; reason: string }[] = [];
@@ -754,6 +796,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         if (calls.length === 1) {
           binding.completedHandbackReturn = handback.returnText;
         }
+        continue;
+      }
+      const relay = relays.get(call.id);
+      if (relay?.kind === "release") {
+        if (relay.call !== call) {
+          blocked.push({
+            id: call.id,
+            name: call.name,
+            reason:
+              "OpenAPPA replaced the message with the text the return check admitted",
+          });
+        }
+        released.push(relay.call);
         continue;
       }
       const decision = decisionById.get(call.id);
@@ -862,7 +917,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       blocked.length === 0 &&
       annotated.length === 0 &&
       !stamp &&
-      handbackIds.size === 0
+      handbackIds.size === 0 &&
+      relays.size === 0
     )
       return;
     return {
@@ -1380,6 +1436,257 @@ const UNBOUND_CHILD_RETURN =
   "The conversation contains a subagent result that OpenAPPA cannot link to the call that started the subagent.";
 const SUBSTITUTED_CHILD_RETURN =
   "The conversation contains a subagent result that matches the result of a different subagent call.";
+
+/**
+ * Admits the messages other agents delivered into this request: text that
+ * crossed from this session's children, and text its parent addressed to it,
+ * reaches the model; the rest is withheld where it stands. A message from
+ * another session is always withheld: its sender's label cannot cross into
+ * this session's family.
+ */
+async function admitRelayArrivals(params: {
+  binding: AppaPluginBinding;
+  session: OpenAppaSession;
+  request: unknown;
+}): Promise<void> {
+  const arrivals = params.binding.adapter?.relayArrivals?.(params.request);
+  if (!arrivals?.length) return;
+  const { session } = params;
+  let crossed: Promise<string[]> | undefined;
+  let addressed: Promise<string[]> | undefined;
+  const crossings = () => {
+    crossed ??= loadChildReturns({
+      organizationId: session.organization_id,
+      parentSessionId: session.session_id,
+    }).then((records) => records.map((record) => record.value));
+    return crossed;
+  };
+  const addresses = () => {
+    addressed ??= session.parent_id
+      ? loadChildAddresses({
+          organizationId: session.organization_id,
+          childSessionId: session.session_id,
+        }).then((records) => records.map((record) => record.value))
+      : Promise.resolve([]);
+    return addressed;
+  };
+  for (const arrival of arrivals) {
+    const records =
+      arrival.kind === "session"
+        ? []
+        : arrival.kind === "coordinator"
+          ? await addresses()
+          : [...(await crossings()), ...(await addresses())];
+    const { withheld } = arrival.admit(records);
+    if (withheld) {
+      logger.info(
+        { sessionId: session.session_id, kind: arrival.kind },
+        "OpenAPPA withheld a message with no record of crossing from its sender",
+      );
+    }
+  }
+}
+
+/**
+ * A message call returns the client's receipt, or the report of an agent the
+ * message resumed. That report is a child's return like any other, so it
+ * reaches the model only when it crossed into this session.
+ */
+async function admitRelayReports(params: {
+  binding: AppaPluginBinding;
+  session: OpenAppaSession;
+  results: LlmProxyToolResultsContext["toolResults"];
+  updates: Record<string, string>;
+}): Promise<void> {
+  const adapter = params.binding.adapter;
+  if (!adapter?.admitRelayReport) return;
+  const reports = params.results.filter(
+    (result) =>
+      adapter.isRelayTool?.(result.name) &&
+      !result.isError &&
+      !adapter.isRelayReceipt?.(result.content),
+  );
+  if (reports.length === 0) return;
+  const records = (
+    await loadChildReturns({
+      organizationId: params.session.organization_id,
+      parentSessionId: params.session.session_id,
+    })
+  ).map((record) => record.value);
+  for (const result of reports) {
+    const admitted = adapter.admitRelayReport(result.content, records);
+    if (admitted.withheld && typeof admitted.content === "string") {
+      params.updates[result.id] = admitted.content;
+    }
+  }
+}
+
+/** How the runtime ruled on one message between agents. */
+type RelayOutcome =
+  | { kind: "release"; call: ToolCall }
+  | { kind: "deny"; feedback: string };
+
+/**
+ * Governs the messages a batch sends between agents of one session, before
+ * any other call of the batch opens: a child's message is a crossing of its
+ * fork, which settles the child's open calls first.
+ *
+ * - A child's message to its parent crosses the fork's return check, exactly
+ *   as the child's end does, and the parent absorbs its label.
+ * - A parent's message to a child carries the parent's current label into the
+ *   child before the child reads it.
+ * - A child's message to a sibling does both: it crosses to the parent, and
+ *   the parent addresses the sibling with it.
+ *
+ * A message whose recipient OpenAPPA cannot identify is denied: delivered
+ * unaddressed, it would reach an agent that never took its label.
+ */
+async function governRelays(params: {
+  binding: AppaPluginBinding;
+  calls: readonly ToolCall[];
+  session: OpenAppaSession;
+}): Promise<Map<string, RelayOutcome>> {
+  const { binding, session } = params;
+  const outcomes = new Map<string, RelayOutcome>();
+  const adapter = binding.adapter;
+  if (!adapter?.relayMessage) return outcomes;
+  const isChild = Boolean(session.parent_id && binding.child);
+  for (const call of params.calls) {
+    const relay = adapter.relayMessage(call);
+    if (!relay || relay.to.kind === "session") continue;
+    if (relay.to.kind === "broadcast") {
+      outcomes.set(call.id, { kind: "deny", feedback: RELAY_BROADCAST });
+      continue;
+    }
+    if (relay.to.kind === "lead") {
+      if (!isChild) continue;
+      outcomes.set(
+        call.id,
+        await crossRelay({ binding, call, relay, session }),
+      );
+      continue;
+    }
+    const parent: OpenAppaSession | undefined = isChild
+      ? session.parent_id
+        ? {
+            organization_id: session.organization_id,
+            ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+            session_id: session.parent_id,
+          }
+        : undefined
+      : session;
+    const recipient = parent
+      ? await resolveRelayChild({
+          binding,
+          parent,
+          name: relay.to.name,
+        })
+      : undefined;
+    if (!parent || !recipient) {
+      outcomes.set(call.id, {
+        kind: "deny",
+        feedback: RELAY_UNKNOWN_RECIPIENT,
+      });
+      continue;
+    }
+    const crossed = isChild
+      ? await crossRelay({ binding, call, relay, session })
+      : ({ kind: "release", call } as const);
+    if (crossed.kind === "deny") {
+      outcomes.set(call.id, crossed);
+      continue;
+    }
+    const addressed = await addressChild({
+      session: parent,
+      operationId: `address:${call.id}`,
+      childSessionId: `${parent.session_id}:${recipient}`,
+      value: adapter.relayMessage(crossed.call)?.value ?? relay.value,
+    });
+    outcomes.set(
+      call.id,
+      addressed.addressed
+        ? crossed
+        : { kind: "deny", feedback: addressed.feedback },
+    );
+  }
+  return outcomes;
+}
+
+/**
+ * A child's message crosses its fork's return check, as the child's end does.
+ * A message the check reshapes (a sanitizer's output, a canonical form)
+ * reaches the recipient reshaped; one it blocks stays with the child.
+ */
+async function crossRelay(params: {
+  binding: AppaPluginBinding;
+  call: ToolCall;
+  relay: AppaRelayMessage;
+  session: OpenAppaSession;
+}): Promise<RelayOutcome> {
+  const { binding, call, relay } = params;
+  const spawnCallId = await resolveSpawnCallId(binding);
+  if (!spawnCallId) return { kind: "deny", feedback: RELAY_UNGOVERNED };
+  const childNativeId = binding.child?.lineage?.childNativeId;
+  const outcome = await endChild({
+    session: params.session,
+    operationId: `child_send:${call.id}`,
+    output: relay.value,
+    spawnCallId,
+    ...(childNativeId ? { childNativeId } : {}),
+  });
+  if (!outcome.crossed) {
+    return { kind: "deny", feedback: outcome.content ?? RELAY_UNGOVERNED };
+  }
+  if (outcome.decision === "release" || outcome.content === relay.value) {
+    return { kind: "release", call };
+  }
+  // A protocol message cannot carry reshaped text; its recipient could not read it.
+  if (relay.structured || !binding.adapter?.rewriteRelayMessage) {
+    return { kind: "deny", feedback: RELAY_RESHAPED_PROTOCOL };
+  }
+  return {
+    kind: "release",
+    call: {
+      ...call,
+      arguments: binding.adapter.rewriteRelayMessage(
+        call.arguments,
+        outcome.content,
+      ),
+    },
+  };
+}
+
+/**
+ * The client-native id of the child a message names: a child the parent
+ * started (by its id, or by the name a teammate id begins with), else a
+ * teammate the parent's history launched but that has not started yet.
+ */
+async function resolveRelayChild(params: {
+  binding: AppaPluginBinding;
+  parent: OpenAppaSession;
+  name: string;
+}): Promise<string | undefined> {
+  const started = await OpenAppaSessionModel.childNativeIds({
+    organizationId: params.parent.organization_id,
+    parentSessionId: params.parent.session_id,
+  });
+  if (started.includes(params.name)) return params.name;
+  const named = started.filter((id) => id.startsWith(`${params.name}@`));
+  if (named.length === 1) return named[0];
+  if (named.length > 1) return undefined;
+  return params.binding.adapter
+    ?.teammateIds?.(params.binding.requestBody)
+    .get(params.name);
+}
+
+const RELAY_BROADCAST =
+  "OpenAPPA checks each message against the agent that receives it. Send the message to each teammate by name.";
+const RELAY_UNKNOWN_RECIPIENT =
+  "OpenAPPA cannot identify the agent this message is for, so it did not send the message. Send it to a teammate by the name the teammate started with.";
+const RELAY_UNGOVERNED =
+  "OpenAPPA cannot check this message, because this agent did not start through a checked spawn. The message was not sent.";
+const RELAY_RESHAPED_PROTOCOL =
+  "OpenAPPA changed the content of this protocol message to meet the return check, and the changed content does not fit the protocol. The message was not sent.";
 
 async function admitChildHandback(params: {
   binding: AppaPluginBinding;

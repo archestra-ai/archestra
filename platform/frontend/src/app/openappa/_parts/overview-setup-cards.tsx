@@ -2,7 +2,6 @@
 
 import {
   ArrowRight,
-  BookOpen,
   CircleCheck,
   CircleDashed,
   CircleX,
@@ -47,8 +46,8 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 /**
  * Where OpenAPPA setup stands. A fresh organization sees only the first step,
  * saving a policy in the policy chat (which turns enforcement on). After that,
- * four compact cards report enforcement, GitHub sync, and unresolved yells
- * and link to the docs, and the first unfinished one is highlighted as the next step.
+ * three compact cards report enforcement, GitHub sync, and unresolved yells.
+ * The first unfinished one is highlighted as the next step.
  */
 export function OverviewSetupCards() {
   const { enabled, isFresh } = useOpenAppaSetupState();
@@ -67,13 +66,12 @@ export function OverviewSetupCards() {
     <div
       className={cn(
         "grid gap-4",
-        canReadYells ? "xl:grid-cols-2" : "lg:grid-cols-3",
+        canReadYells ? "xl:grid-cols-3" : "lg:grid-cols-2",
       )}
     >
       <EnforcementCard next={next === "enforcement"} />
       <GithubSyncCard next={next === "github"} />
       {canReadYells && <YellsCard />}
-      <LearnMoreCard />
     </div>
   );
 }
@@ -151,7 +149,7 @@ function EnforcementCard({ next }: { next: boolean }) {
       action={null}
     >
       <div className="space-y-3 pt-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Switch
               id="openappa-overview-enforcement"
@@ -309,25 +307,6 @@ function YellsCard() {
         </p>
       )}
     </StatusCard>
-  );
-}
-
-function LearnMoreCard() {
-  const appName = useAppName();
-  return (
-    <StatusCard
-      icon={<BookOpen />}
-      title="How it works"
-      description={`${appName}'s guardrail uses OpenAPPA to check that data only goes to people allowed to see it.`}
-      action={
-        <ExternalDocsLink
-          href={openAppaUrl("/how-it-works")}
-          className="text-sm"
-        >
-          Read about OpenAPPA
-        </ExternalDocsLink>
-      }
-    />
   );
 }
 

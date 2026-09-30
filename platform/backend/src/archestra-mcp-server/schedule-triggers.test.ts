@@ -1,5 +1,12 @@
 import { getArchestraToolFullName } from "@archestra/shared";
-import { MemberModel, ScheduleTriggerRunModel, TaskModel } from "@/models";
+import {
+  ConversationModel,
+  InteractionModel,
+  MemberModel,
+  MessageModel,
+  ScheduleTriggerRunModel,
+  TaskModel,
+} from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import { projectService } from "@/services/project";
@@ -13,6 +20,9 @@ const LIST_TRIGGERS = getArchestraToolFullName("list_schedule_triggers");
 const GET_TRIGGER = getArchestraToolFullName("get_schedule_trigger");
 const LIST_RUNS = getArchestraToolFullName("list_schedule_trigger_runs");
 const GET_RUN = getArchestraToolFullName("get_schedule_trigger_run");
+const GET_TRANSCRIPT = getArchestraToolFullName(
+  "get_schedule_trigger_run_transcript",
+);
 const DISABLE_TRIGGER = getArchestraToolFullName("disable_schedule_trigger");
 const ENABLE_TRIGGER = getArchestraToolFullName("enable_schedule_trigger");
 const RUN_NOW = getArchestraToolFullName("run_schedule_trigger_now");
@@ -994,6 +1004,347 @@ describe("schedule trigger MCP tools", () => {
           }
         ).runs.map((r) => r.id),
       ).toEqual([run.id]);
+    });
+  });
+
+  describe("run transcript", () => {
+    type TranscriptOutput = {
+      source: string;
+      note: string | null;
+      total_messages: number;
+      next_offset: number | null;
+      messages: {
+        role: string;
+        parts: {
+          type: string;
+          text: string | null;
+          tool_name: string | null;
+          input: string | null;
+          output: string | null;
+          error: string | null;
+          is_error: boolean | null;
+        }[];
+      }[];
+    };
+
+    async function makeRunWithConversation(params: {
+      triggerId: string;
+      makeScheduleTriggerRun: (triggerId: string) => Promise<{ id: string }>;
+    }) {
+      const run = await params.makeScheduleTriggerRun(params.triggerId);
+      const conversation = await ConversationModel.create({
+        userId,
+        organizationId,
+        agentId: agent.id,
+        title: "Weekly report",
+        origin: "schedule_trigger",
+      });
+      await ScheduleTriggerRunModel.setChatConversationId(
+        run.id,
+        conversation.id,
+      );
+      // A variable, not an inline literal, so the createdAt passthrough
+      // type-checks (as in scheduled-run-conversation.ts).
+      const rows = [
+        {
+          conversationId: conversation.id,
+          role: "user",
+          content: {
+            role: "user",
+            parts: [{ type: "text", text: "Post the weekly report." }],
+          },
+          createdAt: new Date(Date.now() - 1000),
+        },
+        {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: {
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "tool-list_files",
+                toolCallId: "call-1",
+                state: "output-available",
+                input: { folder: "reports" },
+                output: { files: ["week-39.md"] },
+              },
+              {
+                type: "dynamic-tool",
+                toolName: "slack__post_message",
+                toolCallId: "call-2",
+                state: "output-error",
+                input: { channel: "#reports", text: "x".repeat(500) },
+                errorText: "channel_not_found",
+              },
+              { type: "text", text: "Posted the weekly report." },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+      await MessageModel.bulkCreate(rows);
+      await ScheduleTriggerRunModel.markCompleted({
+        runId: run.id,
+        status: "success",
+      });
+      return run;
+    }
+
+    test("returns a successful run's messages, including a failed tool call", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    }) => {
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: userId,
+      });
+      const run = await makeRunWithConversation({
+        triggerId: trigger.id,
+        makeScheduleTriggerRun,
+      });
+
+      const result = await executeArchestraTool(
+        GET_TRANSCRIPT,
+        { schedule_trigger_id: trigger.id, run_id: run.id, max_chars: 100 },
+        context,
+      );
+
+      expect(result.isError, textOf(result)).toBe(false);
+      const output = result.structuredContent as TranscriptOutput;
+      expect(output).toMatchObject({
+        run: { id: run.id, status: "success" },
+        source: "conversation",
+        total_messages: 2,
+        next_offset: null,
+      });
+      expect(output.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+      const [listFiles, postMessage, finalText] = output.messages[1].parts;
+      expect(listFiles).toMatchObject({
+        type: "tool_call",
+        tool_name: "list_files",
+        input: '{"folder":"reports"}',
+        output: '{"files":["week-39.md"]}',
+        is_error: false,
+      });
+      expect(postMessage).toMatchObject({
+        type: "tool_call",
+        tool_name: "slack__post_message",
+        error: "channel_not_found",
+        is_error: true,
+      });
+      expect(postMessage.input).toContain("[truncated");
+      expect(finalText).toMatchObject({
+        type: "text",
+        text: "Posted the weekly report.",
+      });
+      expect(textOf(result)).toContain("untrusted data");
+    });
+
+    test("pages through the transcript with offset", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    }) => {
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: userId,
+      });
+      const run = await makeRunWithConversation({
+        triggerId: trigger.id,
+        makeScheduleTriggerRun,
+      });
+
+      const first = await executeArchestraTool(
+        GET_TRANSCRIPT,
+        { schedule_trigger_id: trigger.id, run_id: run.id, limit: 1 },
+        context,
+      );
+      const firstPage = first.structuredContent as TranscriptOutput;
+      expect(firstPage.messages.map((m) => m.role)).toEqual(["user"]);
+      expect(firstPage.next_offset).toBe(1);
+
+      const second = await executeArchestraTool(
+        GET_TRANSCRIPT,
+        {
+          schedule_trigger_id: trigger.id,
+          run_id: run.id,
+          offset: firstPage.next_offset,
+        },
+        context,
+      );
+      const secondPage = second.structuredContent as TranscriptOutput;
+      expect(secondPage.messages.map((m) => m.role)).toEqual(["assistant"]);
+      expect(secondPage.next_offset).toBeNull();
+    });
+
+    test("rebuilds an unopened run's transcript from its recorded LLM requests", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    }) => {
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: userId,
+      });
+      const run = await makeScheduleTriggerRun(trigger.id);
+      await InteractionModel.create({
+        profileId: agent.id,
+        userId,
+        sessionId: `scheduled-${run.id}`,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Post the weekly report." }],
+        },
+        response: {
+          id: "resp-1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Nothing to report this week.",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+      await drainBackgroundWork();
+      await ScheduleTriggerRunModel.markCompleted({
+        runId: run.id,
+        status: "success",
+      });
+
+      const result = await executeArchestraTool(
+        GET_TRANSCRIPT,
+        { schedule_trigger_id: trigger.id, run_id: run.id },
+        context,
+      );
+
+      expect(result.isError, textOf(result)).toBe(false);
+      const output = result.structuredContent as TranscriptOutput;
+      expect(output.source).toBe("interaction_log");
+      expect(
+        output.messages.flatMap((m) => m.parts.map((p) => p.text)),
+      ).toContain("Nothing to report this week.");
+      // Reading is side-effect free: no conversation is minted for the run.
+      expect(
+        (await ScheduleTriggerRunModel.findById(run.id))?.chatConversationId,
+      ).toBeNull();
+    });
+
+    test("points an Agent Runtime run at get_run", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    }) => {
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: userId,
+      });
+      const run = await makeScheduleTriggerRun(trigger.id);
+      const runtimeTaskId = crypto.randomUUID();
+      expect(
+        await ScheduleTriggerRunModel.setRuntimeTaskId({
+          runId: run.id,
+          taskId: runtimeTaskId,
+        }),
+      ).toBe(true);
+
+      const result = await executeArchestraTool(
+        GET_TRANSCRIPT,
+        { schedule_trigger_id: trigger.id, run_id: run.id },
+        context,
+      );
+
+      expect(result.isError, textOf(result)).toBe(false);
+      const output = result.structuredContent as TranscriptOutput & {
+        run: { runtime_task_id: string | null };
+      };
+      expect(output).toMatchObject({
+        source: "agent_runtime",
+        messages: [],
+        run: { runtime_task_id: runtimeTaskId },
+      });
+      expect(output.note).toContain("get_run");
+    });
+
+    test("refuses a run id that belongs to a different schedule", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    }) => {
+      const [a, b] = await Promise.all([
+        makeScheduleTrigger({
+          organizationId,
+          agentId: agent.id,
+          actorUserId: userId,
+        }),
+        makeScheduleTrigger({
+          organizationId,
+          agentId: agent.id,
+          actorUserId: userId,
+        }),
+      ]);
+      const run = await makeRunWithConversation({
+        triggerId: b.id,
+        makeScheduleTriggerRun,
+      });
+
+      const result = await executeArchestraTool(
+        GET_TRANSCRIPT,
+        { schedule_trigger_id: a.id, run_id: run.id },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("Schedule trigger run not found");
+    });
+
+    test("denies a project member who can list the runs but is not the actor", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+      makeUser,
+      makeMember,
+    }) => {
+      const owner = await makeUser();
+      await makeMember(owner.id, organizationId, { role: "member" });
+      const project = await projectService.create({
+        organizationId,
+        userId,
+        name: "shared-reports",
+        description: null,
+      });
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: owner.id,
+        projectId: project.id,
+      });
+      const run = await makeScheduleTriggerRun(trigger.id);
+
+      const listed = await executeArchestraTool(
+        LIST_RUNS,
+        { schedule_trigger_id: trigger.id },
+        context,
+      );
+      expect(listed.isError).toBe(false);
+
+      const result = await executeArchestraTool(
+        GET_TRANSCRIPT,
+        { schedule_trigger_id: trigger.id, run_id: run.id },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("do not have access");
     });
   });
 

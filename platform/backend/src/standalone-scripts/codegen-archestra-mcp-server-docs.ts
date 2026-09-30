@@ -56,6 +56,8 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
   get_schedule_trigger_run:
     "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+  get_schedule_trigger_run_transcript:
+    "Requires a user token. Only the schedule actor or a scheduled-task administrator can read a run transcript. Project membership alone does not grant it.",
   update_schedule_trigger:
     "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
   delete_schedule_trigger:

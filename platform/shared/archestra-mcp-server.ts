@@ -153,6 +153,8 @@ export const TOOL_LIST_SCHEDULE_TRIGGER_RUNS_SHORT_NAME =
   "list_schedule_trigger_runs";
 export const TOOL_GET_SCHEDULE_TRIGGER_RUN_SHORT_NAME =
   "get_schedule_trigger_run";
+export const TOOL_GET_SCHEDULE_TRIGGER_RUN_TRANSCRIPT_SHORT_NAME =
+  "get_schedule_trigger_run_transcript";
 export const TOOL_ENABLE_SCHEDULE_TRIGGER_SHORT_NAME =
   "enable_schedule_trigger";
 export const TOOL_DISABLE_SCHEDULE_TRIGGER_SHORT_NAME =
@@ -332,6 +334,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_GET_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_LIST_SCHEDULE_TRIGGER_RUNS_SHORT_NAME,
   TOOL_GET_SCHEDULE_TRIGGER_RUN_SHORT_NAME,
+  TOOL_GET_SCHEDULE_TRIGGER_RUN_TRANSCRIPT_SHORT_NAME,
   TOOL_ENABLE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_DISABLE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_RUN_SCHEDULE_TRIGGER_NOW_SHORT_NAME,
@@ -552,6 +555,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   get_schedule_trigger: "projects",
   list_schedule_trigger_runs: "projects",
   get_schedule_trigger_run: "projects",
+  get_schedule_trigger_run_transcript: "projects",
   enable_schedule_trigger: "projects",
   disable_schedule_trigger: "projects",
   run_schedule_trigger_now: "projects",

@@ -206,10 +206,24 @@ process.stdout.write(JSON.stringify({models:process.argv.includes('--bundled') ?
     await expect(
       exec(process.execPath, [helper, "--direct", entry], { env }),
     ).rejects.toMatchObject({ code: 1 });
+    await writeFile(
+      cli,
+      `require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date(Date.now()-60000).toISOString()}));console.log(JSON.stringify({models:[{slug:'gpt-6-luna',tool_mode:'code_mode_only'}]}));`,
+    );
+    await expect(
+      exec(process.execPath, [helper, "--direct", entry], { env }),
+    ).rejects.toMatchObject({ code: 1 });
     expect(
       JSON.parse(await readFile(config.model_catalog_json as string, "utf8"))
         .models,
     ).toHaveLength(2);
+    await writeFile(
+      cli,
+      `require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date(Date.now()-500).toISOString()}));console.log(JSON.stringify({models:[{slug:'gpt-6-luna',tool_mode:'code_mode_only'}]}));`,
+    );
+    await expect(
+      exec(process.execPath, [helper, "--direct", entry], { env }),
+    ).resolves.toBeDefined();
     await writeFile(cli, "process.exit(99);");
     await expect(
       exec(process.execPath, [helper, "--direct", entry], { env }),

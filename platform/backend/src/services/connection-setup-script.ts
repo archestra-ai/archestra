@@ -466,7 +466,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
     case "codex":
       if (ctx.mcp) {
         steps.push(
-          `Run \`codex\` — it opens your browser to finish the OAuth handshake for "${ctx.mcp.serverName}".`,
+          `If registration printed "Successfully logged in.", OAuth for "${ctx.mcp.serverName}" is already cached; do not repeat login. Otherwise check \`codex mcp list\` and run \`codex mcp login ${ctx.mcp.serverName}\` only when Auth is "Not logged in". Keep any pending login running until its browser callback finishes.`,
         );
       }
       if (ctx.proxy) {

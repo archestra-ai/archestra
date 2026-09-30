@@ -884,6 +884,69 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
     );
   });
 
+  test.each([
+    undefined,
+    "collaboration",
+  ])("normalizes a declared qualified retry name with namespace %s", (namespace) => {
+    const request = {
+      model: "test-model",
+      input: [
+        {
+          type: "additional_tools",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              tools: [{ type: "function", name: "spawn_agent" }],
+            },
+          ],
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+    const item = {
+      type: "function_call",
+      id: "item-qualified",
+      call_id: "call-qualified",
+      name: "collaboration.spawn_agent",
+      arguments: '{"message":"Research"}',
+      ...(namespace ? { namespace } : {}),
+    };
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter(request);
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item,
+    } as never);
+    expect(adapter.state.toolCalls[0]).toMatchObject({
+      name: "spawn_agent",
+      namespace: "collaboration",
+    });
+    expect(adapter.state.rawToolCallEvents[0]).toMatchObject({
+      item: { name: "spawn_agent", namespace: "collaboration" },
+    });
+    const response = {
+      id: "response-qualified",
+      model: "test-model",
+      status: "completed",
+      output: [item],
+    } as never;
+    expect(
+      openAiResponsesAdapterFactory
+        .createResponseAdapter(response, request)
+        .getToolCalls()[0],
+    ).toMatchObject({ name: "spawn_agent", namespace: "collaboration" });
+    const flat = {
+      ...request,
+      tools: [{ type: "function", name: "collaboration.spawn_agent" }],
+    } as never;
+    expect(
+      openAiResponsesAdapterFactory
+        .createResponseAdapter(response, flat)
+        .getToolCalls()[0],
+    ).toMatchObject({ name: "collaboration.spawn_agent" });
+  });
+
   test("does not replace a namespace the model already named", () => {
     const adapter = openAiResponsesAdapterFactory.createStreamAdapter({
       model: "gpt-6-luna",

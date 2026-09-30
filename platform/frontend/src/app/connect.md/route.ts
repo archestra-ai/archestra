@@ -80,8 +80,7 @@ under Settings > Plugins. Send a message to make sure that inference works.
    Override OpenAI Base URL.
    A Cursor subscription cannot authenticate the proxy. Send a test prompt in
    Cursor and confirm the request appears in this deployment before reporting success.
-   Codex: use codex mcp login SERVER_NAME. Open a new terminal and run codex.
-   Codex: the setup script selects the proxy as the default provider.
+   Codex: ${CODEX_FINISH_INSTRUCTIONS}
    OpenCode: run opencode mcp list first. If SERVER_NAME is connected (OAuth),
    skip authentication; do not re-authenticate a working connection. Otherwise
    run opencode mcp auth list. If SERVER_NAME is authenticated but not connected,
@@ -114,12 +113,10 @@ under Settings > Plugins. Send a message to make sure that inference works.
    now with opencode mcp list, but must restart to load new tools.
    Configuration applied alone does not prove MCP authentication succeeded.
    For clients requiring a new session, verification is that session's job.
-   Codex: make sure that config.toml selects the proxy provider at the top level.
-   Then send a short prompt in a new Codex session. Gateway OAuth alone does
-   not show that inference uses the proxy. If OpenAPPA is enabled, the first text
-   reply in a new protected session also shows a protected-session mark.
-   If the provider is not selected or the prompt fails, report that the connection
-   is incomplete. Do not report that setup succeeded.
+   Codex: perform the fresh-process verification above from this conversation's
+   terminal; do not defer it to a future user session. Gateway OAuth alone does
+   not prove proxy inference or tool execution. A protected-session mark alone
+   is not a complete verification either.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.
 
@@ -211,8 +208,7 @@ function focusedClientDetails(client: string): {
     case "codex":
       return {
         label: "Codex",
-        finish:
-          "Run codex mcp login SERVER_NAME, then open a new terminal and start Codex. Confirm config.toml selects the proxy provider at the top level. Verify gateway tools and send a short test prompt through the proxy. Report the connection status briefly without listing tool names or quoting the test response. If either check fails, report the connection as incomplete.",
+        finish: CODEX_FINISH_INSTRUCTIONS,
       };
     case "copilot-cli":
       return {
@@ -230,3 +226,6 @@ function focusedClientDetails(client: string): {
       return null;
   }
 }
+
+const CODEX_FINISH_INSTRUCTIONS =
+  "If the installer printed 'Successfully logged in.', gateway OAuth is already cached; do not run codex mcp login again. Otherwise run codex mcp list --json and inspect auth_status for the configured server. If auth_status is oauth, skip login. Only if it is not_logged_in, run codex mcp login SERVER_NAME once and wait for its browser callback. Unknown or unsupported status means verification is incomplete. Do not start another login while one is pending. Verify in a fresh Codex process with the selected model and approval mode unchanged; do not ask the user to run verification commands. If a model proxy was selected, confirm config.toml selects it at the top level and send a short test prompt through it. Check the gateway with an available read-only tool call; registration or tools/list alone does not prove execution. Report the connection status briefly without listing tool names or quoting the test response. If either check fails, report the connection as incomplete.";

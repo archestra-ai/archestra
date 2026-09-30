@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-29
+lastUpdated: 2026-09-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -177,7 +177,7 @@ Switching to passthrough removes saved Archestra keys from that provider's authe
 
 The `codex` CLI must be on your `PATH`.
 
-- **MCP gateway** — runs `codex mcp add <name> --url <url>`. Run `codex` once to finish the browser sign-in.
+- **MCP gateway** — runs `codex mcp add <name> --url <url>`. Codex can complete OAuth during registration. Verification reuses that login instead of opening a second authorization flow.
 - **LLM proxy** — adds a `[model_providers.<name>]` block to `~/.codex/config.toml` and selects it as the default provider. New `codex` sessions use the proxy automatically. Codex can use an existing ChatGPT subscription or OpenAI API key. In virtual-key mode, the script signs in with `codex login --with-api-key`.
 - **Skills** — runs `codex plugin marketplace add`.
 - **Plugins** — runs `codex plugin add` for each plugin. Codex delivers the plugin but does not execute its hooks until you open `/hooks` and approve that content hash.

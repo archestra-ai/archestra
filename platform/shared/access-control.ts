@@ -1957,6 +1957,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // MCP Gateway Routes - available to all authenticated users
   [RouteId.McpGatewayGet]: {}, // MCP transport probe; authenticates gateway credentials
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
+  [RouteId.McpGatewayDelete]: {}, // Session cleanup; validates gateway credentials and signed session ownership
   [RouteId.McpGatewaySseMessage]: {}, // Legacy HTTP+SSE message endpoint; authenticates gateway credentials
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
   [RouteId.McpServerProxyPost]: {}, // Server-scoped Apps proxy; access enforced in-handler

@@ -57,6 +57,27 @@ describe("Connect agent instructions", () => {
   });
 
   it.each([
+    "",
+    "?client=codex",
+  ])("does not repeat completed Codex OAuth in %s instructions", async (query) => {
+    const instructions = await GET(
+      new Request(`http://localhost:3000/connect.md${query}`),
+    ).text();
+    expect(instructions).toContain(
+      "gateway OAuth is already cached; do not run codex mcp login again",
+    );
+    expect(instructions).toContain("If auth_status is oauth, skip login");
+    expect(instructions).toContain(
+      "Only if it is not_logged_in, run codex mcp login SERVER_NAME once",
+    );
+    expect(instructions).toContain(
+      "do not ask the user to run verification commands",
+    );
+    expect(instructions).not.toContain("run codex mcp login SERVER_NAME, then");
+    expect(instructions).not.toContain("Run codex mcp login SERVER_NAME, then");
+  });
+
+  it.each([
     ["claude-code", "Claude Code", "--client claude-code"],
     ["codex", "Codex", "--client codex"],
     ["copilot-cli", "Copilot CLI", "--client copilot-cli"],

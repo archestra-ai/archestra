@@ -644,7 +644,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         "OpenAPPA rejected tool calls from a compaction response",
       );
     }
-    const calls = context.toolCalls;
+    // A return-label acceptance covers one exact spawn. Codex retries that
+    // spawn under a new call id and often rewrites the prompt, which the
+    // runtime treats as a new undeclared spawn and offers again. Evaluate and
+    // release the authorized arguments, not the rewrite. A different task or
+    // tool is left unchanged.
+    const calls = restoreAuthorizedSpawnRetry({
+      calls: context.toolCalls,
+      requestBody: binding.requestBody,
+      isSpawn: (name, namespace) =>
+        binding.adapter?.isSpawnTool(name, namespace) === true,
+    });
     const session = this.governedSession(binding);
     const handbackIds = new Set(
       binding.session.parent_id && binding.adapter?.isChildHandbackTool
@@ -1586,6 +1596,241 @@ function isChildSpawnCall(adapter: AppaClientAdapter, call: ToolCall): boolean {
       items: [{ type: "text", text: "probe" }],
     }) !== undefined
   );
+}
+
+const AUTHORIZED_RETRY =
+  /Call the (\S+) tool again with exactly these arguments: /;
+
+type AuthorizedSpawn = {
+  tool: string;
+  arguments: Record<string, unknown>;
+  namespace?: string;
+};
+
+/**
+ * Replaces one rewritten retry of an authorized spawn with the arguments the
+ * offer covers. The runtime matches the tool and those arguments, not the
+ * call id. A different task name, a non-spawn, or a retry that already
+ * carried the authorized arguments is not rewritten.
+ */
+function restoreAuthorizedSpawnRetry(params: {
+  calls: readonly ToolCall[];
+  requestBody: unknown;
+  isSpawn: (name: string, namespace?: string) => boolean;
+}): readonly ToolCall[] {
+  const pending = pendingAuthorizedSpawn(params.requestBody);
+  if (!pending) return params.calls;
+  let restored = false;
+  return params.calls.map((call) => {
+    if (restored || !params.isSpawn(call.name, call.namespace)) return call;
+    const args = argumentRecordOf(call.arguments);
+    if (
+      !args ||
+      !sameAuthorizedSpawn({
+        name: call.name,
+        arguments: args,
+        pending,
+      })
+    ) {
+      return call;
+    }
+    restored = true;
+    if (spawnArgumentsCovered(args, pending.arguments)) {
+      return call.namespace || !pending.namespace
+        ? call
+        : { ...call, namespace: pending.namespace };
+    }
+    return {
+      ...call,
+      ...(call.namespace || !pending.namespace
+        ? {}
+        : { namespace: pending.namespace }),
+      arguments:
+        typeof call.arguments === "string"
+          ? JSON.stringify(pending.arguments)
+          : pending.arguments,
+    };
+  });
+}
+
+function pendingAuthorizedSpawn(body: unknown): AuthorizedSpawn | undefined {
+  const input = isRecord(body) ? body.input : undefined;
+  if (!Array.isArray(input)) return undefined;
+  let pending: AuthorizedSpawn | undefined;
+  const namespaceByTask = new Map<string, string>();
+  for (const item of input) {
+    if (!isRecord(item)) continue;
+    if (item.type === "function_call" || item.type === "custom_tool_call") {
+      const args = argumentRecordOf(
+        typeof item.arguments === "string"
+          ? item.arguments
+          : JSON.stringify(item.arguments ?? {}),
+      );
+      const name = typeof item.name === "string" ? item.name : undefined;
+      if (!args || !name) continue;
+      const task =
+        typeof args.task_name === "string" ? args.task_name : undefined;
+      if (
+        task &&
+        typeof item.namespace === "string" &&
+        !namespaceByTask.has(task)
+      ) {
+        namespaceByTask.set(task, item.namespace);
+      }
+      if (
+        pending &&
+        sameAuthorizedSpawn({ name, arguments: args, pending }) &&
+        spawnArgumentsCovered(args, pending.arguments)
+      ) {
+        pending = undefined;
+      }
+      continue;
+    }
+    if (pending && item.type === "message" && item.role === "user") {
+      pending = undefined;
+      continue;
+    }
+    for (const text of outputTexts(item.output)) {
+      const authorized = parseAuthorizedRetry(text);
+      if (!authorized) continue;
+      const task =
+        typeof authorized.arguments.task_name === "string"
+          ? authorized.arguments.task_name
+          : undefined;
+      pending = {
+        ...authorized,
+        ...(task && namespaceByTask.has(task)
+          ? { namespace: namespaceByTask.get(task) }
+          : {}),
+      };
+    }
+  }
+  return pending;
+}
+
+function parseAuthorizedRetry(
+  text: string,
+): { tool: string; arguments: Record<string, unknown> } | undefined {
+  if (!text.startsWith("[appa] Authorized.")) return undefined;
+  const match = AUTHORIZED_RETRY.exec(text);
+  if (!match) return undefined;
+  const parsed = parseJsonObject(text.slice(match.index + match[0].length));
+  if (!parsed) return undefined;
+  return { tool: match[1], arguments: parsed };
+}
+
+function sameAuthorizedSpawn(params: {
+  name: string;
+  arguments: Record<string, unknown>;
+  pending: AuthorizedSpawn;
+}): boolean {
+  if (localSpawnName(params.name) !== localSpawnName(params.pending.tool)) {
+    return false;
+  }
+  // The message is the only field a retry may rewrite. Any other difference,
+  // including a reused task_name with different options, is another call.
+  if (typeof params.pending.arguments.message !== "string") return false;
+  const authorizedKeys = Object.keys(params.pending.arguments)
+    .filter((key) => key !== "message")
+    .sort();
+  const actualKeys = Object.keys(params.arguments)
+    .filter((key) => key !== "message")
+    .sort();
+  if (authorizedKeys.join("\0") !== actualKeys.join("\0")) return false;
+  return authorizedKeys.every(
+    (key) =>
+      JSON.stringify(params.arguments[key]) ===
+      JSON.stringify(params.pending.arguments[key]),
+  );
+}
+
+function spawnArgumentsCovered(
+  actual: Record<string, unknown>,
+  authorized: Record<string, unknown>,
+): boolean {
+  if (
+    typeof authorized.task_name === "string" &&
+    actual.task_name !== authorized.task_name
+  ) {
+    return false;
+  }
+  if (typeof authorized.message === "string") {
+    return (
+      typeof actual.message === "string" &&
+      (actual.message === authorized.message ||
+        actual.message.startsWith(
+          `${authorized.message}\n\n[appa] delegated trajectory `,
+        ))
+    );
+  }
+  if (Array.isArray(authorized.items)) {
+    return (
+      Array.isArray(actual.items) &&
+      JSON.stringify(actual.items.slice(0, authorized.items.length)) ===
+        JSON.stringify(authorized.items)
+    );
+  }
+  return JSON.stringify(actual) === JSON.stringify(authorized);
+}
+
+function localSpawnName(name: string): string {
+  const slash = name.lastIndexOf("/");
+  const dotted = name.lastIndexOf(".");
+  return name.slice(Math.max(slash, dotted) + 1);
+}
+
+function outputTexts(value: unknown): string[] {
+  if (typeof value === "string") {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (typeof parsed === "string") return [parsed];
+      if (Array.isArray(parsed)) return outputTexts(parsed);
+      if (isRecord(parsed) && Array.isArray(parsed.content)) {
+        return outputTexts(parsed.content);
+      }
+    } catch {
+      /* Plain tool-result text is not JSON. */
+    }
+    return [value];
+  }
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item === "string") return [item];
+    if (!isRecord(item)) return [];
+    if (typeof item.text === "string") return [item.text];
+    return outputTexts(item.content);
+  });
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | undefined {
+  const start = text.indexOf("{");
+  if (start < 0) return undefined;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index++) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          const parsed: unknown = JSON.parse(text.slice(start, index + 1));
+          return isRecord(parsed) ? parsed : undefined;
+        } catch {
+          return undefined;
+        }
+      }
+    }
+  }
+  return undefined;
 }
 
 /**

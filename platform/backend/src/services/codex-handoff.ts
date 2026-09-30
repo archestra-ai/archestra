@@ -42,7 +42,9 @@ function prepareDirectCatalog(executable, clientArgs = []) {
     // failure. A newly written cache is evidence of an actual remote refresh.
     const cacheFile = path.join(shadow, 'models_cache.json');
     const cache = existsSync(cacheFile) ? JSON.parse(readFileSync(cacheFile, 'utf8')) : null;
-    if (!cache || !Number.isFinite(Date.parse(cache.fetched_at)) || Date.parse(cache.fetched_at) < started) {
+    // The cache did not exist before this process. Allow a small wall-clock
+    // adjustment between Node and Codex without accepting an old cached result.
+    if (!cache || !Number.isFinite(Date.parse(cache.fetched_at)) || Date.parse(cache.fetched_at) < started - 1000) {
       throw new Error('Codex did not fetch a fresh model catalog; check upstream credentials and connectivity.');
     }
   } finally {

@@ -1655,10 +1655,22 @@ function stampDeclaredNamespace<T>(
   const record = item as { type?: string; name?: string; namespace?: unknown };
   if (record.type !== "function_call" && record.type !== "custom_tool_call")
     return item;
-  if (typeof record.namespace === "string" && record.namespace !== "")
-    return item;
+  if (typeof record.namespace === "string" && record.namespace !== "") {
+    return record.name?.startsWith(`${record.namespace}.`) &&
+      namespaces.get(record.name) === record.namespace
+      ? { ...item, name: record.name.slice(record.namespace.length + 1) }
+      : item;
+  }
   const namespace = record.name ? namespaces.get(record.name) : undefined;
-  return namespace ? { ...item, namespace } : item;
+  return namespace
+    ? {
+        ...item,
+        namespace,
+        ...(record.name?.startsWith(`${namespace}.`)
+          ? { name: record.name.slice(namespace.length + 1) }
+          : {}),
+      }
+    : item;
 }
 
 /**
@@ -1696,7 +1708,10 @@ function uniqueDeclaredNamespaces(
       if (typeof namespace !== "string" || namespace === "") continue;
       for (const member of tool.tools) {
         const name = declaredMemberName(member);
-        if (!name || ambiguous.has(name)) continue;
+        if (!name) continue;
+        const qualified = `${namespace}.${name}`;
+        if (!ambiguous.has(qualified)) namespaces.set(qualified, namespace);
+        if (ambiguous.has(name)) continue;
         const existing = namespaces.get(name);
         if (existing && existing !== namespace) {
           ambiguous.add(name);

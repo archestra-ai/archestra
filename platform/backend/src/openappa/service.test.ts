@@ -187,6 +187,42 @@ describe("APPA feature boundary", () => {
     );
   });
 
+  test("names a collaboration spawn in the retry spelling without changing its tool", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call", spawn_binding: "fork-1" }),
+    );
+
+    await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "spawn",
+          name: "spawn_agent",
+          namespace: "collaboration",
+          arguments: { message: "Read the report", task_name: "reader" },
+        },
+      ],
+      {
+        canonicalize: (name) => name,
+        isSpawn: (name, namespace) =>
+          name === "spawn_agent" &&
+          (namespace === undefined ||
+            namespace === "functions" ||
+            namespace === "collaboration"),
+      },
+    );
+
+    expect(
+      JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
+    ).toMatchObject({
+      event: "tool_call",
+      tool: "spawn_agent",
+      spelling: "collaboration.spawn_agent",
+      spawn: true,
+      arguments: { message: "Read the report", task_name: "reader" },
+    });
+  });
+
   test("reports through the authenticated native session after policy checking", async () => {
     config.openappa.yellEnabled = true;
     const args = { message: "Confusing feedback", with_trajectory: true };

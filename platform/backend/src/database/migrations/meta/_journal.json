@@ -3473,6 +3473,13 @@
       "when": 1790680884915,
       "tag": "0495_last_madripoor",
       "breakpoints": true
+    },
+    {
+      "idx": 496,
+      "version": "7",
+      "when": 1790800464950,
+      "tag": "0496_thin_captain_marvel",
+      "breakpoints": true
     }
   ]
 }

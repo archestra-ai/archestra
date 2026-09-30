@@ -21,11 +21,11 @@ export function claudeCodeRelayArrivals(
   requestBody: unknown,
 ): AppaRelayArrival[] {
   const arrivals: AppaRelayArrival[] = [];
-  for (const holder of textHolders(requestBody)) {
+  for (const { holder, answered } of textHolders(requestBody)) {
     for (const envelope of ENVELOPES) {
-      collectEnvelopes(holder, envelope, arrivals);
+      collectEnvelopes(holder, envelope, answered, arrivals);
     }
-    collectCoordinatorMessages(holder, arrivals);
+    collectCoordinatorMessages(holder, answered, arrivals);
   }
   return arrivals;
 }
@@ -127,9 +127,11 @@ const LIFECYCLE_TEXT_FIELDS = [
 ] as const;
 
 const WITHHELD_MESSAGE =
-  "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden from here on.";
+  "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden.";
 const WITHHELD_FIELD =
-  "[appa] withheld: no record of crossing from its sender, so its text is hidden from here on";
+  "[appa] withheld: no record of crossing from its sender, so its text is hidden";
+const UNCHECKED_NOTE =
+  "[appa] This message arrived while Guardrails enforcement was off, so OpenAPPA never checked it.";
 const WITHHELD_REPORT =
   "[appa] Report withheld: the resumed agent's report has no record of crossing into this session.";
 
@@ -154,6 +156,7 @@ const RELAY_RECEIPTS = [
 function collectEnvelopes(
   holder: TextHolder,
   envelope: Envelope,
+  answered: boolean,
   arrivals: AppaRelayArrival[],
 ): void {
   const pattern = new RegExp(
@@ -166,15 +169,19 @@ function collectEnvelopes(
       kind: envelope.kind,
       from: parseAttributes(attributes)[envelope.from] ?? "",
       body,
-      admit(records) {
-        const admitted =
+      answered,
+      admit(records, unchecked = "withhold") {
+        const admitted = settle(
+          body,
           envelope.kind === "session"
             ? { text: WITHHELD_MESSAGE, withheld: true }
             : admitBody({
                 body,
                 records,
                 enveloped: (value) => escapeEnvelopeBody(envelope.tag, value),
-              });
+              }),
+          unchecked,
+        );
         if (admitted.text !== body) {
           replaceOnce(
             holder,
@@ -190,6 +197,7 @@ function collectEnvelopes(
 
 function collectCoordinatorMessages(
   holder: TextHolder,
+  answered: boolean,
   arrivals: AppaRelayArrival[],
 ): void {
   for (const match of holder.get().matchAll(COORDINATOR)) {
@@ -198,14 +206,22 @@ function collectCoordinatorMessages(
       kind: "coordinator",
       from: "main",
       body,
-      admit(records) {
+      answered,
+      admit(records, unchecked = "withhold") {
         // The notice rides a system reminder, whose closing tag is escaped inside it.
-        const admitted = admitBody({
+        const admitted = settle(
           body,
-          records,
-          enveloped: (value) =>
-            value.replaceAll("</system-reminder>", "&lt;/system-reminder&gt;"),
-        });
+          admitBody({
+            body,
+            records,
+            enveloped: (value) =>
+              value.replaceAll(
+                "</system-reminder>",
+                "&lt;/system-reminder&gt;",
+              ),
+          }),
+          unchecked,
+        );
         if (admitted.text !== body) {
           replaceOnce(holder, original, original.replace(body, admitted.text));
         }
@@ -213,6 +229,20 @@ function collectCoordinatorMessages(
       },
     });
   }
+}
+
+/**
+ * A message no record covers stays as the model already read it when that
+ * reading was unchecked: withholding it now would only make the model disown
+ * what it read and said about it.
+ */
+function settle(
+  body: string,
+  admitted: { text: string; withheld: boolean },
+  unchecked: "withhold" | "keep",
+): { text: string; withheld: boolean } {
+  if (!admitted.withheld || unchecked === "withhold") return admitted;
+  return { text: `${body}\n\n${UNCHECKED_NOTE}`, withheld: false };
 }
 
 /**
@@ -378,13 +408,26 @@ function replaceOnce(
   );
 }
 
-/** Every text a user turn, a tool result, or a mid-conversation system message carries. */
-function* textHolders(requestBody: unknown): Generator<TextHolder> {
+/**
+ * Every text a user turn, a tool result, or a mid-conversation system message
+ * carries, and whether the model has replied since. An assistant turn the
+ * request ends on is a prefill the model goes on writing, not a reply.
+ */
+function* textHolders(
+  requestBody: unknown,
+): Generator<{ holder: TextHolder; answered: boolean }> {
   const messages = asRecord(requestBody)?.messages;
-  for (const message of Array.isArray(messages) ? messages : []) {
+  const history = Array.isArray(messages) ? messages : [];
+  const lastReply = history.findLastIndex(
+    (message, index) =>
+      index < history.length - 1 && asRecord(message)?.role === "assistant",
+  );
+  for (const [index, message] of history.entries()) {
     const record = asRecord(message);
     if (!record || record.role === "assistant") continue;
-    yield* contentHolders(record, "content");
+    for (const holder of contentHolders(record, "content")) {
+      yield { holder, answered: index < lastReply };
+    }
   }
 }
 

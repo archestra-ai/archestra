@@ -227,25 +227,32 @@ export type AppaRelayRecipient =
   | { kind: "session"; id: string }
   | { kind: "broadcast" };
 
+/** A teammate a launch receipt names: its child id, and the call that launched it. */
+export type AppaTeammateLaunch = { childNativeId: string; spawnCallId: string };
+
 /**
  * A message the client delivered into a conversation from another agent: a
  * teammate's or the lead's message, a subagent's message or hand-back, the
  * main conversation's word to a background agent, or another session's.
  */
-/** A teammate a launch receipt names: its child id, and the call that launched it. */
-export type AppaTeammateLaunch = { childNativeId: string; spawnCallId: string };
-
 export type AppaRelayArrival = {
   kind: "teammate" | "agent" | "coordinator" | "session";
   /** The sender as the client names it. */
   from: string;
   /** The message as its envelope carries it. */
   body: string;
+  /** The model has replied since this message arrived. */
+  answered: boolean;
   /**
-   * Keeps the text the records show its sender sent here, and withholds the
-   * rest in the request the model reads. Records are the retained values.
+   * Keeps the text the records show its sender sent here. Records are the
+   * retained values. The rest is withheld in the request the model reads,
+   * unless `unchecked` is "keep": a message the model already read while
+   * OpenAPPA was not checking stays as read, with a note saying so.
    */
-  admit(records: readonly string[]): { withheld: boolean };
+  admit(
+    records: readonly string[],
+    unchecked?: "withhold" | "keep",
+  ): { withheld: boolean };
 };
 
 /** The arguments of the platform's ask_user tool. */

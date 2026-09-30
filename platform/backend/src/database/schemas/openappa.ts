@@ -154,6 +154,27 @@ export const openappaProcessedResultsTable = pgTable(
   ],
 );
 
+// A message between agents that the proxy withheld from a session, by digest.
+// Written the first time the message would reach the model unchecked, so it
+// stays withheld on every later turn. A message the model read before
+// OpenAPPA checked the session's messages has no row, and stays as read.
+export const openappaWithheldArrivalsTable = pgTable(
+  "openappa_withheld_arrivals",
+  {
+    ...scope(),
+    digest: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "openappa_withheld_arrivals_pk",
+      columns: [table.organizationId, table.sessionId, table.digest],
+    }),
+  ],
+);
+
 // One row per external consult the native runtime made, written by Rust after
 // the dispatch returns. A dataset for export, never read by a decision.
 export const openappaExternalConsultsTable = pgTable(

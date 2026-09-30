@@ -1,4 +1,9 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import {
   buildElicitationMandateInstruction,
@@ -13,6 +18,7 @@ import config from "@/config";
 import logger from "@/logging";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
+import OpenAppaWithheldArrivalModel from "@/models/openappa-withheld-arrival";
 import { clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
@@ -86,6 +92,7 @@ import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaChildTrajectory,
   type AppaClientAdapter,
+  type AppaRelayArrival,
   type AppaRelayMessage,
   type AppaTrustedContext,
   type AskUserArguments,
@@ -1485,6 +1492,25 @@ async function admitRelayArrivals(params: {
       : Promise.resolve([]);
     return addressed;
   };
+  let withheldBefore: Promise<ReadonlySet<string>> | undefined;
+  // A fork reads its source's history, so what its source withheld stays
+  // withheld in the fork too.
+  const withheldEarlier = () => {
+    withheldBefore ??= OpenAppaSessionModel.forkLines({
+      organizationId: session.organization_id,
+      sessionIds: [session.session_id],
+    }).then((lines) =>
+      OpenAppaWithheldArrivalModel.digests({
+        organizationId: session.organization_id,
+        sessionIds: [
+          session.session_id,
+          ...(lines.get(session.session_id) ?? []),
+        ],
+      }),
+    );
+    return withheldBefore;
+  };
+  const withheldNow: string[] = [];
   for (const arrival of arrivals) {
     if (
       openingPrompt &&
@@ -1498,14 +1524,38 @@ async function admitRelayArrivals(params: {
         : arrival.kind === "coordinator"
           ? await addresses()
           : [...(await crossings()), ...(await addresses())];
-    const { withheld } = arrival.admit(records);
-    if (withheld) {
-      logger.info(
-        { sessionId: session.session_id, kind: arrival.kind },
-        "OpenAPPA withheld a message with no record of crossing from its sender",
-      );
-    }
+    const digest = relayArrivalDigest(arrival);
+    // A message is withheld the first time the model would read it, and on
+    // every turn after. A message the model replied to that was never
+    // withheld reached it while OpenAPPA was not checking: it stays as read.
+    const readUnchecked =
+      arrival.answered && !(await withheldEarlier()).has(digest);
+    const { withheld } = arrival.admit(
+      records,
+      readUnchecked ? "keep" : "withhold",
+    );
+    if (!withheld) continue;
+    if (!arrival.answered) withheldNow.push(digest);
+    logger.info(
+      { sessionId: session.session_id, kind: arrival.kind },
+      "OpenAPPA withheld a message with no record of crossing from its sender",
+    );
   }
+  // Recorded before the model reads the request: a withheld message the
+  // model replies to must never later pass for one it read unchecked.
+  await OpenAppaWithheldArrivalModel.record({
+    organizationId: session.organization_id,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    digests: withheldNow,
+  });
+}
+
+/** Names a message by its kind, its sender, and its text. */
+function relayArrivalDigest(arrival: AppaRelayArrival): string {
+  return createHash("sha256")
+    .update(JSON.stringify([arrival.kind, arrival.from, arrival.body]))
+    .digest("base64url");
 }
 
 /**

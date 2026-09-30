@@ -184,7 +184,13 @@ for (const viewport of [
       await expect(
         page.getByRole("switch", { name: "Enforce the policy" }),
       ).toBeVisible();
-      await page.getByRole("button", { name: "Connect GitHub" }).click();
+      await page
+        .getByRole("button", { name: "Create repository", exact: true })
+        .click();
+      await page
+        .getByRole("dialog", { name: "Create OpenAPPA repository" })
+        .getByRole("button", { name: "Connect existing repository" })
+        .click();
       const dialog = page.getByRole("dialog", {
         name: "Connect OpenAPPA to GitHub",
       });

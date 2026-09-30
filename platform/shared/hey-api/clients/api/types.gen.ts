@@ -103874,6 +103874,12 @@ export type GetTeamStatisticsResponses = {
         timeSeries: Array<{
             timestamp: string;
             value: number;
+            requests?: number;
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheReadTokens?: number;
+            billedCost?: number;
+            subscriptionCost?: number;
         }>;
     }>;
 };
@@ -103971,6 +103977,12 @@ export type GetAgentStatisticsResponses = {
         timeSeries: Array<{
             timestamp: string;
             value: number;
+            requests?: number;
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheReadTokens?: number;
+            billedCost?: number;
+            subscriptionCost?: number;
         }>;
     }>;
 };
@@ -104066,6 +104078,12 @@ export type GetModelStatisticsResponses = {
         timeSeries: Array<{
             timestamp: string;
             value: number;
+            requests?: number;
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheReadTokens?: number;
+            billedCost?: number;
+            subscriptionCost?: number;
         }>;
     }>;
 };
@@ -104085,6 +104103,10 @@ export type GetUserStatisticsData = {
          * Include each user's per-model usage breakdown. Off by default: it costs an extra aggregation.
          */
         includeModels?: string;
+        /**
+         * Include usage time series for each user's models. Implies includeModels. Off by default: it multiplies the response by models and time buckets.
+         */
+        includeModelTimeSeries?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'totalTokens' | 'requests' | 'billedCost' | 'lastActiveAt' | 'userName';
@@ -104186,10 +104208,26 @@ export type GetUserStatisticsResponses = {
                 percentage: number;
                 billedCost: number;
                 subscriptionCost: number;
+                timeSeries?: Array<{
+                    timestamp: string;
+                    value: number;
+                    requests?: number;
+                    inputTokens?: number;
+                    outputTokens?: number;
+                    cacheReadTokens?: number;
+                    billedCost?: number;
+                    subscriptionCost?: number;
+                }>;
             }>;
             timeSeries?: Array<{
                 timestamp: string;
                 value: number;
+                requests?: number;
+                inputTokens?: number;
+                outputTokens?: number;
+                cacheReadTokens?: number;
+                billedCost?: number;
+                subscriptionCost?: number;
             }>;
         }>;
         pagination: {
@@ -104303,10 +104341,26 @@ export type GetMyStatisticsResponses = {
             percentage: number;
             billedCost: number;
             subscriptionCost: number;
+            timeSeries?: Array<{
+                timestamp: string;
+                value: number;
+                requests?: number;
+                inputTokens?: number;
+                outputTokens?: number;
+                cacheReadTokens?: number;
+                billedCost?: number;
+                subscriptionCost?: number;
+            }>;
         }>;
         timeSeries: Array<{
             timestamp: string;
             value: number;
+            requests?: number;
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheReadTokens?: number;
+            billedCost?: number;
+            subscriptionCost?: number;
         }>;
     };
 };

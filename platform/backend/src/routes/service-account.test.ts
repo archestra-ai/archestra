@@ -656,7 +656,7 @@ describe("service account API authentication", () => {
         }),
         app.inject({
           method: "GET",
-          url: "/api/statistics/users?timeframe=24h",
+          url: "/api/statistics/users?timeframe=24h&includeModelTimeSeries=true&includeTimeSeries=true",
           headers: authorization(ownDataToken.token),
         }),
         app.inject({
@@ -666,7 +666,7 @@ describe("service account API authentication", () => {
         }),
         app.inject({
           method: "GET",
-          url: "/api/statistics/users?timeframe=24h",
+          url: "/api/statistics/users?timeframe=24h&includeModelTimeSeries=true&includeTimeSeries=true",
           headers: authorization(organizationDataToken.token),
         }),
       ]);
@@ -683,7 +683,28 @@ describe("service account API authentication", () => {
     expect(allLogs.json().data).toHaveLength(1);
     expect(allUsers.statusCode).toBe(200);
     expect(allUsers.json().data).toEqual([
-      expect.objectContaining({ userId: user.id }),
+      expect.objectContaining({
+        userId: user.id,
+        timeSeries: [
+          expect.objectContaining({
+            requests: 1,
+            inputTokens: 80,
+            outputTokens: 20,
+          }),
+        ],
+        models: [
+          expect.objectContaining({
+            model: "gpt-4o",
+            timeSeries: [
+              expect.objectContaining({
+                requests: 1,
+                inputTokens: 80,
+                outputTokens: 20,
+              }),
+            ],
+          }),
+        ],
+      }),
     ]);
   });
 });

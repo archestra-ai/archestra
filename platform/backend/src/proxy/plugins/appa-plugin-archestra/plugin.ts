@@ -290,7 +290,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           binding,
           answer,
           verifiedNativeQuestionResults,
-        }),
+        }) || isIssuedQuestionAnswer(binding, answer),
       classifySpawnResult: (answer) => {
         if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
           return undefined;
@@ -2390,6 +2390,23 @@ function isUserQuestionResult(params: {
   return (
     name !== undefined &&
     params.verifiedNativeQuestionResults.has(params.answer)
+  );
+}
+
+/**
+ * An answer to a question the proxy issued in this session, by the question's
+ * signed id. The claim on an issued question is spent by the first request
+ * that carries its answer; the id is not, so every later turn that replays the
+ * answer reads it too.
+ */
+function isIssuedQuestionAnswer(
+  binding: AppaPluginBinding,
+  answer: { id: string; name: string },
+): boolean {
+  const name = nativeQuestionName(binding, answer.name);
+  return (
+    name !== undefined &&
+    verifyNativeQuestionId({ session: binding.session, name, id: answer.id })
   );
 }
 

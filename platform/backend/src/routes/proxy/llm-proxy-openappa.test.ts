@@ -1221,7 +1221,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     true,
     false,
-  ])("the user's answer to Claude Code's own question reaches the model as given (stream=%s)", async (stream) => {
+  ])("the user's answer to Claude Code's own question reaches the model as given, on later turns too (stream=%s)", async (stream) => {
     config.openappa = {
       ...config.openappa,
       offerSigningSecret: "test-offer-signing-secret-32chars",
@@ -1274,31 +1274,32 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     providerRequests.length = 0;
     const answer =
       'User has answered your questions: "Scout can\'t be reached. How do you want the report?"="Spawn a new scout". You can now continue with the user\'s answers in mind.';
+    const history = [
+      ...opening,
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: call.id,
+            name: call.name,
+            input: call.input,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: call.id, content: answer },
+        ],
+      },
+    ];
     const answered = await app.inject({
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: claudeCode,
-      payload: request([
-        ...opening,
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "tool_use",
-              id: call.id,
-              name: call.name,
-              input: call.input,
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            { type: "tool_result", tool_use_id: call.id, content: answer },
-          ],
-        },
-      ]),
+      payload: request(history),
     });
 
     expect(answered.statusCode, answered.body).toBe(200);
@@ -1310,6 +1311,25 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       "You can now continue with the user's answers in mind.",
     );
     expect(forwarded).not.toContain("APPROVED REPLACEMENT");
+
+    // Every later turn replays the answer, and reads it as the first did.
+    events.length = 0;
+    const later = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: claudeCode,
+      payload: request([
+        ...history,
+        { role: "assistant", content: "Spawning a new scout." },
+        { role: "user", content: "What did I pick?" },
+      ]),
+    });
+    expect(later.statusCode, later.body).toBe(200);
+    expect(events.filter((event) => event.event === "tool_result")).toEqual([]);
+    expect(JSON.stringify(providerRequests.at(-1))).toContain(
+      "You can now continue with the user's answers in mind.",
+    );
   });
 
   test.each([

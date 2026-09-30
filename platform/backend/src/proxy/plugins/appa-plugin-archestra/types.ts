@@ -164,8 +164,13 @@ export type AppaClientAdapter = {
    * each with a setter that replaces the message text the model reads.
    */
   relayArrivals?(requestBody: unknown): AppaRelayArrival[];
-  /** Child ids the history's launch receipts give each named teammate. */
-  teammateIds?(requestBody: unknown): Map<string, string>;
+  /** The teammates the history's launch receipts name, by name. */
+  teammateLaunches?(requestBody: unknown): Map<string, AppaTeammateLaunch>;
+  /**
+   * True for a child that reports to its parent in messages rather than in
+   * the result of the call that started it: a teammate.
+   */
+  isTeammate?(childNativeId: string): boolean;
   /** True when this local tool is the child's return to its parent. */
   isChildHandbackTool?(name: string): boolean;
   /** Payload carried by a native child handback call. */
@@ -227,6 +232,9 @@ export type AppaRelayRecipient =
  * teammate's or the lead's message, a subagent's message or hand-back, the
  * main conversation's word to a background agent, or another session's.
  */
+/** A teammate a launch receipt names: its child id, and the call that launched it. */
+export type AppaTeammateLaunch = { childNativeId: string; spawnCallId: string };
+
 export type AppaRelayArrival = {
   kind: "teammate" | "agent" | "coordinator" | "session";
   /** The sender as the client names it. */

@@ -127,8 +127,9 @@ const LIFECYCLE_TEXT_FIELDS = [
 ] as const;
 
 const WITHHELD_MESSAGE =
-  "[appa] Message withheld: this message has no record of crossing from its sender into this session.";
-const WITHHELD_FIELD = "[appa] withheld: no record of crossing from its sender";
+  "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden from here on.";
+const WITHHELD_FIELD =
+  "[appa] withheld: no record of crossing from its sender, so its text is hidden from here on";
 const WITHHELD_REPORT =
   "[appa] Report withheld: the resumed agent's report has no record of crossing into this session.";
 

@@ -6,7 +6,7 @@ import {
 } from "./claude-code-relay";
 
 const WITHHELD =
-  "[appa] Message withheld: this message has no record of crossing from its sender into this session.";
+  "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden from here on.";
 
 const teammateMessage = (from: string, body: string) =>
   `<teammate-message teammate_id="${from}" color="blue">\n${body}\n</teammate-message>`;
@@ -111,7 +111,7 @@ describe("claudeCodeRelayArrivals", () => {
     expect(forwarded).toContain("PR 12 is open with the tools.");
     expect(forwarded).not.toContain("Opened a PR");
     expect(forwarded).toContain(
-      "[appa] withheld: no record of crossing from its sender",
+      "[appa] withheld: no record of crossing from its sender, so its text is hidden from here on",
     );
   });
 

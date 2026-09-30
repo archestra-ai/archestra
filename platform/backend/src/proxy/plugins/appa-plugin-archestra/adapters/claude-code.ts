@@ -8,6 +8,7 @@ import type {
   AppaRelayMessage,
   AppaRelayRecipient,
   AppaSpawnPromptField,
+  AppaTeammateLaunch,
   AskUserArguments,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
@@ -167,15 +168,21 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     return claudeCodeRelayArrivals(requestBody);
   }
 
-  teammateIds(requestBody: unknown): Map<string, string> {
-    const ids = new Map<string, string>();
-    for (const text of toolResultTexts(requestBody)) {
+  teammateLaunches(requestBody: unknown): Map<string, AppaTeammateLaunch> {
+    const launches = new Map<string, AppaTeammateLaunch>();
+    for (const { text, callId } of toolResultTexts(requestBody)) {
       if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) continue;
       const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
-      if (id && name && isChildId(id) && isChildId(name)) ids.set(name, id);
+      if (id && name && isChildId(id) && isChildId(name))
+        launches.set(name, { childNativeId: id, spawnCallId: callId });
     }
-    return ids;
+    return launches;
+  }
+
+  /** Claude Code names a teammate `<name>@<team>`; a subagent's id has no `@`. */
+  isTeammate(childNativeId: string): boolean {
+    return childNativeId.includes("@");
   }
 
   isChildHandbackTool(name: string): boolean {
@@ -261,13 +268,25 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     });
   }
 
+  /**
+   * A tool's own model call, like the one WebFetch reads its page with,
+   * carries the headers of the agent that ran the tool but none of that
+   * agent's conversation: it declares no tools, and no verified marker or
+   * receipt binds it to a spawn. It is part of the tool's run, not a turn of
+   * the child, so it stays out of the child's trajectory as the lead's own
+   * tool-free requests do.
+   */
   bindChildTrajectory(context: AppaMatchContext) {
     const parentNativeId = parentSessionId(context);
-    return bindMintedChildTrajectory({
+    const child = bindMintedChildTrajectory({
       context,
       parentNativeId,
       childNativeId: childAgentId(context),
     });
+    return child?.lineage?.source === "native" &&
+      isToolModelCall(context.requestBody)
+      ? undefined
+      : child;
   }
 
   stripCarrierMetadata(request: unknown): void {
@@ -365,9 +384,11 @@ function argumentRecord(args: unknown): Record<string, unknown> | undefined {
   return asRecord(args) ?? (raw ? asRecord(parseJson(raw)) : undefined);
 }
 
-/** The text of every tool result in a Messages request, in order. */
-function toolResultTexts(requestBody: unknown): string[] {
-  const texts: string[] = [];
+/** The text of every tool result in a Messages request, in order, with the call it answers. */
+function toolResultTexts(
+  requestBody: unknown,
+): Array<{ text: string; callId: string }> {
+  const results: Array<{ text: string; callId: string }> = [];
   const messages = asRecord(requestBody)?.messages;
   for (const message of Array.isArray(messages) ? messages : []) {
     const content = asRecord(message)?.content;
@@ -375,10 +396,23 @@ function toolResultTexts(requestBody: unknown): string[] {
       const record = asRecord(block);
       if (record?.type !== "tool_result") continue;
       const text = launchText(record.content);
-      if (text) texts.push(text);
+      const callId = stringField(record.tool_use_id);
+      if (text && callId) results.push({ text, callId });
     }
   }
-  return texts;
+  return results;
+}
+
+/** A conversation that declares no tools: an agent's own turns always do. */
+function isToolModelCall(requestBody: unknown): boolean {
+  const body = asRecord(requestBody);
+  const messages = body?.messages;
+  const tools = body?.tools;
+  return (
+    Array.isArray(messages) &&
+    messages.length > 0 &&
+    !(Array.isArray(tools) && tools.length > 0)
+  );
 }
 
 function launchText(content: unknown): string | undefined {

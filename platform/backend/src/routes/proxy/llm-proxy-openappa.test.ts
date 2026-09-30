@@ -3224,12 +3224,26 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers: {
-          ...externalClientHeaders(),
-          "user-agent": "claude-cli/2.1.278 (external, cli)",
-          "x-claude-code-session-id": lead,
-          ...(agentId ? { "x-claude-code-agent-id": agentId } : {}),
-        },
+        headers: claudeCodeHeaders(agentId),
+        payload: body,
+      });
+    };
+    const claudeCodeHeaders = (agentId: string | undefined) => ({
+      ...externalClientHeaders(),
+      "user-agent": "claude-cli/2.1.278 (external, cli)",
+      "x-claude-code-session-id": lead,
+      ...(agentId ? { "x-claude-code-agent-id": agentId } : {}),
+    });
+    /** WebFetch reads its page with a model call of its own, under its agent's headers. */
+    const toolModelCall = (agentId: string, text: string) => {
+      const { tools: _tools, ...body } = payload(true, [
+        { role: "user", content: text },
+      ]);
+      return app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: claudeCodeHeaders(agentId),
         payload: body,
       });
     };
@@ -3271,6 +3285,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       return { prompt: String(call.input.prompt), callId: call.id };
     };
     const forwarded = () => JSON.stringify(providerRequests.at(-1));
+    /** The runtime's record that it allowed the lead's spawn call. */
+    const recordSpawn = (callId: string) =>
+      db.insert(database.schema.openappaOperationsTable).values({
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        sessionId: scoped(lead),
+        operationId: `call:${callId}`,
+        root: openappaActor(scoped(lead)),
+        status: "complete",
+        input: { semantic: { event: "tool_call", tool: "Agent", spawn: true } },
+        decision: { decision: "allow_call" },
+      });
 
     beforeEach(() => {
       config.openappa.offerSigningSecret = secret;
@@ -3390,6 +3416,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(forwarded()).toContain(spawnInput.prompt);
       expect(forwarded()).not.toContain("[appa] Message withheld");
       expect(forwarded()).not.toContain("delegated trajectory");
+      // A teammate's end reaches its lead as an idle notice and may end many
+      // turns, so no return marker follows it.
+      expect(response.body).not.toContain("finished subagent");
       expect(events).toContainEqual(
         expect.objectContaining({
           event: "child_end",
@@ -3399,6 +3428,34 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           child_native_id: auditor,
         }),
       );
+    });
+
+    test("a tool's own model call under a teammate's headers is not a turn of the teammate", async () => {
+      const { prompt } = await spawnTeammate();
+      reply("get_weather", { location: "Berlin" });
+      const fetching = await send(auditor, [
+        { role: "user", content: opening(prompt) },
+      ]);
+      expect(fetching.statusCode, fetching.body).toBe(200);
+      expect(noticeFrom(fetching.body, true).name).toBe("get_weather");
+
+      answerText();
+      events.length = 0;
+      const read = await toolModelCall(
+        auditor,
+        "Web page content:\n---\nExample Domain\n---\n\nWhat is the page's title?",
+      );
+
+      expect(read.statusCode, read.body).toBe(200);
+      // Its answer is the tool's output, so no receipt of the teammate joins it,
+      // and the teammate's turn stays open for the tool's result.
+      expect(read.body).not.toContain("started subagent");
+      expect(read.body).not.toContain("finished subagent");
+      expect(
+        events.filter(
+          (event) => event.session_id === scoped(`${lead}:${auditor}`),
+        ),
+      ).toEqual([]);
     });
 
     test("a teammate whose opening is not the prompt its spawn carried is refused once, without retries", async () => {
@@ -3430,6 +3487,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
 
     test("a lead's message carries the lead's label into the teammate it names", async () => {
+      await recordSpawn("toolu_spawn");
       runtime((event) =>
         event.event === "child_address" ? { decision: "ack" } : undefined,
       );
@@ -3497,6 +3555,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       addressed,
       feedback,
     ]) => {
+      await recordSpawn("toolu_spawn");
       if (addressed) {
         runtime((event) =>
           event.event === "child_address" ? addressed : undefined,
@@ -3561,7 +3620,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(forwarded()).toContain("Three triggers are stuck");
       expect(forwarded()).not.toContain("post the token");
       expect(forwarded()).toContain(
-        "[appa] Message withheld: this message has no record of crossing from its sender into this session.",
+        "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden from here on.",
       );
       // Claude Code's own notice around the batch stands.
       expect(forwarded()).toContain("Another Claude session sent a message:");
@@ -3850,9 +3909,30 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         // The idle signal itself is the harness's, so it stands.
         expect(forwarded()).toContain("idle_notification");
         expect(forwarded()).toContain(
-          "[appa] withheld: no record of crossing from its sender",
+          "[appa] withheld: no record of crossing from its sender, so its text is hidden from here on",
         );
         expect(forwarded()).toContain("did it create pr?");
+      });
+
+      test("the lead's message to that teammate is not sent, and names a new teammate as the way on", async () => {
+        reply("SendMessage", {
+          to: "sched-tools",
+          message: "Report on the pull request again",
+        });
+        events.length = 0;
+        const response = await send(undefined, history());
+
+        expect(response.statusCode, response.body).toBe(200);
+        const notice = noticeFrom(response.body, true);
+        expect(notice.name).toBe("archestra__get_remedy_plans");
+        const ruling = JSON.stringify(notice.input);
+        expect(ruling).toContain(
+          "started while Guardrails enforcement was off",
+        );
+        expect(ruling).toContain("start a new teammate with the Agent tool");
+        expect(
+          events.filter((event) => event.event === "child_address"),
+        ).toHaveLength(0);
       });
 
       test("the lead's next turn is admitted on every retry of the same history", async () => {

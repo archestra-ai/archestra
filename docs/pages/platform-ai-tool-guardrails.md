@@ -46,6 +46,8 @@ Claude Code teammates pass the same check. A teammate's message to its lead cros
 
 The model reads a message only if it passed the check on its way. Any other message is withheld, and the model reads a notice in its place. Messages from other sessions are always withheld.
 
+A teammate that started while enforcement was off cannot be checked. OpenAPPA refuses its requests and does not send it messages. Start a new teammate to continue its work.
+
 ## Client Support Matrix
 
 Guardrails track session history across model turns and child agents. To track a session, the proxy needs to identify the client and its session boundary.

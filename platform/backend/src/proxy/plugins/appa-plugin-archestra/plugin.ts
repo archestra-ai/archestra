@@ -1003,6 +1003,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!outcome.crossed) {
       return { decision: "replace", responseText: admitted };
     }
+    // A teammate's end reaches its lead as an idle notice, not as the result
+    // of the call that started it, and it may end many turns: it carries no
+    // return marker. The lead reads it only because it crossed here.
+    if (childNativeId && binding.adapter?.isTeammate?.(childNativeId)) {
+      return admitted === context.responseText
+        ? { decision: "release" }
+        : { decision: "replace", responseText: admitted };
+    }
     const marker = mintChildReturnMarker({
       organizationId: binding.session.organization_id,
       callerId: binding.session.caller_id,
@@ -1600,6 +1608,10 @@ async function governRelays(params: {
       });
       continue;
     }
+    if (recipient.unchecked) {
+      outcomes.set(call.id, { kind: "deny", feedback: RELAY_UNCHECKED });
+      continue;
+    }
     const crossed = isChild
       ? await crossRelay({ binding, call, relay, session })
       : ({ kind: "release", call } as const);
@@ -1610,7 +1622,7 @@ async function governRelays(params: {
     const addressed = await addressChild({
       session: parent,
       operationId: `address:${call.id}`,
-      childSessionId: `${parent.session_id}:${recipient}`,
+      childSessionId: `${parent.session_id}:${recipient.childNativeId}`,
       value: adapter.relayMessage(crossed.call)?.value ?? relay.value,
     });
     outcomes.set(
@@ -1670,30 +1682,45 @@ async function crossRelay(params: {
 /**
  * The client-native id of the child a message names: a child the parent
  * started (by its id, or by the name a teammate id begins with), else a
- * teammate the parent's history launched but that has not started yet.
+ * teammate the parent's history launched but that has not started yet. Such
+ * a teammate is `unchecked` when the runtime never allowed the call that
+ * launched it, as when it started while enforcement was off: it can never
+ * open, so no message reaches it.
  */
 async function resolveRelayChild(params: {
   binding: AppaPluginBinding;
   parent: OpenAppaSession;
   name: string;
-}): Promise<string | undefined> {
+}): Promise<{ childNativeId: string; unchecked?: true } | undefined> {
   const started = await OpenAppaSessionModel.childNativeIds({
     organizationId: params.parent.organization_id,
     parentSessionId: params.parent.session_id,
   });
-  if (started.includes(params.name)) return params.name;
+  if (started.includes(params.name)) return { childNativeId: params.name };
   const named = started.filter((id) => id.startsWith(`${params.name}@`));
-  if (named.length === 1) return named[0];
+  if (named.length === 1) return { childNativeId: named[0] };
   if (named.length > 1) return undefined;
-  return params.binding.adapter
-    ?.teammateIds?.(params.binding.requestBody)
+  const launch = params.binding.adapter
+    ?.teammateLaunches?.(params.binding.requestBody)
     .get(params.name);
+  if (!launch) return undefined;
+  const checked = await OpenAppaSpawnCorrelationModel.allowedSpawn({
+    organizationId: params.parent.organization_id,
+    callerId: params.parent.caller_id,
+    parentSessionId: params.parent.session_id,
+    spawnCallId: launch.spawnCallId,
+  });
+  return checked
+    ? { childNativeId: launch.childNativeId }
+    : { childNativeId: launch.childNativeId, unchecked: true };
 }
 
 const RELAY_BROADCAST =
   "OpenAPPA checks each message against the agent that receives it. Send the message to each teammate by name.";
 const RELAY_UNKNOWN_RECIPIENT =
   "OpenAPPA cannot identify the agent this message is for, so it did not send the message. Send it to a teammate by the name the teammate started with.";
+const RELAY_UNCHECKED =
+  "OpenAPPA cannot check this teammate: it started while Guardrails enforcement was off, so OpenAPPA refuses its requests and did not send the message. To continue its work, start a new teammate with the Agent tool and give it the task; OpenAPPA checks that spawn.";
 const RELAY_UNGOVERNED =
   "OpenAPPA cannot tell which spawn started this agent, so it cannot check this message. The message was not sent.";
 const RELAY_RESHAPED_PROTOCOL =

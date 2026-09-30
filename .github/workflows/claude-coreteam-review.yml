@@ -14,7 +14,7 @@ jobs:
   author:
     name: Resolve PR Author
     if: github.repository == 'archestra-ai/archestra'
-    uses: archestra-ai/.github/.github/workflows/claude-review-context.yml@45af72906d38770df0c5358199ca02d102bc4579
+    uses: archestra-ai/.github/.github/workflows/claude-review-context.yml@4c03ba23c1d1de1a34b9c8fcde33d07e97605583
 
   review:
     name: Claude Review
@@ -24,7 +24,7 @@ jobs:
       contents: read
       pull-requests: write # Publish PR review comments.
       id-token: write # Support the reusable workflow's Claude GitHub App authentication.
-    uses: archestra-ai/.github/.github/workflows/claude-coreteam-review.yml@45af72906d38770df0c5358199ca02d102bc4579
+    uses: archestra-ai/.github/.github/workflows/claude-coreteam-review.yml@4c03ba23c1d1de1a34b9c8fcde33d07e97605583
     with:
       setup_repository: true
     # GitHub resolves this lookup before starting the called job; only the

@@ -690,5 +690,49 @@ spec:
         ...systemValues.labels,
       });
     });
+
+    test("preserves privileged pod fields from custom YAML", () => {
+      const userYaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-reproduction
+spec:
+  selector:
+    matchLabels:
+      app: ignored
+  template:
+    metadata:
+      labels:
+        app: ignored
+    spec:
+      serviceAccountName: untrusted-runtime-account
+      hostPID: true
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+      containers:
+        - name: mcp-server
+          image: example.invalid/runtime:latest
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+`;
+
+      const deployment = customYamlToDeployment(userYaml, systemValues);
+
+      expect(deployment?.spec?.template.spec).toMatchObject({
+        serviceAccountName: "untrusted-runtime-account",
+        hostPID: true,
+        volumes: [{ name: "host-root", hostPath: { path: "/" } }],
+        containers: [
+          expect.objectContaining({
+            securityContext: { privileged: true },
+          }),
+        ],
+      });
+    });
   });
 });

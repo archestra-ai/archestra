@@ -117,13 +117,64 @@ for (const width of [1280, 390]) {
         .toBe(true);
       const action = page.getByRole("link", { name: "Investigate in chat" });
       await expect(action).toBeInViewport({ ratio: 1 });
+      await mswControl.registerMany([
+        {
+          method: "get",
+          url: "/api/openappa/yells",
+          body: {
+            data: [
+              {
+                ...yell,
+                resolvedAt: "2026-09-30T13:00:00Z",
+                resolvedBy: "reviewer",
+              },
+            ],
+            pagination,
+          },
+        },
+      ]);
+      await page
+        .getByRole("button", { name: "Mark resolved", exact: true })
+        .click();
+      await expect(
+        page.getByRole("button", { name: "Reopen", exact: true }),
+      ).toBeVisible();
+      await mswControl.registerMany([
+        {
+          method: "get",
+          url: "/api/openappa/yells",
+          body: { data: [yell], pagination },
+        },
+        { method: "patch", url: `/api/openappa/yells/${yell.id}`, body: yell },
+      ]);
+      await page.getByRole("button", { name: "Reopen", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Mark resolved", exact: true }),
+      ).toBeVisible();
+      await mswControl.registerMany([
+        {
+          method: "patch",
+          url: `/api/openappa/yells/${yell.id}`,
+          body: {
+            ...yell,
+            resolvedAt: "2026-09-30T13:00:00Z",
+            resolvedBy: "reviewer",
+          },
+        },
+      ]);
+      await mswControl.use({
+        method: "get",
+        url: "/api/openappa/yells",
+        query: { search: "missing" },
+        body: { data: [], pagination },
+      });
       await page.getByPlaceholder("Search reports").fill("missing");
       await expect(
         page.getByText("No reports match these filters."),
       ).toBeVisible();
       await page.getByPlaceholder("Search reports").fill("");
       await page.getByRole("button", { name: yell.message }).click();
-      const dialog = page.getByRole("dialog", { name: "OpenAPPA yell" });
+      const dialog = page.getByRole("dialog", { name: /OpenAPPA yell/ });
       await expect(dialog.getByText(yell.message)).toBeVisible();
       await dialog.getByRole("button", { name: "Mark resolved" }).click();
       await expect(

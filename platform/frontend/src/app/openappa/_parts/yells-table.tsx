@@ -23,6 +23,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogDescription } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
@@ -31,7 +36,7 @@ import {
   useOpenAppaYells,
   useResolveOpenAppaYell,
 } from "@/lib/openappa-yells.query";
-import { formatDate } from "@/lib/utils/date-time";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 
 export function YellsTable() {
@@ -83,10 +88,7 @@ export function YellsTable() {
             {isMobile && (
               <span className="block text-xs font-normal text-muted-foreground">
                 {row.original.resolvedAt ? "Resolved" : "Unresolved"} ·{" "}
-                {formatDate({
-                  date: row.original.createdAt,
-                  dateFormat: "MMM d",
-                })}
+                {formatRelativeTimeFromNow(row.original.createdAt)}
               </span>
             )}
           </span>
@@ -108,20 +110,54 @@ export function YellsTable() {
       header: "Reported",
       size: 170,
       cell: ({ row }) => (
-        <span className="whitespace-nowrap text-muted-foreground">
-          {formatDate({
-            date: row.original.createdAt,
-            dateFormat: "MMM d, yyyy · h:mm a",
-          })}
+        <span
+          className="whitespace-nowrap text-muted-foreground"
+          title={formatDate({ date: row.original.createdAt })}
+        >
+          {formatRelativeTimeFromNow(row.original.createdAt)}
         </span>
       ),
     },
     {
       id: "actions",
       header: "Actions",
-      size: isMobile ? 144 : 208,
+      size: canResolve ? 112 : 72,
       cell: ({ row }) => (
-        <YellChatAction id={row.original.id} compact={isMobile} />
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <YellChatAction id={row.original.id} compact />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Investigate in chat</TooltipContent>
+          </Tooltip>
+          {canResolve && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={
+                    row.original.resolvedAt ? "Reopen" : "Mark resolved"
+                  }
+                  disabled={resolve.isPending}
+                  onClick={() =>
+                    resolve.mutate({
+                      id: row.original.id,
+                      resolved: !row.original.resolvedAt,
+                    })
+                  }
+                >
+                  {row.original.resolvedAt ? <RotateCcw /> : <Check />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {row.original.resolvedAt ? "Reopen" : "Mark resolved"}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       ),
     },
   ];
@@ -234,7 +270,21 @@ export function YellsTable() {
           onOpenChange={(open) => {
             if (!open) setSelected(null);
           }}
-          title="OpenAPPA yell"
+          title={
+            <span className="flex flex-wrap items-center gap-2 pr-6">
+              <span>OpenAPPA yell</span>
+              <Badge variant="outline">
+                {selected.resolvedAt ? "Resolved" : "Unresolved"}
+              </Badge>
+              <span
+                className="ml-auto flex items-center gap-1.5 text-xs font-normal text-muted-foreground"
+                title={formatDate({ date: selected.createdAt })}
+              >
+                <Clock3 className="size-3.5" />
+                <span>{formatRelativeTimeFromNow(selected.createdAt)}</span>
+              </span>
+            </span>
+          }
           bodyClassName="space-y-4"
           footer={
             <>
@@ -264,37 +314,25 @@ export function YellsTable() {
             </>
           }
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <DialogDescription className="sr-only">
-              Review the reported issue, investigate it in chat, or update its
-              resolution status.
-            </DialogDescription>
-            <Badge variant="outline">
-              {selected.resolvedAt ? "Resolved" : "Unresolved"}
-            </Badge>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock3 className="size-3.5" />
-              {formatDate({
-                date: selected.createdAt,
-                dateFormat: "MMM d, yyyy · h:mm a",
-              })}
-            </span>
-          </div>
+          <DialogDescription className="sr-only">
+            Review the reported issue, investigate it in chat, or update its
+            resolution status.
+          </DialogDescription>
           <div className="rounded-md border bg-muted/30 p-3">
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
               {selected.message}
             </p>
           </div>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Send className="size-3.5 shrink-0" />
-            <span>
-              {selected.reportFailed
-                ? "External report failed. Your report is saved here."
-                : selected.reportedAt
-                  ? "Sent to OpenAPPA developers"
-                  : "External report awaiting confirmation"}
-            </span>
-          </p>
+          {(selected.reportFailed || selected.reportedAt) && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Send className="size-3.5 shrink-0" />
+              <span>
+                {selected.reportFailed
+                  ? "Could not send to OpenAPPA developers. This report is saved here."
+                  : "Sent to OpenAPPA developers"}
+              </span>
+            </p>
+          )}
         </StandardDialog>
       )}
     </div>
@@ -314,12 +352,12 @@ function YellChatAction({
     <OpenAppaChatButton
       promptKey="explainPolicy"
       yellId={id}
-      variant={primary ? "default" : "outline"}
-      size="sm"
+      variant={primary ? "default" : compact ? "ghost" : "outline"}
+      size={compact ? "icon-sm" : "sm"}
       aria-label="Investigate in chat"
     >
-      {!compact && <MessageCircle />}
-      <span>{compact ? "Investigate" : "Investigate in chat"}</span>
+      <MessageCircle />
+      {!compact && <span>Investigate in chat</span>}
     </OpenAppaChatButton>
   );
 }

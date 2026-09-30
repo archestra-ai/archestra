@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-10-02
+lastUpdated: 2026-10-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1699,6 +1699,10 @@ The backend logs the origin it resolved for every request, under `getPublicReque
 - **`ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES`** - Comma-separated namespaces the platform ServiceAccount is granted RBAC in (mirrors the Helm chart's `archestra.orchestrator.kubernetes.rbac.environmentNamespaces`, which is injected automatically). Surfaced to the UI so the environment editor offers a namespace dropdown instead of free text; leave empty to keep free-text entry.
   - Default: empty
   - Example: `staging,production`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_ALLOWED_SERVICE_ACCOUNTS`** - Comma-separated Kubernetes ServiceAccounts that MCP server pods may use. The Helm chart includes `default` and its dedicated MCP operator account automatically.
+  - Default: `default,archestra-platform-mcp-k8s-operator` outside Helm
+  - Set the full list when a local MCP server needs another operator-managed ServiceAccount.
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`

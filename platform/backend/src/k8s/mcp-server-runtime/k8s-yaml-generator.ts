@@ -273,6 +273,8 @@ export function validateDeploymentYaml(
       } else {
         const podSpec = template.spec as Record<string, unknown>;
 
+        errors.push(...validateRestrictedPodFields(podSpec));
+
         // Check containers
         if (
           !Array.isArray(podSpec.containers) ||
@@ -404,16 +406,18 @@ export function resolvePlaceholders(
  * These fields are system-managed and will be overwritten regardless of YAML values:
  *
  * - `metadata.name` - Set to system-generated deployment name
- * - `metadata.labels` - System labels merged in (take precedence over user labels):
+ * - `metadata.labels` - Replaced with system labels:
  *   - `app: "mcp-server"`
  *   - `mcp-server-id: <serverId>`
  *   - `mcp-server-name: <serverName>`
  * - `spec.selector.matchLabels` - Always set to the id-only selector labels
  *   (`app` + `mcp-server-id`); selectors are immutable, so the mutable
  *   `mcp-server-name` label must never be part of pod identity
- * - `spec.template.metadata.labels` - System labels merged in (required for selector matching)
+ * - `spec.template.metadata.labels` - Replaced with system labels
+ * - `spec.template.spec.serviceAccountName` - Set from the catalog configuration
  *
- * ## User-Customizable Fields
+ * Manifests that request privileged containers, added capabilities, host
+ * namespaces, host paths, or host ports are rejected.
  *
  * @param yamlString - The user's YAML string
  * @param systemValues - System-managed values that must be applied
@@ -427,6 +431,7 @@ export function customYamlToDeployment(
     serverName: string;
     labels: Record<string, string>;
     selectorLabels: Record<string, string>;
+    serviceAccountName?: string;
   },
 ): k8s.V1Deployment | null {
   try {
@@ -449,15 +454,19 @@ export function customYamlToDeployment(
     if (!parsed.spec.template.metadata) {
       parsed.spec.template.metadata = {};
     }
+    if (!parsed.spec.template.spec) {
+      return null;
+    }
+
+    const podSpec = parsed.spec.template.spec;
+    if (validateRestrictedPodFields(podSpec).length > 0) {
+      return null;
+    }
 
     // Override protected fields
     parsed.metadata.name = systemValues.deploymentName;
 
-    // Merge labels (system labels take precedence)
-    parsed.metadata.labels = {
-      ...(parsed.metadata.labels || {}),
-      ...systemValues.labels,
-    };
+    parsed.metadata.labels = systemValues.labels;
 
     // Set selector matchLabels (always system-managed; id-only — the mutable
     // mcp-server-name label must not be part of the immutable selector)
@@ -465,11 +474,13 @@ export function customYamlToDeployment(
       matchLabels: systemValues.selectorLabels,
     };
 
-    // Merge template labels
-    parsed.spec.template.metadata.labels = {
-      ...(parsed.spec.template.metadata.labels || {}),
-      ...systemValues.labels,
-    };
+    parsed.spec.template.metadata.labels = systemValues.labels;
+
+    if (systemValues.serviceAccountName) {
+      podSpec.serviceAccountName = systemValues.serviceAccountName;
+    } else {
+      delete podSpec.serviceAccountName;
+    }
 
     // YAML parser converts "true"/"false" to booleans and numbers to numbers.
     // K8s env var values must be strings, so convert them back.
@@ -699,4 +710,77 @@ export function mergeLocalConfigIntoYaml(
     // If anything fails, return the original YAML unchanged
     return yamlString;
   }
+}
+
+function validateRestrictedPodFields(podSpec: object): string[] {
+  const errors: string[] = [];
+  const podFields = podSpec as Record<string, unknown>;
+
+  for (const field of ["hostNetwork", "hostPID", "hostIPC"] as const) {
+    if (podFields[field] === true) {
+      errors.push(`spec.template.spec.${field} is not allowed`);
+    }
+  }
+
+  if (
+    Array.isArray(podFields.volumes) &&
+    podFields.volumes.some(
+      (volume) => isRecord(volume) && isRecord(volume.hostPath),
+    )
+  ) {
+    errors.push("spec.template.spec.volumes[].hostPath is not allowed");
+  }
+
+  for (const field of [
+    "initContainers",
+    "containers",
+    "ephemeralContainers",
+  ] as const) {
+    const containers = podFields[field];
+    if (!Array.isArray(containers)) continue;
+
+    for (const container of containers) {
+      if (!isRecord(container)) continue;
+
+      const securityContext = container.securityContext;
+      if (isRecord(securityContext)) {
+        if (securityContext.privileged === true) {
+          errors.push(
+            `spec.template.spec.${field}[].securityContext.privileged is not allowed`,
+          );
+        }
+        if (securityContext.allowPrivilegeEscalation === true) {
+          errors.push(
+            `spec.template.spec.${field}[].securityContext.allowPrivilegeEscalation is not allowed`,
+          );
+        }
+        if (
+          isRecord(securityContext.capabilities) &&
+          Array.isArray(securityContext.capabilities.add) &&
+          securityContext.capabilities.add.length > 0
+        ) {
+          errors.push(
+            `spec.template.spec.${field}[].securityContext.capabilities.add is not allowed`,
+          );
+        }
+      }
+
+      if (
+        Array.isArray(container.ports) &&
+        container.ports.some(
+          (port) => isRecord(port) && port.hostPort !== undefined,
+        )
+      ) {
+        errors.push(
+          `spec.template.spec.${field}[].ports[].hostPort is not allowed`,
+        );
+      }
+    }
+  }
+
+  return errors;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

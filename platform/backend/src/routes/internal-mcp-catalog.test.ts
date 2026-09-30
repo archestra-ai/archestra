@@ -363,6 +363,57 @@ describe("internal MCP catalog routes", () => {
     expect(response.json().clonedFrom).toBe(source.id);
   });
 
+  test("POST /api/internal_mcp_catalog rejects a service account outside the MCP runtime allowlist", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "Disallowed Runtime Identity",
+        serverType: "local",
+        localConfig: {
+          command: "node",
+          arguments: ["server.js"],
+          serviceAccount: "platform-control-plane",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "is not allowed for MCP server workloads",
+    );
+  });
+
+  test("PUT /api/internal_mcp_catalog preserves the existing service account when an override is rejected", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Allowed Runtime Identity",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        serviceAccount: "default",
+      },
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        localConfig: {
+          ...catalog.localConfig,
+          serviceAccount: "platform-control-plane",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const persisted = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(persisted?.localConfig?.serviceAccount).toBe("default");
+  });
+
   describe("network egress policy enforcement (remote servers)", () => {
     async function makeRestrictedEnv(allowedDomains: string[]) {
       return EnvironmentModel.create({

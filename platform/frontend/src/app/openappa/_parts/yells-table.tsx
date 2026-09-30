@@ -19,15 +19,12 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogDescription } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
@@ -37,7 +34,10 @@ import {
   useResolveOpenAppaYell,
 } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { OpenAppaChatButton } from "./openappa-chat-button";
+import {
+  OpenAppaChatButton,
+  useOpenAppaChatLaunch,
+} from "./openappa-chat-button";
 
 export function YellsTable() {
   const [search, setSearch] = useState("");
@@ -123,41 +123,17 @@ export function YellsTable() {
       header: "Actions",
       size: canResolve ? 112 : 72,
       cell: ({ row }) => (
-        <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex">
-                <YellChatAction id={row.original.id} compact />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Investigate in chat</TooltipContent>
-          </Tooltip>
-          {canResolve && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={
-                    row.original.resolvedAt ? "Reopen" : "Mark resolved"
-                  }
-                  disabled={resolve.isPending}
-                  onClick={() =>
-                    resolve.mutate({
-                      id: row.original.id,
-                      resolved: !row.original.resolvedAt,
-                    })
-                  }
-                >
-                  {row.original.resolvedAt ? <RotateCcw /> : <Check />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {row.original.resolvedAt ? "Reopen" : "Mark resolved"}
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
+        <YellRowActions
+          yell={row.original}
+          canResolve={!!canResolve}
+          pending={resolve.isPending}
+          onResolve={() =>
+            resolve.mutate({
+              id: row.original.id,
+              resolved: !row.original.resolvedAt,
+            })
+          }
+        />
       ),
     },
   ];
@@ -341,23 +317,71 @@ export function YellsTable() {
 
 function YellChatAction({
   id,
-  compact = false,
   primary = false,
 }: {
   id: string;
-  compact?: boolean;
   primary?: boolean;
 }) {
   return (
     <OpenAppaChatButton
       promptKey="explainPolicy"
       yellId={id}
-      variant={primary ? "default" : compact ? "ghost" : "outline"}
-      size={compact ? "icon-sm" : "sm"}
+      variant={primary ? "default" : "outline"}
+      size="sm"
       aria-label="Investigate in chat"
     >
       <MessageCircle />
-      {!compact && <span>Investigate in chat</span>}
+      <span>Investigate in chat</span>
     </OpenAppaChatButton>
+  );
+}
+
+function YellRowActions({
+  yell,
+  canResolve,
+  pending,
+  onResolve,
+}: {
+  yell: OpenAppaYell;
+  canResolve: boolean;
+  pending: boolean;
+  onResolve: () => void;
+}) {
+  const { href, agents } = useOpenAppaChatLaunch({
+    promptKey: "explainPolicy",
+    yellId: yell.id,
+  });
+  return (
+    <TableRowActions
+      actions={[
+        {
+          icon: <MessageCircle className="size-4" />,
+          label: "Investigate in chat",
+          href: href ?? undefined,
+          disabled: !href && !agents.isError,
+          disabledTooltip: "OpenAPPA Configuration Agent is unavailable",
+          tooltip: agents.isError
+            ? "Could not load the chat agent. Click to retry."
+            : undefined,
+          onClick: () => {
+            void agents.refetch();
+          },
+        },
+        ...(canResolve
+          ? [
+              {
+                icon: yell.resolvedAt ? (
+                  <RotateCcw className="size-4" />
+                ) : (
+                  <Check className="size-4" />
+                ),
+                label: yell.resolvedAt ? "Reopen" : "Mark resolved",
+                disabled: pending,
+                onClick: onResolve,
+              },
+            ]
+          : []),
+      ]}
+    />
   );
 }

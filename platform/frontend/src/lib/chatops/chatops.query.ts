@@ -30,6 +30,7 @@ export function useChatOpsBindings(
       const { data, error } = await archestraApiSdk.listChatOpsBindings({
         query: {
           provider: params.provider,
+          botId: params.botId,
           limit: params.limit ?? 20,
           offset: params.offset ?? 0,
           sortBy: params.sortBy,

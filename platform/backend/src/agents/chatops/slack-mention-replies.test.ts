@@ -21,13 +21,16 @@ describe("mention reply delivery", () => {
     makeUser,
     makeOrganization,
     makeInternalAgent,
+    makeChatOpsBot,
   }) => {
     const user = await makeUser({ email: "mention-user@example.com" });
     const org = await makeOrganization();
     const agent = await makeInternalAgent({ organizationId: org.id });
+    const bot = await makeChatOpsBot(org.id);
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "slack",
+      botId: bot.id,
       channelId: "C_TEST",
       workspaceId: "T_TEST",
       agentId: agent.id,
@@ -60,13 +63,16 @@ describe("mention reply delivery", () => {
         },
       ),
     );
-    const provider = new SlackProvider({
-      enabled: true,
-      connectionMode: "webhook",
-      botToken: "xoxb-test",
-      signingSecret: "test-secret",
-      appId: "A_TEST",
-    });
+    const provider = new SlackProvider(
+      {
+        enabled: true,
+        connectionMode: "webhook",
+        botToken: "xoxb-test",
+        signingSecret: "test-secret",
+        appId: "A_TEST",
+      },
+      bot.id,
+    );
     await provider.initialize();
     const manager = new ChatOpsManager();
     const payload = (event: { type: string; text: string; ts: string }) => ({

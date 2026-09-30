@@ -49,8 +49,11 @@ import {
 
 const CHANNEL = "19:abc@thread.tacv2";
 const THREAD = "1700000000000";
+const BOT_A = "bot-a";
+const BOT_B = "bot-b";
 const TEAMS = {
   provider: "ms-teams",
+  botId: BOT_A,
   channelId: CHANNEL,
   threadId: THREAD,
 } as const;
@@ -96,6 +99,19 @@ describe("channel-activation (sticky channel auto-reply)", () => {
     expect(await isChannelThreadActive({ ...TEAMS, provider: "slack" })).toBe(
       true,
     );
+  });
+
+  test("activation is scoped per bot: two bots in one thread are independent", async () => {
+    await markChannelThreadActive(TEAMS);
+
+    // Bot B was never mentioned in this thread, so it must stay silent there.
+    expect(await isChannelThreadActive({ ...TEAMS, botId: BOT_B })).toBe(false);
+
+    await markChannelThreadActive({ ...TEAMS, botId: BOT_B });
+    // Clearing bot A (mute) leaves bot B's activation intact.
+    expect(await clearChannelThreadActive(TEAMS)).toBe(true);
+    expect(await isChannelThreadActive(TEAMS)).toBe(false);
+    expect(await isChannelThreadActive({ ...TEAMS, botId: BOT_B })).toBe(true);
   });
 
   test("marking active writes with the configured TTL", async () => {
@@ -190,6 +206,30 @@ describe("muteChannelThread (mute side-effects)", () => {
     expect(
       await getThreadMuteMarker({ ...TEAMS, provider: "slack" }),
     ).toBeNull();
+  });
+
+  test("muting for bot A does not silence bot B in the same thread", async () => {
+    const botB = { ...TEAMS, botId: BOT_B };
+    await markChannelThreadActive(TEAMS);
+    await markChannelThreadActive(botB);
+    const runA = chatOpsRunRegistry.register(TEAMS);
+    const runB = chatOpsRunRegistry.register(botB);
+
+    await muteChannelThread(TEAMS);
+
+    // Bot A: muted — marker set, activation cleared, in-flight run aborted.
+    expect(await getThreadMuteMarker(TEAMS)).not.toBeNull();
+    expect(await isChannelThreadMuted(TEAMS)).toBe(true);
+    expect(await isChannelThreadActive(TEAMS)).toBe(false);
+    expect(runA.signal.aborted).toBe(true);
+    // Bot B: untouched — it keeps answering the thread.
+    expect(await getThreadMuteMarker(botB)).toBeNull();
+    expect(await isChannelThreadMuted(botB)).toBe(false);
+    expect(await isChannelThreadActive(botB)).toBe(true);
+    expect(runB.signal.aborted).toBe(false);
+
+    runA.unregister();
+    runB.unregister();
   });
 
   test("persists the answer-all mute marker, so a mute survives in a channel with no activation to clear", async () => {
@@ -318,6 +358,14 @@ describe("claimThreadMuteHint", () => {
         channelId: "19:other@thread.tacv2",
       }),
     ).toBe(true);
+  });
+
+  test("is scoped per bot", async () => {
+    expect(await claimThreadMuteHint(TEAMS)).toBe(true);
+
+    // Each bot gets its own one-time hint in the same thread.
+    expect(await claimThreadMuteHint({ ...TEAMS, botId: BOT_B })).toBe(true);
+    expect(await claimThreadMuteHint({ ...TEAMS, botId: BOT_B })).toBe(false);
   });
 
   test("its key does not collide with the activation key (mute ≠ hint)", async () => {
@@ -554,6 +602,17 @@ describe("answer-all per-thread mute markers", () => {
     ).toBe(false);
   });
 
+  test("the mute marker is scoped per bot", async () => {
+    await markChannelThreadMuted(TEAMS);
+
+    expect(await isChannelThreadMuted({ ...TEAMS, botId: BOT_B })).toBe(false);
+
+    await markChannelThreadMuted({ ...TEAMS, botId: BOT_B });
+    await clearChannelThreadMuted(TEAMS);
+    expect(await isChannelThreadMuted(TEAMS)).toBe(false);
+    expect(await isChannelThreadMuted({ ...TEAMS, botId: BOT_B })).toBe(true);
+  });
+
   test("the mute marker uses the sticky auto-reply TTL", async () => {
     await markChannelThreadMuted(TEAMS);
     expect(setSpy).toHaveBeenCalledWith(
@@ -567,6 +626,7 @@ describe("answer-all per-thread mute markers", () => {
 describe("isChannelAnswerAllEnabled", () => {
   const CHANNEL_PARAMS = {
     provider: "slack",
+    botId: BOT_A,
     channelId: "C123",
     workspaceId: "T123",
   } as const;
@@ -584,6 +644,32 @@ describe("isChannelAnswerAllEnabled", () => {
     // Second call is served from cache — no extra DB read.
     expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(true);
     expect(ChatOpsChannelBindingModel.findByChannel).toHaveBeenCalledTimes(1);
+  });
+
+  test("the cached flag is per bot: bot A's setting is invisible to bot B", async () => {
+    vi.mocked(ChatOpsChannelBindingModel.findByChannel).mockImplementation(
+      async ({ botId }) => ({ answerAllMessages: botId === BOT_A }) as never,
+    );
+
+    expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(true);
+    expect(
+      await isChannelAnswerAllEnabled({ ...CHANNEL_PARAMS, botId: BOT_B }),
+    ).toBe(false);
+    // Both are served from their own cache entry on the second read.
+    expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(true);
+    expect(
+      await isChannelAnswerAllEnabled({ ...CHANNEL_PARAMS, botId: BOT_B }),
+    ).toBe(false);
+    expect(ChatOpsChannelBindingModel.findByChannel).toHaveBeenCalledTimes(2);
+    expect(ChatOpsChannelBindingModel.findByChannel).toHaveBeenCalledWith(
+      expect.objectContaining({ botId: BOT_B }),
+    );
+
+    // Invalidating bot A's entry forces a re-read for A only.
+    await invalidateChannelAnswerAll(CHANNEL_PARAMS);
+    await isChannelAnswerAllEnabled(CHANNEL_PARAMS);
+    await isChannelAnswerAllEnabled({ ...CHANNEL_PARAMS, botId: BOT_B });
+    expect(ChatOpsChannelBindingModel.findByChannel).toHaveBeenCalledTimes(3);
   });
 
   test("defaults to false when no binding exists", async () => {
@@ -798,6 +884,26 @@ describe.each([
     // A redelivered / repeated mute must not spam the thread.
     await gate({ text });
     expect(postMutedNotice).toHaveBeenCalledTimes(1);
+  });
+
+  test("a mute addressed to bot A leaves bot B's thread state untouched", async () => {
+    const botB = { ...activation, botId: BOT_B };
+    enableAnswerAll(true);
+    await gate({ botMentioned: true });
+    await applyChannelGate({
+      ...botB,
+      botMentioned: true,
+      text: "hi",
+      postMutedNotice: vi.fn(async () => {}),
+      resolveAnswerAllWorkspaceId,
+    });
+
+    await gate({ text: "mute" });
+
+    expect(await isChannelThreadActive(activation)).toBe(false);
+    expect(await isChannelThreadMuted(activation)).toBe(true);
+    expect(await isChannelThreadActive(botB)).toBe(true);
+    expect(await isChannelThreadMuted(botB)).toBe(false);
   });
 
   test("a mute command in an inactive mentions-only channel stays silent", async () => {

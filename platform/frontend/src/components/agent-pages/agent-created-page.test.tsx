@@ -892,6 +892,7 @@ function binding(overrides: Partial<Binding> = {}): Binding {
     id: "binding-1",
     organizationId: "organization-1",
     provider: "slack",
+    botId: "bot-1",
     channelId: "channel-1",
     channelName: "Release planning",
     workspaceId: "workspace-1",

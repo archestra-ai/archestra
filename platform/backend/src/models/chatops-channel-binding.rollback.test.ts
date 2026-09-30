@@ -6,12 +6,15 @@ describe("ChatOpsChannelBindingModel", () => {
   test("uses the newest pending direct-message assignment", async ({
     makeAgent,
     makeOrganization,
+    makeChatOpsBot,
   }) => {
     const organization = await makeOrganization();
+    const bot = await makeChatOpsBot(organization.id, { provider: "slack" });
     const firstAgent = await makeAgent({ organizationId: organization.id });
     const secondAgent = await makeAgent({ organizationId: organization.id });
     const first = await ChatOpsChannelBindingModel.create({
       organizationId: organization.id,
+      botId: bot.id,
       provider: "slack",
       channelId: "dm:pending:user@example.com",
       workspaceId: null,
@@ -21,6 +24,7 @@ describe("ChatOpsChannelBindingModel", () => {
     });
     const newest = await ChatOpsChannelBindingModel.create({
       organizationId: organization.id,
+      botId: bot.id,
       provider: "slack",
       channelId: "dm:pending:user@example.com",
       workspaceId: "dm:pending",
@@ -41,6 +45,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
     const pending = await ChatOpsChannelBindingModel.findPendingDmBinding({
       organizationId: organization.id,
+      botId: bot.id,
       provider: "slack",
       dmOwnerEmail: "user@example.com",
     });
@@ -51,13 +56,19 @@ describe("ChatOpsChannelBindingModel", () => {
 
   test("resolves and fulfills pending direct messages only inside their organization", async ({
     makeOrganization,
+    makeChatOpsBot,
   }) => {
     const [firstOrganization, secondOrganization] = await Promise.all([
       makeOrganization(),
       makeOrganization(),
     ]);
+    const [firstBot, secondBot] = await Promise.all([
+      makeChatOpsBot(firstOrganization.id, { provider: "slack" }),
+      makeChatOpsBot(secondOrganization.id, { provider: "slack" }),
+    ]);
     const first = await ChatOpsChannelBindingModel.create({
       organizationId: firstOrganization.id,
+      botId: firstBot.id,
       provider: "slack",
       channelId: `dm:pending:${firstOrganization.id}:user@example.com`,
       workspaceId: "dm:pending",
@@ -66,6 +77,7 @@ describe("ChatOpsChannelBindingModel", () => {
     });
     const second = await ChatOpsChannelBindingModel.create({
       organizationId: secondOrganization.id,
+      botId: secondBot.id,
       provider: "slack",
       channelId: `dm:pending:${secondOrganization.id}:user@example.com`,
       workspaceId: "dm:pending",
@@ -75,6 +87,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
     const resolved = await ChatOpsChannelBindingModel.findPendingDmBinding({
       organizationId: firstOrganization.id,
+      botId: firstBot.id,
       provider: "slack",
       dmOwnerEmail: "user@example.com",
     });
@@ -98,12 +111,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("creates a channel binding with required fields", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       const binding = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         workspaceId: "workspace-456",
@@ -122,11 +138,14 @@ describe("ChatOpsChannelBindingModel", () => {
     test("creates only one pending DM for the same provider and user", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const agent = await makeAgent({ agentType: "agent" });
       const input = {
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack" as const,
         channelId: "dm:pending:user@example.com",
         workspaceId: "dm:pending",
@@ -148,12 +167,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("finds binding by provider, channelId, and workspaceId", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         workspaceId: "workspace-456",
@@ -161,6 +183,7 @@ describe("ChatOpsChannelBindingModel", () => {
       });
 
       const binding = await ChatOpsChannelBindingModel.findByChannel({
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         workspaceId: "workspace-456",
@@ -172,6 +195,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
     test("returns null when binding not found", async () => {
       const binding = await ChatOpsChannelBindingModel.findByChannel({
+        botId: "00000000-0000-0000-0000-000000000000",
         provider: "ms-teams",
         channelId: "nonexistent",
         workspaceId: "nonexistent",
@@ -183,12 +207,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("finds binding with null workspaceId", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-ms-teams",
         workspaceId: null,
@@ -196,6 +223,7 @@ describe("ChatOpsChannelBindingModel", () => {
       });
 
       const binding = await ChatOpsChannelBindingModel.findByChannel({
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-ms-teams",
         workspaceId: null,
@@ -207,12 +235,18 @@ describe("ChatOpsChannelBindingModel", () => {
   });
 
   describe("findById", () => {
-    test("finds binding by ID", async ({ makeAgent, makeOrganization }) => {
+    test("finds binding by ID", async ({
+      makeAgent,
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       const created = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         agentId: agent.id,
@@ -236,12 +270,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("finds binding by ID and organization", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       const created = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         agentId: agent.id,
@@ -259,13 +296,16 @@ describe("ChatOpsChannelBindingModel", () => {
     test("returns null for wrong organization", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org1 = await makeOrganization();
+      const bot1 = await makeChatOpsBot(org1.id, { provider: "ms-teams" });
       const org2 = await makeOrganization();
       const agent = await makeAgent({ agentType: "agent" });
 
       const created = await ChatOpsChannelBindingModel.create({
         organizationId: org1.id,
+        botId: bot1.id,
         provider: "ms-teams",
         channelId: "channel-123",
         agentId: agent.id,
@@ -284,13 +324,16 @@ describe("ChatOpsChannelBindingModel", () => {
     test("returns all bindings for an organization", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent1 = await makeAgent({ agentType: "agent" });
       const agent2 = await makeAgent({ agentType: "agent" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-1",
         agentId: agent1.id,
@@ -298,6 +341,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-2",
         agentId: agent2.id,
@@ -325,12 +369,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("returns all bindings for an agent", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-1",
         agentId: agent.id,
@@ -338,6 +385,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-2",
         agentId: agent.id,
@@ -350,13 +398,19 @@ describe("ChatOpsChannelBindingModel", () => {
   });
 
   describe("update", () => {
-    test("updates binding fields", async ({ makeAgent, makeOrganization }) => {
+    test("updates binding fields", async ({
+      makeAgent,
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent1 = await makeAgent({ agentType: "agent" });
       const agent2 = await makeAgent({ agentType: "agent" });
 
       const created = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         agentId: agent1.id,
@@ -383,12 +437,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("finds DM binding by provider and email", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const agent = await makeAgent({ agentType: "agent" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "D123",
         workspaceId: "T1",
@@ -400,6 +457,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const found =
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId: org.id,
+          botId: bot.id,
           provider: "slack",
           dmOwnerEmail: "user@example.com",
         });
@@ -411,11 +469,14 @@ describe("ChatOpsChannelBindingModel", () => {
 
     test("returns null when no DM binding exists", async ({
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const organization = await makeOrganization();
+      const bot = await makeChatOpsBot(organization.id, { provider: "slack" });
       const found =
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId: organization.id,
+          botId: bot.id,
           provider: "slack",
           dmOwnerEmail: "nobody@example.com",
         });
@@ -426,13 +487,16 @@ describe("ChatOpsChannelBindingModel", () => {
     test("returns most recently updated binding when multiple exist", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const agent1 = await makeAgent({ agentType: "agent" });
       const agent2 = await makeAgent({ agentType: "agent" });
 
       const first = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "D-old",
         workspaceId: "T1",
@@ -443,6 +507,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       const second = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "D-new",
         workspaceId: "T1",
@@ -464,6 +529,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const found =
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId: org.id,
+          botId: bot.id,
           provider: "slack",
           dmOwnerEmail: "user@example.com",
         });
@@ -479,6 +545,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const afterUpdate =
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId: org.id,
+          botId: bot.id,
           provider: "slack",
           dmOwnerEmail: "user@example.com",
         });
@@ -493,10 +560,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("does not return a DM binding from another organization", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const [firstOrganization, secondOrganization] = await Promise.all([
         makeOrganization(),
         makeOrganization(),
+      ]);
+      const [firstBot, secondBot] = await Promise.all([
+        makeChatOpsBot(firstOrganization.id, { provider: "slack" }),
+        makeChatOpsBot(secondOrganization.id, { provider: "slack" }),
       ]);
       const [firstAgent, secondAgent] = await Promise.all([
         makeAgent({
@@ -511,6 +583,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: firstOrganization.id,
+        botId: firstBot.id,
         provider: "slack",
         channelId: "D-first",
         workspaceId: "T-first",
@@ -520,6 +593,7 @@ describe("ChatOpsChannelBindingModel", () => {
       });
       await ChatOpsChannelBindingModel.create({
         organizationId: secondOrganization.id,
+        botId: secondBot.id,
         provider: "slack",
         channelId: "D-second",
         workspaceId: "T-second",
@@ -531,6 +605,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const found =
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId: secondOrganization.id,
+          botId: secondBot.id,
           provider: "slack",
           dmOwnerEmail: "user@example.com",
         });
@@ -545,12 +620,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("creates new binding when none exists", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       const binding = await ChatOpsChannelBindingModel.upsertByChannel({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "new-channel",
         workspaceId: "workspace-123",
@@ -564,14 +642,17 @@ describe("ChatOpsChannelBindingModel", () => {
     test("updates existing binding when one exists", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent1 = await makeAgent({ agentType: "agent" });
       const agent2 = await makeAgent({ agentType: "agent" });
 
       // Create initial binding
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         workspaceId: "workspace-456",
@@ -581,6 +662,7 @@ describe("ChatOpsChannelBindingModel", () => {
       // Upsert should update the existing binding
       const binding = await ChatOpsChannelBindingModel.upsertByChannel({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         workspaceId: "workspace-456",
@@ -599,13 +681,16 @@ describe("ChatOpsChannelBindingModel", () => {
     test("inherits agentId from stale DM binding when creating new one", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const agent = await makeAgent({ agentType: "agent" });
 
       // Create DM binding with agent and old channelId
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "D-old-channel",
         workspaceId: "T1",
@@ -617,6 +702,7 @@ describe("ChatOpsChannelBindingModel", () => {
       // Upsert with new channelId but NO agentId — should inherit from stale binding
       const binding = await ChatOpsChannelBindingModel.upsertByChannel({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "D-new-channel",
         workspaceId: "T1",
@@ -629,6 +715,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       // Verify old binding was cleaned up
       const old = await ChatOpsChannelBindingModel.findByChannel({
+        botId: bot.id,
         provider: "slack",
         channelId: "D-old-channel",
         workspaceId: "T1",
@@ -638,12 +725,18 @@ describe("ChatOpsChannelBindingModel", () => {
   });
 
   describe("delete", () => {
-    test("deletes binding by ID", async ({ makeAgent, makeOrganization }) => {
+    test("deletes binding by ID", async ({
+      makeAgent,
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       const created = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         agentId: agent.id,
@@ -668,12 +761,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("deletes binding when organization matches", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       const created = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-123",
         agentId: agent.id,
@@ -692,13 +788,16 @@ describe("ChatOpsChannelBindingModel", () => {
     test("does not delete when organization does not match", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org1 = await makeOrganization();
+      const bot1 = await makeChatOpsBot(org1.id, { provider: "ms-teams" });
       const org2 = await makeOrganization();
       const agent = await makeAgent({ agentType: "agent" });
 
       const created = await ChatOpsChannelBindingModel.create({
         organizationId: org1.id,
+        botId: bot1.id,
         provider: "ms-teams",
         channelId: "channel-123",
         agentId: agent.id,
@@ -716,10 +815,13 @@ describe("ChatOpsChannelBindingModel", () => {
 
     test("returns the deleted row so callers can drop caches keyed on it", async ({
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const created = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "channel-cache-key",
         workspaceId: "team-uuid",
@@ -742,11 +844,14 @@ describe("ChatOpsChannelBindingModel", () => {
 
     test("returns null when there was nothing to delete", async ({
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org1 = await makeOrganization();
+      const bot1 = await makeChatOpsBot(org1.id, { provider: "ms-teams" });
       const org2 = await makeOrganization();
       const created = await ChatOpsChannelBindingModel.create({
         organizationId: org1.id,
+        botId: bot1.id,
         provider: "ms-teams",
         channelId: "channel-other-org",
       });
@@ -763,11 +868,14 @@ describe("ChatOpsChannelBindingModel", () => {
   describe("ensureChannelsExist", () => {
     test("creates bindings with null agentId for new channels", async ({
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
 
       await ChatOpsChannelBindingModel.ensureChannelsExist({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channels: [
           {
@@ -796,13 +904,16 @@ describe("ChatOpsChannelBindingModel", () => {
     test("preserves existing agentId when updating names", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       // Create a binding with an agent
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "ch-1",
         workspaceId: "ws-1",
@@ -813,6 +924,7 @@ describe("ChatOpsChannelBindingModel", () => {
       // Discover the same channel with updated name
       await ChatOpsChannelBindingModel.ensureChannelsExist({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channels: [
           {
@@ -825,6 +937,7 @@ describe("ChatOpsChannelBindingModel", () => {
       });
 
       const binding = await ChatOpsChannelBindingModel.findByChannel({
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "ch-1",
         workspaceId: "ws-1",
@@ -835,11 +948,14 @@ describe("ChatOpsChannelBindingModel", () => {
 
     test("updates channelName and workspaceName for existing channels", async ({
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
 
       await ChatOpsChannelBindingModel.ensureChannelsExist({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channels: [
           {
@@ -854,6 +970,7 @@ describe("ChatOpsChannelBindingModel", () => {
       // Update with new names
       await ChatOpsChannelBindingModel.ensureChannelsExist({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channels: [
           {
@@ -866,6 +983,7 @@ describe("ChatOpsChannelBindingModel", () => {
       });
 
       const binding = await ChatOpsChannelBindingModel.findByChannel({
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "ch-1",
         workspaceId: "ws-1",
@@ -882,12 +1000,15 @@ describe("ChatOpsChannelBindingModel", () => {
 
     test("handles empty channels array (no-op)", async ({
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
 
       // Should not throw
       await ChatOpsChannelBindingModel.ensureChannelsExist({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channels: [],
       });
@@ -902,12 +1023,15 @@ describe("ChatOpsChannelBindingModel", () => {
   describe("deleteStaleChannels", () => {
     test("deletes bindings for channels not in the active list", async ({
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
 
       // Create 3 channels
       await ChatOpsChannelBindingModel.ensureChannelsExist({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channels: [
           {
@@ -935,6 +1059,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
         {
           organizationId: org.id,
+          botId: bot.id,
           provider: "ms-teams",
           workspaceIds: ["ws-1"],
           activeChannelIds: ["ch-1"],
@@ -953,13 +1078,16 @@ describe("ChatOpsChannelBindingModel", () => {
     test("preserves bindings for channels still in the active list", async ({
       makeAgent,
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const agent = await makeAgent({ agentType: "agent" });
 
       // Create a assigned channel
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "ch-1",
         workspaceId: "ws-1",
@@ -969,6 +1097,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
         {
           organizationId: org.id,
+          botId: bot.id,
           provider: "ms-teams",
           workspaceIds: ["ws-1"],
           activeChannelIds: ["ch-1"],
@@ -978,6 +1107,7 @@ describe("ChatOpsChannelBindingModel", () => {
       expect(deletedCount).toBe(0);
 
       const binding = await ChatOpsChannelBindingModel.findByChannel({
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "ch-1",
         workspaceId: "ws-1",
@@ -988,11 +1118,14 @@ describe("ChatOpsChannelBindingModel", () => {
 
     test("returns correct count of deleted rows", async ({
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
 
       await ChatOpsChannelBindingModel.ensureChannelsExist({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channels: [
           {
@@ -1014,6 +1147,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
         {
           organizationId: org.id,
+          botId: bot.id,
           provider: "ms-teams",
           workspaceIds: ["ws-1"],
           activeChannelIds: ["ch-1", "ch-2"],
@@ -1025,11 +1159,14 @@ describe("ChatOpsChannelBindingModel", () => {
 
     test("handles empty activeChannelIds (returns 0)", async ({
       makeOrganization,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
 
       await ChatOpsChannelBindingModel.ensureChannelsExist({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channels: [
           {
@@ -1045,6 +1182,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const deletedCount = await ChatOpsChannelBindingModel.deleteStaleChannels(
         {
           organizationId: org.id,
+          botId: bot.id,
           provider: "ms-teams",
           workspaceIds: ["ws-1"],
           activeChannelIds: [],
@@ -1060,8 +1198,10 @@ describe("ChatOpsChannelBindingModel", () => {
       makeAgent,
       makeOrganization,
       makeUser,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const user = await makeUser({ email: "test@example.com" });
       const agent = await makeAgent({ agentType: "agent" });
 
@@ -1069,6 +1209,7 @@ describe("ChatOpsChannelBindingModel", () => {
       for (let i = 0; i < 5; i++) {
         await ChatOpsChannelBindingModel.create({
           organizationId: org.id,
+          botId: bot.id,
           provider: "slack",
           channelId: `ch-${i}`,
           channelName: `Channel ${i}`,
@@ -1096,14 +1237,17 @@ describe("ChatOpsChannelBindingModel", () => {
       makeAgent,
       makeOrganization,
       makeUser,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const user = await makeUser({ email: "test@example.com" });
       const agent = await makeAgent({ agentType: "agent" });
 
       for (let i = 0; i < 5; i++) {
         await ChatOpsChannelBindingModel.create({
           organizationId: org.id,
+          botId: bot.id,
           provider: "slack",
           channelId: `ch-${i}`,
           channelName: `Channel ${i}`,
@@ -1127,12 +1271,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("filters by search on channelName", async ({
       makeOrganization,
       makeUser,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const user = await makeUser({ email: "test@example.com" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-1",
         channelName: "general",
@@ -1141,6 +1288,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-2",
         channelName: "random",
@@ -1162,13 +1310,16 @@ describe("ChatOpsChannelBindingModel", () => {
       makeAgent,
       makeOrganization,
       makeUser,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const user = await makeUser({ email: "test@example.com" });
       const agent = await makeAgent({ agentType: "agent" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-1",
         channelName: "configured-channel",
@@ -1178,6 +1329,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-2",
         channelName: "unassigned-channel",
@@ -1200,13 +1352,16 @@ describe("ChatOpsChannelBindingModel", () => {
       makeAgent,
       makeOrganization,
       makeUser,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const user = await makeUser({ email: "test@example.com" });
       const agent = await makeAgent({ agentType: "agent" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-1",
         workspaceId: "ws-1",
@@ -1215,6 +1370,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-2",
         workspaceId: "ws-1",
@@ -1232,12 +1388,19 @@ describe("ChatOpsChannelBindingModel", () => {
       expect(result.data[0].agentId).toBeNull();
     });
 
-    test("filters by provider", async ({ makeOrganization, makeUser }) => {
+    test("filters by provider", async ({
+      makeOrganization,
+      makeUser,
+      makeChatOpsBot,
+    }) => {
       const org = await makeOrganization();
+      const slackBot = await makeChatOpsBot(org.id, { provider: "slack" });
+      const teamsBot = await makeChatOpsBot(org.id, { provider: "ms-teams" });
       const user = await makeUser({ email: "test@example.com" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: slackBot.id,
         provider: "slack",
         channelId: "ch-slack",
         workspaceId: "ws-1",
@@ -1245,6 +1408,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: teamsBot.id,
         provider: "ms-teams",
         channelId: "ch-teams",
         workspaceId: "ws-2",
@@ -1261,12 +1425,18 @@ describe("ChatOpsChannelBindingModel", () => {
       expect(result.data[0].provider).toBe("slack");
     });
 
-    test("filters by workspaceId", async ({ makeOrganization, makeUser }) => {
+    test("filters by workspaceId", async ({
+      makeOrganization,
+      makeUser,
+      makeChatOpsBot,
+    }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const user = await makeUser({ email: "test@example.com" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-1",
         workspaceId: "ws-1",
@@ -1275,6 +1445,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-2",
         workspaceId: "ws-2",
@@ -1295,12 +1466,15 @@ describe("ChatOpsChannelBindingModel", () => {
     test("sorts by channelName ascending", async ({
       makeOrganization,
       makeUser,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const user = await makeUser({ email: "test@example.com" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-b",
         channelName: "Bravo",
@@ -1309,6 +1483,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-a",
         channelName: "Alpha",
@@ -1331,8 +1506,10 @@ describe("ChatOpsChannelBindingModel", () => {
       makeAgent,
       makeOrganization,
       makeUser,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const user = await makeUser({ email: "test@example.com" });
       const agent = await makeAgent({ agentType: "agent" });
 
@@ -1340,6 +1517,7 @@ describe("ChatOpsChannelBindingModel", () => {
       for (let i = 0; i < 5; i++) {
         await ChatOpsChannelBindingModel.create({
           organizationId: org.id,
+          botId: bot.id,
           provider: "slack",
           channelId: `ch-${i}`,
           channelName: `Channel ${i}`,
@@ -1365,14 +1543,17 @@ describe("ChatOpsChannelBindingModel", () => {
       makeAgent,
       makeOrganization,
       makeUser,
+      makeChatOpsBot,
     }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const currentUser = await makeUser({ email: "current@example.com" });
       const agent = await makeAgent({ agentType: "agent" });
 
       // Current user's DM
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "dm-current",
         workspaceId: "ws-1",
@@ -1384,6 +1565,7 @@ describe("ChatOpsChannelBindingModel", () => {
       // Other user's DM
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "dm-other",
         workspaceId: "ws-1",
@@ -1395,6 +1577,7 @@ describe("ChatOpsChannelBindingModel", () => {
       // Regular channel
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-regular",
         channelName: "General",
@@ -1416,12 +1599,18 @@ describe("ChatOpsChannelBindingModel", () => {
       expect(channelIds).not.toContain("dm-other");
     });
 
-    test("returns workspaces list", async ({ makeOrganization, makeUser }) => {
+    test("returns workspaces list", async ({
+      makeOrganization,
+      makeUser,
+      makeChatOpsBot,
+    }) => {
       const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id, { provider: "slack" });
       const user = await makeUser({ email: "test@example.com" });
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-1",
         workspaceId: "ws-1",
@@ -1430,6 +1619,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "slack",
         channelId: "ch-2",
         workspaceId: "ws-2",
@@ -1448,6 +1638,317 @@ describe("ChatOpsChannelBindingModel", () => {
         "ws-1",
         "ws-2",
       ]);
+    });
+  });
+
+  describe("per-bot isolation", () => {
+    const channel = (overrides: { channelName?: string } = {}) => ({
+      channelId: "C-shared",
+      channelName: overrides.channelName ?? "general",
+      workspaceId: "T-shared",
+      workspaceName: "Workspace",
+    });
+
+    test("two bots in the same channel hold two separate bindings", async ({
+      makeAgent,
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const botA = await makeChatOpsBot(org.id, { provider: "slack" });
+      const botB = await makeChatOpsBot(org.id, { provider: "slack" });
+      const agentA = await makeAgent({ agentType: "agent" });
+      const agentB = await makeAgent({ agentType: "agent" });
+      const base = {
+        organizationId: org.id,
+        provider: "slack" as const,
+        channelId: "C-shared",
+        workspaceId: "T-shared",
+      };
+
+      const bindingA = await ChatOpsChannelBindingModel.create({
+        ...base,
+        botId: botA.id,
+        agentId: agentA.id,
+      });
+      const bindingB = await ChatOpsChannelBindingModel.create({
+        ...base,
+        botId: botB.id,
+        agentId: agentB.id,
+      });
+
+      expect(bindingA.id).not.toBe(bindingB.id);
+      const lookup = { provider: "slack" as const, ...channel() };
+      expect(
+        (
+          await ChatOpsChannelBindingModel.findByChannel({
+            ...lookup,
+            botId: botA.id,
+          })
+        )?.agentId,
+      ).toBe(agentA.id);
+      expect(
+        (
+          await ChatOpsChannelBindingModel.findByChannel({
+            ...lookup,
+            botId: botB.id,
+          })
+        )?.agentId,
+      ).toBe(agentB.id);
+
+      // Re-binding the channel for bot B leaves bot A's binding alone.
+      const updatedB = await ChatOpsChannelBindingModel.upsertByChannel({
+        ...base,
+        botId: botB.id,
+        agentId: agentA.id,
+      });
+      expect(updatedB.id).toBe(bindingB.id);
+      expect(
+        (await ChatOpsChannelBindingModel.findById(bindingA.id))?.agentId,
+      ).toBe(agentA.id);
+      expect(
+        await ChatOpsChannelBindingModel.findByOrganization(org.id),
+      ).toHaveLength(2);
+    });
+
+    test("ensureChannelsExist for one bot never renames or creates another bot's bindings", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const botA = await makeChatOpsBot(org.id, { provider: "slack" });
+      const botB = await makeChatOpsBot(org.id, { provider: "slack" });
+      const discover = (botId: string, channelName: string) =>
+        ChatOpsChannelBindingModel.ensureChannelsExist({
+          organizationId: org.id,
+          provider: "slack",
+          botId,
+          channels: [channel({ channelName })],
+        });
+
+      await discover(botA.id, "name-a");
+      await discover(botB.id, "name-b");
+      await discover(botA.id, "name-a-renamed");
+
+      const lookup = { provider: "slack" as const, ...channel() };
+      expect(
+        (
+          await ChatOpsChannelBindingModel.findByChannel({
+            ...lookup,
+            botId: botA.id,
+          })
+        )?.channelName,
+      ).toBe("name-a-renamed");
+      expect(
+        (
+          await ChatOpsChannelBindingModel.findByChannel({
+            ...lookup,
+            botId: botB.id,
+          })
+        )?.channelName,
+      ).toBe("name-b");
+      expect(
+        await ChatOpsChannelBindingModel.findByOrganization(org.id),
+      ).toHaveLength(2);
+    });
+
+    test("deleteStaleChannels for bot A never deletes bot B's bindings", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const botA = await makeChatOpsBot(org.id, { provider: "slack" });
+      const botB = await makeChatOpsBot(org.id, { provider: "slack" });
+      for (const botId of [botA.id, botB.id]) {
+        await ChatOpsChannelBindingModel.ensureChannelsExist({
+          organizationId: org.id,
+          provider: "slack",
+          botId,
+          channels: [
+            { ...channel(), channelId: "C-keep" },
+            { ...channel(), channelId: "C-gone" },
+          ],
+        });
+      }
+
+      // Bot A no longer sees C-gone (e.g. it was removed from that channel).
+      const deleted = await ChatOpsChannelBindingModel.deleteStaleChannels({
+        organizationId: org.id,
+        provider: "slack",
+        botId: botA.id,
+        workspaceIds: ["T-shared"],
+        activeChannelIds: ["C-keep"],
+      });
+
+      expect(deleted).toBe(1);
+      const lookup = {
+        provider: "slack" as const,
+        workspaceId: "T-shared",
+        channelId: "C-gone",
+      };
+      expect(
+        await ChatOpsChannelBindingModel.findByChannel({
+          ...lookup,
+          botId: botA.id,
+        }),
+      ).toBeNull();
+      expect(
+        await ChatOpsChannelBindingModel.findByChannel({
+          ...lookup,
+          botId: botB.id,
+        }),
+      ).not.toBeNull();
+    });
+
+    test("deduplicateBindings and deleteDuplicateBindings for bot A never touch bot B", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const botA = await makeChatOpsBot(org.id, { provider: "slack" });
+      const botB = await makeChatOpsBot(org.id, { provider: "slack" });
+      const insert = (botId: string, workspaceId: string) =>
+        ChatOpsChannelBindingModel.create({
+          organizationId: org.id,
+          provider: "slack",
+          botId,
+          channelId: "C-dup",
+          workspaceId,
+        });
+      // The same channel seen under two workspace ids by bot A,
+      // plus bot B's own binding of the same channel.
+      const [a1, a2, b1, b2] = await Promise.all([
+        insert(botA.id, "T-one"),
+        insert(botA.id, "T-two"),
+        insert(botB.id, "T-one"),
+        insert(botB.id, "T-two"),
+      ]);
+
+      const removed = await ChatOpsChannelBindingModel.deduplicateBindings({
+        provider: "slack",
+        botId: botA.id,
+        channelIds: ["C-dup"],
+      });
+      expect(removed).toBe(1);
+
+      const remainingA = [a1, a2].filter(Boolean);
+      const survivingA = await ChatOpsChannelBindingModel.findByIds(
+        remainingA.map((b) => b.id),
+        org.id,
+      );
+      expect(survivingA).toHaveLength(1);
+      // Bot B still has both of its rows.
+      expect(
+        await ChatOpsChannelBindingModel.findByIds([b1.id, b2.id], org.id),
+      ).toHaveLength(2);
+
+      const deletedDuplicates =
+        await ChatOpsChannelBindingModel.deleteDuplicateBindings({
+          provider: "slack",
+          botId: botA.id,
+          channelId: "C-dup",
+          canonicalBindingId: survivingA[0].id,
+        });
+      expect(deletedDuplicates).toBe(0);
+      expect(
+        await ChatOpsChannelBindingModel.findByIds([b1.id, b2.id], org.id),
+      ).toHaveLength(2);
+
+      // Targeting bot B removes only bot B's duplicate.
+      await ChatOpsChannelBindingModel.deleteDuplicateBindings({
+        provider: "slack",
+        botId: botB.id,
+        channelId: "C-dup",
+        canonicalBindingId: b1.id,
+      });
+      expect(
+        await ChatOpsChannelBindingModel.findByIds([b1.id, b2.id], org.id),
+      ).toHaveLength(1);
+      expect(
+        await ChatOpsChannelBindingModel.findByIds([survivingA[0].id], org.id),
+      ).toHaveLength(1);
+    });
+
+    test("DM bindings for the same email are per bot", async ({
+      makeAgent,
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const botA = await makeChatOpsBot(org.id, { provider: "slack" });
+      const botB = await makeChatOpsBot(org.id, { provider: "slack" });
+      const agentA = await makeAgent({ agentType: "agent" });
+      const agentB = await makeAgent({ agentType: "agent" });
+      const dm = (botId: string, channelId: string, agentId?: string) => ({
+        organizationId: org.id,
+        provider: "slack" as const,
+        botId,
+        channelId,
+        workspaceId: "T1",
+        agentId,
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      });
+
+      const dmA = await ChatOpsChannelBindingModel.create(
+        dm(botA.id, "D-a", agentA.id),
+      );
+      const dmB = await ChatOpsChannelBindingModel.create(
+        dm(botB.id, "D-b", agentB.id),
+      );
+      const find = (botId: string) =>
+        ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: org.id,
+          provider: "slack",
+          botId,
+          dmOwnerEmail: "user@example.com",
+        });
+
+      expect((await find(botA.id))?.id).toBe(dmA.id);
+      expect((await find(botB.id))?.id).toBe(dmB.id);
+
+      // Re-initiating the DM with bot A swaps A's stale row (inheriting its
+      // agent) and leaves the same user's DM with bot B alone.
+      const reopened = await ChatOpsChannelBindingModel.upsertByChannel(
+        dm(botA.id, "D-a-new"),
+      );
+      expect(reopened.agentId).toBe(agentA.id);
+      expect(await ChatOpsChannelBindingModel.findById(dmA.id)).toBeNull();
+      expect(await ChatOpsChannelBindingModel.findById(dmB.id)).toMatchObject({
+        channelId: "D-b",
+        agentId: agentB.id,
+      });
+    });
+
+    test("pending DM assignments are per bot", async ({
+      makeAgent,
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const botA = await makeChatOpsBot(org.id, { provider: "slack" });
+      const botB = await makeChatOpsBot(org.id, { provider: "slack" });
+      const agent = await makeAgent({ agentType: "agent" });
+      const pending = await ChatOpsChannelBindingModel.createPendingDmIfAbsent({
+        organizationId: org.id,
+        provider: "slack",
+        botId: botA.id,
+        channelId: "dm:pending:user@example.com",
+        workspaceId: "dm:pending",
+        agentId: agent.id,
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      });
+      const lookup = (botId: string) =>
+        ChatOpsChannelBindingModel.findPendingDmBinding({
+          organizationId: org.id,
+          provider: "slack",
+          botId,
+          dmOwnerEmail: "user@example.com",
+        });
+
+      expect((await lookup(botA.id))?.id).toBe(pending?.id);
+      expect(await lookup(botB.id)).toBeNull();
     });
   });
 });

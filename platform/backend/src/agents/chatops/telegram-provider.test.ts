@@ -10,7 +10,7 @@ import TelegramProvider, { markdownToTelegramHtml } from "./telegram-provider";
 vi.mock("@/cache-manager");
 
 const BOT_TOKEN = "123456:test-token";
-const BOT_ID = 99;
+const TELEGRAM_BOT_ID = 99;
 const BOT_USERNAME = "archestra_bot";
 
 const fetchMock = vi.fn();
@@ -43,13 +43,22 @@ function stubTelegramApi(
   });
 }
 
-function makeProvider(eventHandler?: ChatOpsEventHandler): TelegramProvider {
-  const provider = new TelegramProvider({
-    enabled: true,
-    botToken: BOT_TOKEN,
-  });
+function makeProvider(
+  eventHandler?: ChatOpsEventHandler,
+  botId: string = randomUUID(),
+): TelegramProvider {
+  const provider = new TelegramProvider(
+    {
+      enabled: true,
+      botToken: BOT_TOKEN,
+    },
+    botId,
+  );
   // Set the identity getMe would resolve, without starting the polling loop.
-  Object.assign(provider, { botId: BOT_ID, botUsername: BOT_USERNAME });
+  Object.assign(provider, {
+    telegramBotId: TELEGRAM_BOT_ID,
+    botUsername: BOT_USERNAME,
+  });
   if (eventHandler) provider.setEventHandler(eventHandler);
   return provider;
 }
@@ -205,7 +214,7 @@ describe("parseWebhookNotification", () => {
         text: "yes do that",
         reply_to_message: {
           message_id: 5,
-          from: { id: BOT_ID, is_bot: true, first_name: "Bot" },
+          from: { id: TELEGRAM_BOT_ID, is_bot: true, first_name: "Bot" },
           chat: { id: -100123, type: "supergroup" },
           date: 1_700_000_000,
           text: "Should I create the ticket?",
@@ -408,8 +417,10 @@ describe("sendReply", () => {
 describe("account linking via /start", () => {
   test("/start with a web-minted code links the chat to the code's email", async ({
     makeOrganization,
+    makeChatOpsBot,
   }) => {
-    await makeOrganization();
+    const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id, { provider: "telegram" });
     const code = randomUUID();
     await cacheManager.set(
       `${CacheKey.TelegramLinkCode}-${code}`,
@@ -418,7 +429,7 @@ describe("account linking via /start", () => {
     );
 
     const handler = makeEventHandler();
-    const provider = makeProvider(handler);
+    const provider = makeProvider(handler, bot.id);
     const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
       ok: true,
       result: { message_id: 1 },
@@ -449,11 +460,14 @@ describe("account linking via /start", () => {
 
   test("fulfills an existing pending DM binding instead of creating a duplicate", async ({
     makeOrganization,
+    makeChatOpsBot,
   }) => {
     const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id, { provider: "telegram" });
     const pending = await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "telegram",
+      botId: bot.id,
       channelId: "dm:pending:alice@example.com",
       isDm: true,
       dmOwnerEmail: "alice@example.com",
@@ -467,7 +481,7 @@ describe("account linking via /start", () => {
       60_000,
     );
 
-    const provider = makeProvider(makeEventHandler());
+    const provider = makeProvider(makeEventHandler(), bot.id);
     const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
       ok: true,
       result: { message_id: 1 },
@@ -609,11 +623,14 @@ describe("approval flow", () => {
 
   test("dispatches the requester's decision and consumes the payload", async ({
     makeOrganization,
+    makeChatOpsBot,
   }) => {
     const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id, { provider: "telegram" });
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "telegram",
+      botId: bot.id,
       channelId: "555",
       isDm: true,
       dmOwnerEmail: "alice@example.com",
@@ -622,7 +639,7 @@ describe("approval flow", () => {
     });
 
     const handler = makeEventHandler();
-    const provider = makeProvider(handler);
+    const provider = makeProvider(handler, bot.id);
     const { approve } = await postApprovalForm(provider);
 
     await dispatchUpdate(provider, approvalClick(555, approve.callback_data));
@@ -648,11 +665,14 @@ describe("approval flow", () => {
 
   test("refuses a decision from anyone but the requester and keeps the payload", async ({
     makeOrganization,
+    makeChatOpsBot,
   }) => {
     const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id, { provider: "telegram" });
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "telegram",
+      botId: bot.id,
       channelId: "555",
       isDm: true,
       dmOwnerEmail: "alice@example.com",
@@ -663,6 +683,7 @@ describe("approval flow", () => {
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "telegram",
+      botId: bot.id,
       channelId: "666",
       isDm: true,
       dmOwnerEmail: "mallory@example.com",
@@ -671,7 +692,7 @@ describe("approval flow", () => {
     });
 
     const handler = makeEventHandler();
-    const provider = makeProvider(handler);
+    const provider = makeProvider(handler, bot.id);
     const { approve, answerCallbackQuery } = await postApprovalForm(provider);
 
     await dispatchUpdate(provider, approvalClick(666, approve.callback_data));
@@ -792,13 +813,16 @@ describe("markdownToTelegramHtml", () => {
 
 describe("initialize and cleanup", () => {
   test("authenticates, clears any leftover webhook, and stops polling on cleanup", async () => {
-    const provider = new TelegramProvider({
-      enabled: true,
-      botToken: BOT_TOKEN,
-    });
+    const provider = new TelegramProvider(
+      {
+        enabled: true,
+        botToken: BOT_TOKEN,
+      },
+      randomUUID(),
+    );
     const getMe = vi.fn(() => ({
       ok: true,
-      result: { id: BOT_ID, is_bot: true, username: BOT_USERNAME },
+      result: { id: TELEGRAM_BOT_ID, is_bot: true, username: BOT_USERNAME },
     }));
     const deleteWebhook = vi.fn(() => ({
       ok: true,
@@ -832,10 +856,16 @@ describe("initialize and cleanup", () => {
 
   test("is not configured without a token or when disabled", () => {
     expect(
-      new TelegramProvider({ enabled: true, botToken: "" }).isConfigured(),
+      new TelegramProvider(
+        { enabled: true, botToken: "" },
+        randomUUID(),
+      ).isConfigured(),
     ).toBe(false);
     expect(
-      new TelegramProvider({ enabled: false, botToken: "x" }).isConfigured(),
+      new TelegramProvider(
+        { enabled: false, botToken: "x" },
+        randomUUID(),
+      ).isConfigured(),
     ).toBe(false);
   });
 });
@@ -869,9 +899,11 @@ describe("my_chat_member group binding sync", () => {
 
   test("creates a channel binding when the bot is added to a group", async ({
     makeOrganization,
+    makeChatOpsBot,
   }) => {
-    await makeOrganization();
-    const provider = makeProvider(makeEventHandler());
+    const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id, { provider: "telegram" });
+    const provider = makeProvider(makeEventHandler(), bot.id);
 
     await dispatchUpdate(
       provider,
@@ -884,6 +916,7 @@ describe("my_chat_member group binding sync", () => {
 
     const binding = await ChatOpsChannelBindingModel.findByChannel({
       provider: "telegram",
+      botId: bot.id,
       channelId: "-100200",
       workspaceId: null,
     });
@@ -896,17 +929,20 @@ describe("my_chat_member group binding sync", () => {
   test("keeps the assigned agent when the bot is re-added to a known group", async ({
     makeOrganization,
     makeInternalAgent,
+    makeChatOpsBot,
   }) => {
     const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id, { provider: "telegram" });
     const agent = await makeInternalAgent({ organizationId: org.id });
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "telegram",
+      botId: bot.id,
       channelId: "-100200",
       channelName: "Engineering",
       agentId: agent.id,
     });
-    const provider = makeProvider(makeEventHandler());
+    const provider = makeProvider(makeEventHandler(), bot.id);
 
     await dispatchUpdate(
       provider,
@@ -919,6 +955,7 @@ describe("my_chat_member group binding sync", () => {
 
     const binding = await ChatOpsChannelBindingModel.findByChannel({
       provider: "telegram",
+      botId: bot.id,
       channelId: "-100200",
       workspaceId: null,
     });
@@ -928,15 +965,18 @@ describe("my_chat_member group binding sync", () => {
 
   test("deletes the binding when the bot is removed from the group", async ({
     makeOrganization,
+    makeChatOpsBot,
   }) => {
     const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id, { provider: "telegram" });
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "telegram",
+      botId: bot.id,
       channelId: "-100200",
       channelName: "Engineering",
     });
-    const provider = makeProvider(makeEventHandler());
+    const provider = makeProvider(makeEventHandler(), bot.id);
 
     await dispatchUpdate(
       provider,
@@ -946,6 +986,7 @@ describe("my_chat_member group binding sync", () => {
     expect(
       await ChatOpsChannelBindingModel.findByChannel({
         provider: "telegram",
+        botId: bot.id,
         channelId: "-100200",
         workspaceId: null,
       }),
@@ -954,9 +995,11 @@ describe("my_chat_member group binding sync", () => {
 
   test("ignores membership updates outside groups", async ({
     makeOrganization,
+    makeChatOpsBot,
   }) => {
-    await makeOrganization();
-    const provider = makeProvider(makeEventHandler());
+    const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id, { provider: "telegram" });
+    const provider = makeProvider(makeEventHandler(), bot.id);
 
     await dispatchUpdate(
       provider,
@@ -970,6 +1013,7 @@ describe("my_chat_member group binding sync", () => {
     expect(
       await ChatOpsChannelBindingModel.findByChannel({
         provider: "telegram",
+        botId: bot.id,
         channelId: "555",
         workspaceId: null,
       }),

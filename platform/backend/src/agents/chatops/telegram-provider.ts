@@ -57,12 +57,15 @@ class TelegramProvider implements ChatOpsProvider {
 
   private config: TelegramDbConfig;
   private eventHandler: ChatOpsEventHandler | null = null;
-  private botId: number | null = null;
+  private telegramBotId: number | null = null;
   private botUsername: string | null = null;
   private pollAbort: AbortController | null = null;
   private pollDone: Promise<void> | null = null;
 
-  constructor(telegramConfig: TelegramDbConfig) {
+  constructor(
+    telegramConfig: TelegramDbConfig,
+    readonly botId: string,
+  ) {
     this.config = telegramConfig;
   }
 
@@ -85,10 +88,10 @@ class TelegramProvider implements ChatOpsProvider {
     }
 
     const me = await this.callApi<TelegramUser>("getMe");
-    this.botId = me.id;
+    this.telegramBotId = me.id;
     this.botUsername = me.username ?? null;
     logger.info(
-      { botId: this.botId, botUsername: this.botUsername },
+      { telegramBotId: this.telegramBotId, botUsername: this.botUsername },
       "[TelegramProvider] Authenticated successfully",
     );
 
@@ -113,7 +116,7 @@ class TelegramProvider implements ChatOpsProvider {
     this.pollAbort = null;
     this.pollDone = null;
     this.eventHandler = null;
-    this.botId = null;
+    this.telegramBotId = null;
     this.botUsername = null;
     logger.info("[TelegramProvider] Cleaned up");
   }
@@ -148,7 +151,7 @@ class TelegramProvider implements ChatOpsProvider {
     const botMentioned = this.isBotMentioned(message);
     const isReplyToBot =
       message.reply_to_message?.from?.id != null &&
-      message.reply_to_message.from.id === this.botId;
+      message.reply_to_message.from.id === this.telegramBotId;
 
     // Groups: with BotFather's privacy mode on (the default) Telegram itself
     // delivers only /commands and replies to the bot. When it's off — or the
@@ -361,6 +364,7 @@ class TelegramProvider implements ChatOpsProvider {
   async getUserEmail(userId: string): Promise<string | null> {
     const binding = await ChatOpsChannelBindingModel.findByChannel({
       provider: this.providerId,
+      botId: this.botId,
       channelId: userId,
       workspaceId: null,
     });
@@ -574,6 +578,7 @@ class TelegramProvider implements ChatOpsProvider {
       await ChatOpsChannelBindingModel.upsertByChannel({
         organizationId: org.id,
         provider: this.providerId,
+        botId: this.botId,
         channelId: chatId,
         workspaceId: null,
         channelName: chat.title ?? undefined,
@@ -589,6 +594,7 @@ class TelegramProvider implements ChatOpsProvider {
     if (status === "left" || status === "kicked") {
       const binding = await ChatOpsChannelBindingModel.findByChannel({
         provider: this.providerId,
+        botId: this.botId,
         channelId: chatId,
         workspaceId: null,
       });
@@ -661,6 +667,7 @@ class TelegramProvider implements ChatOpsProvider {
 
     const existing = await ChatOpsChannelBindingModel.findByChannel({
       provider: this.providerId,
+      botId: this.botId,
       channelId: chatId,
       workspaceId: null,
     });
@@ -703,6 +710,7 @@ class TelegramProvider implements ChatOpsProvider {
       await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
         organizationId: org.id,
         provider: this.providerId,
+        botId: this.botId,
         dmOwnerEmail: entry.email,
       });
     if (existingDm) {
@@ -716,6 +724,7 @@ class TelegramProvider implements ChatOpsProvider {
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
         provider: this.providerId,
+        botId: this.botId,
         channelId: chatId,
         isDm: true,
         dmOwnerEmail: entry.email,

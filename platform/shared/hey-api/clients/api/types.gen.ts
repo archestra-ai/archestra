@@ -38078,6 +38078,142 @@ export type PostApiWebhooksChatopsSlackSlashCommandResponses = {
     200: unknown;
 };
 
+export type PostApiWebhooksChatopsSlackBotsByBotIdData = {
+    body: unknown;
+    path: {
+        botId: string;
+    };
+    query?: never;
+    url: '/api/webhooks/chatops/slack/bots/{botId}';
+};
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdError = PostApiWebhooksChatopsSlackBotsByBotIdErrors[keyof PostApiWebhooksChatopsSlackBotsByBotIdErrors];
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        challenge: string;
+    } | {
+        ok: boolean;
+    };
+};
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdResponse = PostApiWebhooksChatopsSlackBotsByBotIdResponses[keyof PostApiWebhooksChatopsSlackBotsByBotIdResponses];
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdInteractiveData = {
+    body: unknown;
+    path: {
+        botId: string;
+    };
+    query?: never;
+    url: '/api/webhooks/chatops/slack/bots/{botId}/interactive';
+};
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdInteractiveErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdInteractiveError = PostApiWebhooksChatopsSlackBotsByBotIdInteractiveErrors[keyof PostApiWebhooksChatopsSlackBotsByBotIdInteractiveErrors];
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdInteractiveResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: boolean;
+    };
+};
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdInteractiveResponse = PostApiWebhooksChatopsSlackBotsByBotIdInteractiveResponses[keyof PostApiWebhooksChatopsSlackBotsByBotIdInteractiveResponses];
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdSlashCommandData = {
+    body: unknown;
+    path: {
+        botId: string;
+    };
+    query?: never;
+    url: '/api/webhooks/chatops/slack/bots/{botId}/slash-command';
+};
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdSlashCommandErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdSlashCommandError = PostApiWebhooksChatopsSlackBotsByBotIdSlashCommandErrors[keyof PostApiWebhooksChatopsSlackBotsByBotIdSlashCommandErrors];
+
+export type PostApiWebhooksChatopsSlackBotsByBotIdSlashCommandResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type GetChatOpsStatusData = {
     body?: never;
     path?: never;
@@ -38174,6 +38310,30 @@ export type GetChatOpsStatusResponses = {
                 appId?: string;
                 botUsername?: string;
             };
+            bots: Array<{
+                id: string;
+                name: string;
+                configured: boolean;
+                credentials?: {
+                    botToken?: string;
+                    appId?: string;
+                    appSecret?: string;
+                    tenantId?: string;
+                    signingSecret?: string;
+                    appLevelToken?: string;
+                    connectionMode?: 'webhook' | 'socket';
+                };
+                dmInfo?: {
+                    botUserId?: string;
+                    teamId?: string;
+                    appId?: string;
+                    botUsername?: string;
+                };
+                agents: Array<{
+                    id: string;
+                    name: string;
+                }>;
+            }>;
         }>;
     };
 };
@@ -38185,6 +38345,7 @@ export type ListChatOpsBindingsData = {
     path?: never;
     query?: {
         provider?: 'ms-teams' | 'slack' | 'telegram';
+        botId?: string;
         workspaceId?: string;
         search?: string;
         status?: 'configured' | 'unassigned';
@@ -38270,6 +38431,7 @@ export type ListChatOpsBindingsResponses = {
             id: string;
             organizationId: string;
             provider: 'ms-teams' | 'slack' | 'telegram';
+            botId: string;
             channelId: string;
             workspaceId: string | null;
             channelName: string | null;
@@ -38392,6 +38554,7 @@ export type BulkUpdateChatOpsBindingsResponses = {
         id: string;
         organizationId: string;
         provider: 'ms-teams' | 'slack' | 'telegram';
+        botId: string;
         channelId: string;
         workspaceId: string | null;
         channelName: string | null;
@@ -38579,6 +38742,7 @@ export type UpdateChatOpsBindingResponses = {
         id: string;
         organizationId: string;
         provider: 'ms-teams' | 'slack' | 'telegram';
+        botId: string;
         channelId: string;
         workspaceId: string | null;
         channelName: string | null;
@@ -38598,6 +38762,7 @@ export type UpdateChatOpsBindingResponse = UpdateChatOpsBindingResponses[keyof U
 export type CreateChatOpsDmBindingData = {
     body: {
         provider: 'ms-teams' | 'slack' | 'telegram';
+        botId?: string;
         agentId: string | null;
         requireNoExistingBinding?: true;
     };
@@ -38679,6 +38844,7 @@ export type CreateChatOpsDmBindingResponses = {
         id: string;
         organizationId: string;
         provider: 'ms-teams' | 'slack' | 'telegram';
+        botId: string;
         channelId: string;
         workspaceId: string | null;
         channelName: string | null;
@@ -38707,6 +38873,7 @@ export type ApplyChatOpsBindingPlanData = {
         }>;
         directMessages: Array<{
             provider: 'ms-teams' | 'slack' | 'telegram';
+            botId?: string;
         }>;
     };
     path?: never;
@@ -38787,6 +38954,7 @@ export type ApplyChatOpsBindingPlanResponses = {
         id: string;
         organizationId: string;
         provider: 'ms-teams' | 'slack' | 'telegram';
+        botId: string;
         channelId: string;
         workspaceId: string | null;
         channelName: string | null;
@@ -39153,6 +39321,8 @@ export type UpdateSlackChatOpsConfigData = {
         appId?: string;
         connectionMode?: 'webhook' | 'socket';
         appLevelToken?: string;
+        botId?: string;
+        name?: string;
     };
     path?: never;
     query?: never;
@@ -39234,6 +39404,184 @@ export type UpdateSlackChatOpsConfigResponses = {
 };
 
 export type UpdateSlackChatOpsConfigResponse = UpdateSlackChatOpsConfigResponses[keyof UpdateSlackChatOpsConfigResponses];
+
+export type CreateSlackChatOpsBotData = {
+    body: {
+        id?: string;
+        name: string;
+        enabled?: boolean;
+        botToken: string;
+        signingSecret?: string;
+        appId?: string;
+        connectionMode?: 'webhook' | 'socket';
+        appLevelToken?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/bots/slack';
+};
+
+export type CreateSlackChatOpsBotErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateSlackChatOpsBotError = CreateSlackChatOpsBotErrors[keyof CreateSlackChatOpsBotErrors];
+
+export type CreateSlackChatOpsBotResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+    };
+};
+
+export type CreateSlackChatOpsBotResponse = CreateSlackChatOpsBotResponses[keyof CreateSlackChatOpsBotResponses];
+
+export type DeleteChatOpsBotData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chatops/bots/{id}';
+};
+
+export type DeleteChatOpsBotErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteChatOpsBotError = DeleteChatOpsBotErrors[keyof DeleteChatOpsBotErrors];
+
+export type DeleteChatOpsBotResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteChatOpsBotResponse = DeleteChatOpsBotResponses[keyof DeleteChatOpsBotResponses];
 
 export type UpdateTelegramChatOpsConfigData = {
     body: {
@@ -39493,6 +39841,7 @@ export type LinkTelegramChatOpsAccountResponse = LinkTelegramChatOpsAccountRespo
 export type RefreshChatOpsChannelDiscoveryData = {
     body: {
         provider: 'ms-teams' | 'slack' | 'telegram';
+        botId?: string;
     };
     path?: never;
     query?: never;

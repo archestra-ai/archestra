@@ -14,12 +14,17 @@ const { sendDirectMessageMock } = vi.hoisted(() => ({
   sendDirectMessageMock: vi.fn(async () => {}),
 }));
 
+const { telegramProviderState } = vi.hoisted(() => ({
+  telegramProviderState: { botId: "" },
+}));
+
 vi.mock("@/agents/chatops/chatops-manager", () => ({
   chatOpsManager: {
     reinitialize: vi.fn(),
     getMSTeamsProvider: vi.fn(() => null),
     getSlackProvider: vi.fn(() => null),
     getTelegramProvider: vi.fn(() => ({
+      botId: telegramProviderState.botId,
       sendDirectMessage: sendDirectMessageMock,
       getBotUsername: () => "archestra_bot",
     })),
@@ -30,14 +35,17 @@ vi.mock("@/agents/chatops/chatops-manager", () => ({
 
 describe("POST /api/chatops/telegram/link", () => {
   let organizationId: string;
+  let botId: string;
   let user: User;
   let userEmail: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeChatOpsBot, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
     config.chatops.telegramEnabled = true;
     const organization = await makeOrganization();
     organizationId = organization.id;
+    botId = (await makeChatOpsBot(organizationId, { provider: "telegram" })).id;
+    telegramProviderState.botId = botId;
     user = await makeUser();
     userEmail = user.email;
   });
@@ -76,6 +84,7 @@ describe("POST /api/chatops/telegram/link", () => {
     expect(response.statusCode).toBe(200);
     const binding = await ChatOpsChannelBindingModel.findByChannel({
       provider: "telegram",
+      botId,
       channelId: "555",
       workspaceId: null,
     });
@@ -99,6 +108,7 @@ describe("POST /api/chatops/telegram/link", () => {
     const pending = await ChatOpsChannelBindingModel.create({
       organizationId,
       provider: "telegram",
+      botId,
       channelId: `dm:pending:${userEmail}`,
       isDm: true,
       dmOwnerEmail: userEmail,
@@ -126,6 +136,7 @@ describe("POST /api/chatops/telegram/link", () => {
     await ChatOpsChannelBindingModel.create({
       organizationId,
       provider: "telegram",
+      botId,
       channelId: "888",
       isDm: true,
       dmOwnerEmail: "someone-else@example.com",

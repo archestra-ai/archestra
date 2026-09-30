@@ -42,15 +42,18 @@ function makeActivity(overrides: Record<string, unknown> = {}) {
 }
 
 function createProvider(): MSTeamsProvider {
-  const provider = new MSTeamsProvider({
-    enabled: true,
-    appId: "app-id-123",
-    appSecret: "test-secret",
-    tenantId: "tenant-1",
-    graphTenantId: "tenant-1",
-    graphClientId: "app-id-123",
-    graphClientSecret: "test-secret",
-  });
+  const provider = new MSTeamsProvider(
+    {
+      enabled: true,
+      appId: "app-id-123",
+      appSecret: "test-secret",
+      tenantId: "tenant-1",
+      graphTenantId: "tenant-1",
+      graphClientId: "app-id-123",
+      graphClientSecret: "test-secret",
+    },
+    "00000000-0000-4000-8000-000000000001",
+  );
   // Set adapter to truthy value so parseWebhookNotification doesn't bail early.
   // The adapter is only existence-checked (not called) during parsing.
   // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field

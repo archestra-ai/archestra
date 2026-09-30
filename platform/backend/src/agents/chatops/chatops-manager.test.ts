@@ -30,6 +30,7 @@ import {
   A2AMessageModel,
   AgentModel,
   AgentTeamModel,
+  ChatOpsBotModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsThreadContextModel,
@@ -42,6 +43,7 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsProvider,
+  ChatOpsProviderType,
   ChatReplyOptions,
   ChatThreadMessage,
   IncomingChatMessage,
@@ -60,6 +62,21 @@ import {
   THREAD_MUTE_HINT,
 } from "./constants";
 import { buildHistorySkippedAttachmentsNote } from "./utils";
+
+/**
+ * A messaging bot for the organization (the bot a binding, a receipt and a
+ * provider instance all hang off).
+ */
+async function makeBot(
+  organizationId: string,
+  provider: ChatOpsProviderType = "ms-teams",
+) {
+  return await ChatOpsBotModel.create({
+    organizationId,
+    provider,
+    name: `Test ${provider} bot ${crypto.randomUUID().slice(0, 8)}`,
+  });
+}
 
 describe("matchesAgentName", () => {
   test("matches exact name", () => {
@@ -97,20 +114,17 @@ describe("ChatOpsManager security validation", () => {
   /**
    * Creates a mock ChatOpsProvider for testing
    */
-  function createMockProvider(
-    overrides: {
-      getUserEmail?: (userId: string) => Promise<string | null>;
-      sendReply?: (options: ChatReplyOptions) => Promise<string>;
-      hasMissingScopes?: () => boolean;
-      notifyMissingScopes?: (message: IncomingChatMessage) => Promise<void>;
-      clearTypingStatus?: (
-        channelId: string,
-        threadTs: string,
-      ) => Promise<void>;
-    } = {},
-  ): ChatOpsProvider {
+  function createMockProvider(overrides: {
+    botId: string;
+    getUserEmail?: (userId: string) => Promise<string | null>;
+    sendReply?: (options: ChatReplyOptions) => Promise<string>;
+    hasMissingScopes?: () => boolean;
+    notifyMissingScopes?: (message: IncomingChatMessage) => Promise<void>;
+    clearTypingStatus?: (channelId: string, threadTs: string) => Promise<void>;
+  }): ChatOpsProvider {
     return {
       providerId: "ms-teams",
+      botId: overrides.botId,
       displayName: "Microsoft Teams",
       isConfigured: () => true,
       initialize: async () => {},
@@ -188,17 +202,20 @@ describe("ChatOpsManager security validation", () => {
   }
 
   async function unboundChannelBinding(organizationId: string) {
+    const bot = await makeBot(organizationId, "ms-teams");
     return ChatOpsChannelBindingModel.create({
       organizationId,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
     });
   }
 
-  function refetchBinding() {
+  function refetchBinding(botId: string) {
     return ChatOpsChannelBindingModel.findByChannel({
       provider: "ms-teams",
+      botId,
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
     });
@@ -210,7 +227,9 @@ describe("ChatOpsManager security validation", () => {
     const organization = await makeOrganization();
     const binding = await unboundChannelBinding(organization.id);
     const sendReply = vi.fn().mockResolvedValue("reply-id");
-    const manager = makeManagerWith(createMockProvider({ sendReply }));
+    const manager = makeManagerWith(
+      createMockProvider({ botId: binding.botId, sendReply }),
+    );
 
     await manager.notifyBindingThread({
       bindingId: binding.id,
@@ -244,15 +263,15 @@ describe("ChatOpsManager security validation", () => {
     const sender = await makeUser({ email: "channel-member@example.com" });
     await makeMember(sender.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
-    await unboundChannelBinding(org.id);
+    const binding = await unboundChannelBinding(org.id);
 
-    const provider = createMockProvider();
+    const provider = createMockProvider({ botId: binding.botId });
     await makeManagerWith(provider).processMessage({
       message: createMockMessage({ senderEmail: sender.email }),
       provider,
     });
 
-    expect((await refetchBinding())?.agentId).toBe(agent.id);
+    expect((await refetchBinding(binding.botId))?.agentId).toBe(agent.id);
   });
 
   test("auto-assigns the org-wide default agent over other candidates", async ({
@@ -267,15 +286,15 @@ describe("ChatOpsManager security validation", () => {
       .update(schema.organizationsTable)
       .set({ defaultAgentId: preferred.id })
       .where(eq(schema.organizationsTable.id, org.id));
-    await unboundChannelBinding(org.id);
+    const binding = await unboundChannelBinding(org.id);
 
-    const provider = createMockProvider();
+    const provider = createMockProvider({ botId: binding.botId });
     await makeManagerWith(provider).processMessage({
       message: createMockMessage(),
       provider,
     });
 
-    expect((await refetchBinding())?.agentId).toBe(preferred.id);
+    expect((await refetchBinding(binding.botId))?.agentId).toBe(preferred.id);
   });
 
   test("prompts with the picker (no auto-assign) when multiple agents and no default", async ({
@@ -289,10 +308,10 @@ describe("ChatOpsManager security validation", () => {
     await makeMember(sender.id, org.id);
     await makeInternalAgent({ organizationId: org.id });
     await makeInternalAgent({ organizationId: org.id });
-    await unboundChannelBinding(org.id);
+    const binding = await unboundChannelBinding(org.id);
 
     const cardSpy = vi.fn().mockResolvedValue(undefined);
-    const provider = createMockProvider();
+    const provider = createMockProvider({ botId: binding.botId });
     provider.sendAgentSelectionCard = cardSpy;
 
     const result = await makeManagerWith(provider).processMessage({
@@ -301,7 +320,7 @@ describe("ChatOpsManager security validation", () => {
     });
 
     expect(cardSpy).toHaveBeenCalled();
-    expect((await refetchBinding())?.agentId).toBeNull();
+    expect((await refetchBinding(binding.botId))?.agentId).toBeNull();
     // Handled via the card — not a silent drop.
     expect(result.success).toBe(true);
   });
@@ -319,10 +338,11 @@ describe("ChatOpsManager security validation", () => {
       access: "personal",
       authorId: user.id,
     });
-    await unboundChannelBinding(org.id);
+    const binding = await unboundChannelBinding(org.id);
 
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const provider = createMockProvider({
+      botId: binding.botId,
       getUserEmail: async () => "joey@example.com",
       sendReply: sendReplySpy,
     });
@@ -336,7 +356,7 @@ describe("ChatOpsManager security validation", () => {
     expect(result.success).toBe(true);
     // ...but a personal agent must NOT be pinned as the shared channel default
     // (other members would be denied access to it).
-    expect((await refetchBinding())?.agentId).toBeNull();
+    expect((await refetchBinding(binding.botId))?.agentId).toBeNull();
   });
 
   test("successful authorization - user exists and has team access", async ({
@@ -359,8 +379,10 @@ describe("ChatOpsManager security validation", () => {
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create channel binding
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -370,6 +392,7 @@ describe("ChatOpsManager security validation", () => {
     // Create mock provider that returns the user's email
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "authorized@example.com",
       sendReply: sendReplySpy,
     });
@@ -407,8 +430,10 @@ describe("ChatOpsManager security validation", () => {
     agentId: string;
     senderEmail: string;
   }) {
+    const bot = await makeBot(params.org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: params.org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -416,6 +441,7 @@ describe("ChatOpsManager security validation", () => {
     });
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const provider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => params.senderEmail,
       sendReply: sendReplySpy,
     });
@@ -515,8 +541,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -525,6 +553,7 @@ describe("ChatOpsManager security validation", () => {
 
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "copilot@example.com",
       sendReply: sendReplySpy,
     });
@@ -601,8 +630,10 @@ describe("ChatOpsManager security validation", () => {
         organizationId: org.id,
       });
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      const bot = await makeBot(org.id, "ms-teams");
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "test-channel-id",
         workspaceId: "test-workspace-id",
@@ -611,6 +642,7 @@ describe("ChatOpsManager security validation", () => {
 
       const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
       const mockProvider = createMockProvider({
+        botId: bot.id,
         getUserEmail: async () => "retry@example.com",
         sendReply: sendReplySpy,
       });
@@ -769,8 +801,10 @@ describe("ChatOpsManager security validation", () => {
         organizationId: org.id,
       });
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      const bot = await makeBot(org.id, "ms-teams");
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "test-channel-id",
         workspaceId: "test-workspace-id",
@@ -779,6 +813,7 @@ describe("ChatOpsManager security validation", () => {
 
       const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
       const mockProvider = createMockProvider({
+        botId: bot.id,
         getUserEmail: async () => "mute@example.com",
         sendReply: sendReplySpy,
       });
@@ -790,11 +825,13 @@ describe("ChatOpsManager security validation", () => {
     }
 
     // createMockMessage has no threadId, so the run is keyed on the channel id.
-    const threadKey = {
-      provider: "ms-teams",
-      channelId: "test-channel-id",
-      threadId: "test-channel-id",
-    } as const;
+    const threadKeyFor = (botId: string) =>
+      ({
+        provider: "ms-teams",
+        botId,
+        channelId: "test-channel-id",
+        threadId: "test-channel-id",
+      }) as const;
 
     test("drops the reply when the thread is muted while the run is in flight (cross-pod marker moved)", async ({
       makeUser,
@@ -841,10 +878,11 @@ describe("ChatOpsManager security validation", () => {
       // Simulate the mute landing on this pod mid-run: abort the registered run
       // (as muteChannelThread → chatOpsRunRegistry.cancelThread would) while the
       // model call is "executing", then let it resolve.
+      let botId = "";
       const executeSpy = vi
         .spyOn(a2aExecutor, "executeA2AMessage")
         .mockImplementation(async () => {
-          chatOpsRunRegistry.cancelThread(threadKey);
+          chatOpsRunRegistry.cancelThread(threadKeyFor(botId));
           return agentResult();
         });
 
@@ -855,6 +893,7 @@ describe("ChatOpsManager security validation", () => {
         makeTeamMember,
         makeInternalAgent,
       });
+      botId = mockProvider.botId;
 
       const result = await manager.processMessage({
         message: createMockMessage(),
@@ -878,6 +917,7 @@ describe("ChatOpsManager security validation", () => {
       // First attempt fails transiently (triggering the one auto-retry); the
       // mute then lands during the retry and aborts it. The abort must not be
       // posted as an error reply.
+      let botId = "";
       const executeSpy = vi
         .spyOn(a2aExecutor, "executeA2AMessage")
         .mockRejectedValueOnce(
@@ -888,7 +928,7 @@ describe("ChatOpsManager security validation", () => {
           }),
         )
         .mockImplementationOnce(async () => {
-          chatOpsRunRegistry.cancelThread(threadKey);
+          chatOpsRunRegistry.cancelThread(threadKeyFor(botId));
           throw new Error("aborted");
         });
 
@@ -899,6 +939,7 @@ describe("ChatOpsManager security validation", () => {
         makeTeamMember,
         makeInternalAgent,
       });
+      botId = mockProvider.botId;
 
       const result = await manager.processMessage({
         message: createMockMessage(),
@@ -990,8 +1031,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1000,6 +1043,7 @@ describe("ChatOpsManager security validation", () => {
 
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "badkey@example.com",
       sendReply: sendReplySpy,
     });
@@ -1058,8 +1102,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1068,6 +1114,7 @@ describe("ChatOpsManager security validation", () => {
 
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "boom@example.com",
       sendReply: sendReplySpy,
     });
@@ -1120,8 +1167,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1130,6 +1179,7 @@ describe("ChatOpsManager security validation", () => {
 
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "subagent-error@example.com",
       sendReply: sendReplySpy,
     });
@@ -1169,7 +1219,7 @@ describe("ChatOpsManager security validation", () => {
     makeInternalAgent: (opts: {
       organizationId: string;
     }) => Promise<{ id: string }>;
-  }): Promise<{ senderEmail: string }> {
+  }): Promise<{ senderEmail: string; botId: string }> {
     const senderEmail = "member@example.com";
     const org = await ctx.makeOrganization();
     const user = await ctx.makeUser({ email: senderEmail });
@@ -1179,23 +1229,27 @@ describe("ChatOpsManager security validation", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
       agentId: agent.id,
     });
-    return { senderEmail };
+    return { senderEmail, botId: bot.id };
   }
 
   async function processChannelReply(params: {
     message: IncomingChatMessage;
     senderEmail: string;
+    botId: string;
   }): Promise<ReturnType<typeof vi.fn>> {
     mockA2AExecutor();
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const provider = createMockProvider({
+      botId: params.botId,
       sendReply: sendReplySpy,
       getUserEmail: async () => params.senderEmail,
     });
@@ -1214,7 +1268,7 @@ describe("ChatOpsManager security validation", () => {
     makeTeamMember,
     makeInternalAgent,
   }) => {
-    const { senderEmail } = await bindAuthorizedChannel({
+    const { senderEmail, botId } = await bindAuthorizedChannel({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -1225,6 +1279,7 @@ describe("ChatOpsManager security validation", () => {
 
     const sendReplySpy = await processChannelReply({
       senderEmail,
+      botId,
       message: createMockMessage({
         threadId: "thread-1",
         senderEmail,
@@ -1234,6 +1289,7 @@ describe("ChatOpsManager security validation", () => {
 
     expect(mockClaimThreadMuteHint).toHaveBeenCalledWith({
       provider: "ms-teams",
+      botId,
       channelId: "test-channel-id",
       threadId: "thread-1",
     });
@@ -1249,7 +1305,7 @@ describe("ChatOpsManager security validation", () => {
     makeTeamMember,
     makeInternalAgent,
   }) => {
-    const { senderEmail } = await bindAuthorizedChannel({
+    const { senderEmail, botId } = await bindAuthorizedChannel({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -1261,6 +1317,7 @@ describe("ChatOpsManager security validation", () => {
 
     const sendReplySpy = await processChannelReply({
       senderEmail,
+      botId,
       message: createMockMessage({
         threadId: "thread-1",
         senderEmail,
@@ -1279,7 +1336,7 @@ describe("ChatOpsManager security validation", () => {
     makeTeamMember,
     makeInternalAgent,
   }) => {
-    const { senderEmail } = await bindAuthorizedChannel({
+    const { senderEmail, botId } = await bindAuthorizedChannel({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -1290,6 +1347,7 @@ describe("ChatOpsManager security validation", () => {
 
     const sendReplySpy = await processChannelReply({
       senderEmail,
+      botId,
       message: createMockMessage({
         threadId: "thread-1",
         senderEmail,
@@ -1328,8 +1386,10 @@ describe("ChatOpsManager security validation", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1339,6 +1399,7 @@ describe("ChatOpsManager security validation", () => {
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const clearTypingStatusSpy = vi.fn().mockResolvedValue(undefined);
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "silent@example.com",
       sendReply: sendReplySpy,
       clearTypingStatus: clearTypingStatusSpy,
@@ -1399,8 +1460,10 @@ describe("ChatOpsManager security validation", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1408,6 +1471,7 @@ describe("ChatOpsManager security validation", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "group@example.com",
     });
     const manager = new ChatOpsManager();
@@ -1498,8 +1562,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1511,6 +1577,7 @@ describe("ChatOpsManager security validation", () => {
       .fn()
       .mockResolvedValue("should-not-be-used@example.com");
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: getUserEmailSpy,
     });
 
@@ -1553,8 +1620,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1564,6 +1633,7 @@ describe("ChatOpsManager security validation", () => {
     // No senderEmail on message AND provider returns null for getUserEmail
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => null,
       sendReply: sendReplySpy,
     });
@@ -1609,8 +1679,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1620,6 +1692,7 @@ describe("ChatOpsManager security validation", () => {
     // Provider returns an email that doesn't exist in Archestra
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "unknown@external.com",
       sendReply: sendReplySpy,
     });
@@ -1662,8 +1735,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1672,6 +1747,7 @@ describe("ChatOpsManager security validation", () => {
 
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "noaccess@example.com",
       sendReply: sendReplySpy,
     });
@@ -1716,8 +1792,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1725,6 +1803,7 @@ describe("ChatOpsManager security validation", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "verified@example.com",
     });
 
@@ -1770,8 +1849,10 @@ describe("ChatOpsManager security validation", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -1779,6 +1860,7 @@ describe("ChatOpsManager security validation", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "verified@example.com",
     });
     const manager = makeManagerWith(mockProvider);
@@ -1820,15 +1902,17 @@ describe("ChatOpsManager security validation", () => {
       organizationId: org.id,
     });
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
       agentId: agent.id,
     });
 
-    const mockProvider = createMockProvider();
+    const mockProvider = createMockProvider({ botId: bot.id });
     const manager = new ChatOpsManager();
 
     const decision: ChatOpsApprovalDecision = {
@@ -1882,15 +1966,17 @@ describe("ChatOpsManager security validation", () => {
       organizationId: org.id,
     });
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
       agentId: agent.id,
     });
 
-    const mockProvider = createMockProvider();
+    const mockProvider = createMockProvider({ botId: bot.id });
     const manager = new ChatOpsManager();
 
     const decision: ChatOpsApprovalDecision = {
@@ -1961,8 +2047,10 @@ describe("ChatOpsManager security validation", () => {
       });
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+      const bot = await makeBot(org.id, "ms-teams");
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "test-channel-id",
         workspaceId: "test-workspace-id",
@@ -1970,6 +2058,7 @@ describe("ChatOpsManager security validation", () => {
       });
 
       const mockProvider = createMockProvider({
+        botId: bot.id,
         getUserEmail: async () => "inline@example.com",
       });
       const manager = new ChatOpsManager();
@@ -2026,8 +2115,10 @@ describe("ChatOpsManager security validation", () => {
       await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [team.id]);
       await AgentTeamModel.assignTeamsToAgent(salesAgent.id, [team.id]);
 
+      const bot = await makeBot(org.id, "ms-teams");
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
+        botId: bot.id,
         provider: "ms-teams",
         channelId: "test-channel-id",
         workspaceId: "test-workspace-id",
@@ -2035,6 +2126,7 @@ describe("ChatOpsManager security validation", () => {
       });
 
       const mockProvider = createMockProvider({
+        botId: bot.id,
         getUserEmail: async () => "switch@example.com",
       });
       const manager = new ChatOpsManager();
@@ -2303,8 +2395,10 @@ describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
       name: "Slack Agent",
     });
 
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "slack",
       channelId: "C_TEST",
       workspaceId: "T_TEST",
@@ -2314,6 +2408,7 @@ describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const provider: ChatOpsProvider = {
       providerId: "slack",
+      botId: bot.id,
       displayName: "Slack",
       isConfigured: () => true,
       initialize: async () => {},
@@ -2382,6 +2477,8 @@ describe("ChatOpsManager.handleIncomingMessage missing scope notification", () =
   ): ChatOpsProvider {
     return {
       providerId: "slack",
+      // Never reaches the database: the flow exits before any binding lookup.
+      botId: crypto.randomUUID(),
       displayName: "Slack",
       isConfigured: () => true,
       initialize: async () => {},
@@ -2495,25 +2592,36 @@ describe("ChatOpsManager.initialize — partial config", () => {
     vi.unstubAllEnvs();
   });
 
-  test("initializes Slack when only Slack config exists in DB", async () => {
+  test("initializes Slack when only Slack config exists in DB", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsConfigModel.saveSlackConfig({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: "test-secret",
-      appId: "A123",
+      bot,
+      value: {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: "test-secret",
+        appId: "A123",
+      },
     });
 
     const manager = new ChatOpsManager();
     await manager.initialize();
 
     expect(manager.getMSTeamsProvider()).toBeNull();
-    expect(manager.getSlackProvider()).not.toBeNull();
-    expect(manager.getSlackProvider()?.isConfigured()).toBe(true);
+    expect(manager.getSlackProvider(bot.id)).not.toBeNull();
+    expect(manager.getSlackProvider(bot.id)?.isConfigured()).toBe(true);
+    expect(manager.getSlackProvider(bot.id)?.botId).toBe(bot.id);
 
     await manager.cleanup();
   });
 
-  test("initializes MS Teams when only MS Teams config exists in DB", async () => {
+  test("initializes MS Teams when only MS Teams config exists in DB", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
     await ChatOpsConfigModel.saveMsTeamsConfig({
       enabled: true,
       appId: "test-app-id",
@@ -2527,19 +2635,21 @@ describe("ChatOpsManager.initialize — partial config", () => {
     const manager = new ChatOpsManager();
     await manager.initialize();
 
-    expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.getSlackProviders()).toEqual([]);
     expect(manager.getMSTeamsProvider()).not.toBeNull();
     expect(manager.getMSTeamsProvider()?.isConfigured()).toBe(true);
 
     await manager.cleanup();
   });
 
-  test("handles no config in DB gracefully", async () => {
+  test("handles no config in DB gracefully", async ({ makeOrganization }) => {
+    await makeOrganization();
     const manager = new ChatOpsManager();
     await manager.initialize();
 
     expect(manager.getMSTeamsProvider()).toBeNull();
-    expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.getSlackProviders()).toEqual([]);
+    expect(manager.getDefaultSlackProvider()).toBeNull();
     expect(manager.isAnyProviderConfigured()).toBe(false);
 
     await manager.cleanup();
@@ -2574,7 +2684,21 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     vi.unstubAllEnvs();
   });
 
-  test("seeds MS Teams config from env vars when DB is empty", async () => {
+  /** Every Slack App's stored configuration for the organization. */
+  async function slackConfigsOf(organizationId: string) {
+    const bots = await ChatOpsBotModel.findByProvider({
+      organizationId,
+      provider: "slack",
+    });
+    return await Promise.all(
+      bots.map((bot) => ChatOpsConfigModel.getSlackConfig(bot)),
+    );
+  }
+
+  test("seeds MS Teams config from env vars when DB is empty", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
     vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "true");
     vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "env-app-id");
     vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "env-app-secret");
@@ -2582,7 +2706,7 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
 
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (manager as any).seedConfigFromEnvVars();
+    await (manager as any).seedConfigFromEnvVars(org.id);
 
     const config = await ChatOpsConfigModel.getMsTeamsConfig();
     expect(config).not.toBeNull();
@@ -2592,7 +2716,10 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     expect(config?.tenantId).toBe("env-tenant-id");
   });
 
-  test("seeds Slack config from env vars when DB is empty", async () => {
+  test("seeds Slack config from env vars when DB is empty", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-test-token");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET", "test-signing-secret");
@@ -2600,9 +2727,11 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
 
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (manager as any).seedConfigFromEnvVars();
+    await (manager as any).seedConfigFromEnvVars(org.id);
 
-    const config = await ChatOpsConfigModel.getSlackConfig();
+    const configs = await slackConfigsOf(org.id);
+    expect(configs).toHaveLength(1);
+    const config = configs[0];
     expect(config).not.toBeNull();
     expect(config?.enabled).toBe(true);
     expect(config?.botToken).toBe("xoxb-test-token");
@@ -2610,7 +2739,10 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     expect(config?.appId).toBe("A12345");
   });
 
-  test("does not overwrite existing MS Teams DB config", async () => {
+  test("does not overwrite existing MS Teams DB config", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
     // Pre-seed DB
     await ChatOpsConfigModel.saveMsTeamsConfig({
       enabled: true,
@@ -2629,19 +2761,26 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
 
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (manager as any).seedConfigFromEnvVars();
+    await (manager as any).seedConfigFromEnvVars(org.id);
 
     // DB config should be unchanged
     const config = await ChatOpsConfigModel.getMsTeamsConfig();
     expect(config?.appId).toBe("db-app-id");
   });
 
-  test("does not overwrite existing Slack DB config", async () => {
+  test("does not overwrite existing Slack DB config", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsConfigModel.saveSlackConfig({
-      enabled: true,
-      botToken: "xoxb-db-token",
-      signingSecret: "db-signing-secret",
-      appId: "DB_APP",
+      bot,
+      value: {
+        enabled: true,
+        botToken: "xoxb-db-token",
+        signingSecret: "db-signing-secret",
+        appId: "DB_APP",
+      },
     });
 
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
@@ -2650,24 +2789,35 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
 
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (manager as any).seedConfigFromEnvVars();
+    await (manager as any).seedConfigFromEnvVars(org.id);
 
-    const config = await ChatOpsConfigModel.getSlackConfig();
+    // Still the one app the admin set up, with its own credentials.
+    const bots = await ChatOpsBotModel.findByProvider({
+      organizationId: org.id,
+      provider: "slack",
+    });
+    expect(bots.map((b) => b.id)).toEqual([bot.id]);
+    const config = await ChatOpsConfigModel.getSlackConfig(bots[0]);
     expect(config?.botToken).toBe("xoxb-db-token");
   });
 
-  test("no-op when no DB config and no env vars", async () => {
+  test("no-op when no DB config and no env vars", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (manager as any).seedConfigFromEnvVars();
+    await (manager as any).seedConfigFromEnvVars(org.id);
 
     const msTeams = await ChatOpsConfigModel.getMsTeamsConfig();
-    const slack = await ChatOpsConfigModel.getSlackConfig();
     expect(msTeams).toBeNull();
-    expect(slack).toBeNull();
+    expect(await slackConfigsOf(org.id)).toEqual([]);
   });
 
-  test("MS Teams graph credentials fall back to bot credentials when not set", async () => {
+  test("MS Teams graph credentials fall back to bot credentials when not set", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
     vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED", "true");
     vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "bot-app-id");
     vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET", "bot-app-secret");
@@ -2676,7 +2826,7 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
 
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (manager as any).seedConfigFromEnvVars();
+    await (manager as any).seedConfigFromEnvVars(org.id);
 
     const config = await ChatOpsConfigModel.getMsTeamsConfig();
     expect(config?.graphTenantId).toBe("bot-tenant-id");
@@ -2684,19 +2834,25 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     expect(config?.graphClientSecret).toBe("bot-app-secret");
   });
 
-  test("does not seed MS Teams when only appId is set (missing appSecret)", async () => {
+  test("does not seed MS Teams when only appId is set (missing appSecret)", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
     vi.stubEnv("ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID", "env-app-id");
     // appSecret not set
 
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (manager as any).seedConfigFromEnvVars();
+    await (manager as any).seedConfigFromEnvVars(org.id);
 
     const config = await ChatOpsConfigModel.getMsTeamsConfig();
     expect(config).toBeNull();
   });
 
-  test("seeds Slack socket mode config from env vars when DB is empty", async () => {
+  test("seeds Slack socket mode config from env vars when DB is empty", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_ENABLED", "true");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-socket-token");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "socket");
@@ -2705,9 +2861,11 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
 
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (manager as any).seedConfigFromEnvVars();
+    await (manager as any).seedConfigFromEnvVars(org.id);
 
-    const config = await ChatOpsConfigModel.getSlackConfig();
+    const configs = await slackConfigsOf(org.id);
+    expect(configs).toHaveLength(1);
+    const config = configs[0];
     expect(config).not.toBeNull();
     expect(config?.enabled).toBe(true);
     expect(config?.botToken).toBe("xoxb-socket-token");
@@ -2716,17 +2874,19 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     expect(config?.appId).toBe("A_SOCKET");
   });
 
-  test("does not seed Slack socket mode when appLevelToken is missing", async () => {
+  test("does not seed Slack socket mode when appLevelToken is missing", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "socket");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN", "xoxb-token");
     // No signing secret and no app-level token
 
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
-    await (manager as any).seedConfigFromEnvVars();
+    await (manager as any).seedConfigFromEnvVars(org.id);
 
-    const config = await ChatOpsConfigModel.getSlackConfig();
-    expect(config).toBeNull();
+    expect(await slackConfigsOf(org.id)).toEqual([]);
   });
 });
 
@@ -2757,20 +2917,27 @@ describe("ChatOpsManager.initialize — Slack socket mode", () => {
     vi.unstubAllEnvs();
   });
 
-  test("socket mode config is configured when botToken and appLevelToken are set", async () => {
+  test("socket mode config is configured when botToken and appLevelToken are set", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsConfigModel.saveSlackConfig({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: "",
-      appId: "A123",
-      connectionMode: "socket",
-      appLevelToken: "xapp-test-token",
+      bot,
+      value: {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: "",
+        appId: "A123",
+        connectionMode: "socket",
+        appLevelToken: "xapp-test-token",
+      },
     });
 
     const manager = new ChatOpsManager();
     await manager.initialize();
 
-    const provider = manager.getSlackProvider();
+    const provider = manager.getSlackProvider(bot.id);
     expect(provider).not.toBeNull();
     expect(provider?.isConfigured()).toBe(true);
     expect(provider?.isSocketMode()).toBe(true);
@@ -2779,39 +2946,53 @@ describe("ChatOpsManager.initialize — Slack socket mode", () => {
     await manager.cleanup();
   });
 
-  test("socket mode config is not configured when appLevelToken is missing", async () => {
+  test("socket mode config is not configured when appLevelToken is missing", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsConfigModel.saveSlackConfig({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: "",
-      appId: "A123",
-      connectionMode: "socket",
-      // no appLevelToken
+      bot,
+      value: {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: "",
+        appId: "A123",
+        connectionMode: "socket",
+        // no appLevelToken
+      },
     });
 
     const manager = new ChatOpsManager();
     await manager.initialize();
 
-    const provider = manager.getSlackProvider();
+    const provider = manager.getSlackProvider(bot.id);
     expect(provider).not.toBeNull();
     expect(provider?.isConfigured()).toBe(false);
 
     await manager.cleanup();
   });
 
-  test("webhook mode config is not configured when signingSecret is missing", async () => {
+  test("webhook mode config is not configured when signingSecret is missing", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsConfigModel.saveSlackConfig({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: "",
-      appId: "A123",
-      connectionMode: "webhook",
+      bot,
+      value: {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: "",
+        appId: "A123",
+        connectionMode: "webhook",
+      },
     });
 
     const manager = new ChatOpsManager();
     await manager.initialize();
 
-    const provider = manager.getSlackProvider();
+    const provider = manager.getSlackProvider(bot.id);
     expect(provider).not.toBeNull();
     expect(provider?.isConfigured()).toBe(false);
     expect(provider?.isSocketMode()).toBe(false);
@@ -2819,19 +3000,26 @@ describe("ChatOpsManager.initialize — Slack socket mode", () => {
     await manager.cleanup();
   });
 
-  test("defaults to socket mode when connectionMode is not set", async () => {
+  test("defaults to socket mode when connectionMode is not set", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsConfigModel.saveSlackConfig({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: "",
-      appId: "A123",
-      appLevelToken: "xapp-test-token",
+      bot,
+      value: {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: "",
+        appId: "A123",
+        appLevelToken: "xapp-test-token",
+      },
     });
 
     const manager = new ChatOpsManager();
     await manager.initialize();
 
-    const provider = manager.getSlackProvider();
+    const provider = manager.getSlackProvider(bot.id);
     expect(provider).not.toBeNull();
     expect(provider?.isSocketMode()).toBe(true);
     expect(provider?.getConnectionMode()).toBe("socket");
@@ -2845,14 +3033,14 @@ describe("ChatOpsManager.initialize — Slack socket mode", () => {
 // =============================================================================
 
 describe("ChatOpsManager attachment passthrough", () => {
-  function createMockProvider(
-    overrides: {
-      getUserEmail?: (userId: string) => Promise<string | null>;
-      sendReply?: (options: ChatReplyOptions) => Promise<string>;
-    } = {},
-  ): ChatOpsProvider {
+  function createMockProvider(overrides: {
+    botId: string;
+    getUserEmail?: (userId: string) => Promise<string | null>;
+    sendReply?: (options: ChatReplyOptions) => Promise<string>;
+  }): ChatOpsProvider {
     return {
       providerId: "ms-teams",
+      botId: overrides.botId,
       displayName: "Microsoft Teams",
       isConfigured: () => true,
       initialize: async () => {},
@@ -2923,8 +3111,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -2932,6 +3122,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "attach-user@example.com",
     });
 
@@ -3008,8 +3199,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3017,6 +3210,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "noattach@example.com",
     });
 
@@ -3061,8 +3255,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3070,6 +3266,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "skip-user@example.com",
     });
 
@@ -3126,8 +3323,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3136,6 +3335,7 @@ describe("ChatOpsManager attachment passthrough", () => {
 
     // Mock provider returns thread history with image files from a previous user message
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "history-attach@example.com",
     });
     mockProvider.getThreadHistory = async () => [
@@ -3235,8 +3435,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3244,6 +3446,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "pdf-history@example.com",
     });
     mockProvider.getThreadHistory = async () => [
@@ -3354,8 +3557,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3363,6 +3568,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "pdf-budget@example.com",
     });
     mockProvider.getThreadHistory = async () => [
@@ -3492,8 +3698,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3501,6 +3709,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "history-skip@example.com",
     });
     mockProvider.getThreadHistory = async () => [
@@ -3619,8 +3828,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3655,6 +3866,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     ];
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "no-skip-history@example.com",
     });
     mockProvider.getThreadHistory = async () => historyWithFiles;
@@ -3732,8 +3944,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3741,6 +3955,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "file-only-turn@example.com",
     });
     mockProvider.getThreadHistory = async () => [
@@ -3850,8 +4065,10 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3859,6 +4076,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "fresh-thread@example.com",
     });
     const getThreadHistorySpy = vi.fn().mockResolvedValue([
@@ -3924,8 +4142,10 @@ describe("ChatOpsManager attachment passthrough", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -3933,6 +4153,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "thread-history@example.com",
     });
     mockProvider.getThreadHistory = vi.fn().mockResolvedValue([
@@ -3995,8 +4216,10 @@ describe("ChatOpsManager attachment passthrough", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "ms-teams");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
@@ -4004,6 +4227,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     const mockProvider = createMockProvider({
+      botId: bot.id,
       getUserEmail: async () => "footer-history@example.com",
     });
     mockProvider.getThreadHistory = vi.fn().mockResolvedValue([
@@ -4072,6 +4296,7 @@ describe("ChatOpsManager Slack conversation context", () => {
   const REPLY_TS = "1786399123.777111";
 
   function createSlackProvider(overrides: {
+    botId: string;
     getUserEmail: () => Promise<string | null>;
     getMessagePermalink?: (params: {
       channelId: string;
@@ -4080,6 +4305,7 @@ describe("ChatOpsManager Slack conversation context", () => {
   }): ChatOpsProvider {
     return {
       providerId: "slack",
+      botId: overrides.botId,
       displayName: "Slack",
       isConfigured: () => true,
       initialize: async () => {},
@@ -4163,8 +4389,10 @@ describe("ChatOpsManager Slack conversation context", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "slack",
       channelId: "C_CTX_NAME",
       workspaceId: "T_CTX",
@@ -4183,6 +4411,7 @@ describe("ChatOpsManager Slack conversation context", () => {
         },
       }),
       provider: createSlackProvider({
+        botId: bot.id,
         getUserEmail: async () => "slack-ctx-name@example.com",
       }),
     });
@@ -4221,8 +4450,10 @@ describe("ChatOpsManager Slack conversation context", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "slack",
       channelId: "C_CTX",
       workspaceId: "T_CTX",
@@ -4230,6 +4461,7 @@ describe("ChatOpsManager Slack conversation context", () => {
     });
 
     const provider = createSlackProvider({
+      botId: bot.id,
       getUserEmail: async () => "slack-ctx@example.com",
     });
 
@@ -4272,8 +4504,10 @@ describe("ChatOpsManager Slack conversation context", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "slack",
       channelId: "C_CTX",
       workspaceId: "T_CTX",
@@ -4284,6 +4518,7 @@ describe("ChatOpsManager Slack conversation context", () => {
       .fn()
       .mockResolvedValue("https://example.slack.test/archives/C_CTX/p1");
     const provider = createSlackProvider({
+      botId: bot.id,
       getUserEmail: async () => "slack-link@example.com",
       getMessagePermalink: permalinkSpy,
     });
@@ -4327,8 +4562,10 @@ describe("ChatOpsManager Slack conversation context", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "slack");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "slack",
       channelId: "C_CTX",
       workspaceId: "T_CTX",
@@ -4336,6 +4573,7 @@ describe("ChatOpsManager Slack conversation context", () => {
     });
 
     const provider = createSlackProvider({
+      botId: bot.id,
       getUserEmail: async () => "slack-root@example.com",
     });
 
@@ -4356,47 +4594,335 @@ describe("ChatOpsManager Slack conversation context", () => {
   });
 });
 
-describe("buildChatOpsSessionId", () => {
-  test("scopes Slack thread IDs to their channel", () => {
-    expect(buildChatOpsSessionId("slack", "C123", "T456")).toBe(
-      "chatops:slack:C123:T456",
+// =============================================================================
+// Several Slack Apps in one workspace — every piece of per-bot state stays with
+// the bot that produced it
+// =============================================================================
+
+describe("ChatOpsManager with several Slack Apps", () => {
+  function createBotProvider(overrides: {
+    botId: string;
+    sendReply?: (options: ChatReplyOptions) => Promise<string>;
+    uploadFileToThread?: ChatOpsProvider["uploadFileToThread"];
+    getUserEmail?: (userId: string) => Promise<string | null>;
+  }): ChatOpsProvider {
+    return {
+      providerId: "slack",
+      botId: overrides.botId,
+      displayName: "Slack",
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification: async () => null,
+      sendReply: overrides.sendReply ?? (async () => "reply-id"),
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
+      getThreadHistory: async () => [],
+      getUserEmail: overrides.getUserEmail ?? (async () => null),
+      getChannelName: async () => "shared-channel",
+      getWorkspaceId: () => "T_SHARED",
+      getWorkspaceName: () => "Shared Workspace",
+      hasMissingScopes: () => false,
+      notifyMissingScopes: async () => {},
+      downloadFiles: async () => [],
+      discoverChannels: async () => null,
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
+      ...(overrides.uploadFileToThread && {
+        uploadFileToThread: overrides.uploadFileToThread,
+      }),
+    };
+  }
+
+  /** The running Slack Apps of a manager, as `initialize()` would have left them. */
+  function runSlackApps(
+    manager: ChatOpsManager,
+    providers: ChatOpsProvider[],
+  ): void {
+    const running = (
+      manager as unknown as { slackProviders: Map<string, ChatOpsProvider> }
+    ).slackProviders;
+    for (const provider of providers) {
+      running.set(provider.botId, provider);
+    }
+  }
+
+  test("processes a message delivered to both Apps once per App", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Done",
+        messageId: "msg-two-bots",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-two-bots",
+          role: "assistant",
+          parts: [{ type: "text", text: "Done" }],
+        },
+      });
+
+    const user = await makeUser({ email: "two-bots@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    // Two Slack Apps are in the same channel; each has its own binding to it.
+    const botA = await makeBot(org.id, "slack");
+    const botB = await makeBot(org.id, "slack");
+    for (const bot of [botA, botB]) {
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        botId: bot.id,
+        provider: "slack",
+        channelId: "C_SHARED",
+        workspaceId: "T_SHARED",
+        agentId: agent.id,
+      });
+    }
+    const replyA = vi.fn().mockResolvedValue("reply-a");
+    const replyB = vi.fn().mockResolvedValue("reply-b");
+    const providerA = createBotProvider({
+      botId: botA.id,
+      sendReply: replyA,
+      getUserEmail: async () => "two-bots@example.com",
+    });
+    const providerB = createBotProvider({
+      botId: botB.id,
+      sendReply: replyB,
+      getUserEmail: async () => "two-bots@example.com",
+    });
+    const manager = new ChatOpsManager();
+
+    // Slack delivers one channel message to every App in the channel, with the
+    // same message id each time.
+    const message: IncomingChatMessage = {
+      messageId: "1786400000.000100",
+      channelId: "C_SHARED",
+      workspaceId: "T_SHARED",
+      threadId: "1786400000.000100",
+      senderId: "U_SHARED",
+      senderName: "Slack User",
+      senderEmail: "two-bots@example.com",
+      text: "hello both",
+      rawText: "hello both",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: { channelType: "im", conversationType: "personal" },
+    };
+
+    await manager.processMessage({ message, provider: providerA });
+    await manager.processMessage({ message, provider: providerB });
+
+    // Each App answered: the receipt the first one left does not swallow the
+    // second App's copy of the message.
+    expect(executorSpy).toHaveBeenCalledTimes(2);
+    expect(replyA).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Done" }),
     );
-    expect(buildChatOpsSessionId("slack", "C123", "T456")).not.toBe(
-      buildChatOpsSessionId("slack", "C789", "T456"),
+    expect(replyB).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Done" }),
+    );
+    // ...and the two runs are logged as separate sessions.
+    const [firstRun, secondRun] = executorSpy.mock.calls.map(
+      ([params]) => params.sessionId,
+    );
+    expect(firstRun).toContain(botA.id.slice(0, 8));
+    expect(secondRun).toContain(botB.id.slice(0, 8));
+    expect(firstRun).not.toBe(secondRun);
+
+    // A redelivery to the same App is still a duplicate.
+    const redelivery = await manager.processMessage({
+      message,
+      provider: providerA,
+    });
+    expect(redelivery.success).toBe(true);
+    expect(executorSpy).toHaveBeenCalledTimes(2);
+    expect(replyA).toHaveBeenCalledTimes(1);
+  });
+
+  test("delivers delayed output through the App that owns the binding, never another App", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const botA = await makeBot(org.id, "slack");
+    const botB = await makeBot(org.id, "slack");
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      botId: botB.id,
+      provider: "slack",
+      channelId: "C_SHARED",
+      workspaceId: "T_SHARED",
+    });
+    const replyA = vi.fn().mockResolvedValue("reply-a");
+    const replyB = vi.fn().mockResolvedValue("reply-b");
+    const uploadA = vi.fn().mockResolvedValue(undefined);
+    const uploadB = vi.fn().mockResolvedValue(undefined);
+    const providerA = createBotProvider({
+      botId: botA.id,
+      sendReply: replyA,
+      uploadFileToThread: uploadA,
+    });
+    const providerB = createBotProvider({
+      botId: botB.id,
+      sendReply: replyB,
+      uploadFileToThread: uploadB,
+    });
+    const manager = new ChatOpsManager();
+    runSlackApps(manager, [providerA, providerB]);
+
+    await manager.notifyBindingThread({
+      bindingId: binding.id,
+      threadId: "task-thread",
+      text: "Task finished.",
+    });
+    await manager.uploadFileToBindingThread({
+      bindingId: binding.id,
+      threadId: "task-thread",
+      filename: "demo.webm",
+      data: Buffer.from("demo"),
+    });
+
+    expect(replyB).toHaveBeenCalledTimes(1);
+    expect(uploadB).toHaveBeenCalledTimes(1);
+    expect(replyA).not.toHaveBeenCalled();
+    expect(uploadA).not.toHaveBeenCalled();
+
+    // When the owning App is stopped, the output is dropped rather than being
+    // posted as a different Slack App.
+    const degraded = new ChatOpsManager();
+    runSlackApps(degraded, [providerA]);
+
+    await degraded.notifyBindingThread({
+      bindingId: binding.id,
+      threadId: "task-thread",
+      text: "Task finished.",
+    });
+    await expect(
+      degraded.uploadFileToBindingThread({
+        bindingId: binding.id,
+        threadId: "task-thread",
+        filename: "demo.webm",
+        data: Buffer.from("demo"),
+      }),
+    ).rejects.toThrow("not running");
+
+    expect(replyA).not.toHaveBeenCalled();
+    expect(uploadA).not.toHaveBeenCalled();
+    expect(replyB).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("buildChatOpsSessionId", () => {
+  const BOT_ID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+
+  test("scopes Slack thread IDs to their channel", () => {
+    expect(
+      buildChatOpsSessionId({
+        providerId: "slack",
+        botId: BOT_ID,
+        channelId: "C123",
+        threadId: "T456",
+      }),
+    ).toBe("chatops:slack:0a1b2c3d:C123:T456");
+    expect(
+      buildChatOpsSessionId({
+        providerId: "slack",
+        botId: BOT_ID,
+        channelId: "C123",
+        threadId: "T456",
+      }),
+    ).not.toBe(
+      buildChatOpsSessionId({
+        providerId: "slack",
+        botId: BOT_ID,
+        channelId: "C789",
+        threadId: "T456",
+      }),
     );
   });
 
   test("falls back to channelId when threadId is undefined", () => {
-    expect(buildChatOpsSessionId("slack", "C123")).toBe("chatops:slack:C123");
+    expect(
+      buildChatOpsSessionId({
+        providerId: "slack",
+        botId: BOT_ID,
+        channelId: "C123",
+      }),
+    ).toBe("chatops:slack:0a1b2c3d:C123");
   });
 
   test("uses ms-teams provider ID", () => {
-    expect(buildChatOpsSessionId("ms-teams", "CH1", "TH1")).toBe(
-      "chatops:ms-teams:TH1",
-    );
+    expect(
+      buildChatOpsSessionId({
+        providerId: "ms-teams",
+        botId: BOT_ID,
+        channelId: "CH1",
+        threadId: "TH1",
+      }),
+    ).toBe("chatops:ms-teams:0a1b2c3d:TH1");
   });
 
   test("uses channelId for non-threaded ms-teams message", () => {
-    expect(buildChatOpsSessionId("ms-teams", "CH1")).toBe(
-      "chatops:ms-teams:CH1",
+    expect(
+      buildChatOpsSessionId({
+        providerId: "ms-teams",
+        botId: BOT_ID,
+        channelId: "CH1",
+      }),
+    ).toBe("chatops:ms-teams:0a1b2c3d:CH1");
+  });
+
+  test("keeps two bots answering in the same thread in separate sessions", () => {
+    const thread = {
+      providerId: "slack",
+      channelId: "C123",
+      threadId: "T456",
+    } as const;
+    expect(
+      buildChatOpsSessionId({
+        ...thread,
+        botId: "aaaaaaaa-0000-4000-8000-000000000001",
+      }),
+    ).not.toBe(
+      buildChatOpsSessionId({
+        ...thread,
+        botId: "bbbbbbbb-0000-4000-8000-000000000002",
+      }),
     );
   });
 
   test("hashes long MS Teams DM channel IDs to stay within exemplar budget", () => {
     const longChannelId =
       "a:15T7kNVP8YbByYGI_Fpc-Ci4cqqlrOfJiumEhUcnvNEZtyranEbXyAUqrNC9jGpSyulMgLurq6nD51ASEEq7sXfK3zetvCvC_XYj37IVz-tFUihy9HjP6YdqWnMw0URwu";
-    const result = buildChatOpsSessionId("ms-teams", longChannelId);
+    const result = buildChatOpsSessionId({
+      providerId: "ms-teams",
+      botId: BOT_ID,
+      channelId: longChannelId,
+    });
 
-    expect(result).toMatch(/^chatops:ms-teams:[a-f0-9]{16}$/);
+    expect(result).toMatch(/^chatops:ms-teams:0a1b2c3d:[a-f0-9]{16}$/);
     expect(result.length).toBeLessThanOrEqual(58);
   });
 
   test("hashes the same long channel ID to a stable session ID", () => {
     const longChannelId =
       "a:15T7kNVP8YbByYGI_Fpc-Ci4cqqlrOfJiumEhUcnvNEZtyranEbXyAUqrNC9jGpSyulMgLurq6nD51ASEEq7sXfK3zetvCvC_XYj37IVz-tFUihy9HjP6YdqWnMw0URwu";
-    expect(buildChatOpsSessionId("ms-teams", longChannelId)).toBe(
-      buildChatOpsSessionId("ms-teams", longChannelId),
-    );
+    const params = {
+      providerId: "ms-teams",
+      botId: BOT_ID,
+      channelId: longChannelId,
+    };
+    expect(buildChatOpsSessionId(params)).toBe(buildChatOpsSessionId(params));
   });
 });
 
@@ -4406,6 +4932,7 @@ describe("buildChatOpsSessionId", () => {
 
 describe("ChatOpsManager server-side sessions", () => {
   function createSessionProvider(overrides: {
+    botId: string;
     getUserEmail: (userId: string) => Promise<string | null>;
     sendReply?: (options: ChatReplyOptions) => Promise<string>;
     setTypingStatus?: (
@@ -4417,6 +4944,7 @@ describe("ChatOpsManager server-side sessions", () => {
   }): ChatOpsProvider {
     return {
       providerId: "telegram",
+      botId: overrides.botId,
       displayName: "Telegram",
       usesServerSideSessions: true,
       ...(overrides.typingRefreshIntervalMs !== undefined && {
@@ -4475,7 +5003,7 @@ describe("ChatOpsManager server-side sessions", () => {
       organizationId: string;
     }) => Promise<{ id: string }>;
     extraEmails?: string[];
-  }): Promise<{ senderEmail: string }> {
+  }): Promise<{ senderEmail: string; botId: string }> {
     const senderEmail = "alice@example.com";
     const org = await ctx.makeOrganization();
     const user = await ctx.makeUser({ email: senderEmail });
@@ -4489,13 +5017,15 @@ describe("ChatOpsManager server-side sessions", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, "telegram");
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: "telegram",
       channelId: "tg-chat-1",
       agentId: agent.id,
     });
-    return { senderEmail };
+    return { senderEmail, botId: bot.id };
   }
 
   test("persists each turn in a thread context and feeds it back as prior messages", async ({
@@ -4505,7 +5035,7 @@ describe("ChatOpsManager server-side sessions", () => {
     makeTeamMember,
     makeInternalAgent,
   }) => {
-    const { senderEmail } = await setUpTelegramBinding({
+    const { senderEmail, botId } = await setUpTelegramBinding({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -4534,6 +5064,7 @@ describe("ChatOpsManager server-side sessions", () => {
       });
 
     const provider = createSessionProvider({
+      botId,
       getUserEmail: async () => senderEmail,
     });
     const manager = new ChatOpsManager();
@@ -4598,7 +5129,7 @@ describe("ChatOpsManager server-side sessions", () => {
     makeTeamMember,
     makeInternalAgent,
   }) => {
-    await setUpTelegramBinding({
+    const { botId } = await setUpTelegramBinding({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -4624,6 +5155,7 @@ describe("ChatOpsManager server-side sessions", () => {
       });
 
     const provider = createSessionProvider({
+      botId,
       getUserEmail: async (userId) =>
         userId === "tg-user-1" ? "alice@example.com" : "bob@example.com",
     });
@@ -4682,7 +5214,7 @@ describe("ChatOpsManager server-side sessions", () => {
     makeTeamMember,
     makeInternalAgent,
   }) => {
-    const { senderEmail } = await setUpTelegramBinding({
+    const { senderEmail, botId } = await setUpTelegramBinding({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -4709,6 +5241,7 @@ describe("ChatOpsManager server-side sessions", () => {
 
     const setTypingStatus = vi.fn().mockResolvedValue(undefined);
     const provider = createSessionProvider({
+      botId,
       getUserEmail: async () => senderEmail,
       setTypingStatus,
       typingRefreshIntervalMs: 20,
@@ -4738,7 +5271,7 @@ describe("ChatOpsManager server-side sessions", () => {
     makeTeamMember,
     makeInternalAgent,
   }) => {
-    const { senderEmail } = await setUpTelegramBinding({
+    const { senderEmail, botId } = await setUpTelegramBinding({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -4782,6 +5315,7 @@ describe("ChatOpsManager server-side sessions", () => {
 
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const provider = createSessionProvider({
+      botId,
       getUserEmail: async () => senderEmail,
       sendReply: sendReplySpy,
     });
@@ -4859,6 +5393,7 @@ describe("ChatOpsManager per-channel instructions", () => {
   function stubProvider(
     overrides: Partial<ChatOpsProvider> & {
       providerId: ChatOpsProvider["providerId"];
+      botId: string;
       getUserEmail: ChatOpsProvider["getUserEmail"];
     },
   ): ChatOpsProvider {
@@ -4903,7 +5438,7 @@ describe("ChatOpsManager per-channel instructions", () => {
       workspaceId?: string | null;
       channelInstructions?: string | null;
     },
-  ): Promise<{ senderEmail: string; agentId: string }> {
+  ): Promise<{ senderEmail: string; agentId: string; botId: string }> {
     const senderEmail = `instructions-${crypto.randomUUID()}@example.com`;
     const org = await ctx.makeOrganization();
     const user = await ctx.makeUser({ email: senderEmail });
@@ -4913,8 +5448,10 @@ describe("ChatOpsManager per-channel instructions", () => {
       organizationId: org.id,
     });
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const bot = await makeBot(org.id, binding.provider);
     const created = await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
+      botId: bot.id,
       provider: binding.provider,
       channelId: binding.channelId,
       workspaceId: binding.workspaceId ?? null,
@@ -4925,7 +5462,7 @@ describe("ChatOpsManager per-channel instructions", () => {
         channelInstructions: binding.channelInstructions,
       });
     }
-    return { senderEmail, agentId: agent.id };
+    return { senderEmail, agentId: agent.id, botId: bot.id };
   }
 
   function mockExecutor() {
@@ -4949,7 +5486,7 @@ describe("ChatOpsManager per-channel instructions", () => {
     makeInternalAgent,
   }) => {
     const executorSpy = mockExecutor();
-    const { senderEmail, agentId } = await bindChannel(
+    const { senderEmail, agentId, botId } = await bindChannel(
       {
         makeOrganization,
         makeUser,
@@ -4980,6 +5517,7 @@ describe("ChatOpsManager per-channel instructions", () => {
         metadata: { channelType: "im", conversationType: "personal" },
       },
       provider: stubProvider({
+        botId,
         providerId: "slack",
         getUserEmail: async () => senderEmail,
       }),
@@ -5011,7 +5549,7 @@ describe("ChatOpsManager per-channel instructions", () => {
     // decides the message itself cannot ask for anything the policy did not
     // enumerate. Both blocks have to be adjacent, with the instructions last.
     const executorSpy = mockExecutor();
-    const { senderEmail } = await bindChannel(
+    const { senderEmail, botId } = await bindChannel(
       {
         makeOrganization,
         makeUser,
@@ -5042,6 +5580,7 @@ describe("ChatOpsManager per-channel instructions", () => {
         metadata: { channelType: "channel", conversationType: "channel" },
       },
       provider: stubProvider({
+        botId,
         providerId: "slack",
         getUserEmail: async () => senderEmail,
         getThreadHistory: async () => [
@@ -5077,7 +5616,7 @@ describe("ChatOpsManager per-channel instructions", () => {
     makeInternalAgent,
   }) => {
     const executorSpy = mockExecutor();
-    const { senderEmail } = await bindChannel(
+    const { senderEmail, botId } = await bindChannel(
       {
         makeOrganization,
         makeUser,
@@ -5103,6 +5642,7 @@ describe("ChatOpsManager per-channel instructions", () => {
         metadata: { channelType: "im", conversationType: "personal" },
       },
       provider: stubProvider({
+        botId,
         providerId: "slack",
         getUserEmail: async () => senderEmail,
       }),
@@ -5135,7 +5675,7 @@ describe("ChatOpsManager per-channel instructions", () => {
           },
         };
       });
-    const { senderEmail } = await bindChannel(
+    const { senderEmail, botId } = await bindChannel(
       {
         makeOrganization,
         makeUser,
@@ -5150,6 +5690,7 @@ describe("ChatOpsManager per-channel instructions", () => {
       },
     );
     const provider = stubProvider({
+      botId,
       providerId: "telegram",
       usesServerSideSessions: true,
       getUserEmail: async () => senderEmail,

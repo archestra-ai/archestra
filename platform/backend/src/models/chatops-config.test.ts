@@ -1,5 +1,7 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@/test";
+import ChatOpsBotModel from "./chatops-bot";
 import ChatOpsConfigModel from "./chatops-config";
+import SecretModel from "./secret";
 
 describe("ChatOpsConfigModel", () => {
   describe("MS Teams config", () => {
@@ -53,12 +55,23 @@ describe("ChatOpsConfigModel", () => {
   });
 
   describe("Slack config", () => {
-    test("returns null when no config exists", async () => {
-      const result = await ChatOpsConfigModel.getSlackConfig();
-      expect(result).toBeNull();
+    test("returns null when the bot has no secret yet", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id);
+
+      expect(bot.secretId).toBeNull();
+      expect(await ChatOpsConfigModel.getSlackConfig(bot)).toBeNull();
     });
 
-    test("saves and retrieves Slack config", async () => {
+    test("first save creates the secret and links it to the bot", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id);
       const slackConfig = {
         enabled: true,
         botToken: "xoxb-test-token",
@@ -66,9 +79,21 @@ describe("ChatOpsConfigModel", () => {
         appId: "A12345",
       };
 
-      await ChatOpsConfigModel.saveSlackConfig(slackConfig);
-      const result = await ChatOpsConfigModel.getSlackConfig();
+      const saved = await ChatOpsConfigModel.saveSlackConfig({
+        bot,
+        value: slackConfig,
+      });
 
+      expect(saved.id).toBe(bot.id);
+      expect(saved.secretId).toEqual(expect.any(String));
+      // The link is persisted on the bot row, not just on the returned object.
+      const reloaded = await ChatOpsBotModel.findById(bot.id);
+      expect(reloaded?.secretId).toBe(saved.secretId);
+      expect(
+        await SecretModel.findById(saved.secretId as string),
+      ).not.toBeNull();
+
+      const result = await ChatOpsConfigModel.getSlackConfig(saved);
       expect(result).toEqual({
         ...slackConfig,
         connectionMode: "webhook",
@@ -76,7 +101,12 @@ describe("ChatOpsConfigModel", () => {
       });
     });
 
-    test("updates existing Slack config", async () => {
+    test("later saves reuse the same secret and overwrite its value", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id);
       const initial = {
         enabled: true,
         botToken: "xoxb-token-1",
@@ -84,17 +114,22 @@ describe("ChatOpsConfigModel", () => {
         appId: "A111",
       };
 
-      await ChatOpsConfigModel.saveSlackConfig(initial);
-
+      const first = await ChatOpsConfigModel.saveSlackConfig({
+        bot,
+        value: initial,
+      });
       const updated = {
         ...initial,
         botToken: "xoxb-token-2",
         enabled: false,
       };
+      const second = await ChatOpsConfigModel.saveSlackConfig({
+        bot: first,
+        value: updated,
+      });
 
-      await ChatOpsConfigModel.saveSlackConfig(updated);
-      const result = await ChatOpsConfigModel.getSlackConfig();
-
+      expect(second.secretId).toBe(first.secretId);
+      const result = await ChatOpsConfigModel.getSlackConfig(second);
       expect(result).toEqual({
         ...updated,
         connectionMode: "webhook",
@@ -102,6 +137,88 @@ describe("ChatOpsConfigModel", () => {
       });
       expect(result?.botToken).toBe("xoxb-token-2");
       expect(result?.enabled).toBe(false);
+    });
+
+    test("two bots keep separate credentials", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const botA = await makeChatOpsBot(org.id);
+      const botB = await makeChatOpsBot(org.id);
+
+      const savedA = await ChatOpsConfigModel.saveSlackConfig({
+        bot: botA,
+        value: {
+          enabled: true,
+          botToken: "xoxb-a",
+          signingSecret: "sign-a",
+          appId: "AAAA",
+        },
+      });
+      const savedB = await ChatOpsConfigModel.saveSlackConfig({
+        bot: botB,
+        value: {
+          enabled: true,
+          botToken: "xoxb-b",
+          signingSecret: "sign-b",
+          appId: "BBBB",
+        },
+      });
+
+      expect(savedA.secretId).not.toBe(savedB.secretId);
+      expect((await ChatOpsConfigModel.getSlackConfig(savedA))?.botToken).toBe(
+        "xoxb-a",
+      );
+      expect((await ChatOpsConfigModel.getSlackConfig(savedB))?.botToken).toBe(
+        "xoxb-b",
+      );
+
+      // Updating one bot never touches the other's credentials.
+      await ChatOpsConfigModel.saveSlackConfig({
+        bot: savedA,
+        value: {
+          enabled: true,
+          botToken: "xoxb-a-rotated",
+          signingSecret: "sign-a",
+          appId: "AAAA",
+        },
+      });
+      expect((await ChatOpsConfigModel.getSlackConfig(savedB))?.botToken).toBe(
+        "xoxb-b",
+      );
+    });
+
+    test("deleteSlackConfig removes only that bot's secret", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const savedA = await ChatOpsConfigModel.saveSlackConfig({
+        bot: await makeChatOpsBot(org.id),
+        value: {
+          enabled: true,
+          botToken: "xoxb-a",
+          signingSecret: "sign-a",
+          appId: "AAAA",
+        },
+      });
+      const savedB = await ChatOpsConfigModel.saveSlackConfig({
+        bot: await makeChatOpsBot(org.id),
+        value: {
+          enabled: true,
+          botToken: "xoxb-b",
+          signingSecret: "sign-b",
+          appId: "BBBB",
+        },
+      });
+
+      await ChatOpsConfigModel.deleteSlackConfig(savedA);
+
+      expect(await SecretModel.findById(savedA.secretId as string)).toBeNull();
+      expect((await ChatOpsConfigModel.getSlackConfig(savedB))?.botToken).toBe(
+        "xoxb-b",
+      );
     });
   });
 
@@ -133,7 +250,12 @@ describe("ChatOpsConfigModel", () => {
   });
 
   describe("independent storage", () => {
-    test("MS Teams and Slack configs are stored independently", async () => {
+    test("MS Teams and Slack configs are stored independently", async ({
+      makeOrganization,
+      makeChatOpsBot,
+    }) => {
+      const org = await makeOrganization();
+      const bot = await makeChatOpsBot(org.id);
       const msTeamsConfig = {
         enabled: true,
         appId: "teams-app",
@@ -152,10 +274,13 @@ describe("ChatOpsConfigModel", () => {
       };
 
       await ChatOpsConfigModel.saveMsTeamsConfig(msTeamsConfig);
-      await ChatOpsConfigModel.saveSlackConfig(slackConfig);
+      const savedBot = await ChatOpsConfigModel.saveSlackConfig({
+        bot,
+        value: slackConfig,
+      });
 
       const teams = await ChatOpsConfigModel.getMsTeamsConfig();
-      const slack = await ChatOpsConfigModel.getSlackConfig();
+      const slack = await ChatOpsConfigModel.getSlackConfig(savedBot);
 
       expect(teams).toEqual(msTeamsConfig);
       expect(slack).toEqual({

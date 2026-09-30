@@ -726,6 +726,8 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  CreateSlackChatOpsBot: "createSlackChatOpsBot",
+  DeleteChatOpsBot: "deleteChatOpsBot",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
   GenerateTelegramLinkCode: "generateTelegramLinkCode",

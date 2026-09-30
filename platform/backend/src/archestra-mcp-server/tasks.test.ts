@@ -509,9 +509,13 @@ describe("run tools", () => {
     }
   });
 
-  test("lists accessible Agent runs with live and thread links", async () => {
+  test("lists accessible Agent runs with live and thread links", async ({
+    makeChatOpsBot,
+  }) => {
+    const bot = await makeChatOpsBot(organizationId);
     const binding = await ChatOpsChannelBindingModel.create({
       organizationId,
+      botId: bot.id,
       provider: "slack",
       channelId: "C01234567",
       workspaceId: "T01234567",

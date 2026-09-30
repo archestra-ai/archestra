@@ -7,12 +7,21 @@ export function SetupSection({
   isLoading,
   providerLabel,
   docsUrl,
+  title = "Setup",
+  description,
+  actions,
   children,
 }: {
   allStepsCompleted: boolean;
   isLoading: boolean;
   providerLabel: string;
   docsUrl: string | null;
+  /** Heading; a provider with several bots names the one being set up. */
+  title?: string;
+  /** Replaces the default one-line blurb under the heading. */
+  description?: React.ReactNode;
+  /** Right-aligned controls next to the docs link (e.g. Remove). */
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -20,7 +29,7 @@ export function SetupSection({
       <div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Setup</h2>
+            <h2 className="text-lg font-semibold">{title}</h2>
             {!isLoading && allStepsCompleted && (
               <Badge
                 variant="secondary"
@@ -31,14 +40,21 @@ export function SetupSection({
               </Badge>
             )}
           </div>
-          <ExternalDocsLink href={docsUrl} className="text-xs">
-            Learn more
-          </ExternalDocsLink>
+          <div className="flex items-center gap-3">
+            {actions}
+            <ExternalDocsLink href={docsUrl} className="text-xs">
+              Learn more
+            </ExternalDocsLink>
+          </div>
         </div>
         {!isLoading && (
           <p className="mt-1 text-xs text-muted-foreground">
-            Connect {providerLabel} so agents can receive and respond to
-            messages.
+            {description ?? (
+              <>
+                Connect {providerLabel} so agents can receive and respond to
+                messages.
+              </>
+            )}
           </p>
         )}
       </div>

@@ -109,13 +109,15 @@ const CASES: ScopeCase[] = [
   },
   {
     name: "ChatOpsChannelBindingModel.findByIdForAudit",
-    setup: async ({ makeOrganization }) => {
+    setup: async ({ makeOrganization, makeChatOpsBot }) => {
       const orgA = await makeOrganization();
       const orgB = await makeOrganization();
+      const bot = await makeChatOpsBot(orgB.id);
       const [binding] = await db
         .insert(schema.chatopsChannelBindingsTable)
         .values({
           organizationId: orgB.id,
+          botId: bot.id,
           provider: "slack",
           channelId: `C${crypto.randomUUID().slice(0, 10)}`,
           workspaceId: `W${crypto.randomUUID().slice(0, 10)}`,
@@ -373,6 +375,7 @@ describe("audit snapshot scope invariant — cross-org returns null", () => {
     makeVirtualApiKey,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
+    makeChatOpsBot,
     makeAdmin,
     makeMember,
     makeSecret,
@@ -390,6 +393,7 @@ describe("audit snapshot scope invariant — cross-org returns null", () => {
       makeVirtualApiKey,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
+      makeChatOpsBot,
       makeAdmin,
       makeMember,
       makeSecret,

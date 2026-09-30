@@ -6,9 +6,9 @@ import {
   RouteId,
   TimeInMs,
 } from "@archestra/shared";
-import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import { MicrosoftAppCredentials } from "botframework-connector";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -32,6 +32,8 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
+import { slackAppService } from "@/agents/chatops/slack-app-service";
+import type SlackProvider from "@/agents/chatops/slack-provider";
 import {
   buildAgentFooter,
   EventDedupMap,
@@ -46,6 +48,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
+  ChatOpsBotModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   InvitationModel,
@@ -60,6 +63,7 @@ import {
   type ChatOpsConnectionMode,
   ChatOpsConnectionModeSchema,
   type ChatOpsProvider,
+  type ChatOpsProviderInfoSchema,
   type ChatOpsProviderType,
   ChatOpsProviderTypeSchema,
   ChatOpsStatusResponseSchema,
@@ -119,6 +123,8 @@ const ChatOpsAssignmentPlanSchema = z
       .array(
         z.object({
           provider: ChatOpsProviderTypeSchema,
+          /** Omitted means the provider's first bot. */
+          botId: z.string().uuid().optional(),
         }),
       )
       .max(100),
@@ -151,13 +157,16 @@ const ChatOpsAssignmentPlanSchema = z
     });
 
     const directMessageKeys = new Set(
-      directMessages.map((directMessage) => directMessage.provider),
+      directMessages.map(
+        (directMessage) =>
+          `${directMessage.provider}:${directMessage.botId ?? ""}`,
+      ),
     );
     if (directMessageKeys.size !== directMessages.length) {
       ctx.addIssue({
         code: "custom",
         path: ["directMessages"],
-        message: "Each direct message provider must be unique",
+        message: "Each direct message bot must be unique",
       });
     }
   });
@@ -301,7 +310,11 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 return;
               }
 
-              await handleAgentSelection(context, cardMessage);
+              await handleAgentSelection({
+                context,
+                message: cardMessage,
+                provider,
+              });
               return;
             }
 
@@ -359,6 +372,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (muteReaction) {
               await muteTeamsThreadAndNotify(context, {
                 provider: "ms-teams",
+                botId: provider.botId,
                 channelId: muteReaction.channelId,
                 threadId: muteReaction.threadId,
               });
@@ -392,6 +406,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               const botMentioned = provider.wasBotMentioned(context.activity);
               const gate = await applyChannelGate({
                 provider: "ms-teams",
+                botId: provider.botId,
                 channelId: message.channelId,
                 threadId: message.threadId ?? message.channelId,
                 botMentioned,
@@ -515,6 +530,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (trimmedText === CHATOPS_COMMANDS.STATUS) {
               const binding = await ChatOpsChannelBindingModel.findByChannel({
                 provider: "ms-teams",
+                botId: provider.botId,
                 channelId: message.channelId,
                 workspaceId: message.workspaceId,
               });
@@ -600,6 +616,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Check for existing binding
             const binding = await ChatOpsChannelBindingModel.findByChannel({
               provider: "ms-teams",
+              botId: provider.botId,
               channelId: message.channelId,
               workspaceId: message.workspaceId,
             });
@@ -627,6 +644,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 await ChatOpsChannelBindingModel.upsertByChannel({
                   organizationId,
                   provider: "ms-teams",
+                  botId: provider.botId,
                   channelId: message.channelId,
                   workspaceId: message.workspaceId,
                   workspaceName: resolvedNames.workspaceName,
@@ -721,340 +739,370 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   await fastify.register(msTeamsWebhookRoutes);
 
-  /**
-   * Slack webhook endpoint
-   *
-   * Receives events from Slack Events API.
-   * Signature validation via HMAC SHA256 signing secret.
-   */
-  fastify.post(
+  // Every Slack App has its own webhook URLs (used in webhook mode). The
+  // original un-prefixed URLs keep resolving to Slack App #1, so an existing
+  // setup never has to touch its Slack configuration.
+  for (const slackWebhookBase of [
     "/api/webhooks/chatops/slack",
-    {
-      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
-      preParsing: [captureSlackRawBody as any],
-      schema: {
-        description: "Slack Events API webhook endpoint",
-        tags: ["ChatOps Webhooks"],
-        body: z.unknown(),
-        response: {
-          200: z.union([
-            z.object({ challenge: z.string() }),
-            z.object({ ok: z.boolean() }),
-          ]),
-          400: z.object({
-            error: z.object({
-              message: z.string(),
-              type: z.string(),
-            }),
-          }),
-          429: z.object({
-            error: z.object({
-              message: z.string(),
-              type: z.string(),
-            }),
-          }),
-          500: z.object({
-            error: z.object({
-              message: z.string(),
-              type: z.string(),
-            }),
-          }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const provider = chatOpsManager.getSlackProvider();
-
+    "/api/webhooks/chatops/slack/bots/:botId",
+  ]) {
+    const isLegacyUrl = !slackWebhookBase.includes(":botId");
+    const resolveSlackProvider = (request: FastifyRequest): SlackProvider => {
+      const { botId } = (request.params ?? {}) as { botId?: string };
+      const provider = isLegacyUrl
+        ? chatOpsManager.getDefaultSlackProvider()
+        : botId
+          ? chatOpsManager.getSlackProvider(botId)
+          : null;
       if (!provider) {
         logger.warn(
+          { botId },
           "[ChatOps] Slack webhook called but provider not configured",
         );
         throw new ApiError(400, "Slack chatops provider not configured");
       }
+      return provider;
+    };
 
-      // Rate limiting
-      const clientIp = request.ip || "unknown";
-      const rateLimitKey =
-        `${CacheKey.WebhookRateLimit}-chatops-slack-${clientIp}` as AllowedCacheKey;
-      const rateLimitConfig = {
-        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
-        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
-      };
-      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
-        logger.warn(
-          { ip: clientIp },
-          "[ChatOps] Rate limit exceeded for Slack webhook",
-        );
-        throw new ApiError(429, "Too many requests");
-      }
+    /**
+     * Slack webhook endpoint
+     *
+     * Receives events from Slack Events API.
+     * Signature validation via HMAC SHA256 signing secret.
+     */
+    fastify.post(
+      slackWebhookBase,
+      {
+        // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+        preParsing: [captureSlackRawBody as any],
+        schema: {
+          description: "Slack Events API webhook endpoint",
+          tags: ["ChatOps Webhooks"],
+          ...(isLegacyUrl ? {} : { params: z.object({ botId: z.string() }) }),
+          body: z.unknown(),
+          response: {
+            200: z.union([
+              z.object({ challenge: z.string() }),
+              z.object({ ok: z.boolean() }),
+            ]),
+            400: z.object({
+              error: z.object({
+                message: z.string(),
+                type: z.string(),
+              }),
+            }),
+            429: z.object({
+              error: z.object({
+                message: z.string(),
+                type: z.string(),
+              }),
+            }),
+            500: z.object({
+              error: z.object({
+                message: z.string(),
+                type: z.string(),
+              }),
+            }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const provider = resolveSlackProvider(request);
 
-      const headers: Record<string, string | string[] | undefined> = {};
-      for (const [key, value] of Object.entries(request.headers)) {
-        headers[key] = value;
-      }
-
-      const body = request.body;
-
-      // Socket mode guard — webhooks are not used in socket mode
-      if (provider.isSocketMode()) {
-        throw new ApiError(
-          400,
-          "Slack is configured for Socket Mode. Webhooks are disabled.",
-        );
-      }
-
-      // Validate request signature FIRST — even url_verification challenges are signed.
-      const rawBody = (request as unknown as { slackRawBody?: string })
-        .slackRawBody;
-      if (!rawBody) {
-        throw new ApiError(400, "Could not read request body for verification");
-      }
-      const isValid = await provider.validateWebhookRequest(rawBody, headers);
-      if (!isValid) {
-        logger.warn("[ChatOps] Invalid Slack webhook signature");
-        throw new ApiError(400, "Invalid request signature");
-      }
-
-      // Handle URL verification challenge (after signature is verified)
-      const challengeResponse = provider.handleValidationChallenge(body) as {
-        challenge: string;
-      } | null;
-      if (challengeResponse) {
-        return reply.send(challengeResponse);
-      }
-
-      try {
-        const slackBody = body as {
-          type?: string;
-          event?: { type?: string; ts?: string; event_ts?: string };
+        // Rate limiting
+        const clientIp = request.ip || "unknown";
+        const rateLimitKey =
+          `${CacheKey.WebhookRateLimit}-chatops-slack-${clientIp}` as AllowedCacheKey;
+        const rateLimitConfig = {
+          windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+          maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
         };
-
-        if (slackBody.type === "event_callback") {
-          // Quick in-memory dedup for Slack's duplicate message+app_mention events.
-          // Messages carry event.ts; reaction events carry event.event_ts.
-          const eventTs = slackBody.event?.ts ?? slackBody.event?.event_ts;
-          if (eventTs && slackWebhookDedup.mark(eventTs)) {
-            return reply.send({ ok: true });
-          }
-
-          // Delegate to shared handler (async — return 200 immediately for Slack's 3s timeout)
-          chatOpsManager
-            .handleIncomingMessage(provider, body)
-            .catch((error) => {
-              logger.error(
-                {
-                  error: error instanceof Error ? error.message : String(error),
-                },
-                "[ChatOps] Error processing Slack message (async)",
-              );
-            });
+        if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+          logger.warn(
+            { ip: clientIp },
+            "[ChatOps] Rate limit exceeded for Slack webhook",
+          );
+          throw new ApiError(429, "Too many requests");
         }
 
-        return reply.send({ ok: true });
-      } catch (error) {
-        logger.error(
-          {
-            error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined,
+        const headers: Record<string, string | string[] | undefined> = {};
+        for (const [key, value] of Object.entries(request.headers)) {
+          headers[key] = value;
+        }
+
+        const body = request.body;
+
+        // Socket mode guard — webhooks are not used in socket mode
+        if (provider.isSocketMode()) {
+          throw new ApiError(
+            400,
+            "Slack is configured for Socket Mode. Webhooks are disabled.",
+          );
+        }
+
+        // Validate request signature FIRST — even url_verification challenges are signed.
+        const rawBody = (request as unknown as { slackRawBody?: string })
+          .slackRawBody;
+        if (!rawBody) {
+          throw new ApiError(
+            400,
+            "Could not read request body for verification",
+          );
+        }
+        const isValid = await provider.validateWebhookRequest(rawBody, headers);
+        if (!isValid) {
+          logger.warn("[ChatOps] Invalid Slack webhook signature");
+          throw new ApiError(400, "Invalid request signature");
+        }
+
+        // Handle URL verification challenge (after signature is verified)
+        const challengeResponse = provider.handleValidationChallenge(body) as {
+          challenge: string;
+        } | null;
+        if (challengeResponse) {
+          return reply.send(challengeResponse);
+        }
+
+        try {
+          const slackBody = body as {
+            type?: string;
+            event?: { type?: string; ts?: string; event_ts?: string };
+          };
+
+          if (slackBody.type === "event_callback") {
+            // Quick in-memory dedup for Slack's duplicate message+app_mention events.
+            // Messages carry event.ts; reaction events carry event.event_ts.
+            // Scoped per bot: one event delivered to two apps is one event each.
+            const eventTs = slackBody.event?.ts ?? slackBody.event?.event_ts;
+            if (
+              eventTs &&
+              slackWebhookDedup.mark(`${provider.botId}:${eventTs}`)
+            ) {
+              return reply.send({ ok: true });
+            }
+
+            // Delegate to shared handler (async — return 200 immediately for Slack's 3s timeout)
+            chatOpsManager
+              .handleIncomingMessage(provider, body)
+              .catch((error) => {
+                logger.error(
+                  {
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  },
+                  "[ChatOps] Error processing Slack message (async)",
+                );
+              });
+          }
+
+          return reply.send({ ok: true });
+        } catch (error) {
+          logger.error(
+            {
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+            },
+            "[ChatOps] Error processing Slack webhook",
+          );
+          throw new ApiError(500, "Internal server error");
+        }
+      },
+    );
+
+    /**
+     * Slack interactive endpoint
+     *
+     * Receives block_actions payloads from Slack when users click buttons
+     * (e.g., agent selection buttons).
+     */
+    fastify.post(
+      `${slackWebhookBase}/interactive`,
+      {
+        // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+        preParsing: [captureSlackRawBody as any],
+        schema: {
+          description: "Slack interactive components endpoint",
+          tags: ["ChatOps Webhooks"],
+          ...(isLegacyUrl ? {} : { params: z.object({ botId: z.string() }) }),
+          body: z.unknown(),
+          response: {
+            200: z.object({ ok: z.boolean() }),
+            400: z.object({
+              error: z.object({ message: z.string(), type: z.string() }),
+            }),
+            429: z.object({
+              error: z.object({ message: z.string(), type: z.string() }),
+            }),
           },
-          "[ChatOps] Error processing Slack webhook",
-        );
-        throw new ApiError(500, "Internal server error");
-      }
-    },
-  );
-
-  /**
-   * Slack interactive endpoint
-   *
-   * Receives block_actions payloads from Slack when users click buttons
-   * (e.g., agent selection buttons).
-   */
-  fastify.post(
-    "/api/webhooks/chatops/slack/interactive",
-    {
-      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
-      preParsing: [captureSlackRawBody as any],
-      schema: {
-        description: "Slack interactive components endpoint",
-        tags: ["ChatOps Webhooks"],
-        body: z.unknown(),
-        response: {
-          200: z.object({ ok: z.boolean() }),
-          400: z.object({
-            error: z.object({ message: z.string(), type: z.string() }),
-          }),
-          429: z.object({
-            error: z.object({ message: z.string(), type: z.string() }),
-          }),
         },
       },
-    },
-    async (request, reply) => {
-      const provider = chatOpsManager.getSlackProvider();
-      if (!provider) {
-        throw new ApiError(400, "Slack chatops provider not configured");
-      }
+      async (request, reply) => {
+        const provider = resolveSlackProvider(request);
 
-      // Rate limiting
-      const clientIp = request.ip || "unknown";
-      const rateLimitKey =
-        `${CacheKey.WebhookRateLimit}-chatops-slack-interactive-${clientIp}` as AllowedCacheKey;
-      const rateLimitConfig = {
-        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
-        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
-      };
-      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
-        logger.warn(
-          { ip: clientIp },
-          "[ChatOps] Rate limit exceeded for Slack interactive webhook",
-        );
-        throw new ApiError(429, "Too many requests");
-      }
+        // Rate limiting
+        const clientIp = request.ip || "unknown";
+        const rateLimitKey =
+          `${CacheKey.WebhookRateLimit}-chatops-slack-interactive-${clientIp}` as AllowedCacheKey;
+        const rateLimitConfig = {
+          windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+          maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+        };
+        if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+          logger.warn(
+            { ip: clientIp },
+            "[ChatOps] Rate limit exceeded for Slack interactive webhook",
+          );
+          throw new ApiError(429, "Too many requests");
+        }
 
-      // Socket mode guard
-      if (provider.isSocketMode()) {
-        throw new ApiError(
-          400,
-          "Slack is configured for Socket Mode. Webhooks are disabled.",
-        );
-      }
+        // Socket mode guard
+        if (provider.isSocketMode()) {
+          throw new ApiError(
+            400,
+            "Slack is configured for Socket Mode. Webhooks are disabled.",
+          );
+        }
 
-      // Validate request signature using the captured raw body
-      const headers: Record<string, string | string[] | undefined> = {};
-      for (const [key, value] of Object.entries(request.headers)) {
-        headers[key] = value;
-      }
-      const rawBody = (request as unknown as { slackRawBody?: string })
-        .slackRawBody;
-      if (!rawBody) {
-        throw new ApiError(400, "Could not read request body for verification");
-      }
-      const isValid = await provider.validateWebhookRequest(rawBody, headers);
-      if (!isValid) {
-        logger.warn("[ChatOps] Invalid Slack interactive webhook signature");
-        throw new ApiError(400, "Invalid request signature");
-      }
+        // Validate request signature using the captured raw body
+        const headers: Record<string, string | string[] | undefined> = {};
+        for (const [key, value] of Object.entries(request.headers)) {
+          headers[key] = value;
+        }
+        const rawBody = (request as unknown as { slackRawBody?: string })
+          .slackRawBody;
+        if (!rawBody) {
+          throw new ApiError(
+            400,
+            "Could not read request body for verification",
+          );
+        }
+        const isValid = await provider.validateWebhookRequest(rawBody, headers);
+        if (!isValid) {
+          logger.warn("[ChatOps] Invalid Slack interactive webhook signature");
+          throw new ApiError(400, "Invalid request signature");
+        }
 
-      // Slack sends interactive payloads as form-encoded with a "payload" field
-      const formBody = request.body as { payload?: string };
-      const payloadStr = formBody.payload;
-      if (!payloadStr) {
-        throw new ApiError(400, "Missing payload");
-      }
+        // Slack sends interactive payloads as form-encoded with a "payload" field
+        const formBody = request.body as { payload?: string };
+        const payloadStr = formBody.payload;
+        if (!payloadStr) {
+          throw new ApiError(400, "Missing payload");
+        }
 
-      let payload: unknown;
-      try {
-        payload = JSON.parse(payloadStr);
-      } catch {
-        throw new ApiError(400, "Invalid payload JSON");
-      }
+        let payload: unknown;
+        try {
+          payload = JSON.parse(payloadStr);
+        } catch {
+          throw new ApiError(400, "Invalid payload JSON");
+        }
 
-      if (provider.handleInteractivePayload) {
-        await provider.handleInteractivePayload(payload);
-      } else {
-        await chatOpsManager.handleInteractiveSelection(provider, payload);
-      }
-      return reply.send({ ok: true });
-    },
-  );
+        if (provider.handleInteractivePayload) {
+          await provider.handleInteractivePayload(payload);
+        } else {
+          await chatOpsManager.handleInteractiveSelection(provider, payload);
+        }
+        return reply.send({ ok: true });
+      },
+    );
 
-  /**
-   * Slack slash command endpoint
-   *
-   * Receives native slash command payloads from Slack.
-   * Slack sends form-encoded body with: command, text, user_id, channel_id,
-   * team_id, response_url, trigger_id.
-   * All three commands share this single endpoint — `command` field distinguishes them.
-   */
-  fastify.post(
-    "/api/webhooks/chatops/slack/slash-command",
-    {
-      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
-      preParsing: [captureSlackRawBody as any],
-      schema: {
-        description: "Slack slash commands endpoint",
-        tags: ["ChatOps Webhooks"],
-        body: z.unknown(),
-        response: {
-          200: z.unknown(),
-          400: z.object({
-            error: z.object({
-              message: z.string(),
-              type: z.string(),
+    /**
+     * Slack slash command endpoint
+     *
+     * Receives native slash command payloads from Slack.
+     * Slack sends form-encoded body with: command, text, user_id, channel_id,
+     * team_id, response_url, trigger_id.
+     * All three commands share this single endpoint — `command` field distinguishes them.
+     */
+    fastify.post(
+      `${slackWebhookBase}/slash-command`,
+      {
+        // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+        preParsing: [captureSlackRawBody as any],
+        schema: {
+          description: "Slack slash commands endpoint",
+          tags: ["ChatOps Webhooks"],
+          ...(isLegacyUrl ? {} : { params: z.object({ botId: z.string() }) }),
+          body: z.unknown(),
+          response: {
+            200: z.unknown(),
+            400: z.object({
+              error: z.object({
+                message: z.string(),
+                type: z.string(),
+              }),
             }),
-          }),
-          429: z.object({
-            error: z.object({
-              message: z.string(),
-              type: z.string(),
+            429: z.object({
+              error: z.object({
+                message: z.string(),
+                type: z.string(),
+              }),
             }),
-          }),
+          },
         },
       },
-    },
-    async (request, reply) => {
-      const provider = chatOpsManager.getSlackProvider();
-      if (!provider) {
-        throw new ApiError(400, "Slack chatops provider not configured");
-      }
+      async (request, reply) => {
+        const provider = resolveSlackProvider(request);
 
-      // Rate limiting
-      const clientIp = request.ip || "unknown";
-      const rateLimitKey =
-        `${CacheKey.WebhookRateLimit}-chatops-slack-slash-${clientIp}` as AllowedCacheKey;
-      const rateLimitConfig = {
-        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
-        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
-      };
-      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
-        throw new ApiError(429, "Too many requests");
-      }
+        // Rate limiting
+        const clientIp = request.ip || "unknown";
+        const rateLimitKey =
+          `${CacheKey.WebhookRateLimit}-chatops-slack-slash-${clientIp}` as AllowedCacheKey;
+        const rateLimitConfig = {
+          windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+          maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+        };
+        if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+          throw new ApiError(429, "Too many requests");
+        }
 
-      // Socket mode guard
-      if (provider.isSocketMode()) {
-        throw new ApiError(
-          400,
-          "Slack is configured for Socket Mode. Webhooks are disabled.",
-        );
-      }
+        // Socket mode guard
+        if (provider.isSocketMode()) {
+          throw new ApiError(
+            400,
+            "Slack is configured for Socket Mode. Webhooks are disabled.",
+          );
+        }
 
-      // Validate request signature using the raw form-encoded body
-      const headers: Record<string, string | string[] | undefined> = {};
-      for (const [key, value] of Object.entries(request.headers)) {
-        headers[key] = value;
-      }
-      const rawBody = (request as unknown as { slackRawBody?: string })
-        .slackRawBody;
-      if (!rawBody) {
-        throw new ApiError(400, "Could not read request body for verification");
-      }
-      const isValid = await provider.validateWebhookRequest(rawBody, headers);
-      if (!isValid) {
-        logger.warn("[ChatOps] Invalid Slack slash command signature");
-        throw new ApiError(400, "Invalid request signature");
-      }
+        // Validate request signature using the raw form-encoded body
+        const headers: Record<string, string | string[] | undefined> = {};
+        for (const [key, value] of Object.entries(request.headers)) {
+          headers[key] = value;
+        }
+        const rawBody = (request as unknown as { slackRawBody?: string })
+          .slackRawBody;
+        if (!rawBody) {
+          throw new ApiError(
+            400,
+            "Could not read request body for verification",
+          );
+        }
+        const isValid = await provider.validateWebhookRequest(rawBody, headers);
+        if (!isValid) {
+          logger.warn("[ChatOps] Invalid Slack slash command signature");
+          throw new ApiError(400, "Invalid request signature");
+        }
 
-      const body = request.body as {
-        command?: string;
-        text?: string;
-        user_id?: string;
-        user_name?: string;
-        channel_id?: string;
-        channel_name?: string;
-        team_id?: string;
-        response_url?: string;
-        trigger_id?: string;
-      };
+        const body = request.body as {
+          command?: string;
+          text?: string;
+          user_id?: string;
+          user_name?: string;
+          channel_id?: string;
+          channel_name?: string;
+          team_id?: string;
+          response_url?: string;
+          trigger_id?: string;
+        };
 
-      const response = await provider.handleSlashCommand(body);
+        const response = await provider.handleSlashCommand(body);
 
-      if (response) {
-        return reply.send(response);
-      }
-      return reply.send({ response_type: "ephemeral", text: "" });
-    },
-  );
+        if (response) {
+          return reply.send(response);
+        }
+        return reply.send({ response_type: "ephemeral", text: "" });
+      },
+    );
+  }
 
   /**
    * Get chatops status (provider configuration status)
@@ -1069,11 +1117,16 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ChatOpsStatusResponseSchema),
       },
     },
-    async (_, reply) => {
+    async (request, reply) => {
       // Iterate through all provider types - automatically includes new providers
       // TypeScript exhaustiveness in getProviderInfo() ensures new providers are handled
       const providers = await Promise.all(
-        ChatOpsProviderTypeSchema.options.map(getProviderInfo),
+        ChatOpsProviderTypeSchema.options.map((providerType) =>
+          getProviderInfo({
+            providerType,
+            organizationId: request.organizationId,
+          }),
+        ),
       );
 
       return reply.send({ providers });
@@ -1093,6 +1146,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             provider: ChatOpsProviderTypeSchema.optional(),
+            botId: z.string().uuid().optional(),
             workspaceId: z.string().optional(),
             search: z.string().optional(),
             status: ChatOpsStatusSchema.optional(),
@@ -1128,6 +1182,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sortBy,
         sortDirection,
         provider,
+        botId,
         workspaceId,
         search,
         status,
@@ -1138,7 +1193,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userEmail: request.user.email,
         pagination: { limit, offset },
         sorting: { sortBy, sortDirection },
-        filters: { provider, workspaceId, search, status },
+        filters: { provider, botId, workspaceId, search, status },
       });
 
       return reply.send({
@@ -1200,6 +1255,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // until the cached flag lapses.
       await invalidateChannelAnswerAll({
         provider: deleted.provider,
+        botId: deleted.botId,
         channelId: deleted.channelId,
         workspaceId: deleted.workspaceId,
       });
@@ -1265,6 +1321,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (request.body.answerAllMessages !== undefined) {
         await invalidateChannelAnswerAll({
           provider: updated.provider,
+          botId: updated.botId,
           channelId: updated.channelId,
           workspaceId: updated.workspaceId,
         });
@@ -1292,6 +1349,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["ChatOps"],
         body: z.object({
           provider: ChatOpsProviderTypeSchema,
+          /** Omitted means the provider's first bot. */
+          botId: z.string().uuid().optional(),
           agentId: z.string().uuid().nullable(),
           requireNoExistingBinding: z.literal(true).optional(),
         }),
@@ -1303,6 +1362,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertMessagingChannelAllowed({
         organizationId: request.organizationId,
         channel: provider,
+      });
+      const bot = await resolveBotForRequest({
+        organizationId: request.organizationId,
+        provider,
+        botId: request.body.botId,
       });
       const userEmail = request.user.email;
 
@@ -1323,6 +1387,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId: request.organizationId,
           provider,
+          botId: bot.id,
           dmOwnerEmail: userEmail,
         });
 
@@ -1358,6 +1423,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const binding = await ChatOpsChannelBindingModel.createPendingDmIfAbsent({
         organizationId: request.organizationId,
         provider,
+        botId: bot.id,
         channelId: pendingChannelId,
         workspaceId: "dm:pending",
         isDm: true,
@@ -1376,6 +1442,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
             organizationId: request.organizationId,
             provider,
+            botId: bot.id,
             dmOwnerEmail: userEmail,
           });
         if (!concurrentDm) {
@@ -1491,17 +1558,31 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(403, "Forbidden");
         }
       }
+      const directMessages = await Promise.all(
+        request.body.directMessages.map(async ({ provider, botId }) => ({
+          provider,
+          botId: (
+            await resolveBotForRequest({
+              organizationId: request.organizationId,
+              provider,
+              botId,
+            })
+          ).id,
+        })),
+      );
       const bindings = await ChatOpsChannelBindingModel.applyAssignmentPlan({
         organizationId: request.organizationId,
         userId: request.user.id,
         dmOwnerEmail: request.user.email,
         ...request.body,
+        directMessages,
       });
 
       await Promise.all(
         bindings.map((binding) =>
           invalidateChannelAnswerAll({
             provider: binding.provider,
+            botId: binding.botId,
             channelId: binding.channelId,
             workspaceId: binding.workspaceId,
           }),
@@ -1791,71 +1872,109 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           appId: z.string().max(256).optional(),
           connectionMode: ChatOpsConnectionModeSchema.optional(),
           appLevelToken: z.string().max(512).optional(),
+          /** Which Slack App to update; omitted means the first one. */
+          botId: z.string().uuid().optional(),
+          /** Display name of the Slack App (its App Name in Slack). */
+          name: z.string().trim().min(1).max(128).optional(),
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
-      const {
-        enabled,
-        botToken,
-        signingSecret,
-        appId,
-        connectionMode,
-        appLevelToken,
-      } = request.body;
+      const { botId, ...settings } = request.body;
       await assertMessagingChannelAllowed({
         organizationId: request.organizationId,
         channel: "slack",
       });
 
-      // Merge new values with existing DB config (or defaults for first setup)
-      const existing = await ChatOpsConfigModel.getSlackConfig();
-      const merged = {
-        enabled: enabled ?? existing?.enabled ?? false,
-        botToken: botToken ?? existing?.botToken ?? "",
-        signingSecret: signingSecret ?? existing?.signingSecret ?? "",
-        appId: appId ?? existing?.appId ?? "",
-        connectionMode:
-          connectionMode ??
-          existing?.connectionMode ??
-          SLACK_DEFAULT_CONNECTION_MODE,
-        appLevelToken: appLevelToken ?? existing?.appLevelToken ?? "",
-      };
+      // The target Slack App: the one named, else the organization's first.
+      // An organization without one yet gets its first app created.
+      const existingBot = botId
+        ? await resolveBotForRequest({
+            organizationId: request.organizationId,
+            provider: "slack",
+            botId,
+          })
+        : await ChatOpsBotModel.findDefault({
+            organizationId: request.organizationId,
+            provider: "slack",
+          });
 
-      // Validate bot token by calling auth.test()
-      if (merged.enabled && merged.botToken) {
-        try {
-          const client = new WebClient(merged.botToken);
-          await client.auth.test();
-        } catch {
-          throw new ApiError(
-            400,
-            "Invalid Slack credentials — could not authenticate with Slack. Please check your Bot Token.",
-          );
-        }
+      await slackAppService.saveApp({
+        organizationId: request.organizationId,
+        bot: existingBot ?? undefined,
+        settings,
+      });
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Create another Slack App. Apps are set up here with the same steps as the
+   * first one; each is its own bot user, so several can sit in the same
+   * channels. The id may be chosen up front because webhook-mode manifests
+   * embed the app's own event URLs.
+   */
+  fastify.post(
+    "/api/chatops/bots/slack",
+    {
+      schema: {
+        operationId: RouteId.CreateSlackChatOpsBot,
+        description: "Create another Slack App for this organization",
+        tags: ["ChatOps"],
+        body: z.object({
+          id: z.string().uuid().optional(),
+          name: z.string().trim().min(1).max(128),
+          enabled: z.boolean().default(true),
+          botToken: z.string().min(1).max(512),
+          signingSecret: z.string().max(256).optional(),
+          appId: z.string().max(256).optional(),
+          connectionMode: ChatOpsConnectionModeSchema.optional(),
+          appLevelToken: z.string().max(512).optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({ id: z.string().uuid(), name: z.string() }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
+      const { id, ...settings } = request.body;
+      if (id && (await ChatOpsBotModel.findById(id))) {
+        throw new ApiError(409, "A bot with this id already exists");
       }
+      const bot = await slackAppService.saveApp({
+        organizationId: request.organizationId,
+        newBotId: id,
+        settings,
+      });
+      return reply.send({ id: bot.id, name: bot.name });
+    },
+  );
 
-      // Validate app-level token for socket mode by calling apps.connections.open()
-      if (
-        merged.enabled &&
-        merged.connectionMode === "socket" &&
-        merged.appLevelToken
-      ) {
-        try {
-          const client = new WebClient(merged.appLevelToken);
-          await client.apps.connections.open();
-        } catch {
-          throw new ApiError(
-            400,
-            "Invalid Slack App-Level Token — could not open a Socket Mode connection. Please check your App-Level Token.",
-          );
-        }
-      }
-
-      await ChatOpsConfigModel.saveSlackConfig(merged);
-      await chatOpsManager.reinitialize();
-
+  /**
+   * Remove a Slack App. Refused while an agent still uses it.
+   */
+  fastify.delete(
+    "/api/chatops/bots/:id",
+    {
+      schema: {
+        operationId: RouteId.DeleteChatOpsBot,
+        description: "Remove a Slack App (refused while an agent uses it)",
+        tags: ["ChatOps"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      await slackAppService.removeApp({
+        organizationId: request.organizationId,
+        botId: request.params.id,
+      });
       return reply.send({ success: true });
     },
   );
@@ -2004,8 +2123,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const email = request.user.email;
+      const telegramProvider = chatOpsManager.getTelegramProvider();
+      if (!telegramProvider) {
+        throw new ApiError(400, "Telegram is not configured yet.");
+      }
       const chatBinding = await ChatOpsChannelBindingModel.findByChannel({
         provider: "telegram",
+        botId: telegramProvider.botId,
         channelId: payload.chatId,
         workspaceId: null,
       });
@@ -2026,6 +2150,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
             organizationId: request.organizationId,
             provider: "telegram",
+            botId: telegramProvider.botId,
             dmOwnerEmail: email,
           });
         if (existingDm) {
@@ -2039,6 +2164,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await ChatOpsChannelBindingModel.create({
             organizationId: request.organizationId,
             provider: "telegram",
+            botId: telegramProvider.botId,
             channelId: payload.chatId,
             isDm: true,
             dmOwnerEmail: email,
@@ -2076,32 +2202,50 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["ChatOps"],
         body: z.object({
           provider: ChatOpsProviderTypeSchema,
+          /** Refresh one bot only; omitted refreshes every bot of the provider. */
+          botId: z.string().uuid().optional(),
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
       const { provider: providerType } = request.body;
-      const prefix =
-        `${CacheKey.ChannelDiscovery}-${providerType}` as AllowedCacheKey;
-      await cacheManager.deleteByPrefix(prefix);
+      const bots = request.body.botId
+        ? [
+            await resolveBotForRequest({
+              organizationId: request.organizationId,
+              provider: providerType,
+              botId: request.body.botId,
+            }),
+          ]
+        : await ChatOpsBotModel.findByProvider({
+            organizationId: request.organizationId,
+            provider: providerType,
+          });
 
-      // If the provider can discover channels eagerly, do it now
-      const provider = chatOpsManager.getChatOpsProvider(providerType);
-      const workspaceId = provider?.getWorkspaceId();
-      if (provider && workspaceId) {
-        await chatOpsManager.discoverChannels({
-          provider,
-          context: null,
-          workspaceId,
+      for (const bot of bots) {
+        const prefix =
+          `${CacheKey.ChannelDiscovery}-${providerType}-${bot.id}` as AllowedCacheKey;
+        await cacheManager.deleteByPrefix(prefix);
+
+        // If the provider can discover channels eagerly, do it now
+        const provider = chatOpsManager.getProviderForBot(bot.id);
+        const workspaceId = provider?.getWorkspaceId();
+        if (provider && workspaceId) {
+          await chatOpsManager.discoverChannels({
+            provider,
+            context: null,
+            workspaceId,
+          });
+        }
+
+        // Backfill workspace name on bindings that are missing it (e.g. DMs)
+        await ChatOpsChannelBindingModel.backfillWorkspaceName({
+          provider: providerType,
+          botId: bot.id,
+          workspaceName: provider?.getWorkspaceName() ?? undefined,
         });
       }
-
-      // Backfill workspace name on bindings that are missing it (e.g. DMs)
-      await ChatOpsChannelBindingModel.backfillWorkspaceName({
-        provider: providerType,
-        workspaceName: provider?.getWorkspaceName() ?? undefined,
-      });
 
       return reply.send({ success: true });
     },
@@ -2126,87 +2270,161 @@ async function getDefaultOrganizationId(): Promise<string> {
 }
 
 /**
+ * The bot a request targets: the one named, or the provider's first bot for
+ * callers that predate multiple bots. A bot of another organization or of
+ * another provider is reported as missing.
+ */
+async function resolveBotForRequest(params: {
+  organizationId: string;
+  provider: ChatOpsProviderType;
+  botId?: string;
+}) {
+  const bot = params.botId
+    ? await ChatOpsBotModel.findByIdAndOrganization(
+        params.botId,
+        params.organizationId,
+      )
+    : await ChatOpsBotModel.findDefault({
+        organizationId: params.organizationId,
+        provider: params.provider,
+      });
+  if (!bot || bot.provider !== params.provider) {
+    throw new ApiError(404, "Bot not found");
+  }
+  return bot;
+}
+
+/**
  * Get provider info for status endpoint.
  * Reads credentials from DB (the single source of truth).
  * Uses exhaustive switch to force updates when new providers are added.
  */
-async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
-  id: ChatOpsProviderType;
-  displayName: string;
-  configured: boolean;
-  credentials?: {
-    botToken?: string;
-    appId?: string;
-    appSecret?: string;
-    tenantId?: string;
-    signingSecret?: string;
-    appLevelToken?: string;
-    connectionMode?: ChatOpsConnectionMode;
-  };
-  dmInfo?: {
-    botUserId?: string;
-    teamId?: string;
-    appId?: string;
-    botUsername?: string;
-  };
-}> {
+async function getProviderInfo(params: {
+  providerType: ChatOpsProviderType;
+  organizationId: string;
+}): Promise<z.infer<typeof ChatOpsProviderInfoSchema>> {
+  const { providerType, organizationId } = params;
+  const bots = await ChatOpsBotModel.findByProvider({
+    organizationId,
+    provider: providerType,
+  });
+  const agentsByBot = new Map(
+    await Promise.all(
+      bots.map(
+        async (bot) =>
+          [
+            bot.id,
+            await ChatOpsChannelBindingModel.findAgentsAssignedToBot(bot.id),
+          ] as const,
+      ),
+    ),
+  );
+
   switch (providerType) {
     case "ms-teams": {
       const provider = chatOpsManager.getMSTeamsProvider();
       const dbConfig = await ChatOpsConfigModel.getMsTeamsConfig();
+      const credentials = {
+        appId: maskValue(dbConfig?.appId ?? ""),
+        appSecret: dbConfig?.appSecret ? "••••••••" : "",
+        tenantId: maskValue(dbConfig?.tenantId ?? ""),
+      };
+      const dmInfo = dbConfig?.appId ? { appId: dbConfig.appId } : undefined;
+      const configured = provider?.isConfigured() ?? false;
       return {
         id: "ms-teams",
         displayName: "Microsoft Teams",
-        configured: provider?.isConfigured() ?? false,
-        credentials: {
-          appId: maskValue(dbConfig?.appId ?? ""),
-          appSecret: dbConfig?.appSecret ? "••••••••" : "",
-          tenantId: maskValue(dbConfig?.tenantId ?? ""),
-        },
-        dmInfo: dbConfig?.appId ? { appId: dbConfig.appId } : undefined,
+        configured,
+        credentials,
+        dmInfo,
+        bots: bots.map((bot) => ({
+          id: bot.id,
+          name: bot.name,
+          configured,
+          credentials,
+          dmInfo,
+          agents: agentsByBot.get(bot.id) ?? [],
+        })),
       };
     }
     case "slack": {
-      const provider = chatOpsManager.getSlackProvider();
-      const dbConfig = await ChatOpsConfigModel.getSlackConfig();
-      const isSocket = dbConfig?.connectionMode === "socket";
-      const credentials = {
-        botToken: maskValue(dbConfig?.botToken ?? ""),
-        appId: maskValue(dbConfig?.appId ?? ""),
-        connectionMode: (dbConfig?.connectionMode ??
-          SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
-        ...(isSocket
-          ? { appLevelToken: maskValue(dbConfig?.appLevelToken ?? "") }
-          : { signingSecret: dbConfig?.signingSecret ? "••••••••" : "" }),
-      };
+      const slackBots = await Promise.all(
+        bots.map(async (bot) => {
+          const provider = chatOpsManager.getSlackProvider(bot.id);
+          const dbConfig = await ChatOpsConfigModel.getSlackConfig(bot);
+          const isSocket = dbConfig?.connectionMode === "socket";
+          const botUserId =
+            provider?.getBotUserId() ?? bot.externalBotUserId ?? undefined;
+          const teamId =
+            provider?.getWorkspaceId() ?? bot.externalWorkspaceId ?? undefined;
+          return {
+            id: bot.id,
+            name: bot.name,
+            configured: provider?.isConfigured() ?? false,
+            credentials: {
+              botToken: maskValue(dbConfig?.botToken ?? ""),
+              appId: maskValue(dbConfig?.appId ?? ""),
+              connectionMode: (dbConfig?.connectionMode ??
+                SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
+              ...(isSocket
+                ? { appLevelToken: maskValue(dbConfig?.appLevelToken ?? "") }
+                : {
+                    signingSecret: dbConfig?.signingSecret ? "••••••••" : "",
+                  }),
+            },
+            dmInfo:
+              botUserId || teamId
+                ? {
+                    botUserId,
+                    teamId,
+                    appId: dbConfig?.appId || bot.externalAppId || undefined,
+                  }
+                : undefined,
+            agents: agentsByBot.get(bot.id) ?? [],
+          };
+        }),
+      );
+      // The provider-level fields describe Slack App #1, which is what callers
+      // that predate multiple Slack Apps expect.
+      const [first] = slackBots;
       return {
         id: "slack",
         displayName: "Slack",
-        configured: provider?.isConfigured() ?? false,
-        credentials,
-        dmInfo:
-          provider?.getBotUserId() || provider?.getWorkspaceId()
-            ? {
-                botUserId: provider.getBotUserId() ?? undefined,
-                teamId: provider.getWorkspaceId() ?? undefined,
-              }
-            : undefined,
+        configured: slackBots.some((bot) => bot.configured),
+        credentials: first?.credentials ?? {
+          botToken: "",
+          appId: "",
+          connectionMode: SLACK_DEFAULT_CONNECTION_MODE,
+        },
+        dmInfo: first?.dmInfo,
+        bots: slackBots,
       };
     }
     case "telegram": {
       const provider = chatOpsManager.getTelegramProvider();
       const dbConfig = await ChatOpsConfigModel.getTelegramConfig();
+      const credentials = {
+        botToken: maskValue(dbConfig?.botToken ?? ""),
+      };
+      // The bot username builds t.me deep links (chat and account linking)
+      const dmInfo = provider?.getBotUsername()
+        ? { botUsername: provider.getBotUsername() ?? undefined }
+        : undefined;
+      const configured = provider?.isConfigured() ?? false;
       return {
         id: "telegram",
         displayName: "Telegram",
-        configured: provider?.isConfigured() ?? false,
-        credentials: {
-          botToken: maskValue(dbConfig?.botToken ?? ""),
-        },
-        // The bot username builds t.me deep links (chat and account linking)
-        dmInfo: provider?.getBotUsername()
-          ? { botUsername: provider.getBotUsername() ?? undefined }
-          : undefined,
+        configured,
+        credentials,
+        dmInfo,
+        bots: bots.map((bot) => ({
+          id: bot.id,
+          name: bot.name,
+          configured,
+          credentials,
+          dmInfo,
+          agents: agentsByBot.get(bot.id) ?? [],
+        })),
       };
     }
   }
@@ -2307,10 +2525,12 @@ async function sendAgentSelectionCard(params: {
 /**
  * Handle agent selection from Adaptive Card submission
  */
-async function handleAgentSelection(
-  context: TurnContext,
-  message: IncomingChatMessage,
-): Promise<void> {
+async function handleAgentSelection(params: {
+  context: TurnContext;
+  message: IncomingChatMessage;
+  provider: ChatOpsProvider;
+}): Promise<void> {
+  const { context, message, provider } = params;
   const value = context.activity.value as
     | {
         agentId?: string;
@@ -2368,6 +2588,7 @@ async function handleAgentSelection(
   const binding = await ChatOpsChannelBindingModel.upsertByChannel({
     organizationId,
     provider: "ms-teams",
+    botId: provider.botId,
     channelId: channelId || message.channelId,
     workspaceId: workspaceId || message.workspaceId,
     channelName,
@@ -2380,6 +2601,7 @@ async function handleAgentSelection(
   // Clean up duplicate bindings for the same channel with different workspaceId formats
   await ChatOpsChannelBindingModel.deleteDuplicateBindings({
     provider: "ms-teams",
+    botId: provider.botId,
     channelId: channelId || message.channelId,
     canonicalBindingId: binding.id,
   });
@@ -2399,8 +2621,7 @@ async function handleAgentSelection(
       "[ChatOps] handleAgentSelection: 'processing' message sent, about to call processMessage",
     );
 
-    // Get the provider and process the original message
-    const provider = chatOpsManager.getMSTeamsProvider();
+    // Process the original message through the bot that received it
     if (provider) {
       // Construct a message object for processing
       const originalMessage: IncomingChatMessage = {
@@ -2530,13 +2751,19 @@ async function resolveTeamsAadGroupId(
  */
 async function muteTeamsThreadAndNotify(
   context: TurnContext,
-  activation: { provider: "ms-teams"; channelId: string; threadId: string },
+  activation: {
+    provider: "ms-teams";
+    botId: string;
+    channelId: string;
+    threadId: string;
+  },
 ): Promise<void> {
   await muteChannelThreadAndNotify({
     ...activation,
     resolveAnswerAll: async () =>
       await isChannelAnswerAllEnabled({
         provider: activation.provider,
+        botId: activation.botId,
         channelId: activation.channelId,
         // Bindings are keyed on the team's aadGroupId, so a reaction has to
         // canonicalize the raw team id exactly as the message path does or the

@@ -1598,6 +1598,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     agentTrigger: ["update"],
   },
+  [RouteId.CreateSlackChatOpsBot]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.DeleteChatOpsBot]: {
+    agentTrigger: ["update"],
+  },
   [RouteId.UpdateTelegramChatOpsConfig]: {
     agentTrigger: ["update"],
   },

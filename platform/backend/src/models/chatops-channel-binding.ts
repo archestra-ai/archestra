@@ -48,6 +48,7 @@ class ChatOpsChannelBindingModel {
       .values({
         organizationId: input.organizationId,
         provider: input.provider,
+        botId: input.botId,
         channelId: input.channelId,
         workspaceId: input.workspaceId ?? null,
         channelName: input.channelName ?? null,
@@ -74,6 +75,7 @@ class ChatOpsChannelBindingModel {
       .values({
         organizationId: input.organizationId,
         provider: input.provider,
+        botId: input.botId,
         channelId: input.channelId,
         workspaceId: input.workspaceId,
         channelName: input.channelName ?? null,
@@ -107,6 +109,7 @@ class ChatOpsChannelBindingModel {
     }>;
     directMessages: Array<{
       provider: ChatOpsProviderType;
+      botId: string;
     }>;
   }): Promise<ChatOpsChannelBinding[]> {
     return withDbTransaction(async (tx) => {
@@ -249,6 +252,7 @@ class ChatOpsChannelBindingModel {
                 schema.chatopsChannelBindingsTable.provider,
                 directMessage.provider,
               ),
+              eq(schema.chatopsChannelBindingsTable.botId, directMessage.botId),
               eq(schema.chatopsChannelBindingsTable.isDm, true),
               eq(
                 schema.chatopsChannelBindingsTable.dmOwnerEmail,
@@ -270,6 +274,7 @@ class ChatOpsChannelBindingModel {
           .values({
             organizationId: params.organizationId,
             provider: directMessage.provider,
+            botId: directMessage.botId,
             channelId: ChatOpsChannelBindingModel.pendingDmChannelId({
               organizationId: params.organizationId,
               dmOwnerEmail: params.dmOwnerEmail,
@@ -304,16 +309,19 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
-   * Find a binding by provider, channel ID, and workspace ID
-   * This is the primary lookup method for message routing
+   * Find a bot's binding by channel ID and workspace ID.
+   * This is the primary lookup method for message routing: a channel two bots
+   * share holds one binding per bot, and each bot only ever sees its own.
    */
   static async findByChannel(params: {
     provider: ChatOpsProviderType;
+    botId: string;
     channelId: string;
     workspaceId: string | null;
   }): Promise<ChatOpsChannelBinding | null> {
     const conditions = [
       eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+      eq(schema.chatopsChannelBindingsTable.botId, params.botId),
       eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
     ];
 
@@ -396,6 +404,7 @@ class ChatOpsChannelBindingModel {
     sorting?: SortingQueryFor<["channelName", "createdAt"]>;
     filters?: {
       provider?: ChatOpsProviderType;
+      botId?: string;
       workspaceId?: string;
       search?: string;
       status?: ChatOpsStatus;
@@ -416,6 +425,7 @@ class ChatOpsChannelBindingModel {
       // DM visibility: exclude other users' DMs
       or(eq(t.isDm, false), eq(t.dmOwnerEmail, userEmail)),
       ...(filters?.provider ? [eq(t.provider, filters.provider)] : []),
+      ...(filters?.botId ? [eq(t.botId, filters.botId)] : []),
     ];
 
     // Filtered conditions (adds search + workspace on top of global)
@@ -480,6 +490,7 @@ class ChatOpsChannelBindingModel {
             isNotNull(t.workspaceId),
             isNotNull(t.workspaceName),
             ...(filters?.provider ? [eq(t.provider, filters.provider)] : []),
+            ...(filters?.botId ? [eq(t.botId, filters.botId)] : []),
           ),
         ),
       db
@@ -504,6 +515,26 @@ class ChatOpsChannelBindingModel {
       ),
       hasDmBinding: Number(dmCount) > 0,
     };
+  }
+
+  /**
+   * The agents holding channels or direct messages under a bot.
+   */
+  static async findAgentsAssignedToBot(
+    botId: string,
+  ): Promise<Array<{ id: string; name: string }>> {
+    return await db
+      .selectDistinct({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
+      .from(schema.chatopsChannelBindingsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.chatopsChannelBindingsTable.agentId, schema.agentsTable.id),
+      )
+      .where(eq(schema.chatopsChannelBindingsTable.botId, botId))
+      .orderBy(asc(schema.agentsTable.name));
   }
 
   /**
@@ -587,6 +618,7 @@ class ChatOpsChannelBindingModel {
   static async findPendingDmBinding(params: {
     organizationId: string;
     provider: ChatOpsProviderType;
+    botId: string;
     dmOwnerEmail: string;
   }): Promise<ChatOpsChannelBinding | null> {
     const [binding] = await db
@@ -599,6 +631,7 @@ class ChatOpsChannelBindingModel {
             params.organizationId,
           ),
           eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          eq(schema.chatopsChannelBindingsTable.botId, params.botId),
           eq(schema.chatopsChannelBindingsTable.isDm, true),
           eq(
             schema.chatopsChannelBindingsTable.dmOwnerEmail,
@@ -617,11 +650,13 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
-   * Find a DM binding for an organization, provider, and owner email.
+   * Find a bot's DM binding for an owner email. A person who messages two bots
+   * holds two DM bindings, one per bot.
    */
   static async findDmBindingByEmailInOrganization(params: {
     organizationId: string;
     provider: ChatOpsProviderType;
+    botId: string;
     dmOwnerEmail: string;
   }): Promise<ChatOpsChannelBinding | null> {
     const [binding] = await db
@@ -634,6 +669,7 @@ class ChatOpsChannelBindingModel {
             params.organizationId,
           ),
           eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          eq(schema.chatopsChannelBindingsTable.botId, params.botId),
           eq(schema.chatopsChannelBindingsTable.isDm, true),
           eq(
             schema.chatopsChannelBindingsTable.dmOwnerEmail,
@@ -791,6 +827,7 @@ class ChatOpsChannelBindingModel {
   ): Promise<ChatOpsChannelBinding> {
     const existing = await ChatOpsChannelBindingModel.findByChannel({
       provider: input.provider,
+      botId: input.botId,
       channelId: input.channelId,
       workspaceId: input.workspaceId ?? null,
     });
@@ -830,6 +867,7 @@ class ChatOpsChannelBindingModel {
               input.organizationId,
             ),
             eq(schema.chatopsChannelBindingsTable.provider, input.provider),
+            eq(schema.chatopsChannelBindingsTable.botId, input.botId),
             eq(schema.chatopsChannelBindingsTable.isDm, true),
             eq(
               schema.chatopsChannelBindingsTable.dmOwnerEmail,
@@ -844,6 +882,7 @@ class ChatOpsChannelBindingModel {
         logger.debug(
           {
             provider: input.provider,
+            botId: input.botId,
             dmOwnerEmail: input.dmOwnerEmail,
             deletedCount: deleted.length,
           },
@@ -906,6 +945,7 @@ class ChatOpsChannelBindingModel {
   static async ensureChannelsExist(params: {
     organizationId: string;
     provider: ChatOpsProviderType;
+    botId: string;
     channels: Array<{
       channelId: string;
       channelName: string | null;
@@ -918,6 +958,7 @@ class ChatOpsChannelBindingModel {
     const values = params.channels.map((ch) => ({
       organizationId: params.organizationId,
       provider: params.provider,
+      botId: params.botId,
       channelId: ch.channelId,
       workspaceId: ch.workspaceId,
       channelName: ch.channelName,
@@ -929,7 +970,7 @@ class ChatOpsChannelBindingModel {
       .values(values)
       .onConflictDoUpdate({
         target: [
-          schema.chatopsChannelBindingsTable.provider,
+          schema.chatopsChannelBindingsTable.botId,
           schema.chatopsChannelBindingsTable.channelId,
           schema.chatopsChannelBindingsTable.workspaceId,
         ],
@@ -949,6 +990,7 @@ class ChatOpsChannelBindingModel {
    */
   static async backfillWorkspaceName(params: {
     provider: ChatOpsProviderType;
+    botId: string;
     workspaceName?: string;
   }): Promise<void> {
     if (params.workspaceName) {
@@ -958,6 +1000,7 @@ class ChatOpsChannelBindingModel {
         .where(
           and(
             eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+            eq(schema.chatopsChannelBindingsTable.botId, params.botId),
             isNull(schema.chatopsChannelBindingsTable.workspaceName),
           ),
         );
@@ -973,6 +1016,7 @@ class ChatOpsChannelBindingModel {
       .where(
         and(
           eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          eq(schema.chatopsChannelBindingsTable.botId, params.botId),
           sql`${schema.chatopsChannelBindingsTable.workspaceName} IS NOT NULL`,
         ),
       )
@@ -987,6 +1031,7 @@ class ChatOpsChannelBindingModel {
         .where(
           and(
             eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+            eq(schema.chatopsChannelBindingsTable.botId, params.botId),
             isNull(schema.chatopsChannelBindingsTable.workspaceName),
           ),
         );
@@ -1002,6 +1047,7 @@ class ChatOpsChannelBindingModel {
   static async deleteStaleChannels(params: {
     organizationId: string;
     provider: ChatOpsProviderType;
+    botId: string;
     workspaceIds: string[];
     activeChannelIds: string[];
   }): Promise<number> {
@@ -1020,6 +1066,8 @@ class ChatOpsChannelBindingModel {
             params.organizationId,
           ),
           eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          // One bot's discovery only ever prunes that bot's own bindings.
+          eq(schema.chatopsChannelBindingsTable.botId, params.botId),
           inArray(
             schema.chatopsChannelBindingsTable.workspaceId,
             params.workspaceIds,
@@ -1046,6 +1094,7 @@ class ChatOpsChannelBindingModel {
    */
   static async deleteDuplicateBindings(params: {
     provider: ChatOpsProviderType;
+    botId: string;
     channelId: string;
     canonicalBindingId: string;
   }): Promise<number> {
@@ -1054,6 +1103,7 @@ class ChatOpsChannelBindingModel {
       .where(
         and(
           eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          eq(schema.chatopsChannelBindingsTable.botId, params.botId),
           eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
           ne(schema.chatopsChannelBindingsTable.id, params.canonicalBindingId),
         ),
@@ -1092,6 +1142,7 @@ class ChatOpsChannelBindingModel {
    */
   static async deduplicateBindings(params: {
     provider: ChatOpsProviderType;
+    botId: string;
     channelIds: string[];
   }): Promise<number> {
     if (params.channelIds.length === 0) return 0;
@@ -1103,6 +1154,7 @@ class ChatOpsChannelBindingModel {
       .where(
         and(
           eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          eq(schema.chatopsChannelBindingsTable.botId, params.botId),
           inArray(
             schema.chatopsChannelBindingsTable.channelId,
             params.channelIds,
@@ -1160,6 +1212,7 @@ class ChatOpsChannelBindingModel {
       id: binding.id,
       organizationId: binding.organizationId,
       provider: binding.provider,
+      botId: binding.botId,
       channelId: binding.channelId,
       workspaceId: binding.workspaceId ?? null,
       channelName: binding.channelName ?? null,
@@ -1181,6 +1234,7 @@ class ChatOpsChannelBindingModel {
       .select({
         id: schema.chatopsChannelBindingsTable.id,
         provider: schema.chatopsChannelBindingsTable.provider,
+        botId: schema.chatopsChannelBindingsTable.botId,
         channelId: schema.chatopsChannelBindingsTable.channelId,
         agentId: schema.chatopsChannelBindingsTable.agentId,
         answerAllMessages: schema.chatopsChannelBindingsTable.answerAllMessages,
@@ -1196,7 +1250,7 @@ class ChatOpsChannelBindingModel {
     const bindings = rows
       .map(
         (r) =>
-          `${r.id}:${r.provider}:${r.channelId}:${r.agentId ?? ""}:${r.answerAllMessages}:${r.channelInstructions ?? ""}:${r.dmOwnerEmail ?? ""}`,
+          `${r.id}:${r.provider}:${r.botId}:${r.channelId}:${r.agentId ?? ""}:${r.answerAllMessages}:${r.channelInstructions ?? ""}:${r.dmOwnerEmail ?? ""}`,
       )
       .sort((a, b) => a.localeCompare(b));
     return { bindings };

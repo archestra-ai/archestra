@@ -75,7 +75,10 @@ class MSTeamsProvider implements ChatOpsProvider {
   private eventHandler: ChatOpsEventHandler | null = null;
   private config: MsTeamsDbConfig;
 
-  constructor(msTeamsConfig: MsTeamsDbConfig) {
+  constructor(
+    msTeamsConfig: MsTeamsDbConfig,
+    readonly botId: string,
+  ) {
     this.config = msTeamsConfig;
   }
 
@@ -1187,6 +1190,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     // Check for existing binding to pre-select
     const existingBinding = await ChatOpsChannelBindingModel.findByChannel({
       provider: "ms-teams",
+      botId: this.botId,
       channelId: params.message.channelId,
       workspaceId: params.message.workspaceId,
     });

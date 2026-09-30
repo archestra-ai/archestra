@@ -15,6 +15,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
+  ChatOpsBotModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
@@ -38,6 +39,7 @@ import type {
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
+import type { ChatOpsBot } from "@/types/chatops-bot";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
@@ -91,7 +93,8 @@ import {
  */
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
-  private slackProvider: SlackProvider | null = null;
+  /** One provider per Slack App, keyed by bot id, in creation order. */
+  private slackProviders = new Map<string, SlackProvider>();
   private telegramProvider: TelegramProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
@@ -115,25 +118,33 @@ export class ChatOpsManager {
     return this.msTeamsProvider;
   }
 
-  getSlackProvider(): SlackProvider | null {
-    return this.slackProvider;
+  /** The running provider of one Slack App, or null when it is not running. */
+  getSlackProvider(botId: string): SlackProvider | null {
+    return this.slackProviders.get(botId) ?? null;
+  }
+
+  /** Slack App #1: what the original single webhook URLs resolve to. */
+  getDefaultSlackProvider(): SlackProvider | null {
+    return this.slackProviders.values().next().value ?? null;
+  }
+
+  getSlackProviders(): SlackProvider[] {
+    return [...this.slackProviders.values()];
   }
 
   getTelegramProvider(): TelegramProvider | null {
     return this.telegramProvider;
   }
 
-  getChatOpsProvider(
-    providerType: ChatOpsProviderType,
-  ): ChatOpsProvider | null {
-    switch (providerType) {
-      case "ms-teams":
-        return this.getMSTeamsProvider();
-      case "slack":
-        return this.getSlackProvider();
-      case "telegram":
-        return this.getTelegramProvider();
-    }
+  /** The running provider behind a bot, whatever its provider type. */
+  getProviderForBot(botId: string): ChatOpsProvider | null {
+    return (
+      this.slackProviders.get(botId) ??
+      [this.msTeamsProvider, this.telegramProvider].find(
+        (provider) => provider?.botId === botId,
+      ) ??
+      null
+    );
   }
 
   /**
@@ -169,7 +180,7 @@ export class ChatOpsManager {
   isAnyProviderConfigured(): boolean {
     return (
       (this.msTeamsProvider?.isConfigured() ?? false) ||
-      (this.slackProvider?.isConfigured() ?? false) ||
+      this.getSlackProviders().some((provider) => provider.isConfigured()) ||
       (this.telegramProvider?.isConfigured() ?? false)
     );
   }
@@ -203,16 +214,14 @@ export class ChatOpsManager {
     if (!binding) {
       throw new Error("The task's messaging-channel binding no longer exists");
     }
-    const provider: ChatOpsProvider | null =
-      binding.provider === "slack"
-        ? this.slackProvider
-        : binding.provider === "ms-teams"
-          ? this.msTeamsProvider
-          : binding.provider === "telegram"
-            ? this.telegramProvider
-            : null;
+    // Delayed output leaves through the bot that started the work. A stopped or
+    // removed bot fails loudly here; there is deliberately no fallback to
+    // another bot of the same provider.
+    const provider = this.getProviderForBot(binding.botId);
     if (!provider?.isConfigured()) {
-      throw new Error(`The ${binding.provider} provider is not configured`);
+      throw new Error(
+        `The ${binding.provider} bot that started this task is not running`,
+      );
     }
     if (!provider.uploadFileToThread) {
       throw new Error(
@@ -242,18 +251,18 @@ export class ChatOpsManager {
       );
       return;
     }
-    const provider =
-      binding.provider === "slack"
-        ? this.slackProvider
-        : binding.provider === "ms-teams"
-          ? this.msTeamsProvider
-          : binding.provider === "telegram"
-            ? this.telegramProvider
-            : null;
+    // Delayed output leaves through the bot that started the work. A stopped or
+    // removed bot is reported here; there is deliberately no fallback to
+    // another bot of the same provider.
+    const provider = this.getProviderForBot(binding.botId);
     if (!provider?.isConfigured()) {
       logger.warn(
-        { bindingId: params.bindingId, provider: binding.provider },
-        "[ChatOps] notifyBindingThread: provider not configured",
+        {
+          bindingId: params.bindingId,
+          provider: binding.provider,
+          botId: binding.botId,
+        },
+        "[ChatOps] notifyBindingThread: the bot that started this task is not running",
       );
       return;
     }
@@ -290,7 +299,7 @@ export class ChatOpsManager {
 
     // TTL check using distributed (PostgreSQL-backed) cache — shared across pods
     const cacheKey =
-      `${CacheKey.ChannelDiscovery}-${provider.providerId}-${workspaceId}` as AllowedCacheKey;
+      `${CacheKey.ChannelDiscovery}-${provider.providerId}-${provider.botId}-${workspaceId}` as AllowedCacheKey;
     if (await cacheManager.get(cacheKey)) return;
 
     try {
@@ -310,6 +319,7 @@ export class ChatOpsManager {
       await ChatOpsChannelBindingModel.ensureChannelsExist({
         organizationId,
         provider: provider.providerId,
+        botId: provider.botId,
         channels,
       });
 
@@ -323,6 +333,7 @@ export class ChatOpsManager {
         {
           organizationId,
           provider: provider.providerId,
+          botId: provider.botId,
           workspaceIds,
           activeChannelIds,
         },
@@ -332,6 +343,7 @@ export class ChatOpsManager {
       // workspaceId formats (UUID vs thread ID) stored at different times.
       await ChatOpsChannelBindingModel.deduplicateBindings({
         provider: provider.providerId,
+        botId: provider.botId,
         channelIds: activeChannelIds,
       });
 
@@ -339,7 +351,12 @@ export class ChatOpsManager {
       await cacheManager.set(cacheKey, true, CHATOPS_CHANNEL_DISCOVERY.TTL_MS);
 
       logger.info(
-        { workspaceId, channelCount: channels.length, deletedCount },
+        {
+          botId: provider.botId,
+          workspaceId,
+          channelCount: channels.length,
+          deletedCount,
+        },
         "[ChatOps] Discovered channels",
       );
     } catch (error) {
@@ -351,12 +368,21 @@ export class ChatOpsManager {
   }
 
   async initialize(): Promise<void> {
+    const organization = await OrganizationModel.getFirst();
+    if (!organization) {
+      logger.warn(
+        "[ChatOps] No organization exists yet, skipping messaging provider initialization",
+      );
+      return;
+    }
+    const organizationId = organization.id;
+
     // Seed DB from env vars on first run (no-op if DB already has config)
-    await this.seedConfigFromEnvVars();
+    await this.seedConfigFromEnvVars(organizationId);
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
-    const [msTeamsConfig, slackConfig, telegramConfig] = await Promise.all([
+    const [msTeamsConfig, slackBots, telegramConfig] = await Promise.all([
       ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
@@ -364,13 +390,7 @@ export class ChatOpsManager {
         );
         return null;
       }),
-      ChatOpsConfigModel.getSlackConfig().catch((error) => {
-        logger.error(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[ChatOps] Failed to load Slack config, skipping",
-        );
-        return null;
-      }),
+      ChatOpsBotModel.findByProvider({ organizationId, provider: "slack" }),
       ChatOpsConfigModel.getTelegramConfig().catch((error) => {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
@@ -379,6 +399,21 @@ export class ChatOpsManager {
         return null;
       }),
     ]);
+    const slackConfigs = await Promise.all(
+      slackBots.map(async (bot) => ({
+        bot,
+        config: await ChatOpsConfigModel.getSlackConfig(bot).catch((error) => {
+          logger.error(
+            {
+              botId: bot.id,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            "[ChatOps] Failed to load Slack config, skipping",
+          );
+          return null;
+        }),
+      })),
+    );
 
     // A channel an admin switched off must actually stop listening — a bot
     // left running would keep answering messages the organization no longer
@@ -398,16 +433,25 @@ export class ChatOpsManager {
       return new Set<MessagingChannelId>();
     });
 
-    // Create providers with their config
+    // Create providers with their config. Teams and Telegram keep one org-level
+    // bot each; every Slack App gets its own provider.
     if (msTeamsConfig && !hiddenChannels.has("ms-teams")) {
-      this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
+      const bot = await this.ensureSingletonBot({
+        organizationId,
+        provider: "ms-teams",
+      });
+      this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig, bot.id);
       this.msTeamsProvider.setEventHandler(this);
     }
-    if (slackConfig && !hiddenChannels.has("slack")) {
-      this.slackProvider = new SlackProvider(slackConfig);
-      // Wire event handler so the provider can dispatch socket events and
-      // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
-      this.slackProvider.setEventHandler(this);
+    if (!hiddenChannels.has("slack")) {
+      for (const { bot, config: slackConfig } of slackConfigs) {
+        if (!slackConfig) continue;
+        const slackProvider = new SlackProvider(slackConfig, bot.id);
+        // Wire event handler so the provider can dispatch socket events and
+        // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
+        slackProvider.setEventHandler(this);
+        this.slackProviders.set(bot.id, slackProvider);
+      }
     }
     // The Telegram integration is feature-flagged: without the master switch
     // the provider never starts, even if the DB already holds a config.
@@ -416,7 +460,11 @@ export class ChatOpsManager {
       config.chatops.telegramEnabled &&
       !hiddenChannels.has("telegram")
     ) {
-      this.telegramProvider = new TelegramProvider(telegramConfig);
+      const bot = await this.ensureSingletonBot({
+        organizationId,
+        provider: "telegram",
+      });
+      this.telegramProvider = new TelegramProvider(telegramConfig, bot.id);
       // Telegram delivers everything over long polling, so all events flow
       // through the event handler (like Slack socket mode)
       this.telegramProvider.setEventHandler(this);
@@ -426,16 +474,28 @@ export class ChatOpsManager {
       return;
     }
 
-    const providers: { name: string; provider: ChatOpsProvider | null }[] = [
+    const providers: {
+      name: string;
+      provider: ChatOpsProvider | null;
+      slackBot?: ChatOpsBot;
+    }[] = [
       { name: "MS Teams", provider: this.msTeamsProvider },
-      { name: "Slack", provider: this.slackProvider },
+      ...slackBots.flatMap((bot) => {
+        const provider = this.slackProviders.get(bot.id) ?? null;
+        return provider
+          ? [{ name: `Slack (${bot.name})`, provider, slackBot: bot }]
+          : [];
+      }),
       { name: "Telegram", provider: this.telegramProvider },
     ];
 
-    for (const { name, provider } of providers) {
+    for (const { name, provider, slackBot } of providers) {
       if (provider?.isConfigured()) {
         try {
           await provider.initialize();
+          if (slackBot) {
+            await this.pinSlackIdentity(slackBot);
+          }
           logger.info(`[ChatOps] ${name} provider initialized`);
         } catch (error) {
           logger.error(
@@ -451,7 +511,8 @@ export class ChatOpsManager {
     // (e.g., Slack via auth.test) get channels discovered immediately on startup.
     for (const { name, provider } of providers) {
       const workspaceId = provider?.getWorkspaceId();
-      if (provider && workspaceId) {
+      // A provider refused by the identity check above is no longer running.
+      if (provider && workspaceId && this.getProviderForBot(provider.botId)) {
         this.discoverChannels({
           provider,
           context: null,
@@ -473,15 +534,72 @@ export class ChatOpsManager {
     await this.initialize();
   }
 
+  /**
+   * (Re)start one Slack App without touching the others: a saved token change
+   * or a newly created app must not drop another app's socket connection.
+   * Throws when the app is configured but cannot start (bad token, identity
+   * mismatch), so the caller can tell the admin instead of leaving a silent,
+   * half-running app behind.
+   */
+  async startSlackApp(botId: string): Promise<void> {
+    await this.stopSlackProvider(botId);
+
+    const bot = await ChatOpsBotModel.findById(botId);
+    if (!bot || bot.provider !== "slack") return;
+    const hiddenChannels = await getHiddenMessagingChannels().catch(
+      () => new Set<MessagingChannelId>(),
+    );
+    if (hiddenChannels.has("slack")) return;
+    const slackConfig = await ChatOpsConfigModel.getSlackConfig(bot);
+    if (!slackConfig) return;
+
+    const slackProvider = new SlackProvider(slackConfig, bot.id);
+    slackProvider.setEventHandler(this);
+    this.slackProviders.set(bot.id, slackProvider);
+    if (!slackProvider.isConfigured()) return;
+
+    try {
+      await slackProvider.initialize();
+      await this.pinSlackIdentity(bot);
+    } catch (error) {
+      // A refused identity already removed the provider; an authentication
+      // failure leaves it registered but not running, like at startup.
+      logger.error(
+        { botId, error: errorMessage(error) },
+        "[ChatOps] Failed to start Slack App",
+      );
+      throw error;
+    }
+    const workspaceId = slackProvider.getWorkspaceId();
+    if (workspaceId) {
+      this.discoverChannels({
+        provider: slackProvider,
+        context: null,
+        workspaceId,
+      }).catch((error) => {
+        logger.warn(
+          { botId, error: errorMessage(error) },
+          "[ChatOps] Initial Slack channel discovery failed",
+        );
+      });
+    }
+    this.startProcessedMessageCleanup();
+  }
+
+  /** Stop one Slack App's provider (removal, or before a restart). */
+  async stopSlackApp(botId: string): Promise<void> {
+    await this.stopSlackProvider(botId);
+  }
+
   async cleanup(): Promise<void> {
     if (this.msTeamsProvider) {
       await this.msTeamsProvider.cleanup();
       this.msTeamsProvider = null;
     }
-    if (this.slackProvider) {
-      await this.slackProvider.cleanup();
-      this.slackProvider = null;
+    for (const slackProvider of this.slackProviders.values()) {
+      await slackProvider.cleanup();
     }
+    this.slackProviders.clear();
     if (this.telegramProvider) {
       await this.telegramProvider.cleanup();
       this.telegramProvider = null;
@@ -575,6 +693,7 @@ export class ChatOpsManager {
     // Check for existing binding
     let binding = await ChatOpsChannelBindingModel.findByChannel({
       provider: provider.providerId,
+      botId: provider.botId,
       channelId: message.channelId,
       workspaceId: message.workspaceId,
     });
@@ -586,6 +705,7 @@ export class ChatOpsManager {
       const pending = await ChatOpsChannelBindingModel.findPendingDmBinding({
         organizationId,
         provider: provider.providerId,
+        botId: provider.botId,
         dmOwnerEmail: message.senderEmail,
       });
       if (pending) {
@@ -610,6 +730,7 @@ export class ChatOpsManager {
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId,
           provider: provider.providerId,
+          botId: provider.botId,
           dmOwnerEmail: message.senderEmail,
         });
       if (existingDm) {
@@ -635,6 +756,7 @@ export class ChatOpsManager {
         binding = await ChatOpsChannelBindingModel.upsertByChannel({
           organizationId,
           provider: provider.providerId,
+          botId: provider.botId,
           channelId: message.channelId,
           workspaceId: message.workspaceId,
           workspaceName: provider.getWorkspaceName() ?? undefined,
@@ -666,9 +788,10 @@ export class ChatOpsManager {
       !message.text.trim();
     if (isEmptySlackMention) {
       // Deduplicate this early-return path so Slack retries don't produce duplicate replies.
-      const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
-        message.messageId,
-      );
+      const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed({
+        botId: provider.botId,
+        messageId: message.messageId,
+      });
       if (isNew) {
         await provider.sendReply({
           originalMessage: message,
@@ -732,6 +855,7 @@ export class ChatOpsManager {
     await ChatOpsChannelBindingModel.upsertByChannel({
       organizationId,
       provider: provider.providerId,
+      botId: provider.botId,
       channelId: selection.channelId,
       workspaceId: selection.workspaceId,
       workspaceName: provider.getWorkspaceName() ?? undefined,
@@ -789,9 +913,10 @@ export class ChatOpsManager {
     } = params;
 
     // Deduplication check
-    const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
-      message.messageId,
-    );
+    const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed({
+      botId: provider.botId,
+      messageId: message.messageId,
+    });
     if (!isNew) {
       return { success: true };
     }
@@ -799,6 +924,7 @@ export class ChatOpsManager {
     // Look up channel binding
     const binding = await ChatOpsChannelBindingModel.findByChannel({
       provider: provider.providerId,
+      botId: provider.botId,
       channelId: message.channelId,
       workspaceId: message.workspaceId,
     });
@@ -1660,13 +1786,75 @@ export class ChatOpsManager {
   }
 
   /**
+   * Pin a Slack App's identity (workspace, bot user, app id) the first time it
+   * authenticates, and refuse to run it afterwards when its token resolves to a
+   * different identity. Without this a token pasted for another app would
+   * silently inherit the first app's channels, agents and delayed output; a
+   * token already held by another Slack App is refused by the unique identity
+   * index. A refused app is stopped and stays stopped until its token is fixed.
+   */
+  private async pinSlackIdentity(bot: ChatOpsBot): Promise<void> {
+    const provider = this.slackProviders.get(bot.id);
+    const botUserId = provider?.getBotUserId();
+    const workspaceId = provider?.getWorkspaceId();
+    if (!provider || !botUserId || !workspaceId) return;
+
+    const pinned = bot.externalBotUserId !== null;
+    if (
+      pinned &&
+      (bot.externalBotUserId !== botUserId ||
+        bot.externalWorkspaceId !== workspaceId)
+    ) {
+      await this.stopSlackProvider(bot.id);
+      throw new Error(
+        `Slack App "${bot.name}" now authenticates as a different bot (${botUserId} in ${workspaceId}) than the one it was set up with. Set up a new Slack App instead of reusing this one.`,
+      );
+    }
+    if (pinned) return;
+
+    try {
+      await ChatOpsBotModel.update(bot.id, {
+        externalBotUserId: botUserId,
+        externalWorkspaceId: workspaceId,
+        externalAppId: provider.getAppId(),
+      });
+    } catch (error) {
+      await this.stopSlackProvider(bot.id);
+      throw new Error(
+        `Slack App "${bot.name}" uses a bot token that another Slack App already uses (${errorMessage(error)})`,
+      );
+    }
+  }
+
+  private async stopSlackProvider(botId: string): Promise<void> {
+    const provider = this.slackProviders.get(botId);
+    this.slackProviders.delete(botId);
+    await provider?.cleanup();
+  }
+
+  /**
    * Seed chatops config from environment variables into the database.
    * Only runs on first startup — if DB already has config, this is a no-op.
    */
-  private async seedConfigFromEnvVars(): Promise<void> {
+  private async seedConfigFromEnvVars(organizationId: string): Promise<void> {
     await this.seedMsTeamsConfigFromEnvVars();
-    await this.seedSlackConfigFromEnvVars();
+    await this.seedSlackConfigFromEnvVars(organizationId);
     await this.seedTelegramConfigFromEnvVars();
+  }
+
+  /**
+   * The org-level bot of a provider that only ever has one (Teams, Telegram),
+   * created on first use so its bindings always have an owner.
+   */
+  private async ensureSingletonBot(params: {
+    organizationId: string;
+    provider: "ms-teams" | "telegram";
+  }) {
+    return await ChatOpsBotModel.ensureDefault({
+      organizationId: params.organizationId,
+      provider: params.provider,
+      name: await OrganizationModel.getAppName(),
+    });
   }
 
   private async seedMsTeamsConfigFromEnvVars(): Promise<void> {
@@ -1701,10 +1889,18 @@ export class ChatOpsManager {
     }
   }
 
-  private async seedSlackConfigFromEnvVars(): Promise<void> {
+  private async seedSlackConfigFromEnvVars(
+    organizationId: string,
+  ): Promise<void> {
     try {
-      const existing = await ChatOpsConfigModel.getSlackConfig();
-      if (existing) return;
+      const existingBots = await ChatOpsBotModel.findByProvider({
+        organizationId,
+        provider: "slack",
+      });
+      if (existingBots.length > 0) return;
+      // An admin removed a Slack App on purpose: its env credentials must not
+      // bring it back on the next restart.
+      if (await ChatOpsConfigModel.isSlackEnvSeedingDisabled()) return;
 
       const botToken = process.env.ARCHESTRA_CHATOPS_SLACK_BOT_TOKEN || "";
       const signingSecret =
@@ -1722,13 +1918,21 @@ export class ChatOpsManager {
       const hasSocketCreds = botToken && appLevelToken;
       if (!hasWebhookCreds && !hasSocketCreds) return;
 
+      const bot = await ChatOpsBotModel.create({
+        organizationId,
+        provider: "slack",
+        name: await OrganizationModel.getAppName(),
+      });
       await ChatOpsConfigModel.saveSlackConfig({
-        enabled: process.env.ARCHESTRA_CHATOPS_SLACK_ENABLED === "true",
-        botToken,
-        signingSecret,
-        appId: process.env.ARCHESTRA_CHATOPS_SLACK_APP_ID || "",
-        connectionMode,
-        appLevelToken,
+        bot,
+        value: {
+          enabled: process.env.ARCHESTRA_CHATOPS_SLACK_ENABLED === "true",
+          botToken,
+          signingSecret,
+          appId: process.env.ARCHESTRA_CHATOPS_SLACK_APP_ID || "",
+          connectionMode,
+          appLevelToken,
+        },
       });
       logger.info("[ChatOps] Seeded Slack config from env vars to DB");
     } catch (error) {
@@ -1829,6 +2033,7 @@ export class ChatOpsManager {
     // after a mute even when the run executed on a different pod than the mute.
     const threadKey = {
       provider: provider.providerId,
+      botId: provider.botId,
       channelId: message.channelId,
       threadId: message.threadId ?? message.channelId,
     };
@@ -1960,6 +2165,7 @@ export class ChatOpsManager {
   private async threadMutedSinceStart(
     threadKey: {
       provider: ChatOpsProviderType;
+      botId: string;
       channelId: string;
       threadId: string;
     },
@@ -1981,6 +2187,7 @@ export class ChatOpsManager {
     message: IncomingChatMessage;
     threadKey: {
       provider: ChatOpsProviderType;
+      botId: string;
       channelId: string;
       threadId: string;
     };
@@ -1990,6 +2197,7 @@ export class ChatOpsManager {
       {
         messageId: message.messageId,
         provider: threadKey.provider,
+        botId: threadKey.botId,
         channelId: threadKey.channelId,
         threadId: threadKey.threadId,
       },
@@ -2251,6 +2459,7 @@ export class ChatOpsManager {
     }
     return await claimThreadMuteHint({
       provider: provider.providerId,
+      botId: provider.botId,
       channelId: message.channelId,
       threadId: message.threadId,
     });
@@ -2375,11 +2584,12 @@ export class ChatOpsManager {
 
     // Use thread ID (or channel ID for non-threaded messages) as session ID
     // so all messages in the same thread are grouped together in logs
-    const sessionId = buildChatOpsSessionId(
-      provider.providerId,
-      message.channelId,
-      message.threadId,
-    );
+    const sessionId = buildChatOpsSessionId({
+      providerId: provider.providerId,
+      botId: provider.botId,
+      channelId: message.channelId,
+      threadId: message.threadId,
+    });
     const effectiveThreadId =
       message.threadId ?? message.channelId ?? message.messageId;
 
@@ -2514,6 +2724,7 @@ export class ChatOpsManager {
 
       const binding = await ChatOpsChannelBindingModel.findByChannel({
         provider: provider.providerId,
+        botId: provider.botId,
         channelId: decision.channelId,
         workspaceId: decision.workspaceId,
       });
@@ -2594,11 +2805,12 @@ export class ChatOpsManager {
           ],
         }),
         systemParams: {
-          sessionId: buildChatOpsSessionId(
-            provider.providerId,
-            decision.channelId,
-            originalMessage.threadId,
-          ),
+          sessionId: buildChatOpsSessionId({
+            providerId: provider.providerId,
+            botId: provider.botId,
+            channelId: decision.channelId,
+            threadId: originalMessage.threadId,
+          }),
           source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
           // Resuming after an approval is still a ChatOps run; without this it
           // would fall back to the A2A route category like the initial send did.
@@ -2673,24 +2885,28 @@ const CHATOPS_PROVIDER_SOURCES: Record<ChatOpsProviderType, InteractionSource> =
  * Build a deterministic session ID for chatops messages.
  * Uses the thread ID when available (threaded conversations), otherwise
  * falls back to the channel ID (non-threaded DMs/channels).
- * Prefixed with provider to avoid collisions across providers. Slack thread
- * timestamps are channel-scoped, so include the channel for Slack threads.
+ * Prefixed with provider to avoid collisions across providers, and with a short
+ * bot id so two bots answering in one thread are grouped separately. Slack
+ * thread timestamps are channel-scoped, so include the channel for Slack threads.
  *
  * MS Teams DM channel IDs can be 100+ chars. Long session IDs overflow the
  * 128-char Prometheus exemplar label budget, so we hash identifiers that
  * would push the total past a safe length.
  * @public — exported for testability
  */
-export function buildChatOpsSessionId(
-  providerId: string,
-  channelId: string,
-  threadId?: string,
-): string {
+export function buildChatOpsSessionId(params: {
+  providerId: string;
+  /** Keeps two bots in one thread in separate log sessions. */
+  botId: string;
+  channelId: string;
+  threadId?: string;
+}): string {
+  const { providerId, botId, channelId, threadId } = params;
   const id =
     providerId === "slack" && threadId !== undefined
       ? `${channelId}:${threadId}`
       : (threadId ?? channelId);
-  const prefix = `chatops:${providerId}:`;
+  const prefix = `chatops:${providerId}:${botId.slice(0, 8)}:`;
   if (prefix.length + id.length <= MAX_SESSION_ID_LENGTH) {
     return `${prefix}${id}`;
   }

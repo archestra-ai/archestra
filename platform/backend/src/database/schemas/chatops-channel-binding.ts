@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import agentsTable from "./agent";
+import chatopsBotsTable from "./chatops-bot";
 
 /**
  * Maps chatops channels (Teams, Slack, etc.) to Archestra agents.
@@ -17,8 +18,11 @@ import agentsTable from "./agent";
  * Each channel can have one binding to an agent. When a message arrives
  * in the channel, it is routed to the assigned agent for processing via A2A.
  *
- * Unique constraint on (provider, channelId, workspaceId) ensures
- * one assignment per channel.
+ * Bindings belong to one bot (Slack App, Teams bot, Telegram bot). Two bots
+ * in the same channel hold two bindings, each with its own agent assignment.
+ *
+ * Unique constraint on (botId, channelId, workspaceId) ensures one assignment
+ * per channel per bot.
  */
 const chatopsChannelBindingsTable = pgTable(
   "chatops_channel_binding",
@@ -30,6 +34,10 @@ const chatopsChannelBindingsTable = pgTable(
     provider: varchar("provider", { length: 32 })
       .$type<ChatOpsProviderType>()
       .notNull(),
+    /** The bot whose membership created this binding */
+    botId: uuid("bot_id")
+      .notNull()
+      .references(() => chatopsBotsTable.id, { onDelete: "cascade" }),
     /** Channel ID from the provider (e.g., Teams channel ID) */
     channelId: varchar("channel_id", { length: 256 }).notNull(),
     /** Workspace/Team ID from the provider (e.g., Teams team ID) */
@@ -66,12 +74,14 @@ const chatopsChannelBindingsTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // Unique constraint: one binding per channel per provider
-    uniqueIndex("chatops_channel_binding_provider_channel_workspace_idx").on(
-      table.provider,
+    // Unique constraint: one binding per channel per bot
+    uniqueIndex("chatops_channel_binding_bot_channel_workspace_idx").on(
+      table.botId,
       table.channelId,
       table.workspaceId,
     ),
+    // Index for looking up bindings by provider (status, discovery cleanup)
+    index("chatops_channel_binding_provider_idx").on(table.provider),
     // Index for looking up bindings by organization
     index("chatops_channel_binding_organization_id_idx").on(
       table.organizationId,

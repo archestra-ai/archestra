@@ -3,6 +3,7 @@ import { chatOpsRunRegistry } from "./chatops-run-registry";
 
 const SLACK_THREAD = {
   provider: "slack",
+  botId: "bot-a",
   channelId: "C123",
   threadId: "1700000000.0001",
 } as const;
@@ -57,6 +58,27 @@ describe("chatOpsRunRegistry", () => {
     teams.unregister();
   });
 
+  test("the same thread key across bots is isolated", () => {
+    const botA = chatOpsRunRegistry.register(SLACK_THREAD);
+    const botB = chatOpsRunRegistry.register({
+      ...SLACK_THREAD,
+      botId: "bot-b",
+    });
+
+    // Muting the thread for bot A must not abort bot B's in-flight reply.
+    expect(chatOpsRunRegistry.cancelThread(SLACK_THREAD)).toBe(1);
+    expect(botA.signal.aborted).toBe(true);
+    expect(botB.signal.aborted).toBe(false);
+
+    expect(
+      chatOpsRunRegistry.cancelThread({ ...SLACK_THREAD, botId: "bot-b" }),
+    ).toBe(1);
+    expect(botB.signal.aborted).toBe(true);
+
+    botA.unregister();
+    botB.unregister();
+  });
+
   test("an unregistered run is no longer cancellable", () => {
     const run = chatOpsRunRegistry.register(SLACK_THREAD);
     run.unregister();
@@ -69,6 +91,7 @@ describe("chatOpsRunRegistry", () => {
     expect(
       chatOpsRunRegistry.cancelThread({
         provider: "slack",
+        botId: "bot-a",
         channelId: "C-empty",
         threadId: "never-ran",
       }),
@@ -89,6 +112,7 @@ describe("chatOpsRunRegistry", () => {
 describe("chatOpsRunRegistry supersede", () => {
   const TG_THREAD = {
     provider: "telegram",
+    botId: "bot-tg",
     channelId: "1399696",
     threadId: "1399696",
   } as const;

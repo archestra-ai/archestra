@@ -864,6 +864,11 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // ChatOps runtime
   // =========================================================================
+  chatopsBotsTable: {
+    audited: false,
+    reason:
+      "ChatOps bot identity rows; creating, changing and removing a bot is audited through the /api/chatops/config and /api/chatops/bots routes",
+  },
   chatopsProcessedMessagesTable: {
     audited: false,
     reason: "ChatOps message dedup; runtime state",

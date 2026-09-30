@@ -41,6 +41,7 @@ import { errorMessage } from "./utils";
  */
 export async function markChannelThreadActive(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<void> {
@@ -60,6 +61,7 @@ export async function markChannelThreadActive(params: {
  */
 export async function isChannelThreadActive(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<boolean> {
@@ -79,6 +81,7 @@ export async function isChannelThreadActive(params: {
  */
 export async function clearChannelThreadActive(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<boolean> {
@@ -117,6 +120,7 @@ export async function clearChannelThreadActive(params: {
  */
 export async function muteChannelThread(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<boolean> {
@@ -155,6 +159,7 @@ export async function muteChannelThread(params: {
  */
 export async function muteChannelThreadAndNotify(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
   /** Whether this channel answers every message (see isChannelAnswerAllEnabled). */
@@ -163,6 +168,7 @@ export async function muteChannelThreadAndNotify(params: {
 }): Promise<boolean> {
   const activation = {
     provider: params.provider,
+    botId: params.botId,
     channelId: params.channelId,
     threadId: params.threadId,
   };
@@ -203,6 +209,7 @@ export async function muteChannelThreadAndNotify(params: {
  */
 export async function isChannelAnswerAllEnabled(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   workspaceId: string | null;
 }): Promise<boolean> {
@@ -218,6 +225,7 @@ export async function isChannelAnswerAllEnabled(params: {
 /** Drop the cached "answer all messages" flag so a toggle takes effect promptly. */
 export async function invalidateChannelAnswerAll(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   workspaceId: string | null;
 }): Promise<void> {
@@ -286,6 +294,7 @@ export async function findWorkspacesWithUnmentionedTraffic(params: {
  */
 export async function markChannelThreadMuted(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<void> {
@@ -306,6 +315,7 @@ export async function markChannelThreadMuted(params: {
  */
 export async function isChannelThreadMuted(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<boolean> {
@@ -321,6 +331,7 @@ export async function isChannelThreadMuted(params: {
  */
 export async function clearChannelThreadMuted(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<boolean> {
@@ -340,6 +351,7 @@ export async function clearChannelThreadMuted(params: {
  */
 export async function getThreadMuteMarker(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<string | null> {
@@ -363,6 +375,7 @@ export async function getThreadMuteMarker(params: {
  */
 export async function claimThreadMuteHint(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<boolean> {
@@ -513,6 +526,7 @@ export function resolveChannelGateAction(params: {
  */
 export async function applyChannelGate(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
   botMentioned: boolean;
@@ -526,8 +540,8 @@ export async function applyChannelGate(params: {
   postMutedNotice: () => Promise<void>;
   resolveAnswerAllWorkspaceId: () => Promise<string | null>;
 }): Promise<{ proceed: boolean; addressed: boolean }> {
-  const { provider, channelId, threadId, botMentioned, text } = params;
-  const activation = { provider, channelId, threadId };
+  const { provider, botId, channelId, threadId, botMentioned, text } = params;
+  const activation = { provider, botId, channelId, threadId };
 
   let wantsMute = isThreadMuteCommand(text);
   if (!wantsMute && mightBeAddressedMuteCommand(text)) {
@@ -549,6 +563,7 @@ export async function applyChannelGate(params: {
     try {
       answerAll = await isChannelAnswerAllEnabled({
         provider,
+        botId,
         channelId,
         workspaceId: await params.resolveAnswerAllWorkspaceId(),
       });
@@ -608,6 +623,7 @@ function normalizeMuteText(text: string): string {
 
 function activationKey(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): AllowedCacheKey {
@@ -615,11 +631,12 @@ function activationKey(params: {
     params.provider === "slack"
       ? CacheKey.SlackThreadActive
       : CacheKey.TeamsThreadActive;
-  return `${prefix}-${params.channelId}::${params.threadId}`;
+  return `${prefix}-${params.botId}::${params.channelId}::${params.threadId}`;
 }
 
 function muteHintKey(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): AllowedCacheKey {
@@ -627,11 +644,12 @@ function muteHintKey(params: {
     params.provider === "slack"
       ? CacheKey.SlackThreadMuteHint
       : CacheKey.TeamsThreadMuteHint;
-  return `${prefix}-${params.channelId}::${params.threadId}`;
+  return `${prefix}-${params.botId}::${params.channelId}::${params.threadId}`;
 }
 
 function mutedKey(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): AllowedCacheKey {
@@ -639,15 +657,16 @@ function mutedKey(params: {
     params.provider === "slack"
       ? CacheKey.SlackThreadMuted
       : CacheKey.TeamsThreadMuted;
-  return `${prefix}-${params.channelId}::${params.threadId}`;
+  return `${prefix}-${params.botId}::${params.channelId}::${params.threadId}`;
 }
 
 function answerAllKey(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   workspaceId: string | null;
 }): AllowedCacheKey {
-  return `${CacheKey.ChatOpsChannelAnswerAll}-${params.provider}::${params.workspaceId ?? ""}::${params.channelId}`;
+  return `${CacheKey.ChatOpsChannelAnswerAll}-${params.provider}::${params.botId}::${params.workspaceId ?? ""}::${params.channelId}`;
 }
 
 function unmentionedTrafficKey(params: {
@@ -686,6 +705,7 @@ const ANSWER_ALL_CACHE_TTL_MS = 60_000;
 /** Write a fresh mute token so in-flight runs observe the thread was just muted. */
 async function recordThreadMute(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): Promise<void> {
@@ -698,6 +718,7 @@ async function recordThreadMute(params: {
 
 function muteMarkerKey(params: {
   provider: ChatOpsProviderType;
+  botId: string;
   channelId: string;
   threadId: string;
 }): AllowedCacheKey {
@@ -705,7 +726,7 @@ function muteMarkerKey(params: {
     params.provider === "slack"
       ? CacheKey.SlackThreadMuteMarker
       : CacheKey.TeamsThreadMuteMarker;
-  return `${prefix}-${params.channelId}::${params.threadId}`;
+  return `${prefix}-${params.botId}::${params.channelId}::${params.threadId}`;
 }
 
 /**

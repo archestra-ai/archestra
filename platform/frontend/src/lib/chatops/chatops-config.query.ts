@@ -197,7 +197,9 @@ export function useUpdateSlackChatOpsConfig() {
         // Trigger channel discovery (awaits completion on backend)
         // so channels are available when the UI refreshes bindings
         await archestraApiSdk
-          .refreshChatOpsChannelDiscovery({ body: { provider: "slack" } })
+          .refreshChatOpsChannelDiscovery({
+            body: { provider: "slack", botId: body.botId },
+          })
           .catch(() => {});
       }
       return data ?? null;
@@ -213,6 +215,74 @@ export function useUpdateSlackChatOpsConfig() {
     onError: (error) => {
       console.error("Slack config update error:", error);
       toast.error("Failed to update Slack configuration");
+    },
+  });
+}
+
+export function useCreateSlackChatOpsBot() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CreateSlackChatOpsBotData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.createSlackChatOpsBot({
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      if (data) {
+        // Discover the new app's channels now so they are assignable right away
+        await archestraApiSdk
+          .refreshChatOpsChannelDiscovery({
+            body: { provider: "slack", botId: data.id },
+          })
+          .catch(() => {});
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data) {
+        return;
+      }
+      toast.success(`Slack App "${data.name}" connected`);
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+    onError: (error) => {
+      console.error("Slack App create error:", error);
+      toast.error("Failed to set up the Slack App");
+    },
+  });
+}
+
+export function useDeleteChatOpsBot() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (botId: string) => {
+      const { data, error } = await archestraApiSdk.deleteChatOpsBot({
+        path: { id: botId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) {
+        return;
+      }
+      toast.success("Slack App removed");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+    onError: (error) => {
+      console.error("Slack App remove error:", error);
+      toast.error("Failed to remove the Slack App");
     },
   });
 }

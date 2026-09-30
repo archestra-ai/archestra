@@ -101,7 +101,10 @@ class SlackProvider implements ChatOpsProvider {
     defaultTtl: TimeInMs.Hour,
   });
 
-  constructor(slackConfig: SlackDbConfig) {
+  constructor(
+    slackConfig: SlackDbConfig,
+    readonly botId: string,
+  ) {
     this.config = slackConfig;
   }
 
@@ -345,6 +348,7 @@ class SlackProvider implements ChatOpsProvider {
     if (!isDM) {
       const { proceed } = await applyChannelGate({
         provider: this.providerId,
+        botId: this.botId,
         channelId: event.channel,
         threadId: threadTs,
         botMentioned: hasBotMention,
@@ -1210,6 +1214,7 @@ class SlackProvider implements ChatOpsProvider {
       case "STATUS": {
         const binding = await ChatOpsChannelBindingModel.findByChannel({
           provider: "slack",
+          botId: this.botId,
           channelId,
           workspaceId,
         });
@@ -1431,6 +1436,11 @@ class SlackProvider implements ChatOpsProvider {
     return this.botUserId;
   }
 
+  /** The Slack app id the admin entered at setup, when one was given. */
+  getAppId(): string | null {
+    return this.config.appId || null;
+  }
+
   hasMissingScopes(): boolean {
     return this.missingScopes.length > 0;
   }
@@ -1442,7 +1452,7 @@ class SlackProvider implements ChatOpsProvider {
   async notifyMissingScopes(message: IncomingChatMessage): Promise<void> {
     if (this.missingScopes.length === 0 || !this.client) return;
 
-    const cacheKey: AllowedCacheKey = `${CacheKey.SlackScopeNotification}-${this.teamId ?? "unknown"}`;
+    const cacheKey: AllowedCacheKey = `${CacheKey.SlackScopeNotification}-${this.botId}-${this.teamId ?? "unknown"}`;
     const alreadyNotified = await cacheManager.get<boolean>(cacheKey);
     if (alreadyNotified) return;
 
@@ -1508,11 +1518,13 @@ class SlackProvider implements ChatOpsProvider {
   ): Promise<boolean> {
     return await muteChannelThreadAndNotify({
       provider: this.providerId,
+      botId: this.botId,
       channelId,
       threadId: threadTs,
       resolveAnswerAll: () =>
         isChannelAnswerAllEnabled({
           provider: this.providerId,
+          botId: this.botId,
           channelId,
           workspaceId,
         }),
@@ -1617,7 +1629,12 @@ class SlackProvider implements ChatOpsProvider {
     channelId: string,
     threadId: string,
   ): Promise<boolean> {
-    const activation = { provider: this.providerId, channelId, threadId };
+    const activation = {
+      provider: this.providerId,
+      botId: this.botId,
+      channelId,
+      threadId,
+    };
     try {
       return (
         (await isChannelThreadActive(activation)) ||

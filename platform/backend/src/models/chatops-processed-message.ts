@@ -1,4 +1,4 @@
-import { eq, lt } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -11,17 +11,24 @@ import { isUniqueConstraintError } from "@/utils/db";
  */
 class ChatOpsProcessedMessageModel {
   /**
-   * Attempt to mark a message as processed.
-   * Uses INSERT with unique constraint for atomic deduplication.
+   * Attempt to mark a message as processed by one bot.
+   * Uses INSERT with unique constraint for atomic deduplication. The claim is
+   * scoped to the bot: one delivery that reaches two bots is processed once
+   * per bot, and neither bot's claim can swallow the other's copy.
    *
-   * @param messageId - The provider's message ID
+   * @param params.botId - The bot claiming the message
+   * @param params.messageId - The provider's message ID
    * @returns true if successfully marked (first to process), false if already processed
    */
-  static async tryMarkAsProcessed(messageId: string): Promise<boolean> {
+  static async tryMarkAsProcessed(params: {
+    botId: string;
+    messageId: string;
+  }): Promise<boolean> {
     try {
-      await db
-        .insert(schema.chatopsProcessedMessagesTable)
-        .values({ messageId });
+      await db.insert(schema.chatopsProcessedMessagesTable).values({
+        botId: params.botId,
+        messageId: params.messageId,
+      });
       return true;
     } catch (error) {
       // Check if this is a unique constraint violation (message already processed)
@@ -38,14 +45,25 @@ class ChatOpsProcessedMessageModel {
    * Note: For deduplication, prefer tryMarkAsProcessed() which is atomic.
    * This method is mainly for debugging/monitoring.
    *
-   * @param messageId - The provider's message ID
+   * @param params.botId - The bot whose claim is checked
+   * @param params.messageId - The provider's message ID
    * @returns true if the message has been processed
    */
-  static async isProcessed(messageId: string): Promise<boolean> {
+  static async isProcessed(params: {
+    botId: string | null;
+    messageId: string;
+  }): Promise<boolean> {
     const [record] = await db
       .select({ id: schema.chatopsProcessedMessagesTable.id })
       .from(schema.chatopsProcessedMessagesTable)
-      .where(eq(schema.chatopsProcessedMessagesTable.messageId, messageId))
+      .where(
+        and(
+          params.botId === null
+            ? isNull(schema.chatopsProcessedMessagesTable.botId)
+            : eq(schema.chatopsProcessedMessagesTable.botId, params.botId),
+          eq(schema.chatopsProcessedMessagesTable.messageId, params.messageId),
+        ),
+      )
       .limit(1);
 
     return !!record;

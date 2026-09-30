@@ -28,9 +28,11 @@ describe("PATCH /api/chatops/bindings/:id — channel instructions", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
+  let botId: string;
 
-  beforeEach(async ({ makeOrganization, makeAdmin }) => {
+  beforeEach(async ({ makeOrganization, makeAdmin, makeChatOpsBot }) => {
     organizationId = (await makeOrganization()).id;
+    botId = (await makeChatOpsBot(organizationId)).id;
     user = await makeAdmin();
 
     app = createFastifyInstance();
@@ -50,6 +52,7 @@ describe("PATCH /api/chatops/bindings/:id — channel instructions", () => {
     const binding = await ChatOpsChannelBindingModel.create({
       organizationId,
       provider: "slack",
+      botId,
       channelId: `C${crypto.randomUUID().slice(0, 10)}`,
       workspaceId: `T${crypto.randomUUID().slice(0, 10)}`,
       channelName: "incident-response",
@@ -125,12 +128,14 @@ describe("PATCH /api/chatops/bindings/:id — channel instructions", () => {
   });
 
   test("refuses a binding belonging to another organization", async ({
+    makeChatOpsBot,
     makeOrganization,
   }) => {
     const otherOrg = await makeOrganization();
     const foreign = await ChatOpsChannelBindingModel.create({
       organizationId: otherOrg.id,
       provider: "slack",
+      botId: (await makeChatOpsBot(otherOrg.id)).id,
       channelId: `C${crypto.randomUUID().slice(0, 10)}`,
       workspaceId: `T${crypto.randomUUID().slice(0, 10)}`,
     });

@@ -3,7 +3,7 @@ import {
   SLACK_REQUIRED_BOT_SCOPES,
   SLACK_SLASH_COMMANDS,
 } from "@archestra/shared";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, vi } from "vitest";
 
 // The canonical Map-backed fake from src/__mocks__/cache-manager.ts stands in
 // for the distributed cache so the sticky-thread activation gate
@@ -34,6 +34,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ChatOpsChannelBindingModel, UserModel } from "@/models";
+import { test } from "@/test";
 import { markChannelThreadActive } from "./channel-activation";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import SlackProvider from "./slack-provider";
@@ -44,13 +45,24 @@ import SlackProvider from "./slack-provider";
 
 const SIGNING_SECRET = "test-signing-secret";
 
-function createProvider(overrides?: { botUserId?: string }): SlackProvider {
-  const provider = new SlackProvider({
-    enabled: true,
-    botToken: "xoxb-test",
-    signingSecret: SIGNING_SECRET,
-    appId: "A12345",
-  });
+// Providers that never touch a bot row (no bindings are written) share this id.
+// Bindings carry a foreign key to chatops_bots, so tests that persist one create
+// a real bot with makeChatOpsBot and build the provider from its id instead.
+const TEST_BOT_ID = "00000000-0000-4000-8000-000000000001";
+
+function createProvider(overrides?: {
+  botUserId?: string;
+  botId?: string;
+}): SlackProvider {
+  const provider = new SlackProvider(
+    {
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: SIGNING_SECRET,
+      appId: "A12345",
+    },
+    overrides?.botId ?? TEST_BOT_ID,
+  );
   // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
   (provider as any).botUserId = overrides?.botUserId || "UBOT123";
   // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
@@ -736,10 +748,14 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
   // Seed a channel binding with "answer all messages" enabled. create() does not
   // persist the flag (only the toggle route does), so set it with a follow-up
   // update — the same path the UI takes.
-  async function seedAnswerAllChannel(channelId: string): Promise<void> {
+  async function seedAnswerAllChannel(
+    channelId: string,
+    bot: { id: string; organizationId: string },
+  ): Promise<void> {
     const binding = await ChatOpsChannelBindingModel.create({
-      organizationId: "org-answer-all",
+      organizationId: bot.organizationId,
       provider: "slack",
+      botId: bot.id,
       channelId,
       workspaceId: "T12345",
     });
@@ -748,10 +764,15 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
     });
   }
 
-  test("an un-mentioned message in an answer-all channel is processed", async () => {
-    const provider = createProvider();
+  test("an un-mentioned message in an answer-all channel is processed", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id);
+    const provider = createProvider({ botId: bot.id });
     const channel = "C_ANSWER_ALL";
-    await seedAnswerAllChannel(channel);
+    await seedAnswerAllChannel(channel, bot);
 
     const result = await provider.parseWebhookNotification(
       makeEventPayload(
@@ -794,14 +815,19 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
     expect(result).toBeNull();
   });
 
-  test("a mute command silences an answer-all thread until it is re-mentioned", async () => {
-    const provider = createProvider();
+  test("a mute command silences an answer-all thread until it is re-mentioned", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id);
+    const provider = createProvider({ botId: bot.id });
     const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
     (provider as any).client = { chat: { postMessage } };
     const channel = "C_ANSWER_ALL_MUTE";
     const threadTs = "7777777777.000010";
-    await seedAnswerAllChannel(channel);
+    await seedAnswerAllChannel(channel, bot);
 
     // Un-mentioned message flows because the channel answers all.
     const first = await provider.parseWebhookNotification(
@@ -887,13 +913,14 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
   async function expectLiteralMuteTokenMutes(
     text: string,
     channel: string,
+    bot: { id: string; organizationId: string },
   ): Promise<void> {
-    const provider = createProvider();
+    const provider = createProvider({ botId: bot.id });
     const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
     (provider as any).client = { chat: { postMessage } };
     const threadTs = "7777777777.000030";
-    await seedAnswerAllChannel(channel);
+    await seedAnswerAllChannel(channel, bot);
 
     // Un-mentioned message flows because the channel answers all.
     const first = await provider.parseWebhookNotification(
@@ -946,14 +973,29 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
     expect(afterMute).toBeNull();
   }
 
-  test("a literal ':mute:' message (not a reaction) mutes an answer-all thread", async () => {
-    await expectLiteralMuteTokenMutes(":mute:", "C_ANSWER_ALL_MUTE_TEXT_1");
+  test("a literal ':mute:' message (not a reaction) mutes an answer-all thread", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id);
+    await expectLiteralMuteTokenMutes(
+      ":mute:",
+      "C_ANSWER_ALL_MUTE_TEXT_1",
+      bot,
+    );
   });
 
-  test("a literal ':shushing_face:' message (not a reaction) mutes an answer-all thread", async () => {
+  test("a literal ':shushing_face:' message (not a reaction) mutes an answer-all thread", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const org = await makeOrganization();
+    const bot = await makeChatOpsBot(org.id);
     await expectLiteralMuteTokenMutes(
       ":shushing_face:",
       "C_ANSWER_ALL_MUTE_TEXT_2",
+      bot,
     );
   });
 });
@@ -1096,12 +1138,15 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
 
   // Client with a postMessage spy and a conversations.replies that resolves the
   // thread root (messages[0].ts) for the reacted message.
-  function createReactionProvider(rootTs: string | null = ROOT): {
+  function createReactionProvider(
+    rootTs: string | null = ROOT,
+    botId: string = TEST_BOT_ID,
+  ): {
     provider: SlackProvider;
     postMessage: ReturnType<typeof vi.fn>;
     replies: ReturnType<typeof vi.fn>;
   } {
-    const provider = createProvider({ botUserId: BOT });
+    const provider = createProvider({ botUserId: BOT, botId });
     const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
     const replies = vi.fn().mockResolvedValue({
       messages: rootTs ? [{ ts: rootTs }] : [],
@@ -1132,10 +1177,14 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     );
   }
 
-  async function enableAnswerAll(): Promise<void> {
+  async function enableAnswerAll(bot: {
+    id: string;
+    organizationId: string;
+  }): Promise<void> {
     const binding = await ChatOpsChannelBindingModel.create({
-      organizationId: `org-${CHANNEL}-${Math.random()}`,
+      organizationId: bot.organizationId,
       provider: "slack",
+      botId: bot.id,
       channelId: CHANNEL,
       // Must match makeEventPayload's team_id: the setting is stored per
       // workspace, and a reaction has to look it up under the same key.
@@ -1153,6 +1202,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     const { provider, postMessage, replies } = createReactionProvider();
     await markChannelThreadActive({
       provider: "slack",
+      botId: TEST_BOT_ID,
       channelId: CHANNEL,
       threadId: ROOT,
     });
@@ -1169,7 +1219,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(
       await cacheManager.get(
-        `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
+        `${CacheKey.SlackThreadActive}-${TEST_BOT_ID}::${CHANNEL}::${ROOT}`,
       ),
     ).toBeUndefined();
   });
@@ -1178,6 +1228,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     const { provider, postMessage } = createReactionProvider();
     await markChannelThreadActive({
       provider: "slack",
+      botId: TEST_BOT_ID,
       channelId: CHANNEL,
       threadId: ROOT,
     });
@@ -1195,6 +1246,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     const { provider, postMessage } = createReactionProvider();
     await markChannelThreadActive({
       provider: "slack",
+      botId: TEST_BOT_ID,
       channelId: CHANNEL,
       threadId: ROOT,
     });
@@ -1209,7 +1261,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(
       await cacheManager.get(
-        `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
+        `${CacheKey.SlackThreadActive}-${TEST_BOT_ID}::${CHANNEL}::${ROOT}`,
       ),
     ).toBeUndefined();
   });
@@ -1218,6 +1270,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     const { provider, postMessage, replies } = createReactionProvider();
     await markChannelThreadActive({
       provider: "slack",
+      botId: TEST_BOT_ID,
       channelId: CHANNEL,
       threadId: ROOT,
     });
@@ -1238,6 +1291,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     const { provider, postMessage, replies } = createReactionProvider(null);
     await markChannelThreadActive({
       provider: "slack",
+      botId: TEST_BOT_ID,
       channelId: CHANNEL,
       threadId: ROOT,
     });
@@ -1263,20 +1317,28 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
-  test("🔇 in an answer-all channel confirms the mute", async () => {
+  test("🔇 in an answer-all channel confirms the mute", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
     // An answer-all thread has no activation to clear, so the mute is invisible
     // unless the confirmation keys off the mute marker instead — and a mute
     // nobody can see is indistinguishable from one that was ignored.
-    const { provider, postMessage } = createReactionProvider();
-    await enableAnswerAll();
+    const bot = await makeChatOpsBot((await makeOrganization()).id);
+    const { provider, postMessage } = createReactionProvider(ROOT, bot.id);
+    await enableAnswerAll(bot);
 
     await provider.parseWebhookNotification(reactionPayload("mute"), {});
     expect(postMessage).toHaveBeenCalledTimes(1);
   });
 
-  test("a repeated 🔇 in an answer-all channel confirms only once", async () => {
-    const { provider, postMessage } = createReactionProvider();
-    await enableAnswerAll();
+  test("a repeated 🔇 in an answer-all channel confirms only once", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const bot = await makeChatOpsBot((await makeOrganization()).id);
+    const { provider, postMessage } = createReactionProvider(ROOT, bot.id);
+    await enableAnswerAll(bot);
 
     await provider.parseWebhookNotification(reactionPayload("mute"), {});
     await provider.parseWebhookNotification(reactionPayload("mute"), {});
@@ -1298,6 +1360,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     const { provider, postMessage } = createReactionProvider(null);
     await markChannelThreadActive({
       provider: "slack",
+      botId: TEST_BOT_ID,
       channelId: CHANNEL,
       threadId: ROOT,
     });
@@ -1310,9 +1373,13 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
-  test("🔇 keeps an answer-all thread quiet on the following message", async () => {
-    const { provider } = createReactionProvider();
-    await enableAnswerAll();
+  test("🔇 keeps an answer-all thread quiet on the following message", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const bot = await makeChatOpsBot((await makeOrganization()).id);
+    const { provider } = createReactionProvider(ROOT, bot.id);
+    await enableAnswerAll(bot);
 
     await provider.parseWebhookNotification(reactionPayload("mute"), {});
 
@@ -2121,12 +2188,15 @@ describe("SlackProvider file attachment downloads", () => {
   function createProviderWithConfig(overrides?: {
     botUserId?: string;
   }): SlackProvider {
-    const provider = new SlackProvider({
-      enabled: true,
-      botToken: "xoxb-test-bot-token",
-      signingSecret: SIGNING_SECRET,
-      appId: "A12345",
-    });
+    const provider = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-test-bot-token",
+        signingSecret: SIGNING_SECRET,
+        appId: "A12345",
+      },
+      TEST_BOT_ID,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
     (provider as any).botUserId = overrides?.botUserId || "UBOT123";
     // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
@@ -2917,12 +2987,15 @@ describe("SlackProvider file attachment downloads", () => {
   });
 
   test("returns no outcomes when client is null", async () => {
-    const provider = new SlackProvider({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: SIGNING_SECRET,
-      appId: "A12345",
-    });
+    const provider = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: SIGNING_SECRET,
+        appId: "A12345",
+      },
+      TEST_BOT_ID,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
     (provider as any).botUserId = "UBOT123";
     // client is null (not initialized) — downloadSlackFiles bails with []
@@ -2946,12 +3019,15 @@ describe("SlackProvider file attachment downloads", () => {
     // Regression: with no client the files can neither be delivered nor
     // recorded as skipped, so a text-less non-mention message stays a blank
     // turn and must be dropped — same behavior as before the outcome rework.
-    const provider = new SlackProvider({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: SIGNING_SECRET,
-      appId: "A12345",
-    });
+    const provider = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: SIGNING_SECRET,
+        appId: "A12345",
+      },
+      TEST_BOT_ID,
+    );
 
     const payload = makeEventPayload(
       {},
@@ -3051,12 +3127,15 @@ describe("SlackProvider.downloadFiles", () => {
   });
 
   test("uninitialized client yields one download_failed skip per input file", async () => {
-    const provider = new SlackProvider({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: SIGNING_SECRET,
-      appId: "A12345",
-    });
+    const provider = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: SIGNING_SECRET,
+        appId: "A12345",
+      },
+      TEST_BOT_ID,
+    );
 
     const outcomes = await provider.downloadFiles([
       {
@@ -3461,12 +3540,15 @@ describe("SlackProvider.getThreadHistory file metadata", () => {
 
 describe("SlackProvider scope detection", () => {
   function createUninitializedProvider(): SlackProvider {
-    return new SlackProvider({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: SIGNING_SECRET,
-      appId: "A12345",
-    });
+    return new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: SIGNING_SECRET,
+        appId: "A12345",
+      },
+      TEST_BOT_ID,
+    );
   }
 
   test("detects missing scopes from x-oauth-scopes header", () => {
@@ -3534,12 +3616,15 @@ describe("SlackProvider.notifyMissingScopes", () => {
   function createProviderWithMissingScopes(
     missingScopes: string[],
   ): SlackProvider {
-    const provider = new SlackProvider({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: SIGNING_SECRET,
-      appId: "A12345",
-    });
+    const provider = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: SIGNING_SECRET,
+        appId: "A12345",
+      },
+      TEST_BOT_ID,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
     (provider as any).botUserId = "UBOT123";
     // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
@@ -3611,7 +3696,7 @@ describe("SlackProvider.notifyMissingScopes", () => {
     await provider.notifyMissingScopes(fakeMessage);
 
     expect(setSpy).toHaveBeenCalledWith(
-      `${CacheKey.SlackScopeNotification}-T12345`,
+      `${CacheKey.SlackScopeNotification}-${TEST_BOT_ID}-T12345`,
       true,
       30 * 24 * 60 * 60 * 1000, // 30 days in ms
     );
@@ -3660,12 +3745,15 @@ describe("SlackProvider.notifyMissingScopes", () => {
   });
 
   test("uses fallback URL when appId is not set", async () => {
-    const provider = new SlackProvider({
-      enabled: true,
-      botToken: "xoxb-test",
-      signingSecret: SIGNING_SECRET,
-      appId: "",
-    });
+    const provider = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-test",
+        signingSecret: SIGNING_SECRET,
+        appId: "",
+      },
+      TEST_BOT_ID,
+    );
     // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
     (provider as any).botUserId = "UBOT123";
     // biome-ignore lint/suspicious/noExplicitAny: test-only — set private fields
@@ -3951,5 +4039,214 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
     expect(await UserModel.findByEmail(email)).toBeTruthy();
     expect(conversationsOpen).not.toHaveBeenCalled();
     expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// Multiple Slack Apps (bots) in one workspace
+// =============================================================================
+
+describe("SlackProvider — per-bot isolation", () => {
+  const CHANNEL = "C_TWO_BOTS";
+  const ROOT = "6666666666.000001";
+
+  // Client stub with just enough surface for the mute confirmation notice.
+  function withClient(provider: SlackProvider) {
+    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (provider as any).client = { chat: { postMessage } };
+    return postMessage;
+  }
+
+  // Both Slack Apps sit in the same channel and see the same thread. The
+  // payloads are identical on purpose: only the provider's botId may tell the
+  // two apart.
+  function threadMessage(text: string, ts: string) {
+    return makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: CHANNEL,
+        text,
+        ts,
+        thread_ts: ROOT,
+      },
+    );
+  }
+
+  test("thread activation and mute state are kept separately per bot", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const org = await makeOrganization();
+    const botA = await makeChatOpsBot(org.id);
+    const botB = await makeChatOpsBot(org.id);
+    const providerA = createProvider({ botId: botA.id });
+    const providerB = createProvider({ botId: botB.id });
+    const postA = withClient(providerA);
+    const postB = withClient(providerB);
+
+    // A mention of bot A activates the thread for bot A only.
+    const mention = await providerA.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel: CHANNEL,
+          text: "<@UBOT123> help me",
+          ts: "6666666666.000002",
+          thread_ts: ROOT,
+        },
+      ),
+      {},
+    );
+    expect(mention).not.toBeNull();
+
+    const followUpA = await providerA.parseWebhookNotification(
+      threadMessage("and another thing", "6666666666.000003"),
+      {},
+    );
+    expect(followUpA?.text).toBe("and another thing");
+    const followUpB = await providerB.parseWebhookNotification(
+      threadMessage("and another thing", "6666666666.000004"),
+      {},
+    );
+    expect(followUpB).toBeNull();
+    expect(
+      await cacheManager.get(
+        `${CacheKey.SlackThreadActive}-${botA.id}::${CHANNEL}::${ROOT}`,
+      ),
+    ).toBeTruthy();
+    expect(
+      await cacheManager.get(
+        `${CacheKey.SlackThreadActive}-${botB.id}::${CHANNEL}::${ROOT}`,
+      ),
+    ).toBeUndefined();
+
+    // Bot B is activated in the same thread too.
+    const mentionB = await providerB.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel: CHANNEL,
+          text: "<@UBOT123> you as well",
+          ts: "6666666666.000005",
+          thread_ts: ROOT,
+        },
+      ),
+      {},
+    );
+    expect(mentionB).not.toBeNull();
+
+    // Muting the thread for bot A confirms once and silences bot A only.
+    const mute = await providerA.parseWebhookNotification(
+      threadMessage("mute", "6666666666.000006"),
+      {},
+    );
+    expect(mute).toBeNull();
+    expect(postA).toHaveBeenCalledTimes(1);
+    expect(postB).not.toHaveBeenCalled();
+
+    expect(
+      await providerA.parseWebhookNotification(
+        threadMessage("anyone there?", "6666666666.000007"),
+        {},
+      ),
+    ).toBeNull();
+    const stillActiveB = await providerB.parseWebhookNotification(
+      threadMessage("anyone there?", "6666666666.000008"),
+      {},
+    );
+    expect(stillActiveB?.text).toBe("anyone there?");
+    expect(postB).not.toHaveBeenCalled();
+  });
+
+  test("a STATUS slash command only sees the binding of its own bot", async ({
+    makeOrganization,
+    makeChatOpsBot,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const botA = await makeChatOpsBot(org.id);
+    const botB = await makeChatOpsBot(org.id);
+    const agentA = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Agent For Bot A",
+    });
+    const agentB = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Agent For Bot B",
+    });
+    // Same channel and workspace, one binding per bot, different agents.
+    for (const [bot, agent] of [
+      [botA, agentA],
+      [botB, agentB],
+    ] as const) {
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "slack",
+        botId: bot.id,
+        channelId: CHANNEL,
+        workspaceId: "T12345",
+        agentId: agent.id,
+      });
+    }
+    // Bound for bot B only.
+    const agentBOnly = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Agent Only Bot B",
+    });
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      botId: botB.id,
+      channelId: "C_ONLY_BOT_B",
+      workspaceId: "T12345",
+      agentId: agentBOnly.id,
+    });
+
+    const email = `two-bots-${crypto.randomUUID()}@example.com`;
+    const makeSlashProvider = (botId: string) => {
+      const provider = createProvider({ botId });
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — fake Slack client boundary
+      (provider as any).client = {
+        users: {
+          info: vi.fn().mockResolvedValue({
+            user: { real_name: "Two Bots", profile: { email } },
+          }),
+        },
+      };
+      return provider;
+    };
+    const status = (provider: SlackProvider, channelId: string) =>
+      provider.handleSlashCommand({
+        command: SLACK_SLASH_COMMANDS.STATUS,
+        text: "",
+        user_id: "U_TWO_BOTS",
+        user_name: "two.bots",
+        channel_id: channelId,
+        team_id: "T12345",
+      });
+
+    const signupWelcomeEnabled = config.chatops.signupWelcomeEnabled;
+    config.chatops.signupWelcomeEnabled = false;
+    try {
+      const providerA = makeSlashProvider(botA.id);
+      const providerB = makeSlashProvider(botB.id);
+
+      expect((await status(providerA, CHANNEL))?.text).toContain(
+        "Agent For Bot A",
+      );
+      expect((await status(providerB, CHANNEL))?.text).toContain(
+        "Agent For Bot B",
+      );
+      expect((await status(providerB, "C_ONLY_BOT_B"))?.text).toContain(
+        "Agent Only Bot B",
+      );
+      expect((await status(providerA, "C_ONLY_BOT_B"))?.text).toContain(
+        "No agent is assigned to this channel yet",
+      );
+    } finally {
+      config.chatops.signupWelcomeEnabled = signupWelcomeEnabled;
+    }
   });
 });

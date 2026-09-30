@@ -23,30 +23,40 @@ describe("PATCH /api/chatops/bindings", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
+  let botId: string;
   let originalOwner: Agent;
   let targetAgent: Agent;
 
-  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization, makeMember }) => {
-    organizationId = (await makeOrganization()).id;
-    user = await makeAdmin();
-    await makeMember(user.id, organizationId, { role: "admin" });
-    originalOwner = await makeAgent({
-      organizationId,
-      authorId: user.id,
-      agentType: "agent",
-    });
-    targetAgent = await makeAgent({
-      organizationId,
-      authorId: user.id,
-      agentType: "agent",
-    });
+  beforeEach(
+    async ({
+      makeAdmin,
+      makeAgent,
+      makeChatOpsBot,
+      makeOrganization,
+      makeMember,
+    }) => {
+      organizationId = (await makeOrganization()).id;
+      botId = (await makeChatOpsBot(organizationId)).id;
+      user = await makeAdmin();
+      await makeMember(user.id, organizationId, { role: "admin" });
+      originalOwner = await makeAgent({
+        organizationId,
+        authorId: user.id,
+        agentType: "agent",
+      });
+      targetAgent = await makeAgent({
+        organizationId,
+        authorId: user.id,
+        agentType: "agent",
+      });
 
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      Object.assign(request, { user, organizationId });
-    });
-    await app.register(chatopsRoutes);
-  });
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        Object.assign(request, { user, organizationId });
+      });
+      await app.register(chatopsRoutes);
+    },
+  );
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -98,6 +108,7 @@ describe("PATCH /api/chatops/bindings", () => {
 
   test("reports missing and foreign bindings as tenant-neutral not-found errors", async ({
     makeAgent,
+    makeChatOpsBot,
     makeOrganization,
   }) => {
     const otherOrganization = await makeOrganization();
@@ -108,6 +119,7 @@ describe("PATCH /api/chatops/bindings", () => {
     const foreignBinding = await ChatOpsChannelBindingModel.create({
       organizationId: otherOrganization.id,
       provider: "slack",
+      botId: (await makeChatOpsBot(otherOrganization.id)).id,
       channelId: "foreign-channel",
       workspaceId: "foreign-workspace",
       agentId: foreignAgent.id,
@@ -229,6 +241,7 @@ describe("PATCH /api/chatops/bindings", () => {
     const dmBinding = await ChatOpsChannelBindingModel.create({
       organizationId,
       provider: "slack",
+      botId,
       channelId: "another-users-dm",
       workspaceId: "another-users-workspace",
       isDm: true,
@@ -260,6 +273,7 @@ describe("PATCH /api/chatops/bindings", () => {
     return ChatOpsChannelBindingModel.create({
       organizationId,
       provider: "slack",
+      botId,
       channelId: `C${crypto.randomUUID().slice(0, 10)}`,
       workspaceId: `T${crypto.randomUUID().slice(0, 10)}`,
       channelName: "incident-response",

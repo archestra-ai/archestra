@@ -42,13 +42,29 @@ export const ChatOpsDmInfoSchema = z
   })
   .optional();
 
+/** One bot (Slack App, or the org-level Teams / Telegram bot) in the status response */
+export const ChatOpsBotInfoSchema = z.object({
+  id: z.string().uuid(),
+  /** Slack App name (or the platform name for Teams and Telegram) */
+  name: z.string(),
+  configured: z.boolean(),
+  credentials: ChatOpsProviderCredentialsSchema,
+  dmInfo: ChatOpsDmInfoSchema,
+  /** Agents that hold channels or direct messages under this bot */
+  agents: z.array(z.object({ id: z.string(), name: z.string() })),
+});
+
 /** Single provider entry in the chatops status response */
 export const ChatOpsProviderInfoSchema = z.object({
   id: ChatOpsProviderTypeSchema,
   displayName: z.string(),
   configured: z.boolean(),
+  /** First bot's credentials, kept for callers that predate multiple bots */
   credentials: ChatOpsProviderCredentialsSchema,
+  /** First bot's identity, kept for callers that predate multiple bots */
   dmInfo: ChatOpsDmInfoSchema,
+  /** Every bot of this provider: several for Slack, at most one otherwise */
+  bots: z.array(ChatOpsBotInfoSchema),
 });
 
 /** Full chatops status response schema */
@@ -290,6 +306,13 @@ export interface ChatOpsProvider {
 
   /** Display name for UI */
   readonly displayName: string;
+
+  /**
+   * The messaging bot this provider instance runs. Every binding, message
+   * receipt, mute/activation entry and in-flight run the provider touches is
+   * scoped by it, so two bots of one provider never share state.
+   */
+  readonly botId: string;
 
   /**
    * The provider's platform API cannot return chat history (Telegram), so the

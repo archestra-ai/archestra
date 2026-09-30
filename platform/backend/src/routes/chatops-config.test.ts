@@ -1,17 +1,24 @@
 import { vi } from "vitest";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
-import { ChatOpsConfigModel, OrganizationModel } from "@/models";
+import {
+  ChatOpsBotModel,
+  ChatOpsConfigModel,
+  OrganizationModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import chatopsRoutes from "./chatops";
 
-const { reinitializeMock } = vi.hoisted(() => ({
+const { reinitializeMock, startSlackAppMock } = vi.hoisted(() => ({
   reinitializeMock: vi.fn(),
+  startSlackAppMock: vi.fn(),
 }));
 
 vi.mock("@/agents/chatops/chatops-manager", () => ({
   chatOpsManager: {
     reinitialize: reinitializeMock,
+    startSlackApp: startSlackAppMock,
+    stopSlackApp: vi.fn(),
     getMSTeamsProvider: vi.fn(() => null),
     getSlackProvider: vi.fn(() => null),
     getTelegramProvider: vi.fn(() => null),
@@ -31,7 +38,16 @@ vi.mock("botframework-connector", () => ({
 
 vi.mock("@slack/web-api", () => ({
   WebClient: class {
-    auth = { test: () => Promise.resolve({ ok: true }) };
+    constructor(private readonly token?: string) {}
+    // Each bot token resolves to its own bot user, like real Slack apps.
+    auth = {
+      test: () =>
+        Promise.resolve({
+          ok: true,
+          user_id: `U-${this.token}`,
+          team_id: "T-test",
+        }),
+    };
     apps = {
       connections: { open: () => Promise.resolve({ ok: true }) },
     };
@@ -118,26 +134,48 @@ describe("PUT /api/chatops/config/slack", () => {
     vi.clearAllMocks();
   });
 
-  test("saves config to DB and reinitializes", async () => {
+  const createApp = async (organizationId: string) => {
     const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
     await app.register(chatopsRoutes);
+    return app;
+  };
 
-    const response = await app.inject({
+  const putSlack = (
+    app: Awaited<ReturnType<typeof createApp>>,
+    payload: Record<string, unknown>,
+  ) =>
+    app.inject({
       method: "PUT",
       url: "/api/chatops/config/slack",
-      payload: {
-        enabled: true,
-        botToken: "xoxb-test-token",
-        signingSecret: "test-secret",
-        appId: "A12345",
-      },
+      payload,
+    });
+
+  test("creates the organization's first Slack App, saves its config, and reinitializes", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const app = await createApp(organization.id);
+
+    const response = await putSlack(app, {
+      enabled: true,
+      botToken: "xoxb-test-token",
+      signingSecret: "test-secret",
+      appId: "A12345",
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ success: true });
 
-    const dbConfig = await ChatOpsConfigModel.getSlackConfig();
-    expect(dbConfig).toEqual({
+    const bots = await ChatOpsBotModel.findByProvider({
+      organizationId: organization.id,
+      provider: "slack",
+    });
+    expect(bots).toHaveLength(1);
+    expect(await ChatOpsConfigModel.getSlackConfig(bots[0])).toEqual({
       enabled: true,
       botToken: "xoxb-test-token",
       signingSecret: "test-secret",
@@ -146,7 +184,128 @@ describe("PUT /api/chatops/config/slack", () => {
       appLevelToken: "",
     });
 
-    expect(reinitializeMock).toHaveBeenCalledTimes(1);
+    expect(startSlackAppMock).toHaveBeenCalledWith(bots[0].id);
+
+    await app.close();
+  });
+
+  test("updates only the named Slack App's secret", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const organization = await makeOrganization();
+    const firstBot = await ChatOpsConfigModel.saveSlackConfig({
+      bot: await makeChatOpsBot(organization.id),
+      value: {
+        enabled: true,
+        botToken: "xoxb-first",
+        signingSecret: "first-secret",
+        appId: "A1",
+        connectionMode: "webhook",
+        appLevelToken: "",
+      },
+    });
+    const secondBot = await ChatOpsConfigModel.saveSlackConfig({
+      bot: await makeChatOpsBot(organization.id),
+      value: {
+        enabled: true,
+        botToken: "xoxb-second",
+        signingSecret: "second-secret",
+        appId: "A2",
+        connectionMode: "webhook",
+        appLevelToken: "",
+      },
+    });
+    const app = await createApp(organization.id);
+
+    const response = await putSlack(app, {
+      botId: secondBot.id,
+      botToken: "xoxb-second-rotated",
+    });
+
+    expect(response.statusCode).toBe(200);
+    // Only the updated app restarts; the other app's connection is left alone.
+    expect(startSlackAppMock).toHaveBeenCalledTimes(1);
+    expect(startSlackAppMock).toHaveBeenCalledWith(secondBot.id);
+    // The partial update merges into the second app's own config...
+    expect(await ChatOpsConfigModel.getSlackConfig(secondBot)).toMatchObject({
+      botToken: "xoxb-second-rotated",
+      signingSecret: "second-secret",
+      appId: "A2",
+    });
+    // ...and leaves the first app, and the bot rows, alone.
+    expect(await ChatOpsConfigModel.getSlackConfig(firstBot)).toMatchObject({
+      botToken: "xoxb-first",
+      signingSecret: "first-secret",
+      appId: "A1",
+    });
+    const bots = await ChatOpsBotModel.findByProvider({
+      organizationId: organization.id,
+      provider: "slack",
+    });
+    expect(bots.map((bot) => bot.id)).toEqual([firstBot.id, secondBot.id]);
+    expect(bots.map((bot) => bot.secretId)).toEqual([
+      firstBot.secretId,
+      secondBot.secretId,
+    ]);
+
+    await app.close();
+  });
+
+  test("without a botId updates the first Slack App and does not create another", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const organization = await makeOrganization();
+    const firstBot = await ChatOpsConfigModel.saveSlackConfig({
+      bot: await makeChatOpsBot(organization.id),
+      value: {
+        enabled: true,
+        botToken: "xoxb-first",
+        signingSecret: "first-secret",
+        appId: "A1",
+        connectionMode: "webhook",
+        appLevelToken: "",
+      },
+    });
+    const laterBot = await makeChatOpsBot(organization.id);
+    const app = await createApp(organization.id);
+
+    const response = await putSlack(app, { appId: "A1-renamed" });
+
+    expect(response.statusCode).toBe(200);
+    expect(await ChatOpsConfigModel.getSlackConfig(firstBot)).toMatchObject({
+      appId: "A1-renamed",
+      botToken: "xoxb-first",
+    });
+    expect(await ChatOpsConfigModel.getSlackConfig(laterBot)).toBeNull();
+    expect(
+      await ChatOpsBotModel.findByProvider({
+        organizationId: organization.id,
+        provider: "slack",
+      }),
+    ).toHaveLength(2);
+
+    await app.close();
+  });
+
+  test("reports an unknown, foreign, or non-Slack bot id as 404 and changes nothing", async ({
+    makeOrganization,
+    makeChatOpsBot,
+  }) => {
+    const organization = await makeOrganization();
+    const teamsBot = await makeChatOpsBot(organization.id, {
+      provider: "ms-teams",
+    });
+    const foreignBot = await makeChatOpsBot((await makeOrganization()).id);
+    const app = await createApp(organization.id);
+
+    for (const botId of [crypto.randomUUID(), teamsBot.id, foreignBot.id]) {
+      const response = await putSlack(app, { botId, botToken: "xoxb-token" });
+      expect(response.statusCode).toBe(404);
+    }
+    expect(await ChatOpsConfigModel.getSlackConfig(foreignBot)).toBeNull();
+    expect(startSlackAppMock).not.toHaveBeenCalled();
 
     await app.close();
   });
@@ -263,8 +422,13 @@ describe("channels the organization turned off", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("turned off");
-    expect(await ChatOpsConfigModel.getSlackConfig()).toBeNull();
-    expect(reinitializeMock).not.toHaveBeenCalled();
+    expect(
+      await ChatOpsBotModel.findByProvider({
+        organizationId: organization.id,
+        provider: "slack",
+      }),
+    ).toEqual([]);
+    expect(startSlackAppMock).not.toHaveBeenCalled();
 
     await app.close();
   });

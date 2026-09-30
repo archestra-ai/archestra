@@ -110,6 +110,7 @@ interface TestFixtures {
   makeMcpServer: typeof makeMcpServer;
   makeInternalMcpCatalog: typeof makeInternalMcpCatalog;
   makeInvitation: typeof makeInvitation;
+  makeChatOpsBot: typeof makeChatOpsBot;
   makeAccount: typeof makeAccount;
   makeSession: typeof makeSession;
   makeAuthHeaders: typeof makeAuthHeaders;
@@ -895,6 +896,33 @@ async function makeInvitation(
 }
 
 /**
+ * Creates a messaging bot (a Slack App by default) that channel bindings and
+ * message receipts can belong to.
+ */
+async function makeChatOpsBot(
+  organizationId: string,
+  overrides: Partial<{
+    provider: "slack" | "ms-teams" | "telegram";
+    name: string;
+    secretId: string | null;
+    externalAppId: string | null;
+    externalWorkspaceId: string | null;
+    externalBotUserId: string | null;
+  }> = {},
+) {
+  const [bot] = await db
+    .insert(schema.chatopsBotsTable)
+    .values({
+      organizationId,
+      provider: "slack",
+      name: `Test Bot ${crypto.randomUUID().substring(0, 8)}`,
+      ...overrides,
+    })
+    .returning();
+  return bot;
+}
+
+/**
  * Creates a test account
  */
 async function makeAccount(
@@ -1640,6 +1668,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeInvitation: async ({}, use) => {
     await use(makeInvitation);
+  },
+  makeChatOpsBot: async ({}, use) => {
+    await use(makeChatOpsBot);
   },
   makeAccount: async ({}, use) => {
     await use(makeAccount);

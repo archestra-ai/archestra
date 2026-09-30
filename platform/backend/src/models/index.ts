@@ -43,6 +43,7 @@ export { default as AppVersionModel } from "./app-version";
 export { default as AuditLogModel } from "./audit-log";
 export { default as BrowserTabStateModel } from "./browser-tab-state";
 export { default as ActiveChatRunModel } from "./chat-active-run";
+export { default as ChatOpsBotModel } from "./chatops-bot";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";

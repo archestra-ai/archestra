@@ -12,8 +12,10 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
-import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
-import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
+import {
+  useCreateSlackChatOpsBot,
+  useUpdateSlackChatOpsConfig,
+} from "@/lib/chatops/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -26,25 +28,49 @@ type ConnectionMode = NonNullable<
   >["connectionMode"]
 >;
 
+type SlackBotInfo = NonNullable<
+  archestraApiTypes.GetChatOpsStatusResponses["200"]["providers"][number]["bots"]
+>[number];
+
 interface SlackSetupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   connectionMode: ConnectionMode;
+  /** The Slack App being reconfigured; omit to set up a new one. */
+  bot?: SlackBotInfo;
+  /**
+   * Id the new Slack App will get. Webhook-mode manifests embed the app's own
+   * event URLs, so the id is chosen before the app exists.
+   */
+  newBotId?: string;
+  /**
+   * Path the app's webhooks live under. Slack App #1 keeps the original
+   * un-prefixed URLs; every other app has its own.
+   */
+  webhookPath: string;
 }
 
 export function SlackSetupDialog({
   open,
   onOpenChange,
   connectionMode,
+  bot,
+  newBotId,
+  webhookPath,
 }: SlackSetupDialogProps) {
   const docsUrl = getFrontendDocsUrl("platform-slack");
   const configuredAppName = useAppName();
   const publicBaseUrl = usePublicBaseUrl();
 
-  const mutation = useUpdateSlackChatOpsConfig();
-  const { data: chatOpsProviders } = useChatOpsStatus();
-  const slack = chatOpsProviders?.find((p) => p.id === "slack");
-  const creds = slack?.credentials;
+  const updateMutation = useUpdateSlackChatOpsConfig();
+  const createMutation = useCreateSlackChatOpsBot();
+  const creds = bot?.credentials;
+
+  // A new app has no name yet: the admin picks one, and it is also the prefix
+  // of the app's slash commands, so it must differ from the other apps.
+  const [sharedAppName, setSharedAppName] = useState(
+    bot?.name ?? (newBotId ? "" : configuredAppName),
+  );
 
   const [saving, setSaving] = useState(false);
 
@@ -60,13 +86,16 @@ export function SlackSetupDialog({
   const hasSigningSecret = Boolean(sharedSigningSecret || creds?.signingSecret);
   const hasAppLevelToken = Boolean(sharedAppLevelToken || creds?.appLevelToken);
   const hasAppId = Boolean(sharedAppId || creds?.appId);
-  const canSave = isSocket
-    ? hasBotToken && hasAppLevelToken && hasAppId
-    : hasBotToken && hasSigningSecret && hasAppId;
+  const canSave =
+    (bot ? true : sharedAppName.trim().length > 0) &&
+    (isSocket
+      ? hasBotToken && hasAppLevelToken && hasAppId
+      : hasBotToken && hasSigningSecret && hasAppId);
 
   const handleOpenChange = (value: boolean) => {
     onOpenChange(value);
     if (!value) {
+      setSharedAppName(bot?.name ?? (newBotId ? "" : configuredAppName));
       setSharedBotToken("");
       setSharedSigningSecret("");
       setSharedAppLevelToken("");
@@ -74,9 +103,9 @@ export function SlackSetupDialog({
     }
   };
 
-  const webhookUrl = `${publicBaseUrl}/api/webhooks/chatops/slack`;
-  const interactiveUrl = `${publicBaseUrl}/api/webhooks/chatops/slack/interactive`;
-  const slashCommandUrl = `${publicBaseUrl}/api/webhooks/chatops/slack/slash-command`;
+  const webhookUrl = `${publicBaseUrl}${webhookPath}`;
+  const interactiveUrl = `${publicBaseUrl}${webhookPath}/interactive`;
+  const slashCommandUrl = `${publicBaseUrl}${webhookPath}/slash-command`;
 
   const steps = React.useMemo(() => {
     if (isSocket) {
@@ -84,6 +113,8 @@ export function SlackSetupDialog({
         <StepManifestSocket
           key="manifest-socket"
           stepNumber={1}
+          appName={sharedAppName}
+          onAppNameChange={setSharedAppName}
           appId={sharedAppId}
           onAppIdChange={setSharedAppId}
         />,
@@ -110,6 +141,8 @@ export function SlackSetupDialog({
       <StepManifestWebhook
         key="manifest-webhook"
         stepNumber={1}
+        appName={sharedAppName}
+        onAppNameChange={setSharedAppName}
         webhookUrl={webhookUrl}
         interactiveUrl={interactiveUrl}
         slashCommandUrl={slashCommandUrl}
@@ -128,6 +161,7 @@ export function SlackSetupDialog({
     ];
   }, [
     isSocket,
+    sharedAppName,
     sharedBotToken,
     sharedSigningSecret,
     sharedAppLevelToken,
@@ -144,19 +178,25 @@ export function SlackSetupDialog({
     onClick: async () => {
       setSaving(true);
       try {
-        const body: NonNullable<
-          archestraApiTypes.UpdateSlackChatOpsConfigData["body"]
-        > = {
+        const credentials = {
           enabled: true,
           connectionMode,
+          name: sharedAppName.trim() || undefined,
           ...(sharedBotToken && { botToken: sharedBotToken }),
           ...(sharedAppId && { appId: sharedAppId }),
           ...(isSocket
             ? sharedAppLevelToken && { appLevelToken: sharedAppLevelToken }
             : sharedSigningSecret && { signingSecret: sharedSigningSecret }),
         };
-        const updateResult = await mutation.mutateAsync(body);
-        if (updateResult?.success) {
+        const saved = bot
+          ? await updateMutation.mutateAsync({ ...credentials, botId: bot.id })
+          : await createMutation.mutateAsync({
+              ...credentials,
+              id: newBotId,
+              name: sharedAppName.trim(),
+              botToken: sharedBotToken,
+            });
+        if (saved) {
           handleOpenChange(false);
         }
       } finally {
@@ -418,6 +458,8 @@ function StepAppLevelToken({
 
 function StepManifestWebhook({
   stepNumber,
+  appName,
+  onAppNameChange,
   webhookUrl,
   interactiveUrl,
   slashCommandUrl,
@@ -427,6 +469,8 @@ function StepManifestWebhook({
   onSigningSecretChange,
 }: {
   stepNumber: number;
+  appName: string;
+  onAppNameChange: (v: string) => void;
   webhookUrl: string;
   interactiveUrl: string;
   slashCommandUrl: string;
@@ -436,10 +480,9 @@ function StepManifestWebhook({
   onSigningSecretChange: (v: string) => void;
 }) {
   const configuredAppName = useAppName();
-  const [appName, setAppName] = useState(configuredAppName);
 
   const manifest = buildSlackManifest({
-    appName,
+    appName: appName || configuredAppName,
     connectionMode: "webhook",
     webhookUrl,
     interactiveUrl,
@@ -460,7 +503,7 @@ function StepManifestWebhook({
           <Input
             id="manifest-app-name"
             value={appName}
-            onChange={(e) => setAppName(e.target.value)}
+            onChange={(e) => onAppNameChange(e.target.value)}
             placeholder={configuredAppName}
           />
         </div>
@@ -547,18 +590,21 @@ function StepManifestWebhook({
 
 function StepManifestSocket({
   stepNumber,
+  appName,
+  onAppNameChange,
   appId,
   onAppIdChange,
 }: {
   stepNumber: number;
+  appName: string;
+  onAppNameChange: (v: string) => void;
   appId: string;
   onAppIdChange: (v: string) => void;
 }) {
   const configuredAppName = useAppName();
-  const [appName, setAppName] = useState(configuredAppName);
 
   const manifest = buildSlackManifest({
-    appName,
+    appName: appName || configuredAppName,
     connectionMode: "socket",
     webhookUrl: "",
     interactiveUrl: "",
@@ -579,7 +625,7 @@ function StepManifestSocket({
           <Input
             id="manifest-app-name-socket"
             value={appName}
-            onChange={(e) => setAppName(e.target.value)}
+            onChange={(e) => onAppNameChange(e.target.value)}
             placeholder={configuredAppName}
           />
         </div>

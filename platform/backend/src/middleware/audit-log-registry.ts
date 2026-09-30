@@ -1061,20 +1061,32 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/chatops/config/ms-teams": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",
-    fetchById: (_id, _orgId) =>
-      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(orgId),
   },
   "/api/chatops/config/slack": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",
-    fetchById: (_id, _orgId) =>
-      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(orgId),
+  },
+  "/api/chatops/bots/slack": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(orgId),
+  },
+  "/api/chatops/bots/:id": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(orgId),
   },
   "/api/chatops/config/ngrok": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",
-    fetchById: (_id, _orgId) =>
-      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(orgId),
   },
   // Channel discovery refresh is semantically distinct from a generic binding update.
   "/api/chatops/channel-discovery/refresh": {

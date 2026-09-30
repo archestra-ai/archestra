@@ -25,32 +25,45 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
   let user: User;
   let activeOrganizationId: string;
   let organizationId: string;
+  let botId: string;
   let originalOwner: Agent;
   let targetAgent: Agent;
 
-  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization, makeMember }) => {
-    organizationId = (await makeOrganization()).id;
-    activeOrganizationId = organizationId;
-    user = await makeAdmin({ email: "operator@example.com" });
-    await makeMember(user.id, organizationId, { role: "admin" });
-    originalOwner = await makeAgent({
-      organizationId,
-      authorId: user.id,
-      agentType: "agent",
-    });
-    targetAgent = await makeAgent({
-      organizationId,
-      authorId: user.id,
-      agentType: "agent",
-    });
-    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
+  beforeEach(
+    async ({
+      makeAdmin,
+      makeAgent,
+      makeChatOpsBot,
+      makeOrganization,
+      makeMember,
+    }) => {
+      organizationId = (await makeOrganization()).id;
+      activeOrganizationId = organizationId;
+      botId = (await makeChatOpsBot(organizationId)).id;
+      user = await makeAdmin({ email: "operator@example.com" });
+      await makeMember(user.id, organizationId, { role: "admin" });
+      originalOwner = await makeAgent({
+        organizationId,
+        authorId: user.id,
+        agentType: "agent",
+      });
+      targetAgent = await makeAgent({
+        organizationId,
+        authorId: user.id,
+        agentType: "agent",
+      });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: true,
+        error: null,
+      });
 
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      Object.assign(request, { user, organizationId: activeOrganizationId });
-    });
-    await app.register(chatopsRoutes);
-  });
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        Object.assign(request, { user, organizationId: activeOrganizationId });
+      });
+      await app.register(chatopsRoutes);
+    },
+  );
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -89,6 +102,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
         organizationId,
         provider: "slack",
+        botId,
         dmOwnerEmail: user.email,
       }),
     ).toMatchObject({
@@ -264,6 +278,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     const anotherUsersDm = await ChatOpsChannelBindingModel.create({
       organizationId,
       provider: "slack",
+      botId,
       channelId: "another-users-dm",
       workspaceId: "another-users-workspace",
       isDm: true,
@@ -329,6 +344,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     await ChatOpsChannelBindingModel.create({
       organizationId,
       provider: "slack",
+      botId,
       channelId: ChatOpsChannelBindingModel.pendingDmChannelId({
         organizationId,
         dmOwnerEmail: user.email,
@@ -393,6 +409,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
 
   test("rejects foreign target agents and bindings without revealing or changing them", async ({
     makeAgent,
+    makeChatOpsBot,
     makeOrganization,
   }) => {
     const localBinding = await makeBinding(originalOwner.id);
@@ -404,6 +421,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     const foreignBinding = await ChatOpsChannelBindingModel.create({
       organizationId: otherOrganization.id,
       provider: "slack",
+      botId: (await makeChatOpsBot(otherOrganization.id)).id,
       channelId: "foreign-channel",
       workspaceId: "foreign-workspace",
       agentId: foreignAgent.id,
@@ -441,10 +459,12 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
 
   test("creates pending DMs for the same email independently in each organization", async ({
     makeAgent,
+    makeChatOpsBot,
     makeOrganization,
     makeMember,
   }) => {
     const otherOrganization = await makeOrganization();
+    const otherBot = await makeChatOpsBot(otherOrganization.id);
     await makeMember(user.id, otherOrganization.id, { role: "admin" });
     const otherTarget = await makeAgent({
       organizationId: otherOrganization.id,
@@ -467,6 +487,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
         organizationId,
         provider: "slack",
+        botId,
         dmOwnerEmail: user.email,
       }),
     ).toMatchObject({ agentId: targetAgent.id });
@@ -474,6 +495,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
         organizationId: otherOrganization.id,
         provider: "slack",
+        botId: otherBot.id,
         dmOwnerEmail: user.email,
       }),
     ).toMatchObject({ agentId: otherTarget.id });
@@ -521,6 +543,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     return ChatOpsChannelBindingModel.create({
       organizationId,
       provider: "slack",
+      botId,
       channelId: `C${crypto.randomUUID().slice(0, 10)}`,
       workspaceId: `T${crypto.randomUUID().slice(0, 10)}`,
       channelName: "incident-response",

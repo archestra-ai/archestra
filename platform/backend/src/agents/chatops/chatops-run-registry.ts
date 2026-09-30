@@ -31,6 +31,11 @@ import type { ChatOpsProviderType } from "@/types/chatops";
 
 interface ChatOpsThreadKey {
   provider: ChatOpsProviderType;
+  /**
+   * The bot running the turn. Two bots in one thread each register their own
+   * runs, so muting one bot never aborts the other's in-flight reply.
+   */
+  botId: string;
   channelId: string;
   /**
    * Thread root identifier. Callers that lack one (direct messages, which can't
@@ -111,6 +116,7 @@ class ChatOpsRunRegistry {
         logger.info(
           {
             provider: key.provider,
+            botId: key.botId,
             channelId: key.channelId,
             threadId: key.threadId,
             supersededSequence: loser.supersede?.sequence,
@@ -162,6 +168,7 @@ class ChatOpsRunRegistry {
       logger.info(
         {
           provider: key.provider,
+          botId: key.botId,
           channelId: key.channelId,
           threadId: key.threadId,
           aborted,
@@ -174,7 +181,7 @@ class ChatOpsRunRegistry {
   }
 
   private threadCacheKey(key: ChatOpsThreadKey): string {
-    return `${key.provider}::${key.channelId}::${key.threadId}`;
+    return `${key.provider}::${key.botId}::${key.channelId}::${key.threadId}`;
   }
 }
 

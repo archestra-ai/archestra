@@ -124,6 +124,39 @@ export class ResourcePermissions {
     return expandScopedGrants({ policies, subjectKeys: keys });
   }
 
+  /** Check a list of organization-owned environments with one policy read. */
+  static async getUsableEnvironmentIds(params: {
+    organizationId: string;
+    userId: string;
+    environmentIds: string[];
+  }): Promise<Set<string>> {
+    if (params.environmentIds.length === 0) return new Set();
+    const subjects = await ResourcePermissions.getSubjects(params);
+    if (subjects.length === 0) return new Set();
+    const policies = await ResourcePermissionPolicyModel.findApplicableBatch({
+      organizationId: params.organizationId,
+      resource: "environment",
+      scopes: params.environmentIds,
+    });
+    const grants = expandScopedGrants({
+      policies,
+      subjectKeys: new Set(subjects.map(subjectKey)),
+    });
+    return new Set(
+      params.environmentIds.filter((scope) =>
+        hasScopedPermission({
+          grants,
+          required: {
+            organizationId: params.organizationId,
+            resource: "environment",
+            scope,
+            action: "use",
+          },
+        }),
+      ),
+    );
+  }
+
   /** Resolve a catalog page in batches; never query once per listed resource. */
   static async getCatalogActions(params: {
     organizationId: string;

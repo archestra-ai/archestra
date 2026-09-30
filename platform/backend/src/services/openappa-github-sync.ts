@@ -206,7 +206,7 @@ export async function updateAppaGithubSync(params: {
   if (!row || row.interval === null)
     throw new ApiError(409, "Connect a GitHub source first");
   if (params.action === "sync")
-    await OpenAppaGithubSyncModel.enqueue(params.organizationId);
+    await syncAppaGithubPolicy(params.organizationId);
   else
     await OpenAppaGithubSyncModel.setInterval(
       params.organizationId,

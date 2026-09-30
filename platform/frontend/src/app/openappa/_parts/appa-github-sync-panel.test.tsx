@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -61,8 +62,13 @@ function show(content = <AppaGithubSyncPanel />) {
 }
 
 test("syncs on demand and shows the server's failure while retaining the source", async () => {
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
   server.use(
     http.patch(url, async ({ request }) => {
+      await pending;
       expect(await request.json()).toEqual({ action: "sync" });
       state = {
         ...state,
@@ -73,10 +79,15 @@ test("syncs on demand and shows the server's failure while retaining the source"
   );
   show();
   fireEvent.click(await screen.findByRole("button", { name: "Sync now" }));
+  expect(
+    await screen.findByRole("button", { name: "Syncing…" }),
+  ).toBeDisabled();
+  finish();
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "GitHub returned HTTP 403",
   );
   expect(screen.getByRole("link", { name: /example\/policies/ })).toBeVisible();
+  expect(toast.success).not.toHaveBeenCalled();
 });
 
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {

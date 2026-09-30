@@ -46,6 +46,7 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -143,26 +144,18 @@ export function AppaGithubSyncPanel() {
                         className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground"
                         aria-live="polite"
                       >
-                        {source.lastSyncError ? (
-                          <InlineNotice variant="error">
-                            <AlertTriangle className="size-4 shrink-0" />
-                            <span className="font-medium">Sync failed</span>
-                            <InlineNoticeText>
-                              {source.lastSyncError}
-                            </InlineNoticeText>
-                          </InlineNotice>
-                        ) : (
-                          <p className="flex items-center gap-1.5">
+                        <p className="flex items-center gap-1.5">
+                          {!source.lastSyncError && (
                             <CheckCircle2 className="size-3.5" />
-                            <span>
-                              {source.lastSyncedAt
-                                ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
-                                : connected
-                                  ? "Waiting for the first sync"
-                                  : "Automatic updates stopped"}
-                            </span>
-                          </p>
-                        )}
+                          )}
+                          <span>
+                            {source.lastSyncedAt
+                              ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
+                              : connected
+                                ? "Waiting for the first sync"
+                                : "Automatic updates stopped"}
+                          </span>
+                        </p>
                         {source.sourceCommit && (
                           <a
                             className="font-mono underline underline-offset-4"
@@ -212,13 +205,36 @@ export function AppaGithubSyncPanel() {
                           disabled={update.isPending}
                           onClick={() => update.mutate({ action: "sync" })}
                         >
-                          <RefreshCw className="size-3.5" />
-                          <span>Sync now</span>
+                          <RefreshCw
+                            className={cn(
+                              "size-3.5",
+                              update.isPending &&
+                                update.variables?.action === "sync" &&
+                                "animate-spin",
+                            )}
+                          />
+                          <span>
+                            {update.isPending &&
+                            update.variables?.action === "sync"
+                              ? "Syncing…"
+                              : "Sync now"}
+                          </span>
                         </Button>
                       )}
                     </div>
                   )}
                 </div>
+                {source.lastSyncError && (
+                  <div className="px-4 pb-4">
+                    <InlineNotice variant="error">
+                      <AlertTriangle className="size-4 shrink-0" />
+                      <span className="font-medium">Could not sync policy</span>
+                      <InlineNoticeText>
+                        {source.lastSyncError}
+                      </InlineNoticeText>
+                    </InlineNotice>
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t bg-muted/30 px-4 py-2">
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     {hasPolicy

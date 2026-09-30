@@ -75,10 +75,11 @@ export function useUpdateAppaGithubSync() {
       return data;
     },
     onSettled: () => invalidatePolicyViews(client),
-    onSuccess: (_data, body) => {
+    onSuccess: (data, body) => {
+      if (body.action === "sync" && data?.source?.lastSyncError) return;
       toast.success(
         body.action === "sync"
-          ? "Sync queued"
+          ? "Sync complete"
           : body.action === "disconnect"
             ? "Sync stopped. The last accepted policy is kept."
             : "Sync schedule updated",

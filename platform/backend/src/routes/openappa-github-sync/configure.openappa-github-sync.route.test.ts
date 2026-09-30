@@ -535,11 +535,32 @@ describe("APPA GitHub sync", () => {
     });
   });
 
-  test("concurrent manual and scheduled requests enqueue one pull", async () => {
+  test("manual sync returns the completed pull and its failures immediately", async () => {
+    await configure();
+    const success = await action({ action: "sync" });
+    expect(success.statusCode).toBe(200);
+    expect(success.json().source).toMatchObject({
+      sourceCommit: commit,
+      lastSyncError: null,
+    });
+    expect(success.json().source.lastSyncedAt).toBeTruthy();
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/policies/commits/:ref",
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    );
+    const failure = await action({ action: "sync" });
+    expect(failure.statusCode).toBe(200);
+    expect(failure.json().source.lastSyncError).toContain("404");
+    expect(failure.json().source.sourceCommit).toBe(commit);
+  });
+
+  test("concurrent scheduled requests enqueue one pull", async () => {
     await configure();
     await Promise.all([
-      action({ action: "sync" }),
-      action({ action: "sync" }),
+      checkDueAppaGithubSyncs(),
+      checkDueAppaGithubSyncs(),
       checkDueAppaGithubSyncs(),
     ]);
     const tasks = await db

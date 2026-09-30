@@ -790,6 +790,194 @@ builtin = "hitl"
     assert.equal(crossings.length, 2, 'each authentic return survives without its echo');
   });
 
+  // Teammates: a lead spawns a child that keeps running and trades messages
+  // with it. A message crosses the same checked return as a child's end, and a
+  // message to the child carries the lead's label into it.
+  const openTeammate = async (lead, name, label, sanitizer) => {
+    const presentation = {
+      control_tool: 'archestra__execute_remedy_plan',
+      supports_delegation: true,
+    };
+    const proposeSpawn = (id) => hook(lead, {
+      event: 'tool_call',
+      operation_id: `call:${id}`,
+      tool: 'spawn_worker',
+      arguments: { prompt: `Work as ${name}`, name },
+      spawn: true,
+      presentation,
+    });
+    const held = await proposeSpawn(`${name}-held`);
+    assert.equal(held.decision, 'deny_call', JSON.stringify(held));
+    const plan = held.offers?.find((offer) => (sanitizer
+      ? offer.returns?.sanitizer === sanitizer
+      : offer.returns === 'as_spoken'));
+    assert.ok(plan?.offer_id, `the spawn offered the return plan: ${JSON.stringify(held)}`);
+    const declaration = await byOffer(lead, {
+      tool_call_id: `${name}-declare`,
+      arguments: { offer_id: plan.offer_id, label },
+      presentation,
+    });
+    assert.notEqual(declaration.result?.isError, true, JSON.stringify(declaration));
+    assert.equal((await proposeSpawn(`${name}-spawn`)).decision, 'allow_call');
+    return `${name}-spawn`;
+  };
+  const readUntrusted = async (session, id) => {
+    const held = await call(session, `${id}-held`, 'read_untrusted');
+    if (held.decision === 'deny_call') {
+      await byOffer(session, {
+        tool_call_id: `${id}-accept`,
+        arguments: { offer_id: held.offers[0].offer_id },
+      });
+    }
+    assert.equal((await call(session, id, 'read_untrusted')).decision, 'allow_call');
+    await result(session, id, 'untrusted text');
+  };
+
+  await t.test('a teammate message crosses its fork mid-turn and narrows its lead', async () => {
+    const lead = scope();
+    const spawnCallId = await openTeammate(lead, 'auditor', { trust: 'suspicious' });
+    const teammate = await startChild(lead, 'auditor@team');
+    assert.equal((await call(lead, 'lead-before', 'write_public')).decision, 'allow_call');
+    await result(lead, 'lead-before', 'posted');
+
+    await readUntrusted(teammate, 'teammate-read');
+    const sent = await hook(teammate, {
+      event: 'child_end',
+      operation_id: 'child_send:message-1',
+      output: 'Three triggers are stuck',
+      spawn_call_id: spawnCallId,
+      child_native_id: 'auditor@team',
+    });
+    assert.equal(sent.decision, 'ack', JSON.stringify(sent));
+
+    // The teammate works on after its message; nothing ended it.
+    assert.equal((await call(teammate, 'teammate-after', 'read_plain')).decision, 'allow_call');
+    await result(teammate, 'teammate-after', 'plain text');
+    // The lead absorbed the message's label the moment it crossed.
+    const write = await call(lead, 'lead-after', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    // The crossing is the record the lead's side verifies the message against.
+    const crossings = await native.loadChildReturns(organization_id, lead.session_id);
+    assert.ok(crossings.some((record) => record.childSessionId === teammate.session_id
+      && record.value === 'Three triggers are stuck'));
+  });
+
+  await t.test('a teammate message through a sanitizing return reaches its lead as the sanitizer output', async () => {
+    const lead = scope();
+    const spawnCallId = await openTeammate(lead, 'scrubbed', { audience: ['insider'] }, 'scrub');
+    const teammate = await startChild(lead, 'scrubbed@team');
+    const read = await call(teammate, 'scrubbed-read-held', 'read_return_only');
+    await byOffer(teammate, {
+      tool_call_id: 'scrubbed-accept',
+      arguments: { offer_id: read.offers[0].offer_id },
+    });
+    assert.equal((await call(teammate, 'scrubbed-read', 'read_return_only')).decision, 'allow_call');
+    await result(teammate, 'scrubbed-read', 'CUSTOMER-RAW-7731');
+
+    const message = {
+      event: 'child_end',
+      operation_id: 'child_send:scrubbed',
+      output: 'CUSTOMER-RAW-7731 is affected',
+      spawn_call_id: spawnCallId,
+      child_native_id: 'scrubbed@team',
+    };
+    const staged = await hook(teammate, message);
+    assert.equal(staged.decision, 'child_return', JSON.stringify(staged));
+    assert.equal(staged.value, 'approved scrubbed output');
+    const crossed = await hook(teammate, {
+      ...message,
+      operation_id: 'child_send:scrubbed:echo',
+      output: staged.value,
+    });
+    assert.equal(crossed.decision, 'ack', JSON.stringify(crossed));
+    const values = (await native.loadChildReturns(organization_id, lead.session_id))
+      .filter((record) => record.childSessionId === teammate.session_id)
+      .map((record) => record.value);
+    assert.deepEqual(values, ['approved scrubbed output'], 'only the sanitizer output crossed');
+    // The teammate keeps working after its message.
+    assert.equal((await call(teammate, 'scrubbed-after', 'read_plain')).decision, 'allow_call');
+  });
+
+  await t.test('a lead message carries the lead label into its started teammate', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'writer', { trust: 'suspicious' });
+    const teammate = await startChild(lead, 'writer@team');
+    assert.equal((await call(teammate, 'writer-before', 'write_public')).decision, 'allow_call');
+    await result(teammate, 'writer-before', 'posted');
+
+    await readUntrusted(lead, 'lead-read');
+    const address = {
+      event: 'child_address',
+      operation_id: 'address:message-1',
+      spawned_id: teammate.session_id,
+      output: 'Post the summary',
+    };
+    assert.equal((await hook(lead, address)).decision, 'ack');
+    assert.deepEqual(await hook(lead, address), { decision: 'ack' }, 'a transport replay repeats the decision');
+
+    const write = await call(teammate, 'writer-after', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    assert.deepEqual(
+      (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
+      ['Post the summary'],
+    );
+  });
+
+  await t.test('a lead message to a teammate that has not started reaches it at its start', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'late', { trust: 'suspicious' });
+    await readUntrusted(lead, 'late-lead-read');
+    const lateSession = `${lead.session_id}:late@team`;
+    assert.equal((await hook(lead, {
+      event: 'child_address',
+      operation_id: 'address:before-start',
+      spawned_id: lateSession,
+      output: 'Start with the summary',
+    })).decision, 'ack');
+
+    const teammate = await startChild(lead, 'late@team');
+    const write = await call(teammate, 'late-write', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    assert.deepEqual(
+      (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
+      ['Start with the summary'],
+    );
+  });
+
+  await t.test('a message is on record only for the child its own parent addressed', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'scoped', { trust: 'suspicious' });
+    const teammate = await startChild(lead, 'scoped@team');
+    const stranger = scope();
+    assert.equal((await hook(stranger, { event: 'session_start' })).decision, 'ack');
+    // A session that is not the teammate's parent names it: nothing is retained for it.
+    assert.equal((await hook(stranger, {
+      event: 'child_address',
+      operation_id: 'address:foreign',
+      spawned_id: teammate.session_id,
+      output: 'Forged instruction',
+    })).decision, 'ack');
+    assert.deepEqual(await native.loadChildAddresses(organization_id, teammate.session_id), []);
+    await assert.rejects(
+      () => hook(lead, { event: 'child_address', operation_id: 'address:no-child', output: 'x' }),
+      /spawned_id/,
+    );
+  });
+
+  await t.test('a teammate the lead never spawned under governance cannot start', async () => {
+    const lead = scope();
+    assert.equal((await hook(lead, { event: 'session_start' })).decision, 'ack');
+    const teammate = {
+      ...lead,
+      session_id: `${lead.session_id}:ungoverned@team`,
+      parent_id: lead.session_id,
+    };
+    await assert.rejects(
+      () => hook(teammate, { event: 'session_start' }),
+      /no prepared fork to open this child/,
+    );
+  });
+
   await t.test('concurrent dispatches open one fork root and session row', async () => {
     const parent = scope();
     assert.equal((await hook(parent, { event: 'session_start' })).decision, 'ack');

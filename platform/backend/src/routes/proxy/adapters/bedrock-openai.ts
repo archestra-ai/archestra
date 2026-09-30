@@ -29,6 +29,7 @@ import {
   converseResponseToOpenai,
   createConverseToOpenaiSseEncoder,
   type OpenaiContext,
+  validateTranslatedConverseRequest,
 } from "./bedrock-openai-translator";
 
 type BedrockRequest = Bedrock.Types.ConverseRequest;
@@ -130,29 +131,10 @@ class BedrockOpenaiResponseAdapter
       refusalMessage,
       contentMessage,
     );
-    const usage = this.inner.getUsage();
-    return {
-      id: this.ctx.chatcmplId,
-      object: "chat.completion",
-      created: this.ctx.createdUnix,
-      model: this.ctx.requestedModel,
-      choices: [
-        {
-          index: 0,
-          logprobs: null,
-          finish_reason: "stop",
-          message: {
-            role: "assistant",
-            content: contentMessage,
-          },
-        },
-      ],
-      usage: {
-        prompt_tokens: usage.inputTokens ?? 0,
-        completion_tokens: usage.outputTokens ?? 0,
-        total_tokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-      },
-    } as unknown as BedrockResponse;
+    return converseResponseToOpenai(
+      this.rewrittenInner,
+      this.ctx,
+    ) as unknown as BedrockResponse;
   }
 }
 
@@ -292,6 +274,14 @@ export function makeBedrockOpenaiAdapterFactory(
 > {
   return {
     ...bedrockAdapterFactory,
+    async execute(client, request) {
+      validateTranslatedConverseRequest(request);
+      return bedrockAdapterFactory.execute(client, request);
+    },
+    async executeStream(client, request) {
+      validateTranslatedConverseRequest(request);
+      return bedrockAdapterFactory.executeStream(client, request);
+    },
     createResponseAdapter(response) {
       return new BedrockOpenaiResponseAdapter(response, ctx);
     },

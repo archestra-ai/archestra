@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-09-17
+lastUpdated: 2026-09-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -86,7 +86,7 @@ The prefix before `:` is the provider. The value after `:` is the provider's nat
 
 The `/models` response includes model-router-compatible text models for the providers mapped on the virtual key. Providers that use native request formats, including Anthropic, Bedrock, Gemini, and Cohere, are translated between OpenAI request/response formats and provider-native formats before forwarding.
 
-Model Router translation forwards inline non-text content where the provider's native format supports it: Gemini (base64 data URL images, audio, and files), Anthropic (base64 data URL images and PDF files, plus http(s) image URLs), Cohere (images via base64 data URI or web URL in user messages), and Bedrock (base64 data URL images). Anthropic also forwards images returned inside tool results. Content the provider format cannot represent is dropped — for example http(s) image URLs to Gemini (its `fileData` accepts only Files API or `gs://` URIs), audio to Anthropic, and non-text content in Gemini and Cohere tool results.
+Model Router translation forwards inline non-text content where the provider's native format supports it: Gemini (base64 data URL images, audio, and files), Anthropic (base64 data URL images and PDF files, plus http(s) image URLs), Cohere (images via base64 data URI or web URL in user messages), and Bedrock (inline base64 images and supported documents). Anthropic also forwards images returned inside tool results. Content the provider format cannot represent is dropped — for example http(s) image URLs to Gemini (its `fileData` accepts only Files API or `gs://` URIs), audio to Anthropic, and non-text content in Gemini and Cohere tool results.
 
 ## OpenAI
 
@@ -841,16 +841,36 @@ A key can also point at a custom endpoint instead, for a VPC or PrivateLink setu
 
 ### Prompt Caching
 
-Bedrock can reuse the unchanging prefix of a request instead of reprocessing it every turn. That prefix is the system prompt, tool definitions, and earlier turns. Reuse needs an explicit cache marker, and who sets it depends on how the request reaches Bedrock:
+Bedrock supports explicit caching on selected Claude and Nova models. Some models also offer implicit caching. Repeating a prefix does not guarantee a cache hit.
 
-- Chat conversations are marked automatically. Archestra marks the stable prefix and the most recent turn, so each turn reuses what the one before it wrote. There is no setting to turn that off.
-- Every other path forwards the markers its caller set, unchanged. On the LLM Proxy that leaves the decision with your own client — Claude Code, for example, marks its own requests. Agent runs reached over A2A, including the Slack, Teams, and Telegram integrations, set no marker of their own, so they go uncached unless the caller adds one.
+Chat conversations and headless agent runs apply Archestra's automatic breakpoint policy. Model Router requests use the markers you supply. The router does not add automatic checkpoints.
 
-Bedrock only caches for Claude and the Nova text models. Other families reject a marked request outright, so Archestra marks none of them. An unfamiliar model forfeits the cache rather than failing.
+For Bedrock Chat Completions and Responses, add `cache_control` to a content part or message. Function tools can also carry markers on supported Claude models. Archestra translates each marker into a standalone Converse `cachePoint` after the marked content.
 
-A cached prefix lives five minutes by default. Archestra asks for the one-hour lifetime on Claude 4.5, the only generation Bedrock accepts it on. Any gap longer than the lifetime expires the prefix, and the next request pays to write all of it again.
+```json
+{
+  "model": "bedrock:us.anthropic.claude-sonnet-4-6",
+  "input": [{
+    "role": "user",
+    "content": [
+      {"type": "input_text", "text": "A stable reference document...", "cache_control": {"type": "ephemeral", "ttl": "1h"}},
+      {"type": "input_text", "text": "Summarize the reference."}
+    ]
+  }]
+}
+```
 
-Cache tokens are billed differently from ordinary input. Reads cost a tenth of the input price, five-minute writes 1.25x, and one-hour writes 2x. The longer lifetime therefore trades a higher write price for fewer rewrites, and pays off whenever it keeps a prefix alive across a gap that would otherwise have expired it. Archestra estimates with those ratios when a model has no cache prices of its own — see [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for setting exact ones and reading cache spend back.
+Claude supports four checkpoints across tools, system content, and messages combined. Longer TTLs must precede shorter TTLs in that order. Nova Pro, Nova Lite, and Nova 2 Lite support five-minute checkpoints in system content and messages. Their cacheable prefixes have a 20K-token ceiling. AWS enforces token thresholds and regional availability.
+
+The router rejects unsupported marker types, TTLs, locations, and excess checkpoints. Unknown model IDs with explicit markers also return an error. Use documented foundation model IDs or geographic/global system inference profile IDs. Opaque application inference profiles require native Converse, where AWS validates their capabilities.
+
+Supported models and TTLs can change. See [AWS prompt caching](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html) and the model card. Internal chat's automatic policy uses a separate model allowlist.
+
+Bedrock Responses preserves ordered text, image, and file parts. Images require supported base64 data URLs. Files accept base64 data URLs or base64 bytes with a supported filename extension. PDF files remain document blocks; JSON files become text-format document blocks. Document-only user messages receive companion text. File IDs, external file/image URLs, and unsupported parts return an error. AWS validates each model's multimodal support.
+
+Native Converse usage retains `cacheReadInputTokens`, `cacheWriteInputTokens`, and `cacheDetails`. Translated input totals include fresh input, cache reads, and cache writes. Chat Completions reports reads in `prompt_tokens_details.cached_tokens`; Responses uses `input_tokens_details.cached_tokens`. Both details objects expose cache writes through the Archestra extensions `cache_write_tokens` and `cache_write_1h_tokens`.
+
+For example, send the same long reference twice within its TTL. Check the returned usage to see whether AWS reports cache writes or reads. Marker forwarding alone does not prove caching occurred. See [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for cache prices and recorded spend.
 
 ### Authentication Methods
 

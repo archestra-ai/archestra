@@ -42,6 +42,7 @@ export const ToolCallSchema = z
 
 const ContentPartRefusalSchema = z
   .object({
+    cache_control: z.unknown().optional(),
     type: z.enum(["refusal"]),
     refusal: z.string(),
   })
@@ -51,6 +52,7 @@ const ContentPartRefusalSchema = z
 
 const ContentPartTextSchema = z
   .object({
+    cache_control: z.unknown().optional(),
     type: z.enum(["text"]),
     text: z.string(),
   })
@@ -60,6 +62,7 @@ const ContentPartTextSchema = z
 
 const ContentPartImageSchema = z
   .object({
+    cache_control: z.unknown().optional(),
     type: z.enum(["image_url"]),
     image_url: z
       .object({
@@ -92,11 +95,13 @@ const ContentPartInputAudioSchema = z
 
 const ContentPartFileSchema = z
   .object({
+    cache_control: z.unknown().optional(),
     type: z.enum(["file"]),
     file: z
       .object({
         file_data: z.string().optional(),
         file_id: z.string().optional(),
+        file_url: z.string().optional(),
         filename: z.string().optional(),
       })
       .describe(
@@ -121,6 +126,7 @@ const ContentPartSchema = z
 const DeveloperMessageParamSchema = z
   .object({
     content: z.union([z.string(), z.array(ContentPartTextSchema)]),
+    cache_control: z.unknown().optional(),
     role: z.enum(["developer"]),
     name: z.string().optional(),
   })
@@ -131,6 +137,7 @@ const DeveloperMessageParamSchema = z
 const SystemMessageParamSchema = z
   .object({
     content: z.union([z.string(), z.array(ContentPartTextSchema)]),
+    cache_control: z.unknown().optional(),
     role: z.enum(["system"]),
     name: z.string().optional(),
   })
@@ -141,6 +148,7 @@ const SystemMessageParamSchema = z
 const UserMessageParamSchema = z
   .object({
     content: z.union([z.string(), z.array(ContentPartSchema)]),
+    cache_control: z.unknown().optional(),
     role: z.enum(["user"]),
     name: z.string().optional(),
   })
@@ -150,6 +158,7 @@ const UserMessageParamSchema = z
 
 export const AssistantMessageParamSchema = z
   .object({
+    cache_control: z.unknown().optional(),
     role: z.enum(["assistant"]),
     audio: z
       .object({
@@ -191,6 +200,7 @@ export const AssistantMessageParamSchema = z
 
 const ToolMessageParamSchema = z
   .object({
+    cache_control: z.unknown().optional(),
     role: z.enum(["tool"]),
     content: z.union([
       z.string(),
@@ -204,6 +214,7 @@ const ToolMessageParamSchema = z
 
 const FunctionMessageParamSchema = z
   .object({
+    cache_control: z.unknown().optional(),
     role: z.enum(["function"]),
     content: z.string().nullable(),
     name: z.string(),

@@ -1,0 +1,591 @@
+import { EventStreamCodec } from "@smithy/eventstream-codec";
+import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
+import Fastify, { type FastifyInstance } from "fastify";
+import {
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from "fastify-type-provider-zod";
+import { HttpResponse, http } from "msw";
+import config from "@/config";
+import {
+  InteractionModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+  VirtualApiKeyModel,
+} from "@/models";
+import { accessGrants, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
+import { ApiError } from "@/types";
+import bedrockRoutes from "./bedrock";
+import modelRouterRoutes from "./model-router";
+
+// The real route, credentials selection, adapter, client and logging execute.
+// Only the HTTP upstream is mocked; unmatched network requests fail the test.
+// biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
+const server = useMswServer();
+const codec = new EventStreamCodec(toUtf8, fromUtf8);
+const modelId = "us.anthropic.claude-sonnet-4-6";
+const cache_control = { type: "ephemeral" };
+const checkpoint = { cachePoint: { type: "default" } };
+const upstreamOrigin = "https://bedrock.example.test";
+
+const bedrockTest = test.extend<{
+  router: { app: FastifyInstance; agentId: string; token: string };
+}>({
+  router: async (
+    { makeOrganization, makeAgent, makeSecret, makeLlmProviderApiKey },
+    use,
+  ) => {
+    config.llm.bedrock.baseUrl = upstreamOrigin;
+    config.llm.bedrock.iamAuthEnabled = false;
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+    });
+    const model = await ModelModel.upsert({
+      externalId: `bedrock/${modelId}`,
+      provider: "bedrock",
+      modelId,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      lastSyncedAt: new Date(),
+    });
+    const secret = await makeSecret({
+      secret: { apiKey: "test-bedrock-bearer" },
+    });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "bedrock",
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    const virtual = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Mocked Bedrock router",
+      ...accessGrants("org"),
+      providerApiKeys: [{ provider: "bedrock", providerApiKeyId: key.id }],
+    });
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _req, reply) =>
+      reply.code(error instanceof ApiError ? error.statusCode : 500).send({
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          type:
+            error instanceof ApiError
+              ? error.type
+              : "api_internal_server_error",
+        },
+      }),
+    );
+    await app.register(modelRouterRoutes);
+    await app.register(bedrockRoutes);
+    try {
+      await use({ app, agentId: agent.id, token: virtual.value });
+    } finally {
+      await app.close();
+    }
+  },
+});
+
+function binaryEvents(events: Array<[string, unknown]>): Uint8Array {
+  const parts = events.map(([type, body]) =>
+    codec.encode({
+      headers: {
+        ":event-type": { type: "string", value: type },
+        ":content-type": { type: "string", value: "application/json" },
+        ":message-type": { type: "string", value: "event" },
+      },
+      body: fromUtf8(JSON.stringify(body)),
+    }),
+  );
+  const result = new Uint8Array(parts.reduce((sum, p) => sum + p.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.length;
+  }
+  return result;
+}
+
+function sseEvents(body: string): Array<Record<string, unknown>> {
+  return body
+    .split("\n")
+    .filter((line) => line.startsWith("data: {"))
+    .map((line) => JSON.parse(line.slice(6)));
+}
+
+for (const surface of ["responses", "chat", "converse"] as const) {
+  for (const stream of [false, true]) {
+    bedrockTest(
+      `${surface}, stream=${stream}: preserves checkpoints, cache usage and logged native usage`,
+      async ({ router }) => {
+        for (const [reads, writes] of [
+          [0, 0],
+          [9000, 0],
+          [0, 9000],
+          [8000, 1000],
+        ]) {
+          const usage = {
+            inputTokens: 12,
+            outputTokens: 3,
+            totalTokens: 15 + reads + writes,
+            cacheReadInputTokens: reads,
+            cacheWriteInputTokens: writes,
+            cacheDetails: writes ? [{ ttl: "1h", inputTokens: writes }] : [],
+          };
+          let upstream: Record<string, unknown> | undefined;
+          server.use(
+            http.post(
+              `${upstreamOrigin}/model/:model/${stream ? "converse-stream" : "converse"}`,
+              async ({ request }) => {
+                upstream = (await request.json()) as Record<string, unknown>;
+                if (!stream)
+                  return HttpResponse.json({
+                    output: {
+                      message: {
+                        role: "assistant",
+                        content: [{ text: "answer" }],
+                      },
+                    },
+                    stopReason: "end_turn",
+                    usage,
+                  });
+                return new HttpResponse(
+                  binaryEvents([
+                    ["messageStart", { role: "assistant" }],
+                    [
+                      "contentBlockDelta",
+                      { contentBlockIndex: 0, delta: { text: "answer" } },
+                    ],
+                    ["contentBlockStop", { contentBlockIndex: 0 }],
+                    ["messageStop", { stopReason: "end_turn" }],
+                    ["metadata", { usage }],
+                  ]),
+                  {
+                    headers: {
+                      "content-type": "application/vnd.amazon.eventstream",
+                    },
+                  },
+                );
+              },
+            ),
+          );
+          const payload =
+            surface === "responses"
+              ? {
+                  model: `bedrock:${modelId}`,
+                  stream,
+                  input: [
+                    {
+                      role: "user",
+                      content: [
+                        { type: "input_text", text: "prefix", cache_control },
+                      ],
+                    },
+                  ],
+                }
+              : surface === "chat"
+                ? {
+                    model: `bedrock:${modelId}`,
+                    stream,
+                    stream_options: { include_usage: true },
+                    messages: [
+                      {
+                        role: "user",
+                        content: [
+                          { type: "text", text: "prefix", cache_control },
+                        ],
+                      },
+                    ],
+                  }
+                : {
+                    modelId,
+                    messages: [
+                      {
+                        role: "user",
+                        content: [{ text: "prefix" }, checkpoint],
+                      },
+                    ],
+                  };
+          const url =
+            surface === "converse"
+              ? `/v1/bedrock/${router.agentId}/${stream ? "converse-stream" : "converse"}`
+              : `/v1/model-router/${router.agentId}/${surface === "chat" ? "chat/completions" : "responses"}`;
+          const response = await router.app.inject({
+            method: "POST",
+            url,
+            headers: {
+              authorization: `Bearer ${router.token}`,
+              "user-agent": "test-client",
+            },
+            payload,
+          });
+          expect(response.statusCode, response.body).toBe(200);
+          expect(upstream?.messages).toEqual([
+            { role: "user", content: [{ text: "prefix" }, checkpoint] },
+          ]);
+          if (!stream && surface === "converse")
+            expect(response.json().usage).toEqual(usage);
+          if (surface !== "converse") {
+            const wire = !stream
+              ? response.json().usage
+              : surface === "responses"
+                ? (
+                    sseEvents(response.body).find(
+                      (e) => e.type === "response.completed",
+                    )?.response as { usage: unknown }
+                  ).usage
+                : sseEvents(response.body).find((e) => e.usage)?.usage;
+            expect(wire).toMatchObject(
+              surface === "responses"
+                ? {
+                    input_tokens: 12 + reads + writes,
+                    total_tokens: 15 + reads + writes,
+                    input_tokens_details: {
+                      cached_tokens: reads,
+                      ...(writes
+                        ? {
+                            cache_write_tokens: writes,
+                            cache_write_1h_tokens: writes,
+                          }
+                        : {}),
+                    },
+                  }
+                : {
+                    prompt_tokens: 12 + reads + writes,
+                    total_tokens: 15 + reads + writes,
+                    ...(reads || writes
+                      ? {
+                          prompt_tokens_details: {
+                            cached_tokens: reads,
+                            ...(writes
+                              ? {
+                                  cache_write_tokens: writes,
+                                  cache_write_1h_tokens: writes,
+                                }
+                              : {}),
+                          },
+                        }
+                      : {}),
+                  },
+            );
+          }
+          const logged = await InteractionModel.findAllPaginated({
+            limit: 1,
+            offset: 0,
+          });
+          expect(logged.data[0]).toMatchObject({
+            type: "bedrock:converse",
+            inputTokens: 12,
+            outputTokens: 3,
+            cacheReadTokens: reads,
+            cacheWriteTokens: writes,
+          });
+          expect(logged.data[0].response).toMatchObject({ usage });
+        }
+      },
+    );
+  }
+}
+
+bedrockTest(
+  "Responses mixed files, images and a growing tool transcript retain their order at the real HTTP boundary",
+  async ({ router }) => {
+    const captured: Record<string, unknown>[] = [];
+    server.use(
+      http.post(
+        `${upstreamOrigin}/model/:model/converse`,
+        async ({ request }) => {
+          captured.push((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({
+            output: {
+              message: { role: "assistant", content: [{ text: "ok" }] },
+            },
+            stopReason: "end_turn",
+            usage: { inputTokens: 10, outputTokens: 2 },
+          });
+        },
+      ),
+    );
+    const first = {
+      role: "user",
+      content: [
+        { type: "input_text", text: "prefix", cache_control },
+        { type: "input_image", image_url: "data:image/png;base64,aGVsbG8=" },
+        { type: "input_file", file_data: "data:application/pdf;base64,cGRm" },
+        { type: "input_file", file_data: "data:application/json;base64,e30=" },
+        { type: "input_text", text: "question" },
+      ],
+    };
+    for (const result of ["tool result", "tool result plus more content"]) {
+      const response = await router.app.inject({
+        method: "POST",
+        url: `/v1/model-router/${router.agentId}/responses`,
+        headers: { authorization: `Bearer ${router.token}` },
+        payload: {
+          model: `bedrock:${modelId}`,
+          input: [
+            first,
+            {
+              type: "function_call",
+              call_id: "call_1",
+              name: "read_file",
+              arguments: "{}",
+            },
+            {
+              type: "function_call_output",
+              call_id: "call_1",
+              output: result,
+              cache_control,
+            },
+          ],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(captured.at(-1)?.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { text: "prefix" },
+            checkpoint,
+            { image: { format: "png", source: { bytes: "aGVsbG8=" } } },
+            {
+              document: {
+                format: "pdf",
+                name: "document",
+                source: { bytes: "cGRm" },
+              },
+            },
+            {
+              document: {
+                format: "txt",
+                name: "document",
+                source: { bytes: "e30=" },
+              },
+            },
+            { text: "question" },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            { toolUse: { toolUseId: "call_1", name: "read_file", input: {} } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              toolResult: { toolUseId: "call_1", content: [{ text: result }] },
+            },
+            checkpoint,
+          ],
+        },
+      ]);
+    }
+  },
+);
+
+bedrockTest(
+  "rejects unresolved files before making an upstream HTTP request",
+  async ({ router }) => {
+    const response = await router.app.inject({
+      method: "POST",
+      url: `/v1/model-router/${router.agentId}/responses`,
+      headers: { authorization: `Bearer ${router.token}` },
+      payload: {
+        model: `bedrock:${modelId}`,
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_file", file_id: "file_unresolved" }],
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json().error.message).toContain("cannot be resolved");
+  },
+);
+
+for (const stream of [false, true]) {
+  bedrockTest(
+    `Responses policy refusal retains cache usage and native logs, stream=${stream}`,
+    async ({ router, makeTool, makeToolPolicy }) => {
+      const tool = await makeTool({
+        name: "read_file",
+        agentId: router.agentId,
+      });
+      await makeToolPolicy(tool.id, {
+        action: "block_always",
+        conditions: [],
+        reason: "File access blocked by policy",
+      });
+      const usage = {
+        inputTokens: 12,
+        outputTokens: 3,
+        totalTokens: 9015,
+        cacheReadInputTokens: 8000,
+        cacheWriteInputTokens: 1000,
+        cacheDetails: [{ ttl: "1h", inputTokens: 1000 }],
+      };
+      server.use(
+        http.post(
+          `${upstreamOrigin}/model/:model/${stream ? "converse-stream" : "converse"}`,
+          () => {
+            if (!stream)
+              return HttpResponse.json({
+                output: {
+                  message: {
+                    role: "assistant",
+                    content: [
+                      {
+                        toolUse: {
+                          toolUseId: "call_blocked",
+                          name: "read_file",
+                          input: {},
+                        },
+                      },
+                    ],
+                  },
+                },
+                stopReason: "tool_use",
+                usage,
+              });
+            return new HttpResponse(
+              binaryEvents([
+                ["messageStart", { role: "assistant" }],
+                [
+                  "contentBlockStart",
+                  {
+                    contentBlockIndex: 0,
+                    start: {
+                      toolUse: { toolUseId: "call_blocked", name: "read_file" },
+                    },
+                  },
+                ],
+                [
+                  "contentBlockDelta",
+                  { contentBlockIndex: 0, delta: { toolUse: { input: "{}" } } },
+                ],
+                ["contentBlockStop", { contentBlockIndex: 0 }],
+                ["messageStop", { stopReason: "tool_use" }],
+                ["metadata", { usage }],
+              ]),
+              {
+                headers: {
+                  "content-type": "application/vnd.amazon.eventstream",
+                },
+              },
+            );
+          },
+        ),
+      );
+      const response = await router.app.inject({
+        method: "POST",
+        url: `/v1/model-router/${router.agentId}/responses`,
+        headers: { authorization: `Bearer ${router.token}` },
+        payload: {
+          model: `bedrock:${modelId}`,
+          stream,
+          input: "Read the file",
+          tools: [
+            {
+              type: "function",
+              name: "read_file",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = stream
+        ? (sseEvents(response.body)
+            .filter((e) => e.type === "response.completed")
+            .at(-1)?.response as Record<string, unknown>)
+        : response.json();
+      expect(JSON.stringify(body.output)).toContain(
+        "File access blocked by policy",
+      );
+      expect(JSON.stringify(body.output)).not.toContain("function_call");
+      expect(body.usage).toMatchObject({
+        input_tokens: 9012,
+        total_tokens: 9015,
+        input_tokens_details: {
+          cached_tokens: 8000,
+          cache_write_tokens: 1000,
+          cache_write_1h_tokens: 1000,
+        },
+      });
+      const logged = await InteractionModel.findAllPaginated({
+        limit: 1,
+        offset: 0,
+      });
+      expect(logged.data[0].response).toMatchObject({
+        usage,
+        stopReason: "end_turn",
+      });
+      expect(JSON.stringify(logged.data[0].response)).toContain(
+        "File access blocked by policy",
+      );
+      expect(JSON.stringify(logged.data[0].response)).not.toContain(
+        "call_blocked",
+      );
+    },
+  );
+}
+
+bedrockTest(
+  "tool-definition checkpoints survive native tool-name mapping at the HTTP boundary",
+  async ({ router }) => {
+    let upstream: Record<string, unknown> | undefined;
+    server.use(
+      http.post(
+        `${upstreamOrigin}/model/:model/converse`,
+        async ({ request }) => {
+          upstream = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({
+            output: {
+              message: { role: "assistant", content: [{ text: "ok" }] },
+            },
+            stopReason: "end_turn",
+            usage: { inputTokens: 10, outputTokens: 1 },
+          });
+        },
+      ),
+    );
+    const response = await router.app.inject({
+      method: "POST",
+      url: `/v1/model-router/${router.agentId}/responses`,
+      headers: { authorization: `Bearer ${router.token}` },
+      payload: {
+        model: `bedrock:${modelId}`,
+        input: "question",
+        tools: [
+          {
+            type: "function",
+            name: "read_file",
+            parameters: { type: "object", properties: {} },
+            cache_control,
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(upstream?.toolConfig).toEqual({
+      tools: [
+        {
+          toolSpec: {
+            name: "read_file",
+            inputSchema: { json: { type: "object", properties: {} } },
+          },
+        },
+        checkpoint,
+      ],
+    });
+  },
+);

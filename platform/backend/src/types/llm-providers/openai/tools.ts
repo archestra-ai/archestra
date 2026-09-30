@@ -27,6 +27,7 @@ const FunctionDefinitionSchema = z
 
 const FunctionToolSchema = z
   .object({
+    cache_control: z.unknown().optional(),
     type: z.enum(["function"]),
     function: FunctionDefinitionSchema,
   })
@@ -160,6 +161,7 @@ const AllowedToolChoiceSchema = z
 
 const NamedToolChoiceSchema = z
   .object({
+    cache_control: z.unknown().optional(),
     type: z.enum(["function"]),
     function: z.object({
       name: z.string(),

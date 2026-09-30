@@ -262,6 +262,10 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
   formatCompleteTextSSE(text: string): string[] {
     this.replacedText = text;
+    // A terminal frame may have been emitted before the policy gate decided.
+    // Reissue completion so the client's final snapshot contains the refusal.
+    this.outputCompleted = false;
+    this.inner.formatCompleteTextSSE(text);
     return [
       this.ensureOutputStarted(),
       this.toSse({
@@ -329,7 +333,9 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   }
 
   toProviderResponse(): TResponse {
-    return this.buildResponsesResponse() as unknown as TResponse;
+    // Logging and policy hooks consume the provider-native response. The
+    // client-facing Responses envelope is built by the SSE methods above.
+    return this.inner.toProviderResponse();
   }
 
   private ensureOutputStarted(): string {
@@ -479,8 +485,6 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       );
     }
 
-    const inputTokens = this.state.usage?.inputTokens ?? 0;
-    const outputTokens = this.state.usage?.outputTokens ?? 0;
     return {
       id: this.ctx.responseId,
       object: "response",
@@ -488,13 +492,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       model: this.ctx.requestedModel,
       status: "completed",
       output,
-      usage: this.state.usage
-        ? {
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            total_tokens: inputTokens + outputTokens,
-          }
-        : undefined,
+      usage: this.state.usage ? toResponsesUsage(this.state.usage) : undefined,
     };
   }
 

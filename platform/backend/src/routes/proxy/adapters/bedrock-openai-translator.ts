@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { ApiError } from "@archestra/shared/types";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Bedrock, OpenAi, StreamAccumulatorState } from "@/types";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
-import {
-  parseJsonObject,
-  stringifyTextContent,
-} from "./openai-translator-utils";
+import { parseJsonObject } from "./openai-translator-utils";
 
 type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -42,30 +40,29 @@ type Loose = any;
  */
 export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
   const loose = req as Loose;
-  const system: Array<{ text: string }> = [];
+  const system: NonNullable<BedrockRequest["system"]> = [];
   const messages: BedrockMessage[] = [];
 
   for (const m of req.messages ?? []) {
     const role = (m as Loose).role as string;
     if (role === "system" || role === "developer") {
-      system.push({ text: stringifyTextContent((m as Loose).content, "") });
+      const blocks = textContentToBedrock((m as Loose).content);
+      appendCacheMarker(blocks, (m as Loose).cache_control);
+      system.push(...blocks);
       continue;
     }
 
     if (role === "user") {
-      messages.push({
-        role: "user",
-        content: ensureBedrockUserContentHasText(
-          userContentToBedrock((m as Loose).content),
-        ),
-      });
+      const content = ensureBedrockUserContentHasText(
+        userContentToBedrock((m as Loose).content),
+      );
+      appendCacheMarker(content, (m as Loose).cache_control);
+      messages.push({ role: "user", content });
       continue;
     }
 
     if (role === "assistant") {
-      const content: BedrockContentBlock[] = [];
-      const text = stringifyAssistantText((m as Loose).content);
-      if (text) content.push({ text });
+      const content = textContentToBedrock((m as Loose).content);
       for (const tc of ((m as Loose).tool_calls ?? []) as Loose[]) {
         if (tc?.type === "function" && tc.function) {
           content.push({
@@ -77,6 +74,7 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
           });
         }
       }
+      appendCacheMarker(content, (m as Loose).cache_control);
       messages.push({ role: "assistant", content });
       continue;
     }
@@ -88,13 +86,20 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
           content: toolResultContent((m as Loose).content),
         },
       };
+      const blocks: BedrockContentBlock[] = [block];
+      // Tool result markers belong after the enclosing toolResult union block.
+      if (Array.isArray((m as Loose).content)) {
+        for (const part of (m as Loose).content)
+          appendCacheMarker(blocks, part?.cache_control);
+      }
+      appendCacheMarker(blocks, (m as Loose).cache_control);
       const prev = messages[messages.length - 1];
       if (prev && prev.role === "user") {
-        prev.content.push(block as BedrockContentBlock);
+        prev.content.push(...blocks);
       } else {
         messages.push({
           role: "user",
-          content: [block as BedrockContentBlock],
+          content: blocks,
         });
       }
     }
@@ -112,6 +117,8 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
   if (inferenceConfig) converseBody.inferenceConfig = inferenceConfig;
   if (toolConfig) converseBody.toolConfig = toolConfig;
 
+  validateTranslatedConverseRequest(converseBody);
+
   const openaiContext: OpenaiContext = {
     chatcmplId: newChatcmplId(),
     createdUnix: Math.floor(Date.now() / 1000),
@@ -120,6 +127,14 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
   };
 
   return { converseBody, openaiContext };
+}
+
+/** Revalidate after model routing and policy rewrites, before sending upstream. */
+export function validateTranslatedConverseRequest(
+  request: BedrockRequest,
+): void {
+  validateCallerCachePoints(request);
+  validateMultimodalContent(request);
 }
 
 /**
@@ -159,6 +174,9 @@ export function converseResponseToOpenai(
     outputTokens: resp.usage?.outputTokens ?? 0,
     cacheReadTokens: resp.usage?.cacheReadInputTokens ?? 0,
     cacheWriteTokens: resp.usage?.cacheWriteInputTokens ?? 0,
+    cacheWrite1hTokens: (resp.usage?.cacheDetails ?? [])
+      .filter((d) => d.ttl === "1h")
+      .reduce((sum, d) => sum + (d.inputTokens ?? 0), 0),
   });
 
   return {
@@ -204,6 +222,7 @@ function converseUsageToOpenai(params: {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  cacheWrite1hTokens?: number;
 }): OpenAiStreamUsage {
   const promptTokens =
     params.uncachedInputTokens +
@@ -215,8 +234,18 @@ function converseUsageToOpenai(params: {
     total_tokens: promptTokens + params.outputTokens,
     // Omitted rather than zeroed when nothing was cached, so the field's
     // presence still means "this provider reported cache hits".
-    ...(params.cacheReadTokens > 0
-      ? { prompt_tokens_details: { cached_tokens: params.cacheReadTokens } }
+    ...(params.cacheReadTokens > 0 || params.cacheWriteTokens > 0
+      ? {
+          prompt_tokens_details: {
+            cached_tokens: params.cacheReadTokens,
+            ...(params.cacheWriteTokens > 0
+              ? { cache_write_tokens: params.cacheWriteTokens }
+              : {}),
+            ...(params.cacheWrite1hTokens
+              ? { cache_write_1h_tokens: params.cacheWrite1hTokens }
+              : {}),
+          },
+        }
       : {}),
   };
 }
@@ -379,6 +408,9 @@ export function createConverseToOpenaiSseEncoder(
           outputTokens: Number(u.outputTokens ?? 0),
           cacheReadTokens: Number(u.cacheReadInputTokens ?? 0),
           cacheWriteTokens: Number(u.cacheWriteInputTokens ?? 0),
+          cacheWrite1hTokens: (u.cacheDetails ?? [])
+            .filter((d: Loose) => d.ttl === "1h")
+            .reduce((sum: number, d: Loose) => sum + (d.inputTokens ?? 0), 0),
         }),
       });
     }
@@ -454,6 +486,7 @@ export function createConverseToOpenaiSseEncoder(
       outputTokens: state.usage?.outputTokens ?? 0,
       cacheReadTokens: state.usage?.cacheReadTokens ?? 0,
       cacheWriteTokens: state.usage?.cacheWriteTokens ?? 0,
+      cacheWrite1hTokens: state.usage?.cacheWrite1hTokens,
     });
     return {
       id: ctx.chatcmplId,
@@ -495,21 +528,140 @@ export function newChatcmplId(): string {
 // internal helpers
 // =============================================================================
 
-function stringifyAssistantText(content: unknown): string {
-  if (content == null) return "";
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((p) => {
-        const part = p as Loose;
-        if (part?.type === "text") return String(part.text ?? "");
-        // refusal parts: treat refusal text as the assistant text
-        if (part?.type === "refusal") return String(part.refusal ?? "");
-        return "";
-      })
-      .join("");
+function textContentToBedrock(content: unknown): BedrockContentBlock[] {
+  if (content == null) return [];
+  if (typeof content === "string") return [{ text: content }];
+  if (!Array.isArray(content))
+    throw new ApiError(
+      400,
+      "Bedrock content must be text or an array of supported parts",
+    );
+  return content.flatMap((part: Loose) => {
+    if (part?.type !== "text" && part?.type !== "refusal")
+      throw new ApiError(
+        400,
+        "Bedrock system and assistant content only support text parts",
+      );
+    const blocks: BedrockContentBlock[] = [
+      { text: String(part.text ?? part.refusal ?? "") },
+    ];
+    appendCacheMarker(blocks, part?.cache_control);
+    return blocks;
+  });
+}
+
+function appendCacheMarker(blocks: BedrockContentBlock[], marker: Loose): void {
+  if (marker === undefined) return;
+  if (
+    !marker ||
+    marker.type !== "ephemeral" ||
+    (marker.ttl !== undefined && marker.ttl !== "5m" && marker.ttl !== "1h")
+  )
+    throw new ApiError(
+      400,
+      "Bedrock cache_control requires type ephemeral and ttl 5m or 1h",
+    );
+  blocks.push({
+    cachePoint: { type: "default", ...(marker.ttl ? { ttl: marker.ttl } : {}) },
+  });
+}
+
+const BEDROCK_CLAUDE_ONE_HOUR_CACHE_MODELS = new Set([
+  "anthropic.claude-sonnet-5-5",
+  "anthropic.claude-opus-5-5",
+  "anthropic.claude-fable-5-1",
+  "anthropic.claude-mythos-5-1",
+  "anthropic.claude-fable-5",
+  "anthropic.claude-mythos-5",
+  "anthropic.claude-opus-5",
+  "anthropic.claude-sonnet-5",
+  "anthropic.claude-opus-4-8",
+  "anthropic.claude-opus-4-7",
+  "anthropic.claude-opus-4-6-v1",
+  "anthropic.claude-opus-4-6-v1:0",
+  "anthropic.claude-sonnet-4-6",
+  "anthropic.claude-opus-4-5-20251101-v1:0",
+  "anthropic.claude-sonnet-4-5-20250929-v1:0",
+  "anthropic.claude-haiku-4-5-20251001-v1:0",
+]);
+const BEDROCK_CLAUDE_FIVE_MINUTE_CACHE_MODELS = new Set([
+  "anthropic.claude-3-7-sonnet-20250219-v1:0",
+  "anthropic.claude-3-5-sonnet-20241022-v2:0",
+]);
+const BEDROCK_NOVA_CACHE_MODELS = new Set([
+  "amazon.nova-pro-v1:0",
+  "amazon.nova-lite-v1:0",
+  "amazon.nova-2-lite-v1:0",
+]);
+
+// Explicit router markers are validated independently of internal chat's
+// automatic placement policy. Sources verified September 2026:
+// https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+// https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-pro.html
+function validateCallerCachePoints(request: BedrockRequest): void {
+  const toolPoints =
+    request.toolConfig?.tools.filter((b) => b.cachePoint) ?? [];
+  const points = [
+    ...toolPoints.map((b) => b.cachePoint),
+    ...(request.system ?? []).flatMap((b) =>
+      "cachePoint" in b ? [b.cachePoint] : [],
+    ),
+    ...(request.messages ?? []).flatMap((m) =>
+      m.content.flatMap((b) => ("cachePoint" in b ? [b.cachePoint] : [])),
+    ),
+  ] as Array<{ ttl?: string }>;
+  if (points.length === 0) return;
+  const model =
+    request.modelId
+      .split("/")
+      .at(-1)
+      ?.replace(/^(?:us|eu|apac|global|jp)\./, "") ?? "";
+  const claude1h = BEDROCK_CLAUDE_ONE_HOUR_CACHE_MODELS.has(model);
+  const claude5m =
+    claude1h || BEDROCK_CLAUDE_FIVE_MINUTE_CACHE_MODELS.has(model);
+  const nova = BEDROCK_NOVA_CACHE_MODELS.has(model);
+  if (!claude5m && !nova)
+    throw new ApiError(
+      400,
+      "Explicit Bedrock caching is not supported for this model ID; use a documented foundation model or system inference profile ID",
+    );
+  if (points.length > 4)
+    throw new ApiError(
+      400,
+      "Bedrock supports at most four cache checkpoints per request",
+    );
+  if (nova && toolPoints.length)
+    throw new ApiError(
+      400,
+      "Nova cache checkpoints are supported in system and messages, not tools",
+    );
+  let sawShort = false;
+  for (const point of points) {
+    if (point.ttl === "1h") {
+      if (!claude1h)
+        throw new ApiError(
+          400,
+          "This Bedrock model does not support a 1h cache TTL",
+        );
+      if (sawShort)
+        throw new ApiError(
+          400,
+          "Bedrock 1h cache checkpoints must precede 5m checkpoints (tools, system, messages)",
+        );
+    } else sawShort = true;
   }
-  return "";
+}
+
+function validateMultimodalContent(request: BedrockRequest): void {
+  const blocks = (request.messages ?? []).flatMap((m) => m.content);
+  if (!blocks.some((b) => "image" in b || "document" in b)) return;
+  // Known text-only models must fail here instead of losing input. For other
+  // models AWS remains the authoritative modality validator.
+  if (/amazon\.nova-micro/.test(request.modelId))
+    throw new ApiError(
+      400,
+      "This Bedrock model does not support the requested image or document content",
+    );
 }
 
 // MIMEs whose text content Bedrock's document block can represent as txt.
@@ -538,7 +690,11 @@ function userContentToBedrock(content: unknown): BedrockContentBlock[] {
   if (typeof content === "string") {
     return [{ text: content }];
   }
-  if (!Array.isArray(content)) return [];
+  if (!Array.isArray(content))
+    throw new ApiError(
+      400,
+      "Bedrock user content must be text or an array of supported parts",
+    );
   const out: BedrockContentBlock[] = [];
   for (const part of content as Loose[]) {
     if (part?.type === "text") {
@@ -546,8 +702,14 @@ function userContentToBedrock(content: unknown): BedrockContentBlock[] {
     } else if (part?.type === "image_url") {
       const url = String(part.image_url?.url ?? "");
       const block = imageUrlToBlock(url);
-      if (block) out.push(block as BedrockContentBlock);
+      out.push(block as BedrockContentBlock);
+    } else if (part?.type === "file") {
+      const file = part.file;
+      out.push(fileDataToBlock(file) as BedrockContentBlock);
+    } else {
+      throw new ApiError(400, "Unsupported Bedrock content part");
     }
+    appendCacheMarker(out, part.cache_control);
   }
   return out;
 }
@@ -557,7 +719,7 @@ function userContentToBedrock(content: unknown): BedrockContentBlock[] {
 function ensureBedrockUserContentHasText(
   content: BedrockContentBlock[],
 ): BedrockContentBlock[] {
-  const hasText = content.some((b) => "text" in b);
+  const hasText = content.some((b) => "text" in b && b.text.trim().length > 0);
   const hasDocument = content.some((b) => "document" in b);
   if (hasDocument && !hasText) {
     return [
@@ -568,11 +730,46 @@ function ensureBedrockUserContentHasText(
   return content;
 }
 
+function fileDataToBlock(file: Loose): unknown {
+  if (
+    !file ||
+    file.file_id ||
+    file.file_url ||
+    typeof file.file_data !== "string"
+  )
+    throw new ApiError(
+      400,
+      "Bedrock files require inline base64 file_data; file IDs and URLs cannot be resolved",
+    );
+  if (file.file_data.startsWith("data:"))
+    return imageUrlToBlock(file.file_data);
+  const extension =
+    typeof file.filename === "string"
+      ? file.filename.split(".").at(-1)?.toLowerCase()
+      : undefined;
+  const mime =
+    extension === "json"
+      ? "application/json"
+      : Object.entries(BEDROCK_DOCUMENT_FORMATS).find(
+          ([, format]) => format === extension,
+        )?.[0];
+  if (!mime || !/^[A-Za-z0-9+/]+={0,2}$/.test(file.file_data))
+    throw new ApiError(
+      400,
+      "Bedrock file_data must be a base64 data URL or base64 bytes with a supported filename extension",
+    );
+  return imageUrlToBlock(`data:${mime};base64,${file.file_data}`);
+}
+
 // Routes an image_url data URL to the correct Bedrock content block.
-// Returns null for unsupported MIMEs so callers can drop the part cleanly.
+// Inline data only: external URLs and unresolved files must never disappear.
 function imageUrlToBlock(url: string): unknown {
   const m = /^data:([^;]+);base64,(.+)$/i.exec(url);
-  if (!m) return null;
+  if (!m)
+    throw new ApiError(
+      400,
+      "Bedrock image and file inputs require a base64 data URL with a supported MIME type",
+    );
 
   const rawMime = m[1].toLowerCase();
   const bytes = m[2];
@@ -598,31 +795,35 @@ function imageUrlToBlock(url: string): unknown {
     };
   }
 
-  return null;
-}
-
-function imageFromDataUrl(url: string): unknown {
-  const m = /^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/i.exec(url);
-  if (!m) {
-    throw new Error(
-      `image_url must be a base64 data URL (data:image/...;base64,...) — got "${url.slice(0, 40)}..."`,
-    );
-  }
-  const fmt = m[1].toLowerCase() === "jpg" ? "jpeg" : m[1].toLowerCase();
-  return { image: { format: fmt, source: { bytes: m[2] } } };
+  throw new ApiError(400, "Unsupported Bedrock image or document MIME type");
 }
 
 function toolResultContent(content: unknown): Loose[] {
   if (typeof content === "string") return [{ text: content }];
-  if (!Array.isArray(content)) return [{ text: "" }];
+  if (!Array.isArray(content))
+    throw new ApiError(
+      400,
+      "Bedrock tool output must be text or supported content parts",
+    );
   const out: Loose[] = [];
-  for (const part of content as Loose[]) {
-    if (part?.type === "text") {
-      out.push({ text: String(part.text ?? "") });
-    } else if (part?.type === "image_url") {
-      const url = String(part.image_url?.url ?? "");
-      out.push(imageFromDataUrl(url));
-    }
+  for (const [index, part] of content.entries()) {
+    if (part?.cache_control !== undefined && index !== content.length - 1)
+      throw new ApiError(
+        400,
+        "A Bedrock tool-result cache marker must follow the complete tool result",
+      );
+    if (part?.type === "text") out.push({ text: String(part.text ?? "") });
+    else if (part?.type === "image_url")
+      out.push(imageUrlToBlock(String(part.image_url?.url ?? "")));
+    else if (part?.type === "file") out.push(fileDataToBlock(part.file));
+    else if (
+      part?.type === "json" &&
+      part.json &&
+      typeof part.json === "object"
+    )
+      out.push({ json: part.json });
+    else
+      throw new ApiError(400, "Unsupported Bedrock tool-result content part");
   }
   return out.length > 0 ? out : [{ text: "" }];
 }
@@ -648,22 +849,25 @@ function buildToolConfig(
   const tools = Array.isArray(loose.tools) ? loose.tools : [];
   if (tools.length === 0 && toolChoice == null) return undefined;
 
-  const mapped = tools
-    .filter((t: Loose) => t?.type === "function" && t.function?.name)
-    .map((t: Loose) => ({
+  const mapped: NonNullable<BedrockRequest["toolConfig"]>["tools"] = [];
+  for (const t of tools) {
+    if (t?.type !== "function" || !t.function?.name) continue;
+    mapped.push({
       toolSpec: {
         name: String(t.function.name),
         ...(t.function.description
           ? { description: String(t.function.description) }
           : {}),
         inputSchema: {
-          json: (t.function.parameters ?? {
-            type: "object",
-            properties: {},
-          }) as Record<string, unknown>,
+          json: t.function.parameters ?? { type: "object", properties: {} },
         },
       },
-    }));
+    });
+    const points: BedrockContentBlock[] = [];
+    appendCacheMarker(points, t.cache_control);
+    for (const point of points)
+      if ("cachePoint" in point) mapped.push({ cachePoint: point.cachePoint });
+  }
 
   const cfg: NonNullable<BedrockRequest["toolConfig"]> = { tools: mapped };
 

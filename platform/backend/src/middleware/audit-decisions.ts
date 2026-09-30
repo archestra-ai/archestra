@@ -419,6 +419,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of agent; parent audited",
   },
+  agentChatopsBotsTable: {
+    audited: false,
+    reason:
+      "join: agent × messaging bot; changes are audited through the ChatOps assignment-plan route",
+  },
   agentTeamsTable: {
     audited: false,
     reason: "join: agent × team; parent (agent) audited",

@@ -244,8 +244,15 @@ export interface ChatThreadMessage {
   text: string;
   /** When the message was sent */
   timestamp: Date;
-  /** Whether this message was from the bot */
+  /** Whether this message was from a bot (this one or another) */
   isFromBot: boolean;
+  /**
+   * Whether this message was written by the bot now answering, as opposed to
+   * another bot in the same thread. Only that bot's own messages are "You" in
+   * the history it is shown; absent means "same as isFromBot" (providers with
+   * one bot per conversation).
+   */
+  isFromSelf?: boolean;
   /** File attachments from this message (metadata only, not downloaded) */
   files?: ChatThreadMessageFile[];
 }
@@ -328,6 +335,13 @@ export interface ChatOpsProvider {
    * for platforms whose status persists until explicitly cleared.
    */
   readonly typingRefreshIntervalMs?: number;
+
+  /**
+   * The name this bot appears under in the chat platform, when it has one of
+   * its own (a Slack App's display name). A bot is addressed and described by
+   * this name, never by another bot's.
+   */
+  getBotDisplayName?(): string | null;
 
   /**
    * Check if the provider is properly configured
@@ -628,10 +642,20 @@ export interface ChatOpsEventHandler {
   getAccessibleChatopsAgents({
     senderEmail,
     isDm,
+    botId,
   }: {
     senderEmail?: string;
     isDm: boolean;
+    /** The receiving bot: offer only the agents that use it, when any do. */
+    botId?: string;
   }): Promise<{ id: string; name: string }[]>;
+  /** The agents that use a bot (its cards on the agents' Messaging tabs). */
+  getAgentsUsingBot(botId: string): Promise<{ id: string; name: string }[]>;
+  /**
+   * Whether a user id is another managed bot of the same workspace. A message
+   * that addresses another managed bot, and not this one, is not for this bot.
+   */
+  isOtherManagedBotUser(params: { botId: string; userId: string }): boolean;
 }
 
 /**

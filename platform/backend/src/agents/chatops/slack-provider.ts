@@ -82,6 +82,8 @@ class SlackProvider implements ChatOpsProvider {
 
   private client: WebClient | null = null;
   private botUserId: string | null = null;
+  /** The Slack `bot_id` (B…) of this app, which tags its own posts. */
+  private slackBotId: string | null = null;
   /**
    * The bot's name as Slack shows it, which is what someone types when they
    * address it without an @mention ("Archestra mute"). auth.test can't provide
@@ -173,6 +175,7 @@ class SlackProvider implements ChatOpsProvider {
       }
 
       this.botUserId = (body.user_id as string) || null;
+      this.slackBotId = (body.bot_id as string) || null;
       this.teamId = (body.team_id as string) || null;
       this.teamName = (body.team as string) || null;
       // Best-effort: without it the bot simply stops answering to its own name.
@@ -227,6 +230,7 @@ class SlackProvider implements ChatOpsProvider {
     this.socketDedup.clear();
     this.client = null;
     this.botUserId = null;
+    this.slackBotId = null;
     this.botDisplayName = null;
     this.teamId = null;
     this.teamName = null;
@@ -331,6 +335,13 @@ class SlackProvider implements ChatOpsProvider {
       event.type === "app_mention" ||
       Boolean(this.botUserId && text.includes(`<@${this.botUserId}>`));
     const cleanedText = this.cleanBotMention(text);
+
+    // A message that addresses another Slack App of this workspace, and not
+    // this one, is that app's to answer. Without this an answer-all channel or
+    // an already-active thread would have both bots reply to "@Clode hello".
+    if (!hasBotMention && this.mentionsOtherManagedBot(text)) {
+      return null;
+    }
 
     // Channel auto-reply gate: in channels the bot stays quiet until
     // @mentioned (app_mention event or message text containing <@BOT_ID>),
@@ -853,8 +864,13 @@ class SlackProvider implements ChatOpsProvider {
           }));
 
         const isFromBot = Boolean(msg.bot_id) || msg.user === this.botUserId;
+        // Own messages carry this app's bot user; any other app's carry its own.
+        const isFromSelf = isFromBot && this.isOwnBotMessage(msg);
         const senderName = isFromBot
-          ? msg.user || "Unknown"
+          ? (msg as { bot_profile?: { name?: string } }).bot_profile?.name ||
+            (msg as { username?: string }).username ||
+            msg.user ||
+            "Unknown"
           : userNameMap.get(msg.user as string) || msg.user || "Unknown";
 
         return {
@@ -864,6 +880,7 @@ class SlackProvider implements ChatOpsProvider {
           text: msg.text || "",
           timestamp: new Date(Number.parseFloat(msg.ts as string) * 1000),
           isFromBot,
+          isFromSelf,
           ...(files && files.length > 0 && { files }),
         };
       });
@@ -1221,11 +1238,20 @@ class SlackProvider implements ChatOpsProvider {
 
         if (binding?.agentId) {
           const agent = await AgentModel.findById(binding.agentId);
+          const holders =
+            (await this.eventHandler?.getAgentsUsingBot(this.botId)) ?? [];
+          // One agent uses this bot: there is nobody else to switch to.
+          if (holders.length === 1) {
+            return {
+              response_type: "ephemeral",
+              text: `This bot always answers as *${agent?.name || holders[0].name}*.`,
+            };
+          }
           return {
             response_type: "ephemeral",
             text:
               `This channel is assigned to agent: *${agent?.name || binding.agentId}*\n\n` +
-              `*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).\n\n` +
+              `*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @${this.botDisplayName ?? archestraMcpBranding.appName} Sales > what's the status?).\n\n` +
               `Use \`${slashCommands.SELECT_AGENT}\` to change the default agent.`,
           };
         }
@@ -1253,10 +1279,20 @@ class SlackProvider implements ChatOpsProvider {
           isThreadReply: false,
         };
 
+        const holders =
+          (await this.eventHandler?.getAgentsUsingBot(this.botId)) ?? [];
+        // With a single agent there is nothing to choose between.
+        if (holders.length === 1) {
+          return {
+            response_type: "ephemeral",
+            text: `This bot always answers as *${holders[0].name}*.`,
+          };
+        }
         const agents =
           (await this.eventHandler?.getAccessibleChatopsAgents({
             senderEmail,
             isDm,
+            botId: this.botId,
           })) ?? [];
 
         if (agents.length === 0) {
@@ -1436,6 +1472,10 @@ class SlackProvider implements ChatOpsProvider {
     return this.botUserId;
   }
 
+  getBotDisplayName(): string | null {
+    return this.botDisplayName;
+  }
+
   /** The Slack app id the admin entered at setup, when one was given. */
   getAppId(): string | null {
     return this.config.appId || null;
@@ -1561,6 +1601,18 @@ class SlackProvider implements ChatOpsProvider {
       // The bot has no reason to mute itself, and reacting to its own replies
       // is how an echo would start.
       (this.botUserId !== null && event.user === this.botUserId)
+    ) {
+      return;
+    }
+    // A reaction on another Slack App's reply mutes that app only, and it
+    // receives the event itself. Reactions on a human message (the thread
+    // root) or on this bot's own reply reach every bot and mute each of them.
+    if (
+      event.item_user &&
+      this.eventHandler?.isOtherManagedBotUser({
+        botId: this.botId,
+        userId: event.item_user,
+      })
     ) {
       return;
     }
@@ -2249,6 +2301,26 @@ class SlackProvider implements ChatOpsProvider {
     return result;
   }
 
+  private mentionsOtherManagedBot(text: string): boolean {
+    if (!this.eventHandler) return false;
+    return [...text.matchAll(/<@([A-Z0-9]+)>/g)].some((match) =>
+      this.eventHandler?.isOtherManagedBotUser({
+        botId: this.botId,
+        userId: match[1],
+      }),
+    );
+  }
+
+  /**
+   * Whether a bot-authored history message is this app's own. Another app's
+   * message names its own bot user; a message without a user is judged by
+   * whether it is one of ours via the app-level bot id when present.
+   */
+  private isOwnBotMessage(msg: { user?: string; bot_id?: string }): boolean {
+    if (msg.user) return msg.user === this.botUserId;
+    return Boolean(this.slackBotId && msg.bot_id === this.slackBotId);
+  }
+
   private cleanBotMention(text: string): string {
     if (!this.botUserId) return text;
     // Slack mentions are formatted as <@U12345678>
@@ -2597,6 +2669,8 @@ interface SlackEventPayload {
     // reaction_added fields (channel/ts live under `item`, not at the top level)
     reaction?: string;
     item?: { type?: string; channel: string; ts: string };
+    /** Author of the message that was reacted to, when Slack reports it. */
+    item_user?: string;
   };
   challenge?: string;
 }

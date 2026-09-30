@@ -47,6 +47,7 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  AgentChatOpsBotModel,
   AgentModel,
   ChatOpsBotModel,
   ChatOpsChannelBindingModel,
@@ -119,6 +120,8 @@ const ChatOpsAssignmentPlanSchema = z
   .object({
     targetAgentId: z.string().uuid(),
     updates: z.array(ChatOpsAssignmentPlanUpdateSchema).max(500),
+    /** Every bot the agent speaks through afterwards (its cards). */
+    bots: z.array(z.string().uuid()).max(20).optional(),
     directMessages: z
       .array(
         z.object({
@@ -129,11 +132,12 @@ const ChatOpsAssignmentPlanSchema = z
       )
       .max(100),
   })
-  .superRefine(({ targetAgentId, updates, directMessages }, ctx) => {
-    if (updates.length === 0 && directMessages.length === 0) {
+  .superRefine(({ targetAgentId, updates, directMessages, bots }, ctx) => {
+    if (updates.length === 0 && directMessages.length === 0 && !bots) {
       ctx.addIssue({
         code: "custom",
-        message: "Provide at least one binding update or direct message",
+        message:
+          "Provide at least one binding update, direct message or bot change",
       });
     }
 
@@ -1303,6 +1307,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           dmOwnerEmails: [existing.dmOwnerEmail],
           organizationId: request.organizationId,
         });
+        await assertOneBotPerProvider({
+          agentId: request.body.agentId,
+          bindings: [existing],
+        });
       }
 
       const updated =
@@ -1656,6 +1664,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ids,
           request.organizationId,
         );
+        await assertOneBotPerProvider({ agentId, bindings });
         const hasChannelBindings = bindings.some((b) => !b.isDm);
         if (hasChannelBindings) {
           await validateAgentChannelAssignment({
@@ -2270,6 +2279,30 @@ async function getDefaultOrganizationId(): Promise<string> {
 }
 
 /**
+ * An agent uses one bot per provider at a time. Assigning it a channel of a
+ * second bot of the same provider is refused here; the agent's Messaging tab
+ * replaces the bot (and releases its channels) deliberately instead.
+ */
+async function assertOneBotPerProvider(params: {
+  agentId: string;
+  bindings: Array<{ botId: string; provider: ChatOpsProviderType }>;
+}): Promise<void> {
+  for (const binding of params.bindings) {
+    const conflict = await AgentChatOpsBotModel.findConflictingCard({
+      agentId: params.agentId,
+      botId: binding.botId,
+      provider: binding.provider,
+    });
+    if (conflict) {
+      throw new ApiError(
+        409,
+        `This agent already uses the ${binding.provider} bot "${conflict.name}". Replace that bot on the agent's Messaging tab before assigning channels of another ${binding.provider} bot.`,
+      );
+    }
+  }
+}
+
+/**
  * The bot a request targets: the one named, or the provider's first bot for
  * callers that predate multiple bots. A bot of another organization or of
  * another provider is reported as missing.
@@ -2308,16 +2341,8 @@ async function getProviderInfo(params: {
     organizationId,
     provider: providerType,
   });
-  const agentsByBot = new Map(
-    await Promise.all(
-      bots.map(
-        async (bot) =>
-          [
-            bot.id,
-            await ChatOpsChannelBindingModel.findAgentsAssignedToBot(bot.id),
-          ] as const,
-      ),
-    ),
+  const agentsByBot = await AgentChatOpsBotModel.findAgentsByBotIds(
+    bots.map((bot) => bot.id),
   );
 
   switch (providerType) {

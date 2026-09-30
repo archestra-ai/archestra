@@ -100,6 +100,8 @@ export function useApplyChatOpsBindingPlan() {
     onSuccess: () => {
       toast.success("Channel changes saved");
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+      // An agent's bot cards are read from the status endpoint.
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
     },
   });
 }

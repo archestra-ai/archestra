@@ -24,6 +24,7 @@ import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/emai
 import { AgentIcon } from "@/components/agent-icon";
 import { ChannelIcon } from "@/components/channel-icon";
 import { CopyButton } from "@/components/copy-button";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SettingsSection } from "@/components/settings-section";
@@ -54,6 +55,15 @@ type Agent = archestraApiTypes.GetAgentResponses["200"];
 type Binding =
   archestraApiTypes.ListChatOpsBindingsResponses["200"]["data"][number];
 type ChatProvider = "ms-teams" | "slack" | "telegram";
+/** One bot of the organization, as the picker and the cards describe it. */
+type BotInfo = {
+  id: string;
+  provider: ChatProvider;
+  name: string;
+  configured: boolean;
+  /** Agents that use the bot (cards, and channels written before cards). */
+  agents: Array<{ id: string; name: string }>;
+};
 type AgentReferenceData = {
   id: string;
   name: string;
@@ -111,6 +121,13 @@ export function AgentChatAppsEditor({
   ) => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // The bots this agent speaks through (its cards), staged until Save.
+  const [selectedBotIds, setSelectedBotIds] = useState<string[]>([]);
+  const [pendingBotChange, setPendingBotChange] = useState<
+    | { kind: "replace"; oldBotId: string; newBotId: string }
+    | { kind: "remove"; botId: string }
+    | null
+  >(null);
   const [optionOrder, setOptionOrder] = useState<string[]>([]);
   const [optionOrderKey, setOptionOrderKey] = useState<string | null>(null);
   const [initializedAgentId, setInitializedAgentId] = useState<string | null>(
@@ -248,18 +265,36 @@ export function AgentChatAppsEditor({
       ? subjectReference
       : (agentReferences.get(detailsBinding.agentId) ?? null)
     : null;
-  const existingDmProviders = new Set(
-    bindings
-      .filter((binding) => binding.isDm)
-      .map((binding) => binding.provider),
+  const allBots: BotInfo[] = (providers ?? []).flatMap((status) =>
+    visibleProviderIds.has(status.id)
+      ? (status.bots ?? []).map((bot) => ({
+          id: bot.id,
+          provider: status.id,
+          name: bot.name,
+          configured: bot.configured,
+          agents: bot.agents,
+        }))
+      : [],
   );
-  const configuredDmProviders = visibleProviders.filter(
-    (provider) =>
-      provider !== "telegram" &&
-      providers?.some(
-        (status) => status.id === provider && status.configured,
-      ) &&
-      !existingDmProviders.has(provider),
+  const botsById = new Map(allBots.map((bot) => [bot.id, bot]));
+  const currentBotIds = allBots
+    .filter((bot) => !!subjectId && bot.agents.some((a) => a.id === subjectId))
+    .map((bot) => bot.id)
+    .sort();
+  const selectedBots = selectedBotIds.flatMap((id) => {
+    const bot = botsById.get(id);
+    return bot ? [bot] : [];
+  });
+  const existingDmBotIds = new Set(
+    bindings.filter((binding) => binding.isDm).map((binding) => binding.botId),
+  );
+  // A direct message is offered under each card whose bot can take one and
+  // has none for this person yet.
+  const configuredDmBots = selectedBots.filter(
+    (bot) =>
+      bot.provider !== "telegram" &&
+      bot.configured &&
+      !existingDmBotIds.has(bot.id),
   );
   const currentIds = useMemo(
     () => assignedBindings.map((binding) => binding.id).sort(),
@@ -274,7 +309,7 @@ export function AgentChatAppsEditor({
       : "the Configuration step",
     agentNames,
     bindings,
-    configuredDmProviders,
+    configuredDmBots,
     currentUserId: session?.user?.id,
     canCreateDm,
   });
@@ -288,10 +323,15 @@ export function AgentChatAppsEditor({
     currentIds,
   );
   const normalizedSelectedIds = [...selectedIds].sort();
+  const normalizedSelectedBotIds = [...selectedBotIds].sort();
   const isDirty =
     initializedAgentId === subjectKey &&
     (normalizedSelectedIds.length !== currentIds.length ||
       normalizedSelectedIds.some((id, index) => id !== currentIds[index]) ||
+      normalizedSelectedBotIds.length !== currentBotIds.length ||
+      normalizedSelectedBotIds.some(
+        (id, index) => id !== currentBotIds[index],
+      ) ||
       Object.keys(pendingChannelDetails).length > 0);
   const isSaving = applyBindingPlanMutation.isPending || isConfirming;
   const allBindingsLoaded =
@@ -307,11 +347,14 @@ export function AgentChatAppsEditor({
       initializedAgentId === subjectKey ||
       isPending ||
       isLoadingError ||
+      providersPending ||
+      providersLoadingError ||
       !allBindingsLoaded
     ) {
       return;
     }
     setSelectedIds(currentIds);
+    setSelectedBotIds(currentBotIds);
     setOptionOrder(sortAssignmentOptionIds(assignmentOptions, currentIds));
     setOptionOrderKey(persistedSelectionKey);
     setInitializedAgentId(subjectKey);
@@ -319,9 +362,12 @@ export function AgentChatAppsEditor({
     subjectKey,
     allBindingsLoaded,
     currentIds,
+    currentBotIds,
     initializedAgentId,
     isLoadingError,
     isPending,
+    providersPending,
+    providersLoadingError,
     assignmentOptions,
     persistedSelectionKey,
   ]);
@@ -368,6 +414,7 @@ export function AgentChatAppsEditor({
         .map((binding) => binding.id)
         .sort(),
     );
+    setSelectedBotIds(currentBotIds);
     setPendingPlan(null);
   }
 
@@ -416,22 +463,21 @@ export function AgentChatAppsEditor({
       {
         targetAgentId,
         updates: [...changedAssignments.values()],
-        directMessages: plan.dmProviders.map((provider) => ({ provider })),
+        directMessages: plan.dmBots,
+        bots: selectedBotIds,
       },
       {
         onSuccess: (result) => {
-          const createdDmByProvider = new Map(
+          const createdDmByBot = new Map(
             result
               .filter((binding) => binding.isDm)
-              .map((binding) => [binding.provider, binding.id]),
+              .map((binding) => [binding.botId, binding.id]),
           );
           setSelectedIds((current) =>
             current.map((id) => {
               if (!id.startsWith(VIRTUAL_DM_PREFIX)) return id;
-              const provider = id.slice(
-                VIRTUAL_DM_PREFIX.length,
-              ) as ChatProvider;
-              return createdDmByProvider.get(provider) ?? id;
+              const botId = id.slice(VIRTUAL_DM_PREFIX.length);
+              return createdDmByBot.get(botId) ?? id;
             }),
           );
           setPendingChannelDetails({});
@@ -466,6 +512,7 @@ export function AgentChatAppsEditor({
         assignedBindings,
         bindings,
         selectedIds,
+        botsById,
       });
       if (confirmTransfers && plan.reassignments.length > 0) {
         setPendingPlan(plan);
@@ -495,6 +542,53 @@ export function AgentChatAppsEditor({
           : [...current, optionId]
         : current.filter((id) => id !== optionId),
     );
+  };
+
+  // Dropping a card releases everything the agent holds under it: the staged
+  // channel rows go with it, and Save unassigns exactly those.
+  const dropBot = (botId: string) => {
+    setSelectedBotIds((current) => current.filter((id) => id !== botId));
+    const releasedIds = assignmentOptions
+      .filter((option) => option.botId === botId)
+      .map((option) => option.id);
+    setSelectedIds((current) =>
+      current.filter((id) => !releasedIds.includes(id)),
+    );
+    setPendingChannelDetails((current) => {
+      const next = { ...current };
+      for (const id of releasedIds) delete next[id];
+      return next;
+    });
+  };
+
+  const addBot = (botId: string) => {
+    const bot = botsById.get(botId);
+    if (!bot || selectedBotIds.includes(botId)) return;
+    // One bot per provider: a second bot replaces the first, after a
+    // confirmation that names what is released.
+    const sameProvider = selectedBots.find(
+      (selected) => selected.provider === bot.provider,
+    );
+    if (sameProvider) {
+      setPendingBotChange({
+        kind: "replace",
+        oldBotId: sameProvider.id,
+        newBotId: botId,
+      });
+      return;
+    }
+    setSelectedBotIds((current) => [...current, botId]);
+  };
+
+  const confirmBotChange = () => {
+    if (!pendingBotChange) return;
+    if (pendingBotChange.kind === "replace") {
+      dropBot(pendingBotChange.oldBotId);
+      setSelectedBotIds((current) => [...current, pendingBotChange.newBotId]);
+    } else {
+      dropBot(pendingBotChange.botId);
+    }
+    setPendingBotChange(null);
   };
 
   const confirmReassignment = async () => {
@@ -572,9 +666,6 @@ export function AgentChatAppsEditor({
     return null;
   }
 
-  const assignedOptions = orderedOptions.filter((option) =>
-    selectedIds.includes(option.id),
-  );
   // Configured, or already carrying channels: a provider whose status has not
   // caught up still has rooms in the pool, and hiding its chip would make them
   // unreachable.
@@ -603,8 +694,8 @@ export function AgentChatAppsEditor({
           pick from, so the section would only ever show an empty state. */}
       {visibleProviders.length > 0 && (
         <SettingsSection
-          title="Channels"
-          description="Where this agent listens and replies."
+          title="Bots"
+          description="The bots this agent speaks through, and where it listens and replies."
         >
           {assignmentRefreshFailed ? (
             <QueryLoadError
@@ -641,57 +732,51 @@ export function AgentChatAppsEditor({
                is the only place the section points at Settings. */
             <ProvidersEmptyState providers={visibleProviders} />
           ) : (
-            <div className="space-y-2">
-              {assignedOptions.length === 0 ? (
+            <div className="space-y-3">
+              {selectedBots.length === 0 ? (
                 <div className="rounded-md border border-dashed px-4 py-6 text-center">
-                  <p className="text-sm font-medium">Not in any channel yet</p>
-                  {/* Which products those channels can come from. An empty
-                      state that only says "nothing here" leaves the reader to
-                      press Add channel to find out what is even on offer —
-                      and what the agent would do there is already the
-                      section's own description, so it is not repeated. */}
-                  {connectedProviders.length > 0 && (
-                    <ul className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-                      {connectedProviders.map((provider) => (
-                        <li
-                          key={provider}
-                          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
-                        >
-                          <ChannelIcon
-                            channel={provider}
-                            className="size-4 shrink-0"
-                          />
-                          {MESSAGING_CHANNEL_LABELS[provider]}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <p className="text-sm font-medium">No bots yet</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Add a bot to choose where this agent listens and replies.
+                  </p>
                 </div>
               ) : (
-                <ul className="space-y-2">
-                  {assignedOptions.map((option) => (
-                    <AssignedChannelRow
-                      key={option.id}
-                      option={option}
-                      readOnly={readOnly}
-                      isSaving={isSaving}
-                      hasPendingDetails={!!pendingChannelDetails[option.id]}
-                      onOpenDetails={() => setDetailsBindingId(option.id)}
-                      onRemove={() => setOptionChecked(option.id, false)}
-                    />
-                  ))}
-                </ul>
+                selectedBots.map((bot) => (
+                  <BotCard
+                    key={bot.id}
+                    bot={bot}
+                    options={orderedOptions.filter(
+                      (option) => option.botId === bot.id,
+                    )}
+                    selectedIds={selectedIds}
+                    pendingChannelDetails={pendingChannelDetails}
+                    readOnly={readOnly}
+                    isSaving={isSaving}
+                    agentId={subjectId ?? ""}
+                    agentReferences={agentReferences}
+                    onOpenDetails={(id) => setDetailsBindingId(id)}
+                    onPickOption={(id) => setOptionChecked(id, true)}
+                    onRemoveOption={(id) => setOptionChecked(id, false)}
+                    onRemoveBot={() =>
+                      setPendingBotChange({ kind: "remove", botId: bot.id })
+                    }
+                  />
+                ))
               )}
               {!readOnly && (
-                <AddChannelPicker
-                  options={orderedOptions}
-                  selectedIds={selectedIds}
-                  connectedProviders={connectedProviders}
+                <AddBotPicker
+                  bots={allBots.filter(
+                    (bot) =>
+                      bot.configured ||
+                      selectedBotIds.includes(bot.id) ||
+                      assignmentOptions.some(
+                        (option) => option.botId === bot.id,
+                      ),
+                  )}
+                  selectedBotIds={selectedBotIds}
                   unconnectedProviders={unconnectedProviders}
-                  agentId={subjectId ?? ""}
-                  agentReferences={agentReferences}
                   disabled={isSaving}
-                  onPick={(id) => setOptionChecked(id, true)}
+                  onPick={addBot}
                 />
               )}
               {standaloneSave && (
@@ -749,6 +834,17 @@ export function AgentChatAppsEditor({
         agentReferences={agentReferences}
         isPending={isSaving}
         onConfirm={() => void confirmReassignment()}
+      />
+
+      <BotChangeDialog
+        change={pendingBotChange}
+        botsById={botsById}
+        heldOptions={assignmentOptions.filter((option) =>
+          selectedIds.includes(option.id),
+        )}
+        isPending={isSaving}
+        onCancel={() => setPendingBotChange(null)}
+        onConfirm={confirmBotChange}
       />
 
       <ChannelDetailsDialog
@@ -885,20 +981,121 @@ function AssignedChannelRow({
   );
 }
 
+/** "@Clode" for a Slack App, the plain name for the org-level bots. */
+function botLabel(bot: BotInfo) {
+  return bot.provider === "slack" ? `@${bot.name}` : bot.name;
+}
+
 /**
- * Claiming a channel out of the organization's pool.
- *
- * One provider at a time, chosen with the chips: a list of lists made the
- * reader parse headers and rows at once, and grouping only earns its place
- * where you are genuinely scanning across products. A provider nobody has
- * connected sits in the same row, so the answer to "where is my Telegram
- * chat" is beside the question rather than in a status strip above it.
+ * One bot this agent speaks through, with the channels it answers in under
+ * that bot. A card can be empty: the agent uses the bot before any channel is
+ * picked.
+ */
+function BotCard({
+  bot,
+  options,
+  selectedIds,
+  pendingChannelDetails,
+  readOnly,
+  isSaving,
+  agentId,
+  agentReferences,
+  onOpenDetails,
+  onPickOption,
+  onRemoveOption,
+  onRemoveBot,
+}: {
+  bot: BotInfo;
+  /** Every channel and direct message of this bot, assigned or not. */
+  options: AssignmentOption[];
+  selectedIds: string[];
+  pendingChannelDetails: Record<string, unknown>;
+  readOnly: boolean;
+  isSaving: boolean;
+  agentId: string;
+  agentReferences: Map<string, { id: string; name: string }>;
+  onOpenDetails: (optionId: string) => void;
+  onPickOption: (optionId: string) => void;
+  onRemoveOption: (optionId: string) => void;
+  onRemoveBot: () => void;
+}) {
+  const label = botLabel(bot);
+  const assigned = options.filter((option) => selectedIds.includes(option.id));
+  return (
+    <section
+      aria-label={`${label} bot`}
+      className="space-y-2 rounded-lg border p-3"
+    >
+      <div className="flex items-center gap-2">
+        <ChannelIcon channel={bot.provider} className="size-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {label}
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            {MESSAGING_CHANNEL_LABELS[bot.provider]}
+          </span>
+        </span>
+        {!readOnly && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Remove ${label}`}
+            disabled={isSaving}
+            onClick={onRemoveBot}
+          >
+            <X className="size-4" />
+          </Button>
+        )}
+      </div>
+      {bot.agents.length === 1 && bot.agents[0].id === agentId && (
+        <p className="text-xs text-muted-foreground">
+          Only this agent uses {label}, so it answers here in every channel and
+          direct message the bot is in.
+        </p>
+      )}
+      {assigned.length === 0 ? (
+        <p className="rounded-md border border-dashed px-3 py-3 text-center text-xs text-muted-foreground">
+          No channels yet.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {assigned.map((option) => (
+            <AssignedChannelRow
+              key={option.id}
+              option={option}
+              readOnly={readOnly}
+              isSaving={isSaving}
+              hasPendingDetails={!!pendingChannelDetails[option.id]}
+              onOpenDetails={() => onOpenDetails(option.id)}
+              onRemove={() => onRemoveOption(option.id)}
+            />
+          ))}
+        </ul>
+      )}
+      {!readOnly && (
+        <AddChannelPicker
+          options={options}
+          selectedIds={selectedIds}
+          botName={label}
+          agentId={agentId}
+          agentReferences={agentReferences}
+          disabled={isSaving}
+          onPick={onPickOption}
+        />
+      )}
+    </section>
+  );
+}
+
+/**
+ * Claiming a channel of one bot. The pool is that bot's alone: a channel two
+ * bots share is a separate row under each, so nothing here can reach across
+ * bots.
  */
 function AddChannelPicker({
   options,
   selectedIds,
-  connectedProviders,
-  unconnectedProviders,
+  botName,
   agentId,
   agentReferences,
   disabled,
@@ -906,15 +1103,13 @@ function AddChannelPicker({
 }: {
   options: AssignmentOption[];
   selectedIds: string[];
-  connectedProviders: ChatProvider[];
-  unconnectedProviders: ChatProvider[];
+  botName: string;
   agentId: string;
   agentReferences: Map<string, { id: string; name: string }>;
   disabled: boolean;
   onPick: (optionId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [provider, setProvider] = useState<ChatProvider | null>(null);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   // Opening replaces the button with the panel, so focus would otherwise fall
@@ -922,7 +1117,6 @@ function AddChannelPicker({
   useEffect(() => {
     if (open) searchRef.current?.focus();
   }, [open]);
-  const activeProvider = provider ?? connectedProviders[0] ?? null;
   const normalized = query.trim().toLocaleLowerCase();
 
   const unassigned = options.filter(
@@ -931,23 +1125,12 @@ function AddChannelPicker({
   const matches = (option: AssignmentOption) =>
     !normalized ||
     assignmentOptionLabel(option).toLocaleLowerCase().includes(normalized);
-  const shown = unassigned.filter(
-    (option) => option.provider === activeProvider && matches(option),
-  );
+  const shown = unassigned.filter(matches);
   // What you can actually click stays the list. An option this agent may never
   // hold — most of the pool, for a personal agent — would otherwise bury the
   // one or two pickable rows under its own copy of the same refusal.
   const available = shown.filter((option) => !option.disabledReason);
   const blocked = groupByDisabledReason(shown);
-  // Searched here, found there: rather than an empty list, say where it is.
-  // Only pickable ones count — pointing at a tab with nothing claimable in it
-  // is a wasted trip.
-  const elsewhere = unassigned.filter(
-    (option) =>
-      option.provider !== activeProvider &&
-      !option.disabledReason &&
-      matches(option),
-  );
 
   if (!open) {
     return (
@@ -956,50 +1139,29 @@ function AddChannelPicker({
         variant="outline"
         size="sm"
         disabled={disabled}
+        aria-label={`Add channel to ${botName}`}
         onClick={() => setOpen(true)}
       >
         <Plus className="size-4" />
-        Add channel
+        <span>Add channel</span>
       </Button>
     );
   }
 
   return (
     <div className="rounded-md border">
-      <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
-        {connectedProviders.map((candidate) => (
-          <Button
-            key={candidate}
-            type="button"
-            size="sm"
-            variant={candidate === activeProvider ? "secondary" : "ghost"}
-            onClick={() => setProvider(candidate)}
-          >
-            <ChannelIcon channel={candidate} className="size-3.5" />
-            {MESSAGING_CHANNEL_LABELS[candidate]}
-          </Button>
-        ))}
-        {/* An unconnected provider is only worth naming at the moment someone
-            looks for one of its channels and does not find it. */}
-        {unconnectedProviders.map((candidate) => (
-          <Button
-            key={candidate}
-            type="button"
-            size="sm"
-            variant="ghost"
-            asChild
-          >
-            <Link href={`/settings/messaging-channels/${candidate}`}>
-              <Plus className="size-3.5" />
-              {MESSAGING_CHANNEL_LABELS[candidate]}
-            </Link>
-          </Button>
-        ))}
+      <div className="flex items-center gap-2 border-b p-2">
+        <Input
+          ref={searchRef}
+          aria-label="Search channels"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={`Search ${botName} channels...`}
+        />
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="ml-auto"
           aria-label="Close channel picker"
           onClick={() => {
             setOpen(false);
@@ -1009,24 +1171,11 @@ function AddChannelPicker({
           <X className="size-4" />
         </Button>
       </div>
-      <div className="p-2">
-        <Input
-          ref={searchRef}
-          aria-label="Search channels"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={
-            activeProvider
-              ? `Search ${MESSAGING_CHANNEL_LABELS[activeProvider]} channels...`
-              : "Search channels..."
-          }
-        />
-      </div>
       {/* Radix scrolls its viewport, not the root, and the root here is sized
           by max-height alone — without clipping it, a long pool spills out of
           the panel and over whatever the page renders underneath. */}
       <ScrollArea className="max-h-64 overflow-auto">
-        <div className="p-2 pt-0">
+        <div className="p-2">
           {available.map((option) => {
             const heldBy =
               option.assignedAgentId && option.assignedAgentId !== agentId
@@ -1065,28 +1214,13 @@ function AddChannelPicker({
               </button>
             );
           })}
-          {available.length === 0 && (
+          {available.length === 0 && blocked.length === 0 && (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-              {elsewhere.length > 0 && activeProvider ? (
-                <>
-                  No {MESSAGING_CHANNEL_LABELS[activeProvider]} channels match.{" "}
-                  <button
-                    type="button"
-                    className="underline hover:text-foreground"
-                    onClick={() => setProvider(elsewhere[0].provider)}
-                  >
-                    {elsewhere.length} in{" "}
-                    {MESSAGING_CHANNEL_LABELS[elsewhere[0].provider]}
-                  </button>
-                </>
-              ) : blocked.length >
-                0 ? /* Something did match, so "no channels match" would be a lie —
-                   and the group below already names them and says why. */
-              null : normalized ? (
-                "No channels match."
-              ) : (
-                "Every channel here is already assigned to this agent."
-              )}
+              {normalized
+                ? "No channels match."
+                : options.length > 0
+                  ? `Every ${botName} channel is already assigned to this agent.`
+                  : `No channels to add. Invite ${botName} to a channel first.`}
             </p>
           )}
           {blocked.map(([reason, blockedOptions]) => (
@@ -1099,6 +1233,197 @@ function AddChannelPicker({
         </div>
       </ScrollArea>
     </div>
+  );
+}
+
+/**
+ * The organization's bots, across providers, that this agent can start using.
+ * Bots it already uses are listed greyed out, so the list always shows what the
+ * organization has.
+ */
+function AddBotPicker({
+  bots,
+  selectedBotIds,
+  unconnectedProviders,
+  disabled,
+  onPick,
+}: {
+  bots: BotInfo[];
+  selectedBotIds: string[];
+  unconnectedProviders: ChatProvider[];
+  disabled: boolean;
+  onPick: (botId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="size-4" />
+        <span>Add bot</span>
+      </Button>
+    );
+  }
+  return (
+    <div className="rounded-md border">
+      <div className="flex items-center justify-between gap-2 border-b p-2">
+        <span className="px-1 text-sm font-medium">Add bot</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close bot picker"
+          onClick={() => setOpen(false)}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      <ul className="p-2">
+        {bots.map((bot) => {
+          const added = selectedBotIds.includes(bot.id);
+          return (
+            <li key={bot.id}>
+              <button
+                type="button"
+                disabled={added}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                onClick={() => {
+                  onPick(bot.id);
+                  setOpen(false);
+                }}
+              >
+                <ChannelIcon
+                  channel={bot.provider}
+                  className="size-4 shrink-0"
+                />
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {botLabel(bot)}
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {MESSAGING_CHANNEL_LABELS[bot.provider]}
+                  </span>
+                </span>
+                {added && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    Added
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+        {bots.length === 0 && (
+          <li className="px-2 py-6 text-center text-sm text-muted-foreground">
+            No bots are set up yet.
+          </li>
+        )}
+      </ul>
+      {/* A provider nobody has connected is only worth naming where someone
+          looks for its bots and does not find one. */}
+      {unconnectedProviders.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 border-t p-2">
+          {unconnectedProviders.map((candidate) => (
+            <Button
+              key={candidate}
+              type="button"
+              size="sm"
+              variant="ghost"
+              asChild
+            >
+              <Link href={`/settings/messaging-channels/${candidate}`}>
+                <Plus className="size-3.5" />
+                <span>{MESSAGING_CHANNEL_LABELS[candidate]}</span>
+              </Link>
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Confirm replacing or removing a bot, naming everything the agent releases.
+ * An agent uses one bot per provider, so picking a second Slack bot is a
+ * replacement; removing a card is the same release without a successor.
+ */
+function BotChangeDialog({
+  change,
+  botsById,
+  heldOptions,
+  isPending,
+  onCancel,
+  onConfirm,
+}: {
+  change:
+    | { kind: "replace"; oldBotId: string; newBotId: string }
+    | { kind: "remove"; botId: string }
+    | null;
+  botsById: Map<string, BotInfo>;
+  /** Everything the agent holds now, staged or saved. */
+  heldOptions: AssignmentOption[];
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const oldBotId = change
+    ? change.kind === "replace"
+      ? change.oldBotId
+      : change.botId
+    : null;
+  const oldBot = oldBotId ? botsById.get(oldBotId) : undefined;
+  const newBot =
+    change?.kind === "replace" ? botsById.get(change.newBotId) : undefined;
+  const released = heldOptions.filter((option) => option.botId === oldBotId);
+  const oldLabel = oldBot ? botLabel(oldBot) : "this bot";
+  const title =
+    change?.kind === "replace" && newBot
+      ? `Replace ${oldLabel} with ${botLabel(newBot)}?`
+      : `Remove ${oldLabel}?`;
+  return (
+    <DeleteConfirmDialog
+      open={!!change}
+      onOpenChange={(open) => {
+        if (!open && !isPending) onCancel();
+      }}
+      title={title}
+      description={
+        <span className="block space-y-2">
+          {change?.kind === "replace" && oldBot && (
+            <span className="block">
+              An agent uses one {MESSAGING_CHANNEL_LABELS[oldBot.provider]} bot
+              at a time.
+            </span>
+          )}
+          {released.length > 0 ? (
+            <>
+              <span className="block">
+                The agent stops answering in these, and they are released when
+                you save:
+              </span>
+              <ul className="list-disc space-y-0.5 pl-5">
+                {released.map((option) => (
+                  <li key={option.id}>
+                    {option.isDm ? "Direct messages" : option.name}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <span className="block">Nothing is assigned under it yet.</span>
+          )}
+        </span>
+      }
+      isPending={isPending}
+      onConfirm={onConfirm}
+      confirmLabel={change?.kind === "replace" ? "Replace bot" : "Remove bot"}
+      pendingLabel="Saving..."
+      confirmVariant={change?.kind === "replace" ? "default" : "destructive"}
+    />
   );
 }
 
@@ -1282,6 +1607,8 @@ function listProviderNames(providers: ChatProvider[]): string {
 type AssignmentOption = {
   id: string;
   provider: ChatProvider;
+  /** The bot the channel belongs to: it is listed under that bot's card. */
+  botId: string;
   name: string;
   /** Whose direct message this is, when it is one. Names it in the a11y label. */
   ownerEmail: string | null;
@@ -1296,7 +1623,7 @@ type AssignmentOption = {
 type AssignmentPlan = {
   expectedAssignments: ExpectedAgentAssignment[];
   expectedUnassignments: ExpectedAgentAssignment[];
-  dmProviders: ChatProvider[];
+  dmBots: Array<{ provider: ChatProvider; botId: string }>;
   reassignments: Array<{
     bindingId: string;
     expectedAgentId: string;
@@ -1373,7 +1700,7 @@ function buildAssignmentOptions({
   subject,
   agentNames,
   bindings,
-  configuredDmProviders,
+  configuredDmBots,
   currentUserId,
   canCreateDm,
   visibilityLocation,
@@ -1381,15 +1708,16 @@ function buildAssignmentOptions({
   subject: ChannelSubject;
   agentNames: Map<string, string>;
   bindings: Binding[];
-  configuredDmProviders: ChatProvider[];
+  configuredDmBots: BotInfo[];
   currentUserId: string | undefined;
   canCreateDm: boolean;
   /** Where this agent's Visibility field is, named as its host names it. */
   visibilityLocation: string;
 }): AssignmentOption[] {
-  const virtualDmOptions = configuredDmProviders.map((provider) => ({
-    id: `${VIRTUAL_DM_PREFIX}${provider}`,
-    provider,
+  const virtualDmOptions = configuredDmBots.map((bot) => ({
+    id: `${VIRTUAL_DM_PREFIX}${bot.id}`,
+    provider: bot.provider,
+    botId: bot.id,
     name: "Direct message",
     ownerEmail: null,
     workspaceName: null,
@@ -1410,6 +1738,7 @@ function buildAssignmentOptions({
     return {
       id: binding.id,
       provider: binding.provider,
+      botId: binding.botId,
       name: channelDisplayName(binding),
       ownerEmail: binding.isDm ? binding.dmOwnerEmail : null,
       workspaceName: binding.workspaceName,
@@ -1455,6 +1784,7 @@ function buildAssignmentPlan({
   assignedBindings,
   bindings,
   selectedIds,
+  botsById,
 }: {
   /** Null before the record exists, when nothing can already be assigned to it. */
   agentId: string | null;
@@ -1462,6 +1792,7 @@ function buildAssignmentPlan({
   assignedBindings: Binding[];
   bindings: Binding[];
   selectedIds: string[];
+  botsById: Map<string, BotInfo>;
 }): AssignmentPlan {
   const selectedRealIds = selectedIds.filter(
     (id) => !id.startsWith(VIRTUAL_DM_PREFIX),
@@ -1486,9 +1817,13 @@ function buildAssignmentPlan({
       id: binding.id,
       agentId: binding.agentId,
     })),
-    dmProviders: selectedIds
+    dmBots: selectedIds
       .filter((id) => id.startsWith(VIRTUAL_DM_PREFIX))
-      .map((id) => id.slice(VIRTUAL_DM_PREFIX.length) as ChatProvider),
+      .flatMap((id) => {
+        const botId = id.slice(VIRTUAL_DM_PREFIX.length);
+        const bot = botsById.get(botId);
+        return bot ? [{ provider: bot.provider, botId }] : [];
+      }),
     reassignments: toAssignBindings.flatMap((binding) =>
       binding.agentId
         ? [

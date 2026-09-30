@@ -69,6 +69,8 @@ function makeEventHandler(): ChatOpsEventHandler {
     handleInteractiveApprovalDecision: vi.fn(async () => {}),
     handleInteractiveSelection: vi.fn(async () => {}),
     getAccessibleChatopsAgents: vi.fn(async () => []),
+    getAgentsUsingBot: vi.fn(async () => []),
+    isOtherManagedBotUser: vi.fn(() => false),
   };
 }
 

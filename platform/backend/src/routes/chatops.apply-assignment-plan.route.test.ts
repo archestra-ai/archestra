@@ -3,7 +3,7 @@ import { vi } from "vitest";
 import { hasPermission } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { ChatOpsChannelBindingModel } from "@/models";
+import { AgentChatOpsBotModel, ChatOpsChannelBindingModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, User } from "@/types";
 import chatopsRoutes from "./chatops";
@@ -537,6 +537,88 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     expect(
       (await ChatOpsChannelBindingModel.findById(binding.id))?.agentId,
     ).toBe(originalOwner.id);
+  });
+
+  describe("bots (the agent's cards)", () => {
+    test("a plan with only `bots` is valid, and an empty plan without it is still rejected", async () => {
+      const bots = await apply({ bots: [botId] });
+      const empty = await apply({});
+
+      expect(bots.statusCode, bots.body).toBe(200);
+      expect(bots.json()).toEqual([]);
+      expect(
+        await AgentChatOpsBotModel.findBotIdsByAgent(targetAgent.id),
+      ).toEqual([botId]);
+      expect(empty.statusCode).toBe(400);
+    });
+
+    test("dropping a bot releases its channels and pending DM and removes the card", async () => {
+      const channel = await makeBinding(targetAgent.id);
+      const dm = await makeBinding(targetAgent.id, true);
+
+      const response = await apply({ bots: [] });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        (await ChatOpsChannelBindingModel.findById(channel.id))?.agentId,
+      ).toBeNull();
+      expect(
+        (await ChatOpsChannelBindingModel.findById(dm.id))?.agentId,
+      ).toBeNull();
+      expect(
+        await AgentChatOpsBotModel.findBotIdsByAgent(targetAgent.id),
+      ).toEqual([]);
+    });
+
+    test("refuses a channel of a bot outside the set, a second bot of one provider, and an unknown bot", async ({
+      makeChatOpsBot,
+    }) => {
+      const secondBotId = (await makeChatOpsBot(organizationId)).id;
+      const channel = await makeBinding(null);
+
+      const outsideSet = await apply({
+        bots: [secondBotId],
+        updates: [
+          {
+            bindingId: channel.id,
+            expectedAgentId: null,
+            nextAgentId: targetAgent.id,
+          },
+        ],
+      });
+      const twoOfOneProvider = await apply({ bots: [botId, secondBotId] });
+      const unknown = await apply({ bots: [crypto.randomUUID()] });
+
+      expect(outsideSet.statusCode).toBe(400);
+      expect(outsideSet.json().error.message).toContain("Add the bot");
+      expect(twoOfOneProvider.statusCode).toBe(400);
+      expect(unknown.statusCode).toBe(404);
+      expect(
+        (await ChatOpsChannelBindingModel.findById(channel.id))?.agentId,
+      ).toBeNull();
+      expect(
+        await AgentChatOpsBotModel.findBotIdsByAgent(targetAgent.id),
+      ).toEqual([]);
+    });
+
+    test("assigning a channel adds its bot to the agent's cards", async () => {
+      const channel = await makeBinding(null);
+
+      const response = await apply({
+        updates: [
+          {
+            bindingId: channel.id,
+            expectedAgentId: null,
+            nextAgentId: targetAgent.id,
+          },
+        ],
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        await AgentChatOpsBotModel.findBotIdsByAgent(targetAgent.id),
+      ).toEqual([botId]);
+    });
   });
 
   function makeBinding(agentId: string | null, isDm = false) {

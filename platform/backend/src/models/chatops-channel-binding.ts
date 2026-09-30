@@ -14,7 +14,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -59,6 +59,7 @@ class ChatOpsChannelBindingModel {
       })
       .returning();
 
+    await ChatOpsChannelBindingModel.ensureAgentCards(db, [binding]);
     return binding as ChatOpsChannelBinding;
   }
 
@@ -87,6 +88,10 @@ class ChatOpsChannelBindingModel {
       .onConflictDoNothing()
       .returning();
 
+    await ChatOpsChannelBindingModel.ensureAgentCards(
+      db,
+      binding ? [binding] : [],
+    );
     return (binding as ChatOpsChannelBinding) || null;
   }
 
@@ -111,6 +116,13 @@ class ChatOpsChannelBindingModel {
       provider: ChatOpsProviderType;
       botId: string;
     }>;
+    /**
+     * The complete set of bots the agent speaks through after this plan (its
+     * cards). Omitted keeps the current cards and only adds those the assigned
+     * channels need. Bots dropped from the set release the channels and direct
+     * messages the agent held under them.
+     */
+    bots?: string[];
   }): Promise<ChatOpsChannelBinding[]> {
     return withDbTransaction(async (tx) => {
       const [targetAgent] = await tx
@@ -208,6 +220,20 @@ class ChatOpsChannelBindingModel {
         }
       }
 
+      const cardBotIds = await ChatOpsChannelBindingModel.resolvePlanBots({
+        tx,
+        organizationId: params.organizationId,
+        targetAgentId: params.targetAgentId,
+        desiredBotIds: params.bots,
+        assignedBindings: params.updates.flatMap((update) => {
+          const binding = bindingsById.get(update.bindingId);
+          return binding && update.nextAgentId === params.targetAgentId
+            ? [binding]
+            : [];
+        }),
+        directMessages: params.directMessages,
+      });
+
       const updatedBindings: ChatOpsChannelBinding[] = [];
       for (const update of params.updates) {
         const [updated] = await tx
@@ -295,6 +321,13 @@ class ChatOpsChannelBindingModel {
         }
         createdDmBindings.push(created as ChatOpsChannelBinding);
       }
+
+      await ChatOpsChannelBindingModel.syncPlanCards({
+        tx,
+        organizationId: params.organizationId,
+        targetAgentId: params.targetAgentId,
+        botIds: cardBotIds,
+      });
 
       return [...updatedBindings, ...createdDmBindings];
     });
@@ -518,26 +551,6 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
-   * The agents holding channels or direct messages under a bot.
-   */
-  static async findAgentsAssignedToBot(
-    botId: string,
-  ): Promise<Array<{ id: string; name: string }>> {
-    return await db
-      .selectDistinct({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-      })
-      .from(schema.chatopsChannelBindingsTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.chatopsChannelBindingsTable.agentId, schema.agentsTable.id),
-      )
-      .where(eq(schema.chatopsChannelBindingsTable.botId, botId))
-      .orderBy(asc(schema.agentsTable.name));
-  }
-
-  /**
    * Find all bindings for a specific agent
    */
   static async findByAgentId(
@@ -573,6 +586,10 @@ class ChatOpsChannelBindingModel {
       .where(eq(schema.chatopsChannelBindingsTable.id, id))
       .returning();
 
+    await ChatOpsChannelBindingModel.ensureAgentCards(
+      db,
+      binding ? [binding] : [],
+    );
     return (binding as ChatOpsChannelBinding) || null;
   }
 
@@ -608,6 +625,10 @@ class ChatOpsChannelBindingModel {
       )
       .returning();
 
+    await ChatOpsChannelBindingModel.ensureAgentCards(
+      db,
+      binding ? [binding] : [],
+    );
     return (binding as ChatOpsChannelBinding) || null;
   }
 
@@ -783,6 +804,7 @@ class ChatOpsChannelBindingModel {
         )
         .returning();
 
+      await ChatOpsChannelBindingModel.ensureAgentCards(tx, updated);
       return updated as ChatOpsChannelBinding[];
     });
   }
@@ -849,6 +871,9 @@ class ChatOpsChannelBindingModel {
           .set(setFields)
           .where(eq(schema.chatopsChannelBindingsTable.id, existing.id))
           .returning();
+        await ChatOpsChannelBindingModel.ensureAgentCards(db, [
+          updated ?? existing,
+        ]);
         return (updated as ChatOpsChannelBinding) ?? existing;
       }
       return existing;
@@ -1198,6 +1223,139 @@ class ChatOpsChannelBindingModel {
     return deleted.length;
   }
 
+  /**
+   * Work out the agent's cards for an assignment plan and reject a plan that
+   * would leave a channel under a bot the agent does not use, or give the agent
+   * two bots of one provider.
+   */
+  private static async resolvePlanBots(params: {
+    tx: Transaction;
+    organizationId: string;
+    targetAgentId: string;
+    desiredBotIds: string[] | undefined;
+    assignedBindings: ChatOpsChannelBinding[];
+    directMessages: Array<{ provider: ChatOpsProviderType; botId: string }>;
+  }): Promise<string[]> {
+    const { tx, organizationId, targetAgentId, desiredBotIds } = params;
+    const currentCards = await tx
+      .select({ botId: schema.agentChatopsBotsTable.botId })
+      .from(schema.agentChatopsBotsTable)
+      .where(eq(schema.agentChatopsBotsTable.agentId, targetAgentId));
+    const current = currentCards.map((card) => card.botId);
+    const needed = [
+      ...params.assignedBindings.map((binding) => binding.botId),
+      ...params.directMessages.map((directMessage) => directMessage.botId),
+    ];
+
+    if (
+      desiredBotIds &&
+      needed.some((botId) => !desiredBotIds.includes(botId))
+    ) {
+      throw new ApiError(
+        400,
+        "Add the bot to this agent before assigning its channels.",
+      );
+    }
+    const finalBotIds = [...new Set(desiredBotIds ?? [...current, ...needed])];
+
+    const bots = finalBotIds.length
+      ? await tx
+          .select({
+            id: schema.chatopsBotsTable.id,
+            provider: schema.chatopsBotsTable.provider,
+          })
+          .from(schema.chatopsBotsTable)
+          .where(
+            and(
+              inArray(schema.chatopsBotsTable.id, finalBotIds),
+              eq(schema.chatopsBotsTable.organizationId, organizationId),
+            ),
+          )
+      : [];
+    if (bots.length !== finalBotIds.length) {
+      throw new ApiError(404, "Bot not found");
+    }
+    const providers = bots.map((bot) => bot.provider);
+    if (new Set(providers).size !== providers.length) {
+      throw new ApiError(
+        400,
+        "An agent uses one bot per provider at a time. Replace the current bot instead of adding a second.",
+      );
+    }
+    return finalBotIds;
+  }
+
+  /**
+   * Make the agent's cards exactly `botIds`. Channels and direct messages the
+   * agent held under a bot that leaves the set are released with it.
+   */
+  private static async syncPlanCards(params: {
+    tx: Transaction;
+    organizationId: string;
+    targetAgentId: string;
+    botIds: string[];
+  }): Promise<void> {
+    const { tx, organizationId, targetAgentId, botIds } = params;
+    const current = (
+      await tx
+        .select({ botId: schema.agentChatopsBotsTable.botId })
+        .from(schema.agentChatopsBotsTable)
+        .where(eq(schema.agentChatopsBotsTable.agentId, targetAgentId))
+    ).map((card) => card.botId);
+    const removed = current.filter((botId) => !botIds.includes(botId));
+    const added = botIds.filter((botId) => !current.includes(botId));
+
+    if (removed.length > 0) {
+      await tx
+        .update(schema.chatopsChannelBindingsTable)
+        .set({ agentId: null })
+        .where(
+          and(
+            eq(schema.chatopsChannelBindingsTable.agentId, targetAgentId),
+            eq(
+              schema.chatopsChannelBindingsTable.organizationId,
+              organizationId,
+            ),
+            inArray(schema.chatopsChannelBindingsTable.botId, removed),
+          ),
+        );
+      await tx
+        .delete(schema.agentChatopsBotsTable)
+        .where(
+          and(
+            eq(schema.agentChatopsBotsTable.agentId, targetAgentId),
+            inArray(schema.agentChatopsBotsTable.botId, removed),
+          ),
+        );
+    }
+    if (added.length > 0) {
+      await tx
+        .insert(schema.agentChatopsBotsTable)
+        .values(added.map((botId) => ({ agentId: targetAgentId, botId })))
+        .onConflictDoNothing();
+    }
+  }
+
+  /**
+   * Keep the rule "an agent holding a channel under a bot has that bot on a
+   * card" true wherever an agent is assigned, not only in the assignment plan.
+   */
+  private static async ensureAgentCards(
+    executor: Pick<typeof db, "insert">,
+    bindings: Array<{ agentId: string | null; botId: string }>,
+  ): Promise<void> {
+    const pairs = bindings.flatMap((binding) =>
+      binding.agentId
+        ? [{ agentId: binding.agentId, botId: binding.botId }]
+        : [],
+    );
+    if (pairs.length === 0) return;
+    await executor
+      .insert(schema.agentChatopsBotsTable)
+      .values(pairs)
+      .onConflictDoNothing();
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -1253,7 +1411,24 @@ class ChatOpsChannelBindingModel {
           `${r.id}:${r.provider}:${r.botId}:${r.channelId}:${r.agentId ?? ""}:${r.answerAllMessages}:${r.channelInstructions ?? ""}:${r.dmOwnerEmail ?? ""}`,
       )
       .sort((a, b) => a.localeCompare(b));
-    return { bindings };
+
+    // Cards are part of the fingerprint, or adding a bot to an agent with no
+    // channel changes would audit as an empty diff.
+    const cardRows = await db
+      .select({
+        agentId: schema.agentChatopsBotsTable.agentId,
+        botId: schema.agentChatopsBotsTable.botId,
+      })
+      .from(schema.agentChatopsBotsTable)
+      .innerJoin(
+        schema.chatopsBotsTable,
+        eq(schema.agentChatopsBotsTable.botId, schema.chatopsBotsTable.id),
+      )
+      .where(eq(schema.chatopsBotsTable.organizationId, organizationId));
+    const cards = cardRows
+      .map((card) => `${card.agentId}:${card.botId}`)
+      .sort((a, b) => a.localeCompare(b));
+    return { bindings, cards };
   }
 }
 

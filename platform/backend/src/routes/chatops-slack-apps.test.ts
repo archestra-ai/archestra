@@ -251,6 +251,63 @@ describe("Slack Apps", () => {
       await app.close();
     });
 
+    test("is refused while an agent has a card for the app even with no channel, and names the agent", async ({
+      makeOrganization,
+      makeUser,
+      makeAgent,
+      makeChatOpsBot,
+    }) => {
+      const organization = await makeOrganization();
+      const user = await makeUser();
+      const agent = await makeAgent({
+        organizationId: organization.id,
+        authorId: user.id,
+        name: "Card Holder",
+        agentType: "agent",
+      });
+      const bot = await makeChatOpsBot(organization.id, { name: "Clode" });
+      await ChatOpsChannelBindingModel.applyAssignmentPlan({
+        organizationId: organization.id,
+        userId: user.id,
+        dmOwnerEmail: user.email,
+        targetAgentId: agent.id,
+        updates: [],
+        directMessages: [],
+        bots: [bot.id],
+      });
+      const app = await createApp(organization.id);
+
+      const refused = await app.inject({
+        method: "DELETE",
+        url: `/api/chatops/bots/${bot.id}`,
+      });
+
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json().error.message).toContain('"Card Holder"');
+      expect(await ChatOpsBotModel.findById(bot.id)).not.toBeNull();
+      expect(stopSlackAppMock).not.toHaveBeenCalled();
+
+      // Dropping the card frees the app for removal.
+      await ChatOpsChannelBindingModel.applyAssignmentPlan({
+        organizationId: organization.id,
+        userId: user.id,
+        dmOwnerEmail: user.email,
+        targetAgentId: agent.id,
+        updates: [],
+        directMessages: [],
+        bots: [],
+      });
+      const removed = await app.inject({
+        method: "DELETE",
+        url: `/api/chatops/bots/${bot.id}`,
+      });
+
+      expect(removed.statusCode).toBe(200);
+      expect(await ChatOpsBotModel.findById(bot.id)).toBeNull();
+
+      await app.close();
+    });
+
     test("stops the app, drops its channels and keeps env vars from re-seeding it", async ({
       makeOrganization,
       makeChatOpsBot,

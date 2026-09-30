@@ -14,6 +14,7 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  AgentChatOpsBotModel,
   AgentModel,
   ChatOpsBotModel,
   ChatOpsChannelBindingModel,
@@ -156,9 +157,11 @@ export class ChatOpsManager {
   async getAccessibleChatopsAgents({
     senderEmail,
     isDm,
+    botId,
   }: {
     senderEmail?: string;
     isDm: boolean;
+    botId?: string;
   }): Promise<{ id: string; name: string }[]> {
     const user = senderEmail
       ? await UserModel.findByEmail(senderEmail.toLowerCase())
@@ -167,11 +170,35 @@ export class ChatOpsManager {
     if (!user) return [];
     const org = await OrganizationModel.getFirst();
     if (!org) return [];
-    return AgentModel.findUsableChatopsAgents({
+    const usable = await AgentModel.findUsableChatopsAgents({
       organizationId: org.id,
       userId: user.id,
       includePersonal: isDm,
     });
+    // A bot only ever offers the agents that use it. A bot no agent uses yet
+    // behaves as before and offers every usable agent.
+    const holders = botId ? await this.getAgentsUsingBot(botId) : [];
+    if (holders.length === 0) return usable;
+    const holderIds = new Set(holders.map((agent) => agent.id));
+    return usable.filter((agent) => holderIds.has(agent.id));
+  }
+
+  async getAgentsUsingBot(
+    botId: string,
+  ): Promise<{ id: string; name: string }[]> {
+    return await AgentChatOpsBotModel.findAgentsByBot(botId);
+  }
+
+  /**
+   * Whether `userId` is the bot user of another Slack App running here. Used to
+   * tell "addressed to the other bot" from "addressed to nobody".
+   */
+  isOtherManagedBotUser(params: { botId: string; userId: string }): boolean {
+    return this.getSlackProviders().some(
+      (provider) =>
+        provider.botId !== params.botId &&
+        provider.getBotUserId() === params.userId,
+    );
   }
 
   /**
@@ -965,11 +992,18 @@ export class ChatOpsManager {
     }
 
     // Resolve inline agent mention
-    const { agentToUse, cleanedMessageText } =
+    const { agentToUse, cleanedMessageText, refusal } =
       await this.resolveInlineAgentMention({
         messageText: message.text,
         defaultAgent: agent,
+        botId: provider.botId,
       });
+    if (refusal) {
+      if (sendReply) {
+        await provider.sendReply({ originalMessage: message, text: refusal });
+      }
+      return { success: true };
+    }
 
     // Security: Validate user has access to the agent
     logger.debug(
@@ -1077,9 +1111,12 @@ export class ChatOpsManager {
           : null;
       // People also address the bot by the platform name ("Archestra, create
       // a task"), which matches neither the agent nor the chat display name.
-      const platformName =
-        (await OrganizationModel.getById(agent.organizationId))?.appName ||
-        DEFAULT_APP_NAME;
+      // Only the platform's own bot answers to it: a second Slack App has a
+      // name of its own and is never told it is called Archestra.
+      const platformName = this.isPrimaryBot(provider)
+        ? (await OrganizationModel.getById(agent.organizationId))?.appName ||
+          DEFAULT_APP_NAME
+        : null;
       const botMentioned = message.metadata?.botMentioned === true;
       const mentionedOthers = Array.isArray(message.metadata?.mentionedOthers)
         ? (message.metadata.mentionedOthers as string[])
@@ -1102,9 +1139,9 @@ export class ChatOpsManager {
             `Never post commentary about whether a message is addressed to you or why you are staying silent — either answer the message itself or respond with the sentinel.`,
           ];
       systemPrefix += [
-        `\n\nYou are "${agentToUse.name}"${botName ? ` (appearing in this chat as "${botName}")` : ""} — a bot participating in a group conversation with multiple people. People sometimes also address you as "${platformName}".`,
+        `\n\nYou are "${agentToUse.name}"${botName ? ` (appearing in this chat as "${botName}")` : ""} — a bot participating in a group conversation with multiple people.${platformName ? ` People sometimes also address you as "${platformName}".` : ""}`,
         `The latest message is from ${message.senderName}.${mentionNote}`,
-        `Default to replying — when in doubt, reply. Messages addressing you by any of those names (with or without an @mention) are your business.`,
+        `Default to replying — when in doubt, reply. Messages addressing you by ${platformName ? "any of those names" : "your name"} (with or without an @mention) are your business.`,
         ...silenceOption,
       ].join("\n");
     }
@@ -1263,9 +1300,30 @@ export class ChatOpsManager {
   private async autoResolveChannelAgentId(params: {
     organizationId: string;
     senderEmail?: string;
+    /** The receiving bot; the agents that use it are the only candidates. */
+    botId: string;
   }): Promise<{ agentId: string; persist: boolean } | null> {
-    // 1. Org-wide default — an explicit, shared choice; pin it to the channel.
     const org = await OrganizationModel.getById(params.organizationId);
+
+    // A bot some agents use resolves among those agents only: the org default
+    // if it is one of them, else the sole one, else the picker card. A bot with
+    // exactly one agent therefore answers as that agent everywhere.
+    const holders = await this.getAgentsUsingBot(params.botId);
+    if (holders.length > 0) {
+      const preferred =
+        (org?.defaultAgentId &&
+          holders.find((agent) => agent.id === org.defaultAgentId)) ||
+        (holders.length === 1 ? holders[0] : null);
+      if (!preferred) return null;
+      const agent = await AgentModel.findById(preferred.id);
+      if (agent?.agentType !== "agent") return null;
+      return {
+        agentId: preferred.id,
+        persist: (await this.channelAudience(agent)) !== "personal",
+      };
+    }
+
+    // 1. Org-wide default — an explicit, shared choice; pin it to the channel.
     if (org?.defaultAgentId) {
       const agent = await AgentModel.findById(org.defaultAgentId);
       if (agent?.agentType === "agent") {
@@ -1281,25 +1339,37 @@ export class ChatOpsManager {
     });
     if (accessible.length === 1) {
       const agent = await AgentModel.findById(accessible[0].id);
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      const audience = agent
-        ? (
-            await ResourcePermissionPolicyModel.findAudience({
-              organizationId: agent.organizationId,
-              resource: "agent",
-              scope: agent.id,
-            })
-          ).audience
-        : null;
-      // SPDX-SnippetEnd
       return {
         agentId: accessible[0].id,
-        persist: audience !== "personal",
+        persist:
+          (agent ? await this.channelAudience(agent) : null) !== "personal",
       };
     }
     return null;
+  }
+
+  /** The platform's own bot: Teams, Telegram, or the first Slack App. */
+  private isPrimaryBot(provider: ChatOpsProvider): boolean {
+    if (provider.providerId !== "slack") return true;
+    const firstSlackApp = this.getDefaultSlackProvider();
+    return !firstSlackApp || firstSlackApp.botId === provider.botId;
+  }
+
+  private async channelAudience(agent: {
+    id: string;
+    organizationId: string;
+  }): Promise<string | null> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    return (
+      await ResourcePermissionPolicyModel.findAudience({
+        organizationId: agent.organizationId,
+        resource: "agent",
+        scope: agent.id,
+      })
+    ).audience;
+    // SPDX-SnippetEnd
   }
 
   /**
@@ -1317,6 +1387,7 @@ export class ChatOpsManager {
     const resolved = await this.autoResolveChannelAgentId({
       organizationId: binding.organizationId,
       senderEmail: message.senderEmail,
+      botId: provider.botId,
     });
     if (resolved) {
       if (resolved.persist) {
@@ -1357,6 +1428,7 @@ export class ChatOpsManager {
     const agents = await this.getAccessibleChatopsAgents({
       senderEmail: message.senderEmail,
       isDm,
+      botId: provider.botId,
     });
 
     if (agents.length === 0) {
@@ -1408,9 +1480,13 @@ export class ChatOpsManager {
   private async resolveInlineAgentMention(params: {
     messageText: string;
     defaultAgent: { id: string; name: string };
+    /** The receiving bot: only the agents that use it can be switched to. */
+    botId: string;
   }): Promise<{
     agentToUse: { id: string; name: string };
     cleanedMessageText: string;
+    /** Set when the prefix names an agent this bot cannot answer as. */
+    refusal?: string;
   }> {
     const { messageText, defaultAgent } = params;
 
@@ -1430,9 +1506,29 @@ export class ChatOpsManager {
 
     const availableAgents = await AgentModel.findAllInternalAgents();
 
+    // A bot some agents use can only switch among those agents. Naming another
+    // agent is refused rather than quietly answered by an agent that has no
+    // business speaking through this bot.
+    const holders = await this.getAgentsUsingBot(params.botId);
+    const holderIds = new Set(holders.map((holder) => holder.id));
+
     // Try to find a matching agent using tolerant matching
     for (const agent of availableAgents) {
       if (matchesAgentName(potentialAgentName, agent.name)) {
+        if (
+          holders.length > 0 &&
+          !holderIds.has(agent.id) &&
+          agent.id !== defaultAgent.id
+        ) {
+          return {
+            agentToUse: defaultAgent,
+            cleanedMessageText: messageText,
+            refusal:
+              holders.length === 1
+                ? `This bot always answers as *${holders[0].name}*, so it can't pass your message to *${agent.name}*.`
+                : `*${agent.name}* isn't available through this bot.`,
+          };
+        }
         return {
           agentToUse: agent,
           cleanedMessageText: messageAfterDelimiter,
@@ -1488,15 +1584,23 @@ export class ChatOpsManager {
         "[ChatOps] Thread history fetched",
       );
 
+      // Only this bot's own turns are "You". Another bot's reply in the same
+      // thread is shown as that bot's words, so one bot is never taught that it
+      // said what a different bot said.
+      const ownName =
+        provider.getBotDisplayName?.() ?? archestraMcpBranding.appName;
       const contextMessages = history.map((msg) => {
         // A bot turn is replayed without the chrome the platform stamped onto
         // it — a footer left in here is a footer the model learns to write.
         const text = msg.isFromBot
           ? stripAgentFooterChrome(msg.text)
           : msg.text;
-        const sender = msg.isFromBot
-          ? `You (${archestraMcpBranding.appName})`
-          : msg.senderName;
+        const isSelf = msg.isFromSelf ?? msg.isFromBot;
+        const sender = isSelf
+          ? `You (${ownName})`
+          : msg.isFromBot
+            ? `${msg.senderName} (another bot)`
+            : msg.senderName;
         // A file-only turn has no text; name its attachments so the turn is
         // meaningful (the file arrives separately or gets a skip note below).
         if (!text.trim() && msg.files?.length) {

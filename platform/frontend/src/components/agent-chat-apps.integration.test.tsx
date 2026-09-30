@@ -59,7 +59,23 @@ beforeEach(() => {
     ),
     http.get(`${API_ORIGIN}/api/chatops/status`, () =>
       HttpResponse.json({
-        providers: [{ id: "slack", configured: true }],
+        providers: [
+          {
+            id: "slack",
+            configured: true,
+            // The agent holds a card for this bot, so its channels are listed
+            // under it.
+            bots: [
+              {
+                id: "bot-1",
+                name: "Clode",
+                configured: true,
+                agents: [{ id: "target-agent", name: "New Responder" }],
+                dmInfo: null,
+              },
+            ],
+          },
+        ],
       }),
     ),
     http.get(`${API_ORIGIN}/api/chatops/bindings`, () =>
@@ -72,6 +88,7 @@ beforeEach(() => {
             channelName: "support",
             workspaceName: "Example workspace",
             agentId: "source-agent",
+            botId: "bot-1",
             isDm: false,
           },
         ],
@@ -116,7 +133,7 @@ describe("Channel takeover agent names", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "Add channel" }),
+      await screen.findByRole("button", { name: "Add channel to @Clode" }),
     );
     await user.click(
       await screen.findByRole("button", {

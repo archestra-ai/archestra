@@ -164,6 +164,7 @@ const bindings = [
     workspaceName: "Workspace",
     workspaceId: "W1",
     agentId: "agent-1",
+    botId: "bot-slack",
     isDm: false,
   },
   {
@@ -174,6 +175,7 @@ const bindings = [
     workspaceName: "Team",
     workspaceId: "W2",
     agentId: "agent-2",
+    botId: "bot-teams",
     isDm: false,
   },
 ];
@@ -185,17 +187,71 @@ const agent = {
   authorId: "user-1",
 } as never;
 
+const SLACK_BOT = "@Clode";
+const TEAMS_BOT = "Teams Bot";
+
+/** One bot of the organization, as the chatops status lists it. */
+function bot(id: string, name: string, agentIds: string[] = []) {
+  return {
+    id,
+    name,
+    configured: true,
+    agents: agentIds.map((agentId) => ({ id: agentId, name: agentId })),
+    dmInfo: null,
+  };
+}
+
+function provider(
+  id: "slack" | "ms-teams" | "telegram",
+  bots: ReturnType<typeof bot>[],
+  configured = true,
+) {
+  return { id, configured, bots };
+}
+
 /**
- * Claiming a channel goes through the picker now: there is no checkbox list of
- * the whole pool, so a test clicks Add channel, switches provider if it needs
- * one that is not the default, and picks the row.
+ * The organization's bots. `agent-1` holds a card for the Slack App and the
+ * Teams bot, which is what makes them saved cards rather than picker entries.
+ */
+function defaultProviders() {
+  return [
+    provider("slack", [bot("bot-slack", "Clode", ["agent-1"])]),
+    provider("ms-teams", [bot("bot-teams", "Teams Bot", ["agent-1"])]),
+    provider("telegram", [], false),
+  ];
+}
+
+function mockStatus(providers: ReturnType<typeof defaultProviders>) {
+  vi.mocked(useChatOpsStatus).mockReturnValue({
+    data: providers,
+    isPending: false,
+    isLoadingError: false,
+    refetch: refetchProviders,
+  } as never);
+}
+
+function mockBindings(list: Array<Record<string, unknown>>) {
+  vi.mocked(useAllChatOpsBindings).mockReturnValue({
+    data: { bindings: list },
+    isPending: false,
+    isLoadingError: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: vi.fn(),
+    refetch: refetchBindings,
+  } as never);
+}
+
+/**
+ * Claiming a channel goes through the picker inside its bot's card: click that
+ * card's Add channel, then pick the row.
  */
 async function addChannel(
   user: ReturnType<typeof userEvent.setup>,
   channelName: string,
-  provider?: string,
+  botLabel: string = SLACK_BOT,
 ) {
-  await openPicker(user, provider);
+  await openPicker(user, botLabel);
   // A claimed row's accessible name carries "Answered by ..." after the
   // channel, so match the start rather than the whole string.
   await user.click(
@@ -214,15 +270,27 @@ function channelRow(channelName: string) {
   });
 }
 
-/** Opening the picker, optionally on a provider other than the first. */
+/** Opening one bot card's channel picker. */
 async function openPicker(
   user: ReturnType<typeof userEvent.setup>,
-  provider?: string,
+  botLabel: string = SLACK_BOT,
 ) {
-  await user.click(screen.getByRole("button", { name: /add channel/i }));
-  if (provider) {
-    await user.click(await screen.findByRole("button", { name: provider }));
-  }
+  await user.click(
+    screen.getByRole("button", { name: `Add channel to ${botLabel}` }),
+  );
+}
+
+/** Adding a bot the agent does not use yet, from the Add bot picker. */
+async function addBot(
+  user: ReturnType<typeof userEvent.setup>,
+  botLabel: string,
+) {
+  await user.click(screen.getByRole("button", { name: "Add bot" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: new RegExp(`^${botLabel}`),
+    }),
+  );
 }
 
 /** Dropping one this agent already holds, from its row. */
@@ -278,36 +346,19 @@ describe("AgentChatAppsEditor", () => {
       isLoadingError: false,
       refetch: refetchAgentNames,
     } as never);
-    vi.mocked(useChatOpsStatus).mockReturnValue({
-      data: [
-        { id: "slack", configured: true },
-        { id: "ms-teams", configured: false },
-        { id: "telegram", configured: false },
-      ],
-      isPending: false,
-      isLoadingError: false,
-      refetch: refetchProviders,
-    } as never);
+    mockStatus(defaultProviders());
     refetchBindings.mockResolvedValue({
       data: { bindings },
       isError: false,
     });
-    vi.mocked(useAllChatOpsBindings).mockReturnValue({
-      data: { bindings },
-      isPending: false,
-      isLoadingError: false,
-      hasNextPage: false,
-      isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
-      refetch: refetchBindings,
-    } as never);
+    mockBindings(bindings);
   });
 
   it("names the agent holding a channel, without linking one it cannot read", async () => {
     const user = userEvent.setup();
     render(<AgentChatApps agent={agent} />);
 
-    await openPicker(user, "MS Teams");
+    await openPicker(user, TEAMS_BOT);
     expect(
       await screen.findByRole("button", {
         name: /^OperationsAnswered by Incident Agent/,
@@ -326,7 +377,7 @@ describe("AgentChatAppsEditor", () => {
     } as never);
     render(<AgentChatApps agent={agent} />);
 
-    await openPicker(user, "MS Teams");
+    await openPicker(user, TEAMS_BOT);
     expect(
       await screen.findByRole("button", {
         name: /^OperationsAnswered by another agent/,
@@ -341,102 +392,94 @@ describe("AgentChatAppsEditor", () => {
     // assigned here, Operations belongs to another agent and is not listed.
     expect(screen.getByText("General")).toBeVisible();
     expect(screen.queryByText("Operations")).toBeNull();
-    expect(screen.getByRole("button", { name: "Add channel" })).toBeVisible();
+    // Each bot card has its own picker for its own channels.
+    expect(
+      screen.getByRole("region", { name: `${SLACK_BOT} bot` }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: `Add channel to ${SLACK_BOT}` }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: `Add channel to ${TEAMS_BOT}` }),
+    ).toBeVisible();
     // No provider strip: a connected provider needs no announcement.
     expect(
       screen.queryByRole("link", { name: /Slack\s*Connected/ }),
     ).toBeNull();
   });
 
-  it("names the connected providers in the empty state, and only those", () => {
-    vi.mocked(useAllChatOpsBindings).mockReturnValue({
-      data: { bindings: [] },
-      isPending: false,
-      isLoadingError: false,
-      hasNextPage: false,
-      isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
-      refetch: refetchBindings,
-    } as never);
+  it("offers the connected bots when the agent has none, and only those", async () => {
+    const user = userEvent.setup();
+    // No card held: the agent has not picked a bot yet.
+    mockStatus([
+      provider("slack", [bot("bot-slack", "Clode")]),
+      provider("ms-teams", [], false),
+      provider("telegram", [], false),
+    ]);
+    mockBindings([]);
     render(<AgentChatApps agent={agent} />);
 
-    const empty = screen.getByText("Not in any channel yet").closest("div");
-    // Slack is configured; Telegram is not, so it is not somewhere this agent
-    // could be listening and has no business being offered here.
-    expect(within(empty as HTMLElement).getByText("Slack")).toBeVisible();
-    expect(within(empty as HTMLElement).queryByText("Telegram")).toBeNull();
+    expect(screen.getByText("No bots yet")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Add bot" }));
+    // Slack has a bot to offer; Telegram has none, so it appears only as a
+    // link to set it up, never as something the agent could be listening on.
+    expect(screen.getByRole("button", { name: /^@Clode/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Telegram/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "Telegram" })).toBeVisible();
   });
 
-  it("points at the provider holding a channel the search found elsewhere", async () => {
+  it("does not offer another bot's channel, even when the search names it", async () => {
     const user = userEvent.setup();
-    vi.mocked(useAllChatOpsBindings).mockReturnValue({
-      data: {
-        bindings: [
-          ...bindings,
-          {
-            ...bindings[0],
-            id: "binding-3",
-            channelId: "C3",
-            channelName: "Escalations",
-            agentId: null,
-          },
-        ],
+    mockBindings([
+      ...bindings,
+      {
+        ...bindings[0],
+        id: "binding-3",
+        channelId: "C3",
+        channelName: "Escalations",
+        agentId: null,
       },
-      isPending: false,
-      isLoadingError: false,
-      hasNextPage: false,
-      isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
-      refetch: refetchBindings,
-    } as never);
+    ]);
     render(<AgentChatApps agent={agent} />);
 
-    // The picker opens on the first connected provider — MS Teams here — but
-    // Escalations is a Slack room, so the search must say where it went.
-    await openPicker(user);
+    // Escalations is a room of the Slack App, so the Teams card finds nothing.
+    await openPicker(user, TEAMS_BOT);
     await user.type(
       screen.getByRole("textbox", { name: "Search channels" }),
       "Escalations",
     );
+    expect(screen.getByText("No channels match.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Escalations/ })).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Close channel picker" }),
+    );
 
-    expect(screen.getByText(/No MS Teams channels match/)).toBeVisible();
-    await user.click(await screen.findByRole("button", { name: "1 in Slack" }));
-
+    await openPicker(user, SLACK_BOT);
     expect(
       await screen.findByRole("button", { name: /^Escalations/ }),
     ).toBeVisible();
   });
 
-  it("says so when a provider has nothing left to add", async () => {
+  it("says so when a bot has nothing left to add", async () => {
     const user = userEvent.setup();
-    vi.mocked(useAllChatOpsBindings).mockReturnValue({
-      data: {
-        bindings: [
-          bindings[0],
-          // A direct message already exists and is already ours, so Slack has
-          // neither a room nor a DM left to offer.
-          {
-            ...bindings[0],
-            id: "binding-dm",
-            channelId: "D1",
-            channelName: "Direct message",
-            isDm: true,
-          },
-        ],
+    mockBindings([
+      bindings[0],
+      // A direct message already exists and is already ours, so the Slack App
+      // has neither a room nor a DM left to offer.
+      {
+        ...bindings[0],
+        id: "binding-dm",
+        channelId: "D1",
+        channelName: "Direct message",
+        isDm: true,
       },
-      isPending: false,
-      isLoadingError: false,
-      hasNextPage: false,
-      isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
-      refetch: refetchBindings,
-    } as never);
+    ]);
     render(<AgentChatApps agent={agent} />);
 
     await openPicker(user);
 
     expect(
-      screen.getByText("Every channel here is already assigned to this agent."),
+      screen.getByText(/channel is already assigned to this agent/),
     ).toBeVisible();
   });
 
@@ -458,7 +501,7 @@ describe("AgentChatAppsEditor", () => {
       </form>,
     );
 
-    await addChannel(user, "Operations", "MS Teams");
+    await addChannel(user, "Operations", TEAMS_BOT);
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -476,7 +519,8 @@ describe("AgentChatAppsEditor", () => {
 
     expect(screen.getByText("General")).toBeVisible();
     expect(screen.getByRole("button", { name: "View details" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Add channel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add channel/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add bot" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Save channel changes" }),
@@ -489,7 +533,7 @@ describe("AgentChatAppsEditor", () => {
 
     render(<AgentChatApps agent={agent} />);
 
-    await openPicker(user, "Slack");
+    await openPicker(user, SLACK_BOT);
     // Not offered as something to click...
     expect(
       screen.queryByRole("button", { name: /^Direct message/ }),
@@ -570,6 +614,7 @@ describe("AgentChatAppsEditor", () => {
           },
         ],
         directMessages: [],
+        bots: ["bot-slack", "bot-teams"],
       },
       expect.objectContaining({
         onError: expect.any(Function),
@@ -583,7 +628,7 @@ describe("AgentChatAppsEditor", () => {
     const onDirtyChange = vi.fn();
     render(<AgentChatApps agent={agent} onDirtyChange={onDirtyChange} />);
 
-    await addChannel(user, "Operations", "MS Teams");
+    await addChannel(user, "Operations", TEAMS_BOT);
 
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
     expect(
@@ -639,7 +684,7 @@ describe("AgentChatAppsEditor", () => {
     } as never);
     render(<AgentChatApps agent={agent} />);
 
-    await addChannel(user, "Escalations", "Slack");
+    await addChannel(user, "Escalations");
     await user.click(
       within(channelRow("Escalations")).getByRole("button", {
         name: "Settings",
@@ -670,6 +715,7 @@ describe("AgentChatAppsEditor", () => {
           },
         ],
         directMessages: [],
+        bots: ["bot-slack", "bot-teams"],
       },
       expect.objectContaining({
         onError: expect.any(Function),
@@ -682,7 +728,7 @@ describe("AgentChatAppsEditor", () => {
     const user = userEvent.setup();
     render(<AgentChatApps agent={agent} />);
 
-    await addChannel(user, "Operations", "MS Teams");
+    await addChannel(user, "Operations", TEAMS_BOT);
     await user.click(
       within(channelRow("Operations")).getByRole("button", {
         name: "Settings",
@@ -705,13 +751,20 @@ describe("AgentChatAppsEditor", () => {
 
   it("does not offer chat apps that the organization turned off", async () => {
     const user = userEvent.setup();
-    isChannelHidden.mockImplementation((provider) => provider === "telegram");
+    isChannelHidden.mockImplementation((provider) => provider === "ms-teams");
 
     render(<AgentChatApps agent={agent} />);
 
-    await openPicker(user);
-    expect(screen.getByRole("button", { name: "Slack" })).toBeVisible();
-    expect(screen.queryByRole("link", { name: /Telegram/ })).toBeNull();
+    // The Teams bot is neither a card nor something the picker lists.
+    expect(
+      screen.getByRole("region", { name: `${SLACK_BOT} bot` }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: `${TEAMS_BOT} bot` }),
+    ).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add bot" }));
+    expect(screen.getByRole("button", { name: /^@Clode/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Teams Bot/ })).toBeNull();
   });
 
   it("keeps Email available when every chat provider is hidden", () => {
@@ -721,8 +774,9 @@ describe("AgentChatAppsEditor", () => {
 
     expect(screen.getByRole("button", { name: "Turn on" })).toBeVisible();
     // Nothing to pick from, so the channel section says nothing at all.
-    expect(screen.queryByText("Channels")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add channel" })).toBeNull();
+    expect(screen.queryByText("Bots")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add channel/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add bot" })).toBeNull();
   });
 
   it("shows an error instead of marking unknown provider status as disconnected", () => {
@@ -736,7 +790,8 @@ describe("AgentChatAppsEditor", () => {
     render(<AgentChatApps agent={agent} />);
 
     expect(screen.getByText("Cannot load chat app status")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Add channel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add channel/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add bot" })).toBeNull();
     expect(screen.queryByText("No messaging providers connected")).toBeNull();
   });
 
@@ -762,7 +817,7 @@ describe("AgentChatAppsEditor", () => {
 
     // Another agent's channel is not listed here until it is claimed.
     expect(screen.queryByText("Operations")).toBeNull();
-    await addChannel(user, "Operations", "MS Teams");
+    await addChannel(user, "Operations", TEAMS_BOT);
     // Claimed but not yet saved, and the row says whose it still is.
     expect(
       within(channelRow("Operations")).getByText(
@@ -814,6 +869,7 @@ describe("AgentChatAppsEditor", () => {
             },
           ],
           directMessages: [],
+          bots: ["bot-slack", "bot-teams"],
         },
         expect.objectContaining({
           onError: expect.any(Function),
@@ -848,6 +904,7 @@ describe("AgentChatAppsEditor", () => {
             },
           ],
           directMessages: [],
+          bots: ["bot-slack", "bot-teams"],
         },
         expect.objectContaining({
           onError: expect.any(Function),
@@ -875,7 +932,7 @@ describe("AgentChatAppsEditor", () => {
       <AgentChatApps agent={agent} onDirtyChange={onDirtyChange} />,
     );
 
-    await addChannel(user, "Direct message", "Slack");
+    await addChannel(user, "Direct message");
     expect(
       within(channelRow("Direct message")).getByText("New direct message"),
     ).toBeVisible();
@@ -888,7 +945,8 @@ describe("AgentChatAppsEditor", () => {
         {
           targetAgentId: "agent-1",
           updates: [],
-          directMessages: [{ provider: "slack" }],
+          directMessages: [{ provider: "slack", botId: "bot-slack" }],
+          bots: ["bot-slack", "bot-teams"],
         },
         expect.objectContaining({
           onError: expect.any(Function),
@@ -931,7 +989,7 @@ describe("AgentChatAppsEditor", () => {
     });
     render(<AgentChatApps agent={agent} />);
 
-    await addChannel(user, "Operations", "MS Teams");
+    await addChannel(user, "Operations", TEAMS_BOT);
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -970,7 +1028,7 @@ describe("AgentChatAppsEditor", () => {
     );
     render(<AgentChatApps agent={agent} />);
 
-    await addChannel(user, "Escalations", "Slack");
+    await addChannel(user, "Escalations");
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -1034,7 +1092,7 @@ describe("AgentChatAppsEditor", () => {
     render(<AgentChatApps agent={agent} />);
 
     for (let index = 1; index <= 4; index += 1) {
-      await addChannel(user, `Operations ${index}`, "MS Teams");
+      await addChannel(user, `Operations ${index}`, TEAMS_BOT);
     }
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
@@ -1117,7 +1175,7 @@ describe("AgentChatAppsEditor", () => {
       />,
     );
 
-    await openPicker(user, "Slack");
+    await openPicker(user, SLACK_BOT);
     // The refusal names the field that lifts it, and where that field is on
     // this surface — the record's page calls its first tab General.
     const reason =
@@ -1208,7 +1266,7 @@ describe("AgentChatAppsEditor", () => {
     });
     render(<AgentChatApps agent={agent} />);
 
-    await addChannel(user, "Direct message \\(admin@example.com\\)", "Slack");
+    await addChannel(user, "Direct message \\(admin@example.com\\)");
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -1251,7 +1309,13 @@ describe("AgentChatAppsEditor", () => {
     // both its agent id and the draft's are null.
     expect(screen.queryByText("General")).toBeNull();
 
-    await addChannel(user, "General", "Slack");
+    // No card yet: the bot is picked first, then a channel under it.
+    expect(screen.getByText("No bots yet")).toBeVisible();
+    await addBot(user, SLACK_BOT);
+    expect(
+      screen.getByRole("region", { name: `${SLACK_BOT} bot` }),
+    ).toBeVisible();
+    await addChannel(user, "General");
     expect(channelRow("General")).toBeVisible();
 
     // The wizard writes the staged picks against the id Create just returned.
@@ -1270,6 +1334,8 @@ describe("AgentChatAppsEditor", () => {
             },
           ],
           directMessages: [],
+          // The card goes out in the same request as its channel.
+          bots: ["bot-slack"],
         },
         expect.objectContaining({ onSuccess: expect.any(Function) }),
       );
@@ -1297,5 +1363,241 @@ describe("AgentChatAppsEditor", () => {
         name: "Remove Slack channel General",
       }),
     ).toBeDisabled();
+  });
+  describe("bot cards", () => {
+    const second = (over: Record<string, unknown> = {}) => ({
+      ...bindings[0],
+      ...over,
+    });
+
+    it("lists only that bot's channels in a card's picker", async () => {
+      const user = userEvent.setup();
+      mockStatus([
+        provider("slack", [
+          bot("bot-slack", "Clode", ["agent-1"]),
+          bot("bot-slack-2", "Nova"),
+        ]),
+        provider("ms-teams", [bot("bot-teams", "Teams Bot", ["agent-1"])]),
+        provider("telegram", [], false),
+      ]);
+      mockBindings([
+        ...bindings,
+        second({
+          id: "b-escalations",
+          channelId: "C3",
+          channelName: "Escalations",
+          agentId: null,
+        }),
+        second({
+          id: "b-billing",
+          channelId: "C4",
+          channelName: "Billing",
+          agentId: null,
+          botId: "bot-teams",
+        }),
+        // The same workspace, but another Slack App's room.
+        second({
+          id: "b-launch",
+          channelId: "C5",
+          channelName: "Launch",
+          agentId: null,
+          botId: "bot-slack-2",
+        }),
+      ]);
+      render(<AgentChatApps agent={agent} />);
+
+      await openPicker(user, SLACK_BOT);
+      expect(
+        await screen.findByRole("button", { name: /^Escalations/ }),
+      ).toBeVisible();
+      expect(screen.queryByRole("button", { name: /^Billing/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Launch/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Operations/ })).toBeNull();
+      await user.click(
+        screen.getByRole("button", { name: "Close channel picker" }),
+      );
+
+      await openPicker(user, TEAMS_BOT);
+      expect(
+        await screen.findByRole("button", { name: /^Billing/ }),
+      ).toBeVisible();
+      expect(screen.getByRole("button", { name: /^Operations/ })).toBeVisible();
+      expect(screen.queryByRole("button", { name: /^Escalations/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Launch/ })).toBeNull();
+    });
+
+    it("greys out a bot that is already added and adds an empty card for a new one", async () => {
+      const user = userEvent.setup();
+      mockStatus([
+        provider("slack", [bot("bot-slack", "Clode", ["agent-1"])]),
+        provider("ms-teams", [bot("bot-teams", "Teams Bot", ["agent-1"])]),
+        provider("telegram", [bot("bot-tg", "Support Telegram")]),
+      ]);
+      render(<AgentChatApps agent={agent} />);
+
+      await user.click(screen.getByRole("button", { name: "Add bot" }));
+      const added = screen.getByRole("button", { name: /^@Clode/ });
+      expect(added).toBeDisabled();
+      expect(added).toHaveTextContent("Added");
+      expect(screen.getByRole("button", { name: /^Teams Bot/ })).toBeDisabled();
+
+      await user.click(
+        screen.getByRole("button", { name: /^Support Telegram/ }),
+      );
+
+      const card = screen.getByRole("region", { name: "Support Telegram bot" });
+      expect(within(card).getByText("No channels yet.")).toBeVisible();
+      // Staged like a channel: nothing is sent until Save.
+      expect(applyBindingPlan).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: "Save channel changes" }),
+      ).toBeEnabled();
+    });
+
+    it("confirms replacing a Slack bot, listing what it releases", async () => {
+      const user = userEvent.setup();
+      mockStatus([
+        provider("slack", [
+          bot("bot-slack", "Clode", ["agent-1"]),
+          bot("bot-slack-2", "Nova"),
+        ]),
+        provider("ms-teams", [bot("bot-teams", "Teams Bot")]),
+        provider("telegram", [], false),
+      ]);
+      mockBindings([
+        bindings[0],
+        second({
+          id: "b-launch",
+          channelId: "C5",
+          channelName: "Launch",
+          agentId: null,
+          botId: "bot-slack-2",
+        }),
+      ]);
+      render(<AgentChatApps agent={agent} />);
+
+      await addBot(user, "@Nova");
+
+      const dialog = screen.getByRole("dialog", {
+        name: "Replace @Clode with @Nova?",
+      });
+      expect(dialog).toHaveTextContent(
+        "An agent uses one Slack bot at a time.",
+      );
+      // The channel the agent is about to stop answering in.
+      expect(within(dialog).getByText("General")).toBeVisible();
+
+      // Cancelling leaves the agent exactly as it was.
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      expect(screen.getByRole("region", { name: "@Clode bot" })).toBeVisible();
+      expect(screen.queryByRole("region", { name: "@Nova bot" })).toBeNull();
+
+      await addBot(user, "@Nova");
+      await user.click(screen.getByRole("button", { name: "Replace bot" }));
+
+      expect(screen.queryByRole("region", { name: "@Clode bot" })).toBeNull();
+      const card = screen.getByRole("region", { name: "@Nova bot" });
+      expect(within(card).getByText("No channels yet.")).toBeVisible();
+      expect(screen.queryByText("General")).toBeNull();
+
+      await user.click(
+        screen.getByRole("button", { name: "Save channel changes" }),
+      );
+      expect(applyBindingPlan).toHaveBeenCalledWith(
+        {
+          targetAgentId: "agent-1",
+          // The old bot's channel is released, not carried over.
+          updates: [
+            {
+              bindingId: "binding-1",
+              expectedAgentId: "agent-1",
+              nextAgentId: null,
+            },
+          ],
+          directMessages: [],
+          bots: ["bot-slack-2"],
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+
+    it("confirms removing a card, then releases its channels on Save", async () => {
+      const user = userEvent.setup();
+      render(<AgentChatApps agent={agent} />);
+
+      await user.click(screen.getByRole("button", { name: "Remove @Clode" }));
+
+      const dialog = screen.getByRole("dialog", { name: "Remove @Clode?" });
+      expect(within(dialog).getByText("General")).toBeVisible();
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      expect(screen.getByRole("region", { name: "@Clode bot" })).toBeVisible();
+
+      await user.click(screen.getByRole("button", { name: "Remove @Clode" }));
+      await user.click(screen.getByRole("button", { name: "Remove bot" }));
+
+      expect(screen.queryByRole("region", { name: "@Clode bot" })).toBeNull();
+      expect(screen.queryByText("General")).toBeNull();
+      await user.click(
+        screen.getByRole("button", { name: "Save channel changes" }),
+      );
+      expect(applyBindingPlan).toHaveBeenCalledWith(
+        {
+          targetAgentId: "agent-1",
+          updates: [
+            {
+              bindingId: "binding-1",
+              expectedAgentId: "agent-1",
+              nextAgentId: null,
+            },
+          ],
+          directMessages: [],
+          bots: ["bot-teams"],
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+
+    it("says nothing is released when the card is empty", async () => {
+      const user = userEvent.setup();
+      render(<AgentChatApps agent={agent} />);
+
+      await user.click(
+        screen.getByRole("button", { name: "Remove Teams Bot" }),
+      );
+
+      expect(
+        within(
+          screen.getByRole("dialog", { name: "Remove Teams Bot?" }),
+        ).getByText("Nothing is assigned under it yet."),
+      ).toBeVisible();
+    });
+
+    it("saves a bots-only change as a plan with no channel updates", async () => {
+      const user = userEvent.setup();
+      mockStatus([
+        provider("slack", [bot("bot-slack", "Clode", ["agent-1"])]),
+        provider("ms-teams", [bot("bot-teams", "Teams Bot", ["agent-1"])]),
+        provider("telegram", [bot("bot-tg", "Support Telegram")]),
+      ]);
+      render(<AgentChatApps agent={agent} />);
+      expect(
+        screen.getByRole("button", { name: "Save channel changes" }),
+      ).toBeDisabled();
+
+      await addBot(user, "Support Telegram");
+      await user.click(
+        screen.getByRole("button", { name: "Save channel changes" }),
+      );
+
+      expect(applyBindingPlan).toHaveBeenCalledWith(
+        {
+          targetAgentId: "agent-1",
+          updates: [],
+          directMessages: [],
+          bots: ["bot-slack", "bot-teams", "bot-tg"],
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
   });
 });

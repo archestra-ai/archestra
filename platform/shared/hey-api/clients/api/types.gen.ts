@@ -38871,6 +38871,7 @@ export type ApplyChatOpsBindingPlanData = {
             expectedAgentId: string | null;
             nextAgentId: string | null;
         }>;
+        bots?: Array<string>;
         directMessages: Array<{
             provider: 'ms-teams' | 'slack' | 'telegram';
             botId?: string;

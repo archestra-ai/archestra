@@ -1,8 +1,8 @@
 import { WebClient } from "@slack/web-api";
 import logger from "@/logging";
 import {
+  AgentChatOpsBotModel,
   ChatOpsBotModel,
-  ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   OrganizationModel,
 } from "@/models";
@@ -133,9 +133,7 @@ class SlackAppService {
       throw new ApiError(404, "Slack App not found");
     }
 
-    const agents = await ChatOpsChannelBindingModel.findAgentsAssignedToBot(
-      bot.id,
-    );
+    const agents = await AgentChatOpsBotModel.findAgentsByBot(bot.id);
     if (agents.length > 0) {
       throw new ApiError(
         409,

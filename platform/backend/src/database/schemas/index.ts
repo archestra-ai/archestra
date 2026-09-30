@@ -100,6 +100,7 @@ export {
   chatActiveRunsTable,
 } from "./chat-active-run";
 export { default as chatToolExecutionClaimsTable } from "./chat-tool-execution-claim";
+export { default as agentChatopsBotsTable } from "./agent-chatops-bot";
 export { default as chatopsBotsTable } from "./chatops-bot";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";

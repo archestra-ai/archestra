@@ -11,6 +11,7 @@ import {
   requireAgentModifyPermission,
   userHasPermission,
 } from "@/auth";
+import config from "@/config";
 import logger from "@/logging";
 import {
   A2ATaskModel,
@@ -39,7 +40,10 @@ import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
-import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
+import {
+  accessAgentWorkspaceFile,
+  stageAgentRunTerminalFile,
+} from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
 import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
@@ -61,7 +65,10 @@ import {
   StartAgentRunResponseSchema,
   UpdateAgentRunSchema,
 } from "@/types";
-import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
+import {
+  agentRunAttachmentSchema,
+  agentRunAttachmentsSchema,
+} from "@/types/agent-run-attachments";
 import {
   AgentWorkspaceFileRequestSchema,
   AgentWorkspaceFileResultSchema,
@@ -999,6 +1006,37 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await A2ATaskModel.delete(run.taskId);
       request.auditAfter = { deleted: true };
       return reply.send({ deleted: true as const });
+    },
+  );
+
+  fastify.post(
+    "/api/agent-runs/:taskId/terminal-files",
+    {
+      bodyLimit:
+        Math.ceil(config.chat.attachmentStorageBytesLimit / 3) * 4 + 64 * 1024,
+      schema: {
+        operationId: RouteId.UploadAgentRunTerminalFile,
+        tags: ["Agents"],
+        description:
+          "Place a file dropped on the caller's live run terminal outside the Agent's workspace and return its absolute path",
+        params: z.object({ taskId: z.string().uuid() }),
+        body: agentRunAttachmentSchema(),
+        response: constructResponseSchema(z.object({ path: z.string() })),
+      },
+    },
+    async (request, reply) => {
+      const staged = await stageAgentRunTerminalFile({
+        actor: {
+          kind: "user",
+          id: request.user.id,
+          organizationId: request.organizationId,
+        },
+        taskId: request.params.taskId,
+        name: request.body.name,
+        data: Buffer.from(request.body.contentBase64, "base64"),
+      });
+      request.auditAfter = { terminalFile: staged };
+      return reply.send(staged);
     },
   );
 

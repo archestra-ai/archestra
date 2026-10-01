@@ -2,38 +2,34 @@ import { z } from "zod";
 import config from "@/config";
 
 export function agentRunAttachmentsSchema() {
+  return z.array(agentRunAttachmentSchema()).max(20).optional();
+}
+
+export function agentRunAttachmentSchema() {
   return z
-    .array(
-      z
-        .object({
-          name: z.string().trim().min(1).max(255),
-          contentType: z.string().trim().min(1).max(255),
-          contentBase64: z
-            .string()
-            .min(1)
-            .refine(
-              isCanonicalBase64,
-              "Attachment content is not valid base64",
-            ),
-        })
-        .superRefine((attachment, context) => {
-          const bytes = Buffer.from(attachment.contentBase64, "base64");
-          if (bytes.byteLength === 0) {
-            context.addIssue({
-              code: "custom",
-              message: "Attachment content is not valid base64",
-            });
-          }
-          if (bytes.byteLength > config.chat.attachmentStorageBytesLimit) {
-            context.addIssue({
-              code: "custom",
-              message: `Attachments may not exceed ${config.chat.attachmentStorageBytesLimit} bytes`,
-            });
-          }
-        }),
-    )
-    .max(20)
-    .optional();
+    .object({
+      name: z.string().trim().min(1).max(255),
+      contentType: z.string().trim().min(1).max(255),
+      contentBase64: z
+        .string()
+        .min(1)
+        .refine(isCanonicalBase64, "Attachment content is not valid base64"),
+    })
+    .superRefine((attachment, context) => {
+      const bytes = Buffer.from(attachment.contentBase64, "base64");
+      if (bytes.byteLength === 0) {
+        context.addIssue({
+          code: "custom",
+          message: "Attachment content is not valid base64",
+        });
+      }
+      if (bytes.byteLength > config.chat.attachmentStorageBytesLimit) {
+        context.addIssue({
+          code: "custom",
+          message: `Attachments may not exceed ${config.chat.attachmentStorageBytesLimit} bytes`,
+        });
+      }
+    });
 }
 
 function isCanonicalBase64(value: string): boolean {

@@ -326,6 +326,18 @@ class AgentRuntimeManager {
     });
   }
 
+  /** Write one file into a running workspace's runtime directory. */
+  async writeRuntimeFile(params: {
+    session: AgentRunRecord;
+    path: string;
+    data: Buffer;
+  }): Promise<void> {
+    await this.writeFileInPod({
+      ...params,
+      podName: await this.requireRunningPodName(params.session),
+    });
+  }
+
   /**
    * Copy durable inputs into the shared runtime volume, then atomically release
    * the bootstrap. The ready marker makes retries and reconciler adoption
@@ -356,18 +368,11 @@ class AgentRuntimeManager {
     if (alreadyReady) return;
 
     for (const input of params.inputs) {
-      await this.execInPod({
+      await this.writeFileInPod({
         session: params.session,
         podName: pod,
-        command: [
-          "/bin/sh",
-          "-c",
-          'umask 077; mkdir -p "$1"; cat > "$2"',
-          "archestra-stage-input",
-          path.posix.dirname(input.runtimePath),
-          input.runtimePath,
-        ],
-        stdin: NodeReadable.from([input.fileData]),
+        path: input.runtimePath,
+        data: input.fileData,
       });
     }
 
@@ -1648,6 +1653,27 @@ done`
           );
         })
         .catch(finish);
+    });
+  }
+
+  private async writeFileInPod(params: {
+    session: AgentRunRecord;
+    podName: string;
+    path: string;
+    data: Buffer;
+  }): Promise<void> {
+    await this.execInPod({
+      session: params.session,
+      podName: params.podName,
+      command: [
+        "/bin/sh",
+        "-c",
+        'umask 077; mkdir -p "$1"; cat > "$2"',
+        "archestra-stage-input",
+        path.posix.dirname(params.path),
+        params.path,
+      ],
+      stdin: NodeReadable.from([params.data]),
     });
   }
 

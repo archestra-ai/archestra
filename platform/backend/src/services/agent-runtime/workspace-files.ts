@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { AgentRunModel, AgentWorkspaceModel } from "@/models";
 import { ApiError } from "@/types";
@@ -5,7 +6,9 @@ import {
   type AgentWorkspaceFileRequest,
   AgentWorkspaceFileRequestSchema,
 } from "@/types/agent-workspace-file";
+import { sanitizeUploadFilename } from "@/utils/upload-filename";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
+import { AGENT_RUNTIME_ATTACHMENTS_DIR } from "./runtime-contract";
 
 /** Shared owner-only file access for API and MCP callers. Shared run viewers
  * must not gain access to the owner's live filesystem or credentials. */
@@ -20,6 +23,25 @@ export async function accessAgentWorkspaceFile(params: {
     session,
     request,
   });
+}
+
+/** Place a file the owner dropped on the live terminal beside the run's other
+ * inputs, outside the Agent's working tree, and return its absolute path. */
+export async function stageAgentRunTerminalFile(params: {
+  actor: A2AActor;
+  taskId: string;
+  name: string;
+  data: Buffer;
+}): Promise<{ path: string }> {
+  const session = await authorizeAgentWorkspaceAccess(params);
+  // A fresh directory per drop keeps the original name without collisions.
+  const path = `${AGENT_RUNTIME_ATTACHMENTS_DIR}/${params.taskId}/terminal/${randomUUID().slice(0, 8)}/${sanitizeUploadFilename(params.name)}`;
+  await resolveAgentRuntimeBackendDriver(session.backend).writeRuntimeFile({
+    session,
+    path,
+    data: params.data,
+  });
+  return { path };
 }
 
 /** Run the owner-only workspace gate and return the session behind it.

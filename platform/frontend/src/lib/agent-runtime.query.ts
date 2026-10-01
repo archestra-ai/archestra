@@ -6,6 +6,8 @@ import {
   hasRecentlyEnded,
   hasRetainedSessionActivity,
 } from "@/lib/agent-run-activity";
+import { useFeature } from "@/lib/config/config.query";
+import { readFileAsBase64, validateUploadFile } from "@/lib/files/file-upload";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
@@ -20,6 +22,7 @@ const {
   setAgentRuntimeCredential,
   startAgentRun,
   updateAgentRun,
+  uploadAgentRunTerminalFile,
 } = archestraApiSdk;
 
 export type AgentRunListItem =
@@ -204,6 +207,45 @@ export function useDeleteAgentWorkspace() {
     onSuccess: async () => {
       toast.success("Workspace deleted. Run history is still available.");
       await queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
+    },
+  });
+}
+
+/** Upload files dropped on a live run terminal, one request per file, and
+ * resolve with the in-runtime path of each file that landed. */
+export function useUploadAgentRunTerminalFiles(taskId: string) {
+  const maxBytes = useFeature("chatAttachmentStorageBytesLimit");
+  return useMutation({
+    mutationFn: async (files: File[]) => {
+      const paths: string[] = [];
+      for (const file of files) {
+        const validation = validateUploadFile(
+          file,
+          maxBytes ?? Number.POSITIVE_INFINITY,
+        );
+        if (!validation.ok) {
+          toast.error(
+            validation.reason === "empty"
+              ? `${file.name} is empty`
+              : `${file.name} is too large (max ${Math.floor((maxBytes ?? 0) / 1024 / 1024)} MB)`,
+          );
+          continue;
+        }
+        const { data, error } = await uploadAgentRunTerminalFile({
+          path: { taskId },
+          body: {
+            name: file.name,
+            contentType: file.type || "application/octet-stream",
+            contentBase64: await readFileAsBase64(file),
+          },
+        });
+        if (error) {
+          reportApiError(error);
+          continue;
+        }
+        paths.push(data.path);
+      }
+      return paths;
     },
   });
 }

@@ -635,6 +635,50 @@ describe("ExecTerminal", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("types the stored paths of files dropped on a live terminal", async () => {
+    const session: { handlers: ExecSessionHandlers | null } = {
+      handlers: null,
+    };
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        session.handlers = handlers;
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    const onDropFiles = vi
+      .fn()
+      .mockResolvedValue(["/runtime/a/shot.png", "/runtime/b/notes.txt"]);
+    const files = [
+      new File(["png"], "shot.png", { type: "image/png" }),
+      new File(["txt"], "notes.txt", { type: "text/plain" }),
+    ];
+
+    render(
+      <ExecTerminal
+        sessionKey="task-drop"
+        transport={transport}
+        isActive
+        onDropFiles={onDropFiles}
+      />,
+    );
+    await waitFor(() => expect(session.handlers).not.toBeNull());
+    session.handlers?.onStarted(null);
+    await screen.findByText("Connected");
+
+    fireEvent.drop(terminalHarness.element as HTMLDivElement, {
+      dataTransfer: { files, types: ["Files"] },
+    });
+
+    await waitFor(() =>
+      expect(transport.sendInput).toHaveBeenCalledWith(
+        "/runtime/a/shot.png /runtime/b/notes.txt ",
+      ),
+    );
+    expect(onDropFiles).toHaveBeenCalledWith(files);
+  });
+
   it("drops no-button mouse motion without swallowing terminal input", async () => {
     const transport: ExecSessionTransport = {
       open: (handlers) => {

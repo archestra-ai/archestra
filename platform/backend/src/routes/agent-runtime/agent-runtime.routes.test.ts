@@ -1837,6 +1837,61 @@ describe("Agent Runtime routes", () => {
     expect(fileAccess).toHaveBeenCalledTimes(1);
   });
 
+  test("terminal files land outside the workspace for the owner only", async ({
+    makeAdmin,
+  }) => {
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const write = vi
+      .spyOn(agentRuntimeManager, "writeRuntimeFile")
+      .mockResolvedValue();
+    const payload = {
+      name: "screen shot.png",
+      contentType: "image/png",
+      contentBase64: Buffer.from("png").toString("base64"),
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/terminal-files`,
+      payload,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const { path } = response.json();
+    expect(path).toMatch(
+      new RegExp(
+        `^/var/run/archestra/attachments/${task.id}/terminal/[0-9a-f]{8}/screen shot\\.png$`,
+      ),
+    );
+    expect(write).toHaveBeenCalledWith(
+      expect.objectContaining({ path, data: Buffer.from("png") }),
+    );
+
+    user = await makeAdmin();
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/agent-runs/${task.id}/terminal-files`,
+          payload,
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
   test("reports a retained terminal from the reconciler's probe until the CLI exits", async () => {
     const task = await createTask(agent.id);
     const run = await createRun({ taskId: task.id, actorUserId: user.id });

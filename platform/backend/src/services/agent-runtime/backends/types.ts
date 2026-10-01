@@ -150,6 +150,13 @@ export interface AgentRuntimeBackendDriver {
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
   ): Promise<void>;
 
+  /** Write one file into the runtime directory of a running workspace. */
+  writeRuntimeFile(params: {
+    session: AgentRunRecord;
+    path: string;
+    data: Buffer;
+  }): Promise<void>;
+
   /** Materialize durable task inputs before the Agent command is released. */
   stageInputs(params: {
     session: AgentRunRecord;

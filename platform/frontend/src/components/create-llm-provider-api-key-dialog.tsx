@@ -110,9 +110,10 @@ export function CreateLlmProviderApiKeyDialog({
         ? getDefaultFormValues({
             defaultValues,
             availableProviders,
+            credentialMode,
           })
         : null,
-    [availableProviders, defaultValues],
+    [availableProviders, defaultValues, credentialMode],
   );
   const resetKey = JSON.stringify(defaultFormValues);
 
@@ -157,7 +158,10 @@ export function CreateLlmProviderApiKeyDialog({
     // deferred until a sign-in completes (so switching tabs can't silently
     // privatize anything), and the sign-in callback reads form values in the
     // same tick the credential lands — before any effect has run.
-    const shared = subscriptionKind ? false : values.shared;
+    // Ordinary keys use their grant policy for access. Creation grants the
+    // caller full access; personal account credentials remain owner-only.
+    const shared =
+      !subscriptionKind && !providerRequiresPerUserCredential(values.provider);
     try {
       const createdKey = await createMutation.mutateAsync({
         name:
@@ -319,8 +323,9 @@ function getDefaultFormValues(params: {
   defaultValues?: Partial<LlmProviderApiKeyFormValues>;
   /** Providers the organization still allows, in catalog order. */
   availableProviders: LlmProviderApiKeyFormValues["provider"][];
+  credentialMode: "api-key" | "subscription";
 }): LlmProviderApiKeyFormValues {
-  const { defaultValues, availableProviders } = params;
+  const { defaultValues, availableProviders, credentialMode } = params;
   const provider =
     defaultValues?.provider &&
     availableProviders.includes(defaultValues.provider)
@@ -334,7 +339,6 @@ function getDefaultFormValues(params: {
     baseUrl: null,
     inferenceBaseUrl: null,
     extraHeaders: [],
-    shared: false,
     initialGrants: [],
     teamId: null,
     vaultSecretPath: null,
@@ -348,6 +352,10 @@ function getDefaultFormValues(params: {
     ...defaultValues,
     // Anthropic unless the compatible provider list excludes it.
     provider,
+    shared:
+      credentialMode !== "subscription" &&
+      defaultValues?.authMethod !== "subscription" &&
+      !providerRequiresPerUserCredential(provider),
   };
 }
 

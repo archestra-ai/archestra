@@ -150,8 +150,7 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps creation simple when choosing a shared key", async () => {
-    const user = userEvent.setup();
+  it("defers access management until after creation", () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -171,11 +170,13 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
     expect(
       screen.queryByRole("button", { name: "Permissions" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Shared" }));
-    expect(screen.getByRole("tab", { name: "Shared" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(screen.queryByText("Who uses this key")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Shared" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Just for me" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Permissions" }),
     ).not.toBeInTheDocument();
@@ -206,6 +207,7 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
           open
           onOpenChange={onOpenChange}
           onSuccess={onSuccess}
+          defaultValues={{ shared: false }}
           title="Add API Key"
           description="Create a provider key"
           allowedProviders={["anthropic"]}
@@ -236,6 +238,8 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
     expect(requests).toEqual([
       expect.objectContaining({
         apiKey: "test-provider-key",
+        shared: true,
+        initialGrants: [],
         baseUrl: "https://gateway.example.com",
         extraHeaders: { "X-Gateway": "test-value" },
       }),

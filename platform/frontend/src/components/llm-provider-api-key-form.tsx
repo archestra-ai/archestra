@@ -81,8 +81,8 @@ export type LlmProviderApiKeyFormValues = {
   /** Edited as an array of rows; serialized to Record<string, string> on submit. */
   extraHeaders: Array<{ name: string; value: string }>;
   /**
-   * "Just for me" (false: the key is yours and only you use it) or "Shared"
-   * (true: no owner; the initial grants say who uses it).
+   * API ownership metadata: ordinary new keys have no owner and use grants.
+   * Existing personal keys and subscription credentials retain their owner.
    */
   shared: boolean;
   /** The team whose vault folder the secret picker browses. Not submitted. */
@@ -1491,44 +1491,21 @@ export function LlmProviderApiKeyForm({
           {/* SPDX-SnippetBegin
             SPDX-SnippetCopyrightText: 2026 Archestra Inc.
             SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-          {!hideScopeAndPrimary && !isPerUserCredential && !existingKey?.id && (
-            <div className="space-y-2">
-              <Label>Who uses this key</Label>
-              <Tabs
-                value={shared ? "shared" : "just-me"}
-                onValueChange={(value) =>
-                  form.setValue("shared", value === "shared", {
+          {!hideScopeAndPrimary &&
+            !hidePermissions &&
+            !isPerUserCredential &&
+            !existingKey?.id &&
+            shared && (
+              <ResourceAccessSection
+                resource="llmProviderApiKey"
+                grants={form.watch("initialGrants") ?? []}
+                onGrantsChange={(grants) =>
+                  form.setValue("initialGrants", grants, {
                     shouldDirty: true,
                   })
                 }
-              >
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="just-me" disabled={isPending}>
-                    Just for me
-                  </TabsTrigger>
-                  <TabsTrigger value="shared" disabled={isPending}>
-                    Shared
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <FieldDescription>
-                {shared
-                  ? "No one owns a shared key."
-                  : "Only you use this key. It is picked before any shared key."}
-              </FieldDescription>
-              {shared && !hidePermissions && (
-                <ResourceAccessSection
-                  resource="llmProviderApiKey"
-                  grants={form.watch("initialGrants") ?? []}
-                  onGrantsChange={(grants) =>
-                    form.setValue("initialGrants", grants, {
-                      shouldDirty: true,
-                    })
-                  }
-                />
-              )}
-            </div>
-          )}
+              />
+            )}
           {/* SPDX-SnippetEnd */}
 
           {/* Region is a primary Bedrock field, not an advanced one: AWS enables

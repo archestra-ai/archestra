@@ -268,7 +268,7 @@ describe("LlmProviderApiKeyForm", () => {
 
     expect(screen.getByLabelText("Provider")).toBeInTheDocument();
     expect(screen.getByText("API Key")).toBeInTheDocument();
-    expect(screen.getByText("Who uses this key")).toBeInTheDocument();
+    expect(screen.queryByText("Who uses this key")).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
     expect(screen.queryByText("Primary key")).not.toBeInTheDocument();
     expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
@@ -281,26 +281,17 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.getByText("Extra HTTP headers")).toBeInTheDocument();
   });
 
-  it("asks whether a new key is just for the creator or shared", async () => {
-    const user = userEvent.setup();
-    renderForm({ credentialMode: "api-key" });
+  it("shows grants for a new key without an ownership selector", () => {
+    renderForm({ credentialMode: "api-key", defaults: { shared: true } });
 
-    // Just for me by default: the key is the creator's alone, so there is no
-    // one to grant it to.
-    expect(screen.getByRole("tab", { name: "Just for me" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(screen.getByText(/Only you use this key/)).toBeInTheDocument();
-    expect(screen.queryByText("Permissions")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: "Shared" }));
-
-    expect(screen.getByText(/No one owns a shared key/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Just for me" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Shared" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Permissions")).toBeInTheDocument();
-    // A shared key has no owner, but its creator gets full access.
     expect(screen.getByText(/You’ll have full access/)).toBeInTheDocument();
-    expect(form.getValues("shared")).toBe(true);
   });
 
   it("offers no sharing for a per-user credential", () => {

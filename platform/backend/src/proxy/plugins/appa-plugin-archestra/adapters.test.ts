@@ -17,36 +17,31 @@ describe("APPA child trajectory adapters", () => {
   const openCode = new AppaOpenCodeAdapter();
   const chat = new AppaChatAdapter();
 
-  test("reads a Claude Code teammate launch only from a spawn call's result", () => {
+  test("reads a Claude Code teammate launch only from its spawn call's own result", () => {
     const receipt =
       "Spawned successfully.\nagent_id: sched-tools@audit\nname: sched-tools";
-    const history = (callName: string) => ({
-      messages: [
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "tool_use",
-              id: "toolu_launch",
-              name: callName,
-              input: { name: "sched-tools", prompt: "Add the tools." },
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: "toolu_launch",
-              content: receipt,
-            },
-          ],
-        },
-      ],
+    const call = (name: string, input: Record<string, unknown>) => ({
+      type: "tool_use",
+      id: "toolu_launch",
+      name,
+      input,
     });
+    const result = (extra: Record<string, unknown> = {}) => ({
+      type: "tool_result",
+      tool_use_id: "toolu_launch",
+      content: receipt,
+      ...extra,
+    });
+    const spawn = call("Agent", { name: "sched-tools", prompt: "Add tools." });
+    const launches = (messages: unknown[]) =>
+      claudeCode.teammateLaunches({ messages });
 
-    expect(claudeCode.teammateLaunches(history("Agent"))).toEqual(
+    expect(
+      launches([
+        { role: "assistant", content: [spawn] },
+        { role: "user", content: [result()] },
+      ]),
+    ).toEqual(
       new Map([
         [
           "sched-tools",
@@ -54,8 +49,40 @@ describe("APPA child trajectory adapters", () => {
         ],
       ]),
     );
-    // Any other tool can print the same text: it launches nothing.
-    expect(claudeCode.teammateLaunches(history("Bash")).size).toBe(0);
+    // Text that only reads like a receipt launches nothing.
+    for (const messages of [
+      // another tool printed it
+      [
+        { role: "assistant", content: [call("Bash", { command: "echo" })] },
+        { role: "user", content: [result()] },
+      ],
+      // a spawn call the model did not make
+      [
+        { role: "user", content: [spawn] },
+        { role: "user", content: [result()] },
+      ],
+      // a failed launch
+      [
+        { role: "assistant", content: [spawn] },
+        { role: "user", content: [result({ is_error: true })] },
+      ],
+      // a spawn under another name
+      [
+        {
+          role: "assistant",
+          content: [call("Agent", { name: "other", prompt: "Add tools." })],
+        },
+        { role: "user", content: [result()] },
+      ],
+      // a second result for a call that already has one
+      [
+        { role: "assistant", content: [spawn] },
+        { role: "user", content: [result({ is_error: true })] },
+        { role: "user", content: [result()] },
+      ],
+    ]) {
+      expect(launches(messages).size).toBe(0);
+    }
   });
 
   test("keeps Claude Code Skill in-session before a real child spawn", () => {

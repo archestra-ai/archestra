@@ -177,11 +177,11 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
 
   teammateLaunches(requestBody: unknown): Map<string, AppaTeammateLaunch> {
     const launches = new Map<string, AppaTeammateLaunch>();
-    for (const { text, callId } of spawnResultTexts(requestBody)) {
+    for (const { text, callId, teammate } of spawnResultTexts(requestBody)) {
       if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) continue;
       const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
-      if (id && name && isChildId(id) && isChildId(name))
+      if (id && name === teammate && isChildId(id) && isChildId(name))
         launches.set(name, { childNativeId: id, spawnCallId: callId });
     }
     return launches;
@@ -398,31 +398,43 @@ function argumentRecord(args: unknown): Record<string, unknown> | undefined {
 }
 
 /**
- * The text of every result of a spawn call in a Messages request, in order,
- * with the call it answers. Any other tool can return text that reads like a
- * launch receipt, so only a spawn call's result counts.
+ * The text of every successful result of a model's teammate spawn in a
+ * Messages request, in order, with the call it answers and the teammate name
+ * that call gave. Any other tool can return text that reads like a launch
+ * receipt, so only the one result of such a call counts.
  */
 function spawnResultTexts(
   requestBody: unknown,
-): Array<{ text: string; callId: string }> {
-  const results: Array<{ text: string; callId: string }> = [];
-  const spawnCalls = new Set<string>();
+): Array<{ text: string; callId: string; teammate: string }> {
+  const results: Array<{ text: string; callId: string; teammate: string }> = [];
+  const spawns = new Map<string, string>();
   const messages = asRecord(requestBody)?.messages;
   for (const message of Array.isArray(messages) ? messages : []) {
-    const content = asRecord(message)?.content;
+    const record = asRecord(message);
+    const content = record?.content;
     for (const block of Array.isArray(content) ? content : []) {
-      const record = asRecord(block);
-      const id = stringField(record?.id);
-      const name = stringField(record?.name);
-      if (record?.type === "tool_use" && id && name) {
-        if (CHILD_SPAWN_TOOLS.has(localToolName(name))) spawnCalls.add(id);
+      const part = asRecord(block);
+      if (part?.type === "tool_use" && record?.role === "assistant") {
+        const id = stringField(part.id);
+        const name = stringField(part.name);
+        const teammate = stringField(asRecord(part.input)?.name);
+        if (
+          id &&
+          name &&
+          teammate &&
+          CHILD_SPAWN_TOOLS.has(localToolName(name))
+        )
+          spawns.set(id, teammate);
         continue;
       }
-      if (record?.type !== "tool_result") continue;
-      const callId = stringField(record.tool_use_id);
-      if (!callId || !spawnCalls.has(callId)) continue;
-      const text = launchText(record.content);
-      if (text) results.push({ text, callId });
+      if (part?.type !== "tool_result") continue;
+      const callId = stringField(part.tool_use_id);
+      const teammate = callId ? spawns.get(callId) : undefined;
+      if (!callId || teammate === undefined) continue;
+      spawns.delete(callId);
+      if (part.is_error === true) continue;
+      const text = launchText(part.content);
+      if (text) results.push({ text, callId, teammate });
     }
   }
   return results;

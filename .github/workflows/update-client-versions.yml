@@ -136,6 +136,7 @@ jobs:
           fi
 
           # git diff --quiet exits 1 for a change and above 1 for an error.
+          # file_changed returns 0 (true) when the file differs from HEAD.
           file_changed() {
             if git -C "$TARGET" diff --quiet -- "$1"; then
               return 1

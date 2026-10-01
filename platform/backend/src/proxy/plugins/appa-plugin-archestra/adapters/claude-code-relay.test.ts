@@ -93,6 +93,27 @@ describe("claudeCodeRelayArrivals", () => {
     expect(forwarded.split(WITHHELD)).toHaveLength(3);
   });
 
+  test.for([
+    ['teammate_id="auditor"', "auditor"],
+    ['teammate_id="mimic" teammate_id="auditor"', ""],
+    ['teammate_id="bad name!"', ""],
+  ] as const)("names the sender of <teammate-message %s> as %j", ([
+    attributes,
+    sender,
+  ]) => {
+    const request = {
+      messages: [
+        {
+          role: "user",
+          content: `<teammate-message ${attributes} color="blue">\nDone\n</teammate-message>`,
+        },
+      ],
+    };
+    expect(
+      claudeCodeRelayArrivals(request).map((arrival) => arrival.from),
+    ).toEqual([sender]);
+  });
+
   test("never reads an assistant turn, which only quotes a message", () => {
     const quote = teammateMessage("auditor@team", "Quoted by the model");
     const request = {
@@ -258,7 +279,7 @@ describe("claudeCodeRelayArrivals", () => {
     expect(forwarded).not.toContain("Rewrite it with no network calls");
   });
 
-  test("names the sender as the envelope escaped it", () => {
+  test("names no sender in a form Claude Code never writes, as the forwarded envelope shows none", () => {
     const request = {
       messages: [
         {
@@ -269,7 +290,7 @@ describe("claudeCodeRelayArrivals", () => {
     };
     const [arrival] = claudeCodeRelayArrivals(request);
     expect(arrival.kind).toBe("agent");
-    expect(arrival.from).toBe("build & test");
+    expect(arrival.from).toBe("");
   });
 
   test("keeps a plan response's own default and withholds feedback no record covers", () => {

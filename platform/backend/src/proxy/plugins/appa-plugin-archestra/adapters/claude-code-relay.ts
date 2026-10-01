@@ -291,7 +291,7 @@ function collectEnvelopes(
     const [original, attributes = "", body = ""] = match;
     arrivals.push({
       kind: envelope.kind,
-      from: parseAttributes(attributes)[envelope.from] ?? "",
+      from: senderOf(envelope, attributes),
       body,
       admit(records) {
         const admitted =
@@ -600,13 +600,22 @@ function withCoordinatorBody(
   return `${original.slice(0, start)}${text}${original.slice(start + body.length)}`;
 }
 
-function parseAttributes(raw: string): Record<string, string> {
-  const attributes: Record<string, string> = Object.create(null);
-  for (const match of raw.matchAll(ATTRIBUTE)) {
-    const [, name, value = ""] = match;
-    if (name) attributes[name] = unescapeAttribute(value);
-  }
-  return attributes;
+/**
+ * The sender an envelope names: its one sender attribute, in the form Claude
+ * Code writes, as the rendered envelope shows it. A repeated or malformed
+ * sender names no one.
+ */
+function senderOf(envelope: Envelope, raw: string): string {
+  const values = [...raw.matchAll(ATTRIBUTE)].flatMap(([, name, value = ""]) =>
+    name === envelope.from ? [unescapeAttribute(value)] : [],
+  );
+  const form = envelope.attributes.get(envelope.from);
+  const [value] = values;
+  return values.length === 1 &&
+    value !== undefined &&
+    (!form || form.test(value))
+    ? value
+    : "";
 }
 
 function unescapeAttribute(value: string): string {

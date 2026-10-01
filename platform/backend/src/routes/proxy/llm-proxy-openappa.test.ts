@@ -1062,9 +1062,58 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.statusCode, response.body).toBe(200);
     }
     expect(providerRequests).toHaveLength(2);
-    expect(events.filter((event) => event.event === "tool_call")).toHaveLength(
-      1,
-    );
+    // Two roots, each ruled once. The known client's native id is scoped to
+    // the loopback user. An explicit header on that unauthenticated loopback
+    // is the named root, not a second evaluation of the first call.
+    const callerId = `user:${userId}`;
+    const knownRoot = `${callerId}|known-session`;
+    const explicitRoot = "explicit-session";
+    const starts = events.filter((event) => event.event === "session_start");
+    const toolCalls = events.filter((event) => event.event === "tool_call");
+    expect(starts).toEqual([
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: knownRoot,
+      }),
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: explicitRoot,
+      }),
+    ]);
+    expect(starts.map((event) => event.parent_id)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(starts.map((event) => event.fork_of)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(toolCalls).toEqual([
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: knownRoot,
+        tool: "get_weather",
+        operation_id: "call:toolu_test_weather",
+      }),
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: explicitRoot,
+        tool: "get_weather",
+        operation_id: "call:toolu_test_weather",
+      }),
+    ]);
+    expect(toolCalls.map((event) => event.namespace)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(toolCalls.map((event) => event.parent_id)).toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 
   test("does not issue a remedy notice while the deployment switch is off, then does after it is turned on", async () => {

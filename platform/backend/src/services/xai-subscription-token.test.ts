@@ -509,6 +509,41 @@ describe("createXaiSubscriptionFetch", () => {
     expect(init.redirect).toBe("manual");
   });
 
+  test("reports a Grok CLI version at or above the proxy minimum when no override is set", async () => {
+    // The mocked config is shared by every test in this file.
+    const override = config.llm.xai.subscription.clientVersion;
+    config.llm.xai.subscription.clientVersion = undefined;
+    stubRedemptionFetch(() => ({
+      access_token: "at_version",
+      expires_in: 3600,
+    }));
+    const innerFetch = vi.fn().mockResolvedValue(new Response("ok"));
+    const wrapped = createXaiSubscriptionFetch({
+      credential: { refreshToken: "rt_version", userId: "x-user-123" },
+      innerFetch,
+    });
+
+    try {
+      await wrapped("https://cli-chat-proxy.grok.test/v1/chat/completions", {
+        method: "POST",
+        body: "{}",
+      });
+    } finally {
+      config.llm.xai.subscription.clientVersion = override;
+    }
+
+    const [, init] = innerFetch.mock.calls[0];
+    const version = (init.headers as Headers).get("x-grok-client-version");
+    expect((init.headers as Headers).get("user-agent")).toContain(
+      `grok-build/${version}`,
+    );
+    // xAI answered 426 below 1.0.13 as of 2026-10-01.
+    const [major, minor, patch] = String(version).split(".").map(Number);
+    expect(major * 1_000_000 + minor * 1_000 + patch).toBeGreaterThanOrEqual(
+      1_000_013,
+    );
+  });
+
   test("sets the session proxy model-routing header from the request body", async () => {
     stubRedemptionFetch(() => ({
       access_token: "at_model",

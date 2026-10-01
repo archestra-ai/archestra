@@ -1236,8 +1236,9 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://auth.x.ai`
 - **`ARCHESTRA_XAI_SUBSCRIPTION_VERIFICATION_ORIGIN`** - Allowed browser origin for the device-flow verification page. Responses pointing elsewhere are rejected.
   - Default: `https://accounts.x.ai`
-- **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION`** - Tested xAI session-protocol version reported to the proxy. Update this deliberately when adopting a newer proxy contract.
-  - Default: `1.0.0`
+- **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION`** - Overrides the Grok CLI version reported to the SuperGrok session proxy.
+  - Default: the stable Grok CLI version pinned in your Archestra release
+  - xAI rejects versions below a minimum that it raises without notice. If SuperGrok chat fails with HTTP 426, set this to the version at `https://x.ai/cli/stable`.
 - **`ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL`** - OpenAI-compatible inference and model endpoint for SuperGrok OAuth sessions.
   - Default: `https://cli-chat-proxy.grok.com/v1`
   - This is separate from the metered `ARCHESTRA_XAI_BASE_URL` API-key endpoint

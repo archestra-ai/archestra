@@ -1,11 +1,21 @@
 "use client";
 
 import { Copy } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type SyntheticEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { copyToClipboard } from "@/lib/clipboard";
+import styles from "./exec-terminal.module.css";
 import { isUsableTerminalDimensions } from "./exec-terminal.utils";
 import {
   type ExecSessionProgress,
@@ -134,6 +144,29 @@ export function ExecTerminal({
   const [closedReason, setClosedReason] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const initializedRef = useRef(false);
+  const [focusTerminal, setFocusTerminal] = useState(true);
+  const focusTerminalRef = useRef(focusTerminal);
+  const focusSwitchId = useId();
+
+  const handleFocusTerminalChange = (focused: boolean) => {
+    // Update before React renders: a pending paste or mouse report must not
+    // slip through after switching to browser mode.
+    focusTerminalRef.current = focused;
+    setFocusTerminal(focused);
+    const terminal = terminalInstanceRef.current;
+    if (!terminal) return;
+    terminal.options.disableStdin = !focused;
+    terminal.clearSelection();
+    if (terminal.textarea) terminal.textarea.disabled = !focused;
+    if (focused) terminal.focus();
+    else terminal.blur();
+  };
+
+  const handleBrowserEvent = (event: SyntheticEvent) => {
+    // Keep the browser's default action, but stop xterm's listeners from
+    // focusing its hidden textarea, copying its selection or sending input.
+    if (!focusTerminalRef.current) event.stopPropagation();
+  };
 
   const cleanup = useCallback(() => {
     if (terminalInstanceRef.current) {
@@ -181,10 +214,15 @@ export function ExecTerminal({
         },
         scrollback: 5000,
         scrollSensitivity: TERMINAL_SCROLL_SENSITIVITY,
+        disableStdin: !focusTerminalRef.current,
       });
 
       terminal.loadAddon(fitAddon);
       terminal.open(terminalRef.current);
+      if (terminal.textarea) {
+        terminal.textarea.disabled = !focusTerminalRef.current;
+      }
+      terminal.attachCustomKeyEventHandler(() => focusTerminalRef.current);
 
       // FitAddon can resize xterm for reasons other than an element resize
       // (font metrics settling is the common one). Drive the remote PTY from
@@ -263,6 +301,7 @@ export function ExecTerminal({
       };
 
       terminal.onData((data) => {
+        if (disposed || !focusTerminalRef.current) return;
         const input = normalizeTerminalInput(data);
         if (input) transportRef.current.sendInput(input);
       });
@@ -332,9 +371,18 @@ export function ExecTerminal({
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0">
       <div className="flex flex-col gap-2 flex-1 min-h-0">
-        {title && (
-          <h3 className="text-sm font-semibold flex-shrink-0">{title}</h3>
-        )}
+        <div className="flex items-center justify-between gap-3 flex-shrink-0">
+          {title ? <h3 className="text-sm font-semibold">{title}</h3> : <div />}
+          <div className="flex items-center gap-2">
+            <Label htmlFor={focusSwitchId}>Focus terminal</Label>
+            <Switch
+              id={focusSwitchId}
+              checked={focusTerminal}
+              onCheckedChange={handleFocusTerminalChange}
+              aria-description="On: terminal mouse and keyboard controls. Off: browser selection, copy and context menu."
+            />
+          </div>
+        </div>
         <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
           {status === "connecting" &&
             (progress ? (
@@ -373,7 +421,27 @@ export function ExecTerminal({
                   : "block",
             }}
           >
-            <div ref={terminalRef} className="h-full" />
+            <div
+              ref={terminalRef}
+              className={`h-full ${focusTerminal ? "" : styles.browserMode}`}
+              onMouseDownCapture={handleBrowserEvent}
+              onMouseUpCapture={handleBrowserEvent}
+              onMouseMoveCapture={handleBrowserEvent}
+              onClickCapture={handleBrowserEvent}
+              onDoubleClickCapture={handleBrowserEvent}
+              onWheelCapture={handleBrowserEvent}
+              onCopyCapture={handleBrowserEvent}
+              onPasteCapture={handleBrowserEvent}
+              onKeyDownCapture={handleBrowserEvent}
+              onKeyUpCapture={handleBrowserEvent}
+              onContextMenuCapture={(event) => {
+                // tmux already receives the right-button mouse report. Avoid
+                // xterm moving its textarea under the cursor and opening a
+                // second, native menu over tmux's menu.
+                event.stopPropagation();
+                if (focusTerminalRef.current) event.preventDefault();
+              }}
+            />
           </div>
           {status === "connected" && (
             <div className="flex items-center justify-between px-3 py-2 border-t border-slate-800">

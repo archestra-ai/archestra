@@ -1,0 +1,9 @@
+.browserMode :global(.xterm) {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.browserMode :global(.xterm-helper-textarea) {
+  pointer-events: none;
+}

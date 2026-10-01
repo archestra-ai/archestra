@@ -1,9 +1,21 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const terminalHarness = vi.hoisted(() => {
   return {
     write: vi.fn(),
+    focus: vi.fn(),
+    blur: vi.fn(),
+    clearSelection: vi.fn(),
+    keyHandler: null as ((event: KeyboardEvent) => boolean) | null,
+    element: null as HTMLDivElement | null,
+    textarea: null as HTMLTextAreaElement | null,
     dataHandler: null as ((data: string) => void) | null,
     resizeHandler: null as
       | ((dimensions: { cols: number; rows: number }) => void)
@@ -22,9 +34,30 @@ const terminalHarness = vi.hoisted(() => {
 vi.mock("@xterm/xterm", () => ({
   Terminal: class Terminal {
     rows = 24;
+    options: { disableStdin?: boolean };
+    textarea = document.createElement("textarea");
+    constructor(options: { disableStdin?: boolean }) {
+      this.options = options;
+    }
     loadAddon() {}
-    open() {}
+    open(element: HTMLDivElement) {
+      terminalHarness.element = element;
+      terminalHarness.textarea = this.textarea;
+      element.appendChild(this.textarea);
+    }
     dispose() {}
+    focus() {
+      terminalHarness.focus();
+      this.textarea.focus();
+    }
+    blur() {
+      terminalHarness.blur();
+      this.textarea.blur();
+    }
+    clearSelection = terminalHarness.clearSelection;
+    attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean) {
+      terminalHarness.keyHandler = handler;
+    }
     write = terminalHarness.write;
     onData(handler: (data: string) => void) {
       terminalHarness.dataHandler = handler;
@@ -67,6 +100,168 @@ describe("ExecTerminal", () => {
     terminalHarness.resizeObserverCallback = null;
     terminalHarness.proposedDimensions = { cols: 80, rows: 24 };
     terminalHarness.write.mockReset();
+    terminalHarness.keyHandler = null;
+    terminalHarness.element = null;
+    terminalHarness.textarea = null;
+  });
+
+  it("routes input to the terminal by default and suppresses only its native context menu", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="focus-default"
+        transport={transport}
+        isActive
+      />,
+    );
+    await screen.findByText("Connected");
+    const toggle = screen.getByRole("switch", { name: "Focus terminal" });
+    expect(toggle).toBeChecked();
+    const terminal = terminalHarness.element;
+    const target = terminalHarness.textarea;
+    if (!terminal || !target) throw new Error("Terminal did not initialize");
+    const mouse = vi.fn(() => terminalHarness.emitData("\x1b[<2;8;12M"));
+    const nativeMenu = vi.fn();
+    target.addEventListener("mousedown", mouse);
+    target.addEventListener("contextmenu", nativeMenu);
+    fireEvent.mouseDown(target, { button: 2 });
+    expect(mouse).toHaveBeenCalledOnce();
+    expect(transport.sendInput).toHaveBeenCalledWith("\x1b[<2;8;12M");
+    expect(fireEvent.contextMenu(target)).toBe(false);
+    expect(nativeMenu).not.toHaveBeenCalled();
+    expect(
+      terminalHarness.keyHandler?.(
+        new KeyboardEvent("keydown", { key: "c", ctrlKey: true }),
+      ),
+    ).toBe(true);
+    terminalHarness.emitData("\x03");
+    expect(transport.sendInput).toHaveBeenCalledWith("\x03");
+    // Header controls keep their normal context menu in either mode.
+    expect(fireEvent.contextMenu(toggle)).toBe(true);
+    expect(terminal.contains(toggle)).toBe(false);
+  });
+
+  it("restores browser defaults and blocks mouse, keyboard, paste and pending input when off", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="focus-browser"
+        transport={transport}
+        isActive
+      />,
+    );
+    await screen.findByText("Connected");
+    const target = terminalHarness.textarea;
+    if (!target) throw new Error("Terminal did not initialize");
+    const xtermEvent = vi.fn((event: Event) => {
+      event.preventDefault();
+      terminalHarness.emitData("terminal input");
+    });
+    for (const name of [
+      "mousedown",
+      "mousemove",
+      "mouseup",
+      "wheel",
+      "keydown",
+      "keyup",
+      "copy",
+      "paste",
+      "contextmenu",
+    ]) {
+      target.addEventListener(name, xtermEvent);
+    }
+    fireEvent.click(screen.getByRole("switch", { name: "Focus terminal" }));
+    expect(target).toBeDisabled();
+    expect(terminalHarness.blur).toHaveBeenCalledOnce();
+    expect(
+      terminalHarness.keyHandler?.(
+        new KeyboardEvent("keydown", { key: "a", metaKey: true }),
+      ),
+    ).toBe(false);
+    for (const name of [
+      "mousedown",
+      "mousemove",
+      "mouseup",
+      "wheel",
+      "keydown",
+      "keyup",
+      "copy",
+      "paste",
+      "contextmenu",
+    ]) {
+      expect(
+        fireEvent(target, new Event(name, { bubbles: true, cancelable: true })),
+      ).toBe(true);
+    }
+    terminalHarness.emitData("pending paste\r\x1b[<2;8;12M");
+    expect(xtermEvent).not.toHaveBeenCalled();
+    expect(transport.sendInput).not.toHaveBeenCalled();
+  });
+
+  it("can repeatedly toggle and return focus without reopening the PTY, including a hidden tab transition", async () => {
+    const transport: ExecSessionTransport = {
+      open: vi.fn((handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      }),
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    const { rerender } = render(
+      <ExecTerminal
+        sessionKey="focus-transitions"
+        transport={transport}
+        isActive
+      />,
+    );
+    await screen.findByText("Connected");
+    const toggle = screen.getByRole("switch", { name: "Focus terminal" });
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(toggle);
+      terminalHarness.emitData("ignored");
+      fireEvent.click(toggle);
+      expect(terminalHarness.textarea).toHaveFocus();
+      expect(terminalHarness.textarea).not.toBeDisabled();
+      terminalHarness.emitData("accepted");
+    }
+    expect(transport.open).toHaveBeenCalledOnce();
+    expect(transport.sendInput).toHaveBeenCalledTimes(3);
+    fireEvent.click(toggle);
+    rerender(
+      <ExecTerminal
+        sessionKey="focus-transitions"
+        transport={transport}
+        isActive={false}
+      />,
+    );
+    rerender(
+      <ExecTerminal
+        sessionKey="focus-transitions"
+        transport={transport}
+        isActive
+      />,
+    );
+    await waitFor(() => expect(transport.open).toHaveBeenCalledTimes(2));
+    expect(toggle).not.toBeChecked();
+    expect(terminalHarness.textarea).toBeDisabled();
+    terminalHarness.emitData("still ignored");
+    expect(transport.sendInput).toHaveBeenCalledTimes(3);
+    fireEvent.click(toggle);
+    expect(terminalHarness.textarea).toHaveFocus();
   });
 
   it("waits for a usable terminal grid before opening the remote session", async () => {

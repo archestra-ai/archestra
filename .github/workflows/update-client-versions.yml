@@ -238,6 +238,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTING_WEBHOOK_URL }}
           UPDATE_RESULT: ${{ needs.update.result }}
+          PUSHED: ${{ needs.update.outputs.pushed }}
           SUMMARY: ${{ needs.update.outputs.summary }}
           PULL_REQUEST_URL: ${{ needs.update.outputs.pull_request_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -250,6 +251,10 @@ jobs:
 
           if [[ "$UPDATE_RESULT" == "failure" ]]; then
             message=":rotating_light: Client version update failed. <$RUN_URL|View workflow run>"
+            # One client can fail after the other one pushed its update.
+            if [[ "$PUSHED" == "true" && -n "$PULL_REQUEST_URL" ]]; then
+              message+=" The run still proposed $SUMMARY: <$PULL_REQUEST_URL|View pull request>"
+            fi
           elif [[ -n "$PULL_REQUEST_URL" ]]; then
             message="Client version update proposed ($SUMMARY): <$PULL_REQUEST_URL|View pull request>"
           else

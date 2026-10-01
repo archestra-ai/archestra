@@ -1,28 +1,34 @@
-name: Update Grok CLI Client Version
+name: Update Client Versions
 
 on:
   schedule:
-    - cron: "47 9 * * 1"
+    - cron: "23 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: update-grok-client-version
+  group: update-client-versions
   cancel-in-progress: false
 
 jobs:
   update:
-    name: Propose latest stable Grok CLI client version
+    name: Propose latest stable client versions
     if: github.repository == 'archestra-ai/archestra'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+      summary: ${{ steps.update.outputs.summary }}
       pull_request_url: ${{ steps.pr.outputs.url }}
     defaults:
       run:
         working-directory: ./platform
+    env:
+      BRANCH: automation/client-versions
+      CODEX_FILE: platform/backend/src/routes/chat/model-fetchers/openai.ts
+      GROK_FILE: platform/backend/src/services/xai-subscription-token.ts
     steps:
       - name: Checkout trusted main branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,9 +40,35 @@ jobs:
       - name: Set up Node.js and pnpm
         uses: ./.github/actions/setup-env
 
+      # Each client resolves on its own, so one unreachable source does not
+      # hold back the other. The last step fails the job for any miss.
+      - name: Resolve latest stable Codex release
+        id: codex
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          page=1
+          while :; do
+            tag="$(gh api "repos/openai/codex/releases?per_page=30&page=$page" --jq '
+              if length == 0 then "END"
+              else ([.[] | select(.draft == false and .prerelease == false and
+                (.tag_name | test("^rust-v[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tag_name] | first // "")
+              end')"
+            if [[ "$tag" == "END" ]]; then
+              echo "::error::No stable Codex CLI release found"
+              exit 1
+            fi
+            [[ -n "$tag" ]] && break
+            ((page += 1))
+          done
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       # The same channel pointer and fallback that https://x.ai/cli/install.sh reads.
       - name: Resolve latest stable Grok CLI release
-        id: release
+        id: grok
+        continue-on-error: true
         run: |
           set -euo pipefail
           version=""
@@ -68,7 +100,6 @@ jobs:
         id: branch
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          BRANCH: automation/grok-client-version
         run: |
           set -euo pipefail
           gh auth setup-git --hostname github.com --force
@@ -76,7 +107,7 @@ jobs:
           git config user.email "releaser-bot@users.noreply.github.com"
           git fetch origin main
 
-          target="$RUNNER_TEMP/grok-client-version-branch"
+          target="$RUNNER_TEMP/client-versions-branch"
           existing="$(git ls-remote --heads origin "refs/heads/$BRANCH")"
           if [[ -n "$existing" ]]; then
             git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
@@ -87,40 +118,62 @@ jobs:
           fi
           echo "path=$target" >> "$GITHUB_OUTPUT"
 
-      # This script comes from the trusted main checkout. It only reads and
-      # changes the source file in the separate automation worktree.
-      - name: Update Grok CLI client version
+      # These scripts come from the trusted main checkout. They only read and
+      # change the source files in the separate automation worktree.
+      - name: Update client versions
         id: update
         env:
-          VERSION: ${{ steps.release.outputs.version }}
+          CODEX_TAG: ${{ steps.codex.outputs.tag }}
+          GROK_VERSION: ${{ steps.grok.outputs.version }}
           TARGET: ${{ steps.branch.outputs.path }}
         run: |
           set -euo pipefail
-          source_file="platform/backend/src/services/xai-subscription-token.ts"
-          pnpm --dir backend update:grok-client-version "$VERSION" "$TARGET/$source_file"
-          if git -C "$TARGET" diff --quiet -- "$source_file"; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            status=$?
-            if [[ "$status" -ne 1 ]]; then
-              exit "$status"
-            fi
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+          if [[ -n "$CODEX_TAG" ]]; then
+            pnpm --dir backend update:codex-models-client-version "$CODEX_TAG" "$TARGET/$CODEX_FILE"
+          fi
+          if [[ -n "$GROK_VERSION" ]]; then
+            pnpm --dir backend update:grok-client-version "$GROK_VERSION" "$TARGET/$GROK_FILE"
           fi
 
+          # git diff --quiet exits 1 for a change and above 1 for an error.
+          file_changed() {
+            if git -C "$TARGET" diff --quiet -- "$1"; then
+              return 1
+            else
+              local status=$?
+              if [[ "$status" -ne 1 ]]; then
+                exit "$status"
+              fi
+            fi
+          }
+          summary=()
+          if file_changed "$CODEX_FILE"; then
+            summary+=("Codex ${CODEX_TAG#rust-v}")
+          fi
+          if file_changed "$GROK_FILE"; then
+            summary+=("Grok CLI $GROK_VERSION")
+          fi
+          if [[ "${#summary[@]}" -eq 0 ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          joined="$(printf '%s, ' "${summary[@]}")"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "summary=${joined%, }" >> "$GITHUB_OUTPUT"
+
       - name: Commit and push update
+        id: push
         if: steps.update.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           TARGET: ${{ steps.branch.outputs.path }}
-          VERSION: ${{ steps.release.outputs.version }}
-          BRANCH: automation/grok-client-version
+          SUMMARY: ${{ steps.update.outputs.summary }}
         run: |
           set -euo pipefail
-          source_file="platform/backend/src/services/xai-subscription-token.ts"
-          git -C "$TARGET" add -- "$source_file"
-          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore(xai): update Grok CLI client version to $VERSION"
+          git -C "$TARGET" add -- "$CODEX_FILE" "$GROK_FILE"
+          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update client versions ($SUMMARY)"
           git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
 
       # Also recovers a branch pushed by an earlier run whose PR creation failed.
       - name: Open or update pull request
@@ -129,12 +182,10 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           GH_REPO: ${{ github.repository }}
           TARGET: ${{ steps.branch.outputs.path }}
-          BRANCH: automation/grok-client-version
         run: |
           set -euo pipefail
-          source_file="platform/backend/src/services/xai-subscription-token.ts"
-          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$source_file"; then
-            echo "Grok CLI client version already matches main."
+          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$CODEX_FILE" "$GROK_FILE"; then
+            echo "Client versions already match main."
             exit 0
           else
             status=$?
@@ -143,8 +194,8 @@ jobs:
             fi
           fi
 
-          pr_title="chore(xai): update Grok CLI client version"
-          pr_body="Track the stable Grok CLI release so SuperGrok requests stay above the minimum client version that xAI's session proxy accepts."
+          pr_title="chore: update client versions"
+          pr_body="Track stable Codex CLI and Grok CLI releases. Codex filters the ChatGPT subscription model catalog by client version, and xAI's SuperGrok session proxy rejects Grok CLI versions below its minimum."
           owner="${GH_REPO%%/*}"
           existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
           if [[ -z "$existing_pr" ]]; then
@@ -164,10 +215,20 @@ jobs:
           fi
           gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
 
+      - name: Fail for an unresolved client
+        if: steps.codex.outcome == 'failure' || steps.grok.outcome == 'failure'
+        env:
+          CODEX_OUTCOME: ${{ steps.codex.outcome }}
+          GROK_OUTCOME: ${{ steps.grok.outcome }}
+        run: |
+          echo "::error::Could not resolve every client version (Codex: $CODEX_OUTCOME, Grok CLI: $GROK_OUTCOME)"
+          exit 1
+
+  # Hourly runs stay quiet unless a run fails or pushes a new version.
   notify:
     name: Report update result
     needs: update
-    if: ${{ always() && github.repository == 'archestra-ai/archestra' && (needs.update.result == 'failure' || needs.update.outputs.pull_request_url != '') }}
+    if: ${{ always() && github.repository == 'archestra-ai/archestra' && (needs.update.result == 'failure' || needs.update.outputs.pushed == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -176,6 +237,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTING_WEBHOOK_URL }}
           UPDATE_RESULT: ${{ needs.update.result }}
+          SUMMARY: ${{ needs.update.outputs.summary }}
           PULL_REQUEST_URL: ${{ needs.update.outputs.pull_request_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -186,9 +248,9 @@ jobs:
           fi
 
           if [[ "$UPDATE_RESULT" == "failure" ]]; then
-            message=":rotating_light: Grok CLI client version update failed. <$RUN_URL|View workflow run>"
+            message=":rotating_light: Client version update failed. <$RUN_URL|View workflow run>"
           else
-            message="Grok CLI client version update proposed: <$PULL_REQUEST_URL|View pull request>"
+            message="Client version update proposed ($SUMMARY): <$PULL_REQUEST_URL|View pull request>"
           fi
           jq -n --arg text "$message" '{text: $text}' |
             curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"

@@ -35,6 +35,7 @@ import {
   OPENCODE_GUARD_CLIENT,
 } from "@/services/startup-guard.clients";
 import { renderStartupGuardPowerShell } from "@/services/startup-guard.windows";
+import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
 
 const execFileAsync = promisify(execFile);
 
@@ -401,6 +402,7 @@ async function runGuardSnippet(params: {
   invoke: string;
   files?: Record<string, string>;
   env?: Record<string, string>;
+  cliBody?: string;
 }): Promise<{ code: number; stdout: string; cliArgs: string[] }> {
   const script = renderStartupGuardScript(CTX, params.client);
   const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-run-"));
@@ -418,7 +420,7 @@ async function runGuardSnippet(params: {
     const fakeCli = path.join(bin, params.client.binary);
     await writeFile(
       fakeCli,
-      `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(argvLog)}\n`,
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(argvLog)}\n${params.cliBody ?? ""}\n`,
       "utf8",
     );
     await chmod(fakeCli, 0o755);
@@ -571,6 +573,62 @@ describe("Codex disconnect reports what it could not remove", () => {
 });
 
 describe("Codex disconnect reverses the credential it installed", () => {
+  test.each([
+    false,
+    true,
+  ])("proxy removal restores direct-mode settings with MCP disconnected first: %s", async (mcpFirst) => {
+    const helper = `${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs`;
+    const { code } = await runGuardSnippet({
+      client: CODEX_GUARD_CLIENT,
+      functions: [
+        "menu_disconnect_row",
+        "disconnect_actions",
+        "disconnect_proxy",
+        "codex_logout_if_ours",
+        "disconnect_verify",
+      ],
+      files: {
+        [helper]: CODEX_HANDOFF_HELPER,
+        "model-cli.cmd": "npm shim placeholder",
+        "node_modules/@openai/codex/bin/codex.js": `require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()})); console.log(JSON.stringify({models:[{slug:'model-a',tool_mode:'code_mode_only'}]}));`,
+        "config.toml": `model_provider = "acme_proxy"
+model = "model-a"
+web_search = "live"
+[features]
+code_mode_host = true
+js_repl = true
+# >>> archestra:acme_proxy >>>
+[model_providers.acme_proxy]
+name = "acme_proxy"
+# <<< archestra:acme_proxy <<<
+${GATEWAY_TABLE}`,
+        "config.toml.archestra-backup": 'model_provider = "openai"\n',
+      },
+      env: { CODEX_HOME: "{HOME}" },
+      cliBody: `if [ "$1 $2" = 'mcp remove' ]; then
+node -e 'const fs=require("node:fs"); const p=process.env.CODEX_HOME+"/config.toml"; fs.writeFileSync(p,fs.readFileSync(p,"utf8").replace(/\\[mcp_servers\\.prod_gateway\\][\\s\\S]*$/,""));'
+fi`,
+      invoke: `set -e
+node "$HOME/${helper}" --install-direct "$HOME/model-cli.cmd"
+test -f "$HOME/archestra-direct-model-catalog.json"
+${MENU_ROW_PREAMBLE}
+GUARD_KINDS=(mcp proxy)
+GUARD_LABELS=("MCP gateway" "LLM proxy")
+${mcpFirst ? 'menu_disconnect_row 1 0\ngrep -q "archestra:codex-direct:root" "$HOME/config.toml"\ntest -f "$HOME/archestra-direct-model-catalog.json"' : ""}
+menu_disconnect_row 2 1
+grep -qx proxy "$SKIP_FILE"
+grep -Fx 'code_mode_host = true' "$HOME/config.toml"
+grep -Fx 'js_repl = true' "$HOME/config.toml"
+grep -Fx 'web_search = "live"' "$HOME/config.toml"
+grep -Fx 'model_provider = "openai"' "$HOME/config.toml"
+! grep -q 'archestra:codex-direct:' "$HOME/config.toml"
+test ! -f "$HOME/archestra-direct-model-catalog.json"
+${mcpFirst ? '! grep -Fq "[mcp_servers.prod_gateway]" "$HOME/config.toml"' : 'grep -Fq "[mcp_servers.prod_gateway]" "$HOME/config.toml"'}
+`,
+    });
+    expect(code).toBe(0);
+  });
+
   test.each([
     {
       previous: 'model_provider = "openai"\nmodel = "gpt-5.5"\n',

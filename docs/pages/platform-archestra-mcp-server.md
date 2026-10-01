@@ -2197,7 +2197,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `action` | `"accept" \| "decline" \| "cancel"` | Yes | Whether the user submitted, declined, or canceled. |
+| `action` | `"accept" \| "decline" \| "cancel"` | Yes | Whether the choice form was submitted, declined, or canceled. |
 | `selected` | `string[]` | Yes | The labels the user selected. Empty when declined or canceled. |
 | `timedOut` | `boolean` | No | True when the question expired without an answer. |
 

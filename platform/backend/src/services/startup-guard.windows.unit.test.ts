@@ -609,3 +609,32 @@ describe.each([
     expect(unshadow).not.toContain("Set-Content");
   });
 });
+
+test("Codex Windows launcher applies direct tool mode only while the LLM proxy is connected", () => {
+  for (const context of [
+    { ...CTX, proxy: null, runtimeHandoffInstructions: null },
+    { ...CTX, mcp: null, runtimeHandoffInstructions: null },
+  ]) {
+    const install = buildWindowsStartupGuardInstallSection(
+      context,
+      CODEX_GUARD_CLIENT,
+    );
+    if (context.proxy) {
+      expect(install).toContain("--direct $archReal.Source --output-base64");
+      expect(install).toContain("--install-direct $archCodexExe.Source");
+      expect(install).toContain("'features.code_mode_host=false'");
+      expect(install).toContain("'web_search=\"disabled\"'");
+    } else {
+      expect(install).not.toContain(
+        "--direct $archReal.Source --output-base64",
+      );
+      expect(install).toContain("--remove-direct");
+    }
+    expect(renderStartupGuardPowerShell(context, CODEX_GUARD_CLIENT)).toContain(
+      "--remove-direct",
+    );
+    expect(install).toContain("($archDirectReady -or $false)");
+    expect(install).toContain("--launch $archReal.Source");
+    expect(install).toContain("& $archReal.Source @args");
+  }
+});

@@ -26,6 +26,8 @@ import {
 
 const SPAWN_TOOLS = new Set(["spawn_agent"]);
 const CHILD_ID_KEYS = ["agent_id", "thread_id", "receiver_thread_id"] as const;
+const LAUNCH_AGENT_ID = /^[A-Za-z0-9_.:-]{1,512}$/;
+const LAUNCH_TASK_NAME = /^[A-Za-z0-9_.:@/-]{1,512}$/;
 
 /** Identifies Codex Responses requests and normalizes local tool names. */
 export class AppaCodexAdapter implements AppaClientAdapter {
@@ -187,14 +189,18 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       typeof result.content === "string"
         ? parseJsonObject(result.content)
         : asRecord(result.content);
-    const id = stringField(output?.agent_id) ?? stringField(output?.task_name);
-    if (!id || !/^[A-Za-z0-9_.:-]{1,512}$/.test(id)) {
-      throw new ApiError(
-        409,
-        "OpenAPPA withheld an invalid child launch acknowledgment",
-      );
+    if (output && Object.hasOwn(output, "agent_id")) {
+      const agentId = output.agent_id;
+      if (typeof agentId !== "string" || !LAUNCH_AGENT_ID.test(agentId)) {
+        throw withheldChildLaunch();
+      }
+      return JSON.stringify({ agent_id: agentId });
     }
-    return JSON.stringify({ agent_id: id });
+    const taskName = output?.task_name;
+    if (typeof taskName !== "string" || !LAUNCH_TASK_NAME.test(taskName)) {
+      throw withheldChildLaunch();
+    }
+    return JSON.stringify({ task_name: taskName });
   }
 
   spawnPromptField(
@@ -244,6 +250,11 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 
   bindChildTrajectory(context: AppaMatchContext) {
+    // Guardian auto-review names the requester thread as parent_thread_id and
+    // its own thread as thread_id. That pair is a side review, not a spawn.
+    // Opening it as a child is refused: no spawn prepared a fork, and the
+    // refusal is classified as an unavailable runtime.
+    if (isGuardianReview(context)) return undefined;
     const parentNativeId = parentThreadId(context);
     const childNativeId = childThreadId(context, parentNativeId);
     return bindMintedChildTrajectory({
@@ -275,10 +286,41 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   }
 }
 
+/**
+ * Codex auto-review is an out-of-band Responses call. It carries the
+ * requester session as parent metadata and a fresh thread id, plus an empty
+ * top-level tools list, additional_tools, and a json_schema verdict. None of
+ * that is a prepared child trajectory.
+ */
+function isGuardianReview(context: AppaMatchContext): boolean {
+  if (readHeader(context.headers, "x-openai-subagent") === "guardian")
+    return true;
+  const body = asRecord(context.requestBody);
+  if (body?.model === "codex-auto-review") return true;
+  const metadata = asRecord(body?.client_metadata) ?? asRecord(body?.metadata);
+  if (stringField(metadata?.["x-openai-subagent"]) === "guardian") return true;
+  const turn =
+    parseJsonHeader(context.headers, "x-codex-turn-metadata") ??
+    turnMetadataRecord(metadata?.["x-codex-turn-metadata"]);
+  return (
+    turn?.turn_trigger === "guardian_review" ||
+    turn?.thread_source === "guardian_review" ||
+    turn?.subagent_kind === "guardian"
+  );
+}
+
+function withheldChildLaunch(): ApiError {
+  return new ApiError(
+    409,
+    "OpenAPPA withheld an invalid child launch acknowledgment",
+  );
+}
+
 function isNativeCodexNamespace(namespace: string | undefined): boolean {
   return (
     namespace === undefined ||
     namespace === "functions" ||
+    namespace === "collaboration" ||
     namespace === "multi_agent_v1"
   );
 }

@@ -1376,7 +1376,8 @@ export const anthropicAdapterFactory: LLMProvider<
     // Check if this is a Bearer token (OAuth) or regular API key
     const isAuthToken = apiKey?.startsWith("Bearer:") ?? false;
     const token = isAuthToken && apiKey ? apiKey.slice(7) : undefined;
-    const regularApiKey = isAuthToken ? undefined : apiKey;
+    // Null prevents the SDK from adding an ambient API key to bearer requests.
+    const regularApiKey = isAuthToken ? null : apiKey;
     const isClaudeSubscriptionToken = token?.startsWith("sk-ant-oat") ?? false;
 
     // A Claude subscription bearer belongs to Anthropic even when this

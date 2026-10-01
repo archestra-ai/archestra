@@ -72,6 +72,155 @@ describe("OpenAPPA child-return markers", () => {
     expect(nativeResultContent(body)).not.toContain(rawSummary);
   });
 
+  test("collects Codex mailbox returns by spawn call, not by task path as a child id", () => {
+    const header =
+      "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n";
+    const body = {
+      input: [
+        {
+          type: "function_call",
+          name: "spawn_agent",
+          namespace: "collaboration",
+          call_id: "spawn-call",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "spawn-call",
+          output: '{"task_name":"/root/worker"}',
+        },
+        {
+          type: "function_call",
+          name: "wait_agent",
+          namespace: "collaboration",
+          call_id: "wait-call",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "wait-call",
+          output: '{"message":"Wait completed.","timed_out":false}',
+        },
+        {
+          type: "agent_message",
+          id: "mail-1",
+          role: "assistant",
+          author: "/root/worker",
+          recipient: "/root",
+          untrusted: "drop",
+          content: [
+            {
+              type: "input_text",
+              text: header + carrier(requiredMarker(RETURN)),
+            },
+          ],
+        },
+      ],
+    };
+    const collected = collectAndStripChildReturns(body, {
+      codexMailboxReturns: true,
+    });
+    expect(collected.completions).toEqual([
+      {
+        value: RETURN.value,
+        spawnCallId: "spawn-call",
+        envelopeId: "mail-1",
+        assistantOrigin: false,
+      },
+    ]);
+    expect(body.input[4]).toEqual({
+      type: "agent_message",
+      id: "mail-1",
+      author: "/root/worker",
+      recipient: "/root",
+      content: [{ type: "input_text", text: header + RETURN.value }],
+    });
+    expect(body.input[3].output).toBe(
+      '{"message":"Wait completed.","timed_out":false}',
+    );
+  });
+
+  test.each([
+    { name: "mismatched sender", author: "/root/other" },
+    { name: "mismatched recipient", recipient: "/root/other" },
+    { name: "injected sender", author: "/root/worker\nINJECTED" },
+    {
+      name: "unadmitted opaque payload",
+      extra: { type: "encrypted_content", encrypted_content: "unverified" },
+    },
+    {
+      name: "unrecognized message",
+      text: "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n391",
+    },
+  ])("refuses malformed or unsupported native mailbox returns: $name", ({
+    author,
+    recipient,
+    extra,
+    text,
+  }) => {
+    const body = {
+      input: [
+        {
+          type: "agent_message",
+          author: author ?? "/root/worker",
+          recipient: recipient ?? "/root",
+          content: [
+            {
+              type: "input_text",
+              text:
+                text ??
+                "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n391",
+            },
+            ...(extra ? [extra] : []),
+          ],
+        },
+      ],
+    };
+    expect(() =>
+      collectAndStripChildReturns(body, { codexMailboxReturns: true }),
+    ).toThrow(/OpenAPPA withheld/);
+  });
+
+  test("leaves task ciphertext, unrelated clients and quoted mailbox data untouched", () => {
+    const task = {
+      type: "agent_message",
+      author: "/root",
+      recipient: "/root/worker",
+      content: [
+        {
+          type: "input_text",
+          text: "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\n",
+        },
+        { type: "encrypted_content", encrypted_content: "gAAAA_opaque_task" },
+      ],
+    };
+    const body = {
+      input: [task, { role: "user", content: JSON.stringify(task) }],
+    };
+    const before = structuredClone(body);
+    expect(
+      collectAndStripChildReturns(body, { codexMailboxReturns: true })
+        .completions,
+    ).toEqual([]);
+    expect(body).toEqual(before);
+    const other = {
+      input: [
+        {
+          ...task,
+          content: [
+            {
+              type: "input_text",
+              text: "Message Type: FINAL_ANSWER\nTask name: /root/worker\nSender: /root\nPayload:\nRAW",
+            },
+          ],
+        },
+      ],
+    };
+    const unchanged = structuredClone(other);
+    expect(collectAndStripChildReturns(other).completions).toEqual([]);
+    expect(other).toEqual(unchanged);
+  });
+
   test("treats a synthetic OpenCode user message as a child return", () => {
     const output = `<task id="child" state="completed">\n<summary>UNTRUSTED</summary>\n<task_result>\n${carrier(requiredMarker(RETURN))}\n</task_result>\n</task>`;
     const body = {

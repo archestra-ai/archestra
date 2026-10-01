@@ -3255,7 +3255,7 @@ Required RBAC permission: `file:manage`
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Case-insensitive substring matched against filenames only. Omit it (or pass empty) to list the files (the first 200). |
 | `scope` | `"chat" \| "app"` | No | "chat" (default) = this chat's files; "app" = the files of the app the user has open, which is how you find what the app has produced before copying one out with copy_file. |
-| `project_id` | `string` | No | Read this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be read. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
+| `project_id` | `string` | No | Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
 
 ##### Output
 
@@ -3281,7 +3281,7 @@ Required RBAC permission: `file:manage`
 | `filename` | `string` | No | Filename to read instead of `id`; rejected as ambiguous if more than one file shares the name. |
 | `offset` | `integer` | No | 1-based line number to start reading from. Defaults to 1. |
 | `limit` | `integer` | No | Maximum number of lines to read. Defaults to 2000. |
-| `project_id` | `string` | No | Read this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be read. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
+| `project_id` | `string` | No | Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
 
 ##### Output
 
@@ -3311,6 +3311,7 @@ Required RBAC permission: `file:manage`
 | `contentBase64` | `string` | No | Base64-encoded binary content. |
 | `mimeType` | `string` | No | Optional MIME type. Sniffed from the bytes when omitted. |
 | `overwrite` | `boolean` | No | Replace an existing file of the same name in place, keeping its id. Default false errors if the name is already taken. |
+| `project_id` | `string` | No | Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
 
 ##### Output
 
@@ -3318,7 +3319,7 @@ Required RBAC permission: `file:manage`
 |-------|------|----------|-------------|
 | `fileId` | `string` | Yes |  |
 | `filename` | `string` | Yes |  |
-| `projectName` | `string \| null` | Yes | Owning project when saved in a project chat; null otherwise. |
+| `projectName` | `string \| null` | Yes | Owning project when saved into a project; null otherwise. |
 | `mimeType` | `string` | Yes |  |
 | `sizeBytes` | `number` | Yes |  |
 | `overwritten` | `boolean` | Yes | True when an existing same-named file was replaced in place. |
@@ -3336,6 +3337,7 @@ Required RBAC permission: `file:manage`
 | `old_string` | `string` | Yes | The exact text to replace; must match the file's current content (read it first with read_file). Include enough surrounding context to be unique unless replace_all is set. |
 | `new_string` | `string` | Yes | The text to insert in place of old_string. |
 | `replace_all` | `boolean` | No | Replace every occurrence of old_string. Default false replaces a single occurrence and errors if old_string is not unique. |
+| `project_id` | `string` | No | Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
 
 ##### Output
 
@@ -3357,6 +3359,7 @@ Required RBAC permission: `file:manage`
 |-----------|------|----------|-------------|
 | `id` | `string` | No | Id of the file to delete (from search_files / save_file). |
 | `filename` | `string` | No | Filename to delete instead of `id`; rejected as ambiguous if more than one file shares the name. |
+| `project_id` | `string` | No | Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
 
 ##### Output
 

@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-09-21
+lastUpdated: 2026-09-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,6 +35,8 @@ Labels are key-value tags that organize projects — `stage: review`, for exampl
 When an agent saves a file in a project chat — a report, for example — it goes to the project. The project page lists them all, and every chat in the project can read them.
 
 You can add your own files too: drag and drop them onto the Files panel. Text and Markdown files are editable right in the panel.
+
+External MCP clients, such as Claude Code, can read and write project files through the [MCP Gateway](./platform-archestra-mcp-server) — a spec drafted in your editor, for example.
 
 Not sure whether a file belongs in a chat, a project, or the knowledge base? See [Chat, Project, and Knowledge Files](./platform-knowledge#chat-project-and-knowledge-files).
 

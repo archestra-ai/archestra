@@ -606,6 +606,25 @@ class ProjectService {
   }
 
   /**
+   * Whether the caller may manage the project (owner or project admin) — the
+   * gate {@link setInstructions} applies, for callers that write the
+   * instructions file through another path (the agent file tools).
+   */
+  async canManage(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<boolean> {
+    try {
+      await this.requireManageable(params);
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 404) return false;
+      throw error;
+    }
+  }
+
+  /**
    * Create or replace the project's instructions (owner only). The first save
    * materializes the real `instructions.md` file; empty content is kept (an
    * empty file is simply not injected into chats), never deleted.

@@ -342,10 +342,10 @@ const registry = defineArchestraTools([
     shortName: "list_guardrails_battery_fits",
     title: "List OpenAPPA batteries that fit",
     description:
-      "List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is given. Each fit gives the `include` entry to add, the battery's namespaces to point at the server's `toolPrefixes` in `[server_aliases]`, the credential variables `[credentials]` must bind to a runtime credential key, `newlyCovered` (the server's tools no rule names today that it would judge), and every battery rule for the server's tools: its kind (`read` narrows labels, `write` requires labels and can block a call, `approval` asks a person, `neutral` does neither), delta, requires, annotator, and `currentRule`, what judges the tool today. A root rule keeps priority over the battery's. This changes nothing. Declared batteries and their status are in get_guardrails_policy.",
+      "List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. Pass null for all visible servers. Each fit gives the `include` entry to add, the battery's namespaces to point at the server's `toolPrefixes` in `[server_aliases]`, the credential variables `[credentials]` must bind to a runtime credential key, `newlyCovered` (the server's tools no rule names today that it would judge), and every battery rule for the server's tools: its kind (`read` narrows labels, `write` requires labels and can block a call, `approval` asks a person, `neutral` does neither), delta, requires, annotator, and `currentRule`, what judges the tool today. A root rule keeps priority over the battery's. This changes nothing. Declared batteries and their status are in get_guardrails_policy.",
     schema: z.strictObject({
-      mcpServerId: UuidIdSchema.optional().describe(
-        "The catalog ID of one MCP server; omit for every server you can see.",
+      mcpServerId: UuidIdSchema.nullable().describe(
+        "The catalog ID of one MCP server, or null for every server you can see.",
       ),
     }),
     async handler({ args, context }) {
@@ -358,7 +358,7 @@ const registry = defineArchestraTools([
       return result({
         fits: await openappaCoverageService.batteryFits({
           organizationId: context.organizationId,
-          catalogId: args.mcpServerId,
+          catalogId: args.mcpServerId ?? undefined,
           ...visibility,
         }),
       });

@@ -115,6 +115,10 @@ test("splits every tool by what judges it, with the share a rule covers and a ch
     );
   }
 
+  expect(
+    coverage.getByText(/53% of your tools can run without policy restrictions/),
+  ).toBeVisible();
+
   // A legend row explains its slice and puts its share in the middle.
   await userEvent.hover(coverage.getByText("No rule"));
   expect(await screen.findByRole("tooltip")).toHaveTextContent(
@@ -238,16 +242,16 @@ test.each([
   {
     counts: { notCovered: 3, catchAll: 0 },
     visible:
-      "These tools can run without policy restrictions. Add rules to control what your agents can do.",
+      "100% of your tools can run without policy restrictions. Add rules to control what your agents can do.",
     absent:
-      "One rule covers all these tools. Add specific rules to set limits for individual tools.",
+      "100% of your tools share one catch-all rule. Add specific rules to set limits for individual tools.",
   },
   {
     counts: { notCovered: 0, catchAll: 3 },
     visible:
-      "One rule covers all these tools. Add specific rules to set limits for individual tools.",
+      "100% of your tools share one catch-all rule. Add specific rules to set limits for individual tools.",
     absent:
-      "These tools can run without policy restrictions. Add rules to control what your agents can do.",
+      "100% of your tools can run without policy restrictions. Add rules to control what your agents can do.",
   },
 ])("shows the relevant warning without buttons and keeps one chat action", async (scenario) => {
   renderCharts({ summary: totals({ tools: 3, ...scenario.counts }) });

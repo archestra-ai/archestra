@@ -2,7 +2,7 @@
 export const CLIENT_CONNECTION_INSTALLER = String.raw`#!/usr/bin/env node
 const { spawn, spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { mkdtemp, open, writeFile, readFile, rm } = require('node:fs/promises');
+const { mkdtemp, open, writeFile, readFile, rm, access } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 
@@ -57,13 +57,7 @@ async function runConnection({ args, clientId, networkOrigin, origin, platform }
   console.log('Open ' + verificationUrl.href);
   console.log('Check that the browser shows code ' + started.userCode + ', then review and approve the setup.');
   console.log('Waiting for browser approval. Press Ctrl+C to cancel.');
-  if (!args.includes('--no-open')) {
-    const command = platform === 'macos' ? 'open' : platform === 'windows' ? 'rundll32' : 'xdg-open';
-    const openArgs = platform === 'windows' ? ['url.dll,FileProtocolHandler', verificationUrl.href] : [verificationUrl.href];
-    const child = spawn(command, openArgs, { stdio: 'ignore' });
-    child.on('error', () => console.log('Open the URL above in your browser.'));
-    child.unref();
-  }
+  if (!args.includes('--no-open')) await openApprovalBrowser(verificationUrl.href);
   const deadline = Math.min(Date.parse(started.expiresAt), Date.now() + 600000);
   if (!Number.isFinite(deadline)) throw new Error('Invalid connection expiry.');
   while (Date.now() < deadline) {
@@ -85,6 +79,73 @@ async function runConnection({ args, clientId, networkOrigin, origin, platform }
     return;
   }
   throw new Error('Connection expired. Start the installer again.');
+}
+function commandOnPath(name) {
+  const found = spawnSync('which', [name], { encoding: 'utf8' });
+  if (!found || found.status !== 0 || !found.stdout) return '';
+  const line = String(found.stdout).trim().split('\n')[0];
+  return line.indexOf(name) === -1 ? '' : line;
+}
+async function pathExists(filePath) {
+  try { await access(filePath); return true; } catch { return false; }
+}
+async function selectBrowserLaunch(url) {
+  if (process.platform === 'darwin') return { command: 'open', args: [url] };
+  if (process.platform === 'win32') return { command: 'rundll32.exe', args: ['url.dll,FileProtocolHandler', url] };
+  const wsl = process.platform === 'linux' && (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
+  if (wsl) {
+    const view = commandOnPath('wslview');
+    if (view) return { command: view, args: [url] };
+    if (process.env.WSL_INTEROP) {
+      const windowsRundll = '/mnt/c/Windows/System32/rundll32.exe';
+      const rundll = commandOnPath('rundll32.exe') || (await pathExists(windowsRundll) ? windowsRundll : '');
+      if (rundll) return { command: rundll, args: ['url.dll,FileProtocolHandler', url], interop: true };
+    }
+  }
+  return { command: 'xdg-open', args: [url] };
+}
+function classifySpawnError(error) {
+  const code = error && error.code;
+  if (code === 'EACCES') return 'eacces';
+  if (code === 'ENOEXEC') return 'enoexec';
+  return 'error';
+}
+function spawnBrowser(command, args) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(command, args, { stdio: 'ignore' });
+    } catch (error) {
+      resolve(classifySpawnError(error));
+      return;
+    }
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => {
+      child.unref();
+      finish('ok');
+    }, 5000);
+    child.once('error', (error) => finish(classifySpawnError(error)));
+    child.once('exit', (code) => finish(code === 0 ? 'ok' : 'exit'));
+  });
+}
+async function openApprovalBrowser(url) {
+  const launch = await selectBrowserLaunch(url);
+  const failed = () => console.log('Browser did not open. Use the approval URL above.');
+  if (!launch) { failed(); return; }
+  const result = await spawnBrowser(launch.command, launch.args);
+  if (result === 'ok') return;
+  if (result === 'eacces') { failed(); return; }
+  if (result === 'enoexec' && launch.interop && process.env.WSL_INTEROP && await pathExists('/init')) {
+    const bridged = await spawnBrowser('/init', [launch.command].concat(launch.args));
+    if (bridged === 'ok') return;
+  }
+  failed();
 }
 async function acquireConnectionLock({ origin, clientId, platform }) {
   const digest = createHash('sha256').update(origin + '\n' + clientId + '\n' + platform).digest('hex').slice(0, 24);

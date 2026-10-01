@@ -38,7 +38,7 @@ opentelemetry-otlp = { version = "0.32", default-features = false, features = [
     "reqwest-blocking-client",
     "reqwest-rustls-webpki-roots",
 ], optional = true }
-opentelemetry-appender-tracing = { version = "0.32", optional = true }
+opentelemetry-appender-tracing = { version = "0.33", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = [

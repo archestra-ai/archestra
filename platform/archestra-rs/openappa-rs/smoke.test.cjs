@@ -950,13 +950,14 @@ builtin = "hitl"
     const teammate = await startChild(lead, 'scoped@team');
     const stranger = scope();
     assert.equal((await hook(stranger, { event: 'session_start' })).decision, 'ack');
-    // A session that is not the teammate's parent names it: nothing is retained for it.
+    // A session that is not the teammate's parent names it: the address is refused and
+    // nothing is retained for it.
     assert.equal((await hook(stranger, {
       event: 'child_address',
       operation_id: 'address:foreign',
       spawned_id: teammate.session_id,
       output: 'Forged instruction',
-    })).decision, 'ack');
+    })).decision, 'block');
     assert.deepEqual(await native.loadChildAddresses(organization_id, teammate.session_id), []);
     await assert.rejects(
       () => hook(lead, { event: 'child_address', operation_id: 'address:no-child', output: 'x' }),

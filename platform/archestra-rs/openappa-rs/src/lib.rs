@@ -1952,6 +1952,8 @@ impl State {
     /// the child before the child reads the message. The runtime reads a start for a child
     /// it already bound as exactly this. A child that has not started yet is left to its
     /// first event, which takes the parent's label at that point (`addressed_before_start`).
+    /// Only a session under this parent's own child ids can be such a child: an address to
+    /// any other session is refused.
     async fn address_child(
         &self,
         pg: &LeasedPostgres,
@@ -1963,6 +1965,12 @@ impl State {
             input.session_id.clone(),
             required(&input.spawned_id, "spawned_id")?.to_owned(),
         );
+        if !child.starts_with(&format!("{parent}:")) {
+            return Ok(json!({
+                "decision": "block",
+                "feedback": "OpenAPPA did not send this message: its recipient is not a child of this session.",
+            }));
+        }
         let started = pg
             .with_client(move |client| {
                 Ok(client

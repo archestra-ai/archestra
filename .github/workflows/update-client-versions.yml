@@ -144,6 +144,7 @@ jobs:
               if [[ "$status" -ne 1 ]]; then
                 exit "$status"
               fi
+              return 0
             fi
           }
           summary=()
@@ -249,8 +250,10 @@ jobs:
 
           if [[ "$UPDATE_RESULT" == "failure" ]]; then
             message=":rotating_light: Client version update failed. <$RUN_URL|View workflow run>"
-          else
+          elif [[ -n "$PULL_REQUEST_URL" ]]; then
             message="Client version update proposed ($SUMMARY): <$PULL_REQUEST_URL|View pull request>"
+          else
+            message="Client version update pushed ($SUMMARY), but no pull request was found. <$RUN_URL|View workflow run>"
           fi
           jq -n --arg text "$message" '{text: $text}' |
             curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"

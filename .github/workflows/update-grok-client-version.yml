@@ -1,0 +1,194 @@
+name: Update Grok CLI Client Version
+
+on:
+  schedule:
+    - cron: "47 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-grok-client-version
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Propose latest stable Grok CLI client version
+    if: github.repository == 'archestra-ai/archestra'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      pull_request_url: ${{ steps.pr.outputs.url }}
+    defaults:
+      run:
+        working-directory: ./platform
+    steps:
+      - name: Checkout trusted main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js and pnpm
+        uses: ./.github/actions/setup-env
+
+      # The same channel pointer and fallback that https://x.ai/cli/install.sh reads.
+      - name: Resolve latest stable Grok CLI release
+        id: release
+        run: |
+          set -euo pipefail
+          version=""
+          for url in \
+            "https://x.ai/cli/stable" \
+            "https://storage.googleapis.com/grok-build-public-artifacts/cli/stable"; do
+            if body="$(curl -fsSL --max-time 15 "$url")"; then
+              version="$(printf '%s' "$body" | tr -d '\r' | head -n1 | tr -d '[:space:]')"
+              break
+            fi
+          done
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::No valid stable Grok CLI version found"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # The App token makes pushes and the new PR trigger ordinary CI.
+      - name: Generate releaser token
+        id: token
+        uses: ./.github/actions/github-app-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Prepare automation branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          BRANCH: automation/grok-client-version
+        run: |
+          set -euo pipefail
+          gh auth setup-git --hostname github.com --force
+          git config user.name "Archestra releaser automation"
+          git config user.email "releaser-bot@users.noreply.github.com"
+          git fetch origin main
+
+          target="$RUNNER_TEMP/grok-client-version-branch"
+          existing="$(git ls-remote --heads origin "refs/heads/$BRANCH")"
+          if [[ -n "$existing" ]]; then
+            git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git worktree add -b "$BRANCH" "$target" "origin/$BRANCH"
+            git -C "$target" -c core.hooksPath=/dev/null merge --no-edit origin/main
+          else
+            git worktree add -b "$BRANCH" "$target" origin/main
+          fi
+          echo "path=$target" >> "$GITHUB_OUTPUT"
+
+      # This script comes from the trusted main checkout. It only reads and
+      # changes the source file in the separate automation worktree.
+      - name: Update Grok CLI client version
+        id: update
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          source_file="platform/backend/src/services/xai-subscription-token.ts"
+          pnpm --dir backend update:grok-client-version "$VERSION" "$TARGET/$source_file"
+          if git -C "$TARGET" diff --quiet -- "$source_file"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            status=$?
+            if [[ "$status" -ne 1 ]]; then
+              exit "$status"
+            fi
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push update
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          TARGET: ${{ steps.branch.outputs.path }}
+          VERSION: ${{ steps.release.outputs.version }}
+          BRANCH: automation/grok-client-version
+        run: |
+          set -euo pipefail
+          source_file="platform/backend/src/services/xai-subscription-token.ts"
+          git -C "$TARGET" add -- "$source_file"
+          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore(xai): update Grok CLI client version to $VERSION"
+          git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
+
+      # Also recovers a branch pushed by an earlier run whose PR creation failed.
+      - name: Open or update pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ steps.branch.outputs.path }}
+          BRANCH: automation/grok-client-version
+        run: |
+          set -euo pipefail
+          source_file="platform/backend/src/services/xai-subscription-token.ts"
+          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$source_file"; then
+            echo "Grok CLI client version already matches main."
+            exit 0
+          else
+            status=$?
+            if [[ "$status" -ne 1 ]]; then
+              exit "$status"
+            fi
+          fi
+
+          pr_title="chore(xai): update Grok CLI client version"
+          pr_body="Track the stable Grok CLI release so SuperGrok requests stay above the minimum client version that xAI's session proxy accepts."
+          owner="${GH_REPO%%/*}"
+          existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
+          if [[ -z "$existing_pr" ]]; then
+            pr="$(gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "$pr_title" \
+              --body "$pr_body")"
+          else
+            pr="$existing_pr"
+            gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+          fi
+
+          auto_merge_enabled="$(gh pr view "$pr" --repo "$GH_REPO" --json autoMergeRequest --jq '.autoMergeRequest != null')"
+          if [[ "$auto_merge_enabled" == "false" ]]; then
+            gh pr merge "$pr" --repo "$GH_REPO" --auto
+          fi
+          gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
+
+  notify:
+    name: Report update result
+    needs: update
+    if: ${{ always() && github.repository == 'archestra-ai/archestra' && (needs.update.result == 'failure' || needs.update.outputs.pull_request_url != '') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Post result to alerting
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTING_WEBHOOK_URL }}
+          UPDATE_RESULT: ${{ needs.update.result }}
+          PULL_REQUEST_URL: ${{ needs.update.outputs.pull_request_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
+            echo "::warning::SLACK_ALERTING_WEBHOOK_URL not set; skipping Slack notification."
+            exit 0
+          fi
+
+          if [[ "$UPDATE_RESULT" == "failure" ]]; then
+            message=":rotating_light: Grok CLI client version update failed. <$RUN_URL|View workflow run>"
+          else
+            message="Grok CLI client version update proposed: <$PULL_REQUEST_URL|View pull request>"
+          fi
+          jq -n --arg text "$message" '{text: $text}' |
+            curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"

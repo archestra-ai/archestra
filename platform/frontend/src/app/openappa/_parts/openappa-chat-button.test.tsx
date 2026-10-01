@@ -178,6 +178,7 @@ test.each([
   expect(
     screen.queryByRole("link", { name: props.children }),
   ).not.toBeInTheDocument();
+  await userEvent.unhover(button);
   await userEvent.hover(button);
   const tooltip = await screen.findByRole("tooltip");
   expect(tooltip).toHaveTextContent("Missing permissions");

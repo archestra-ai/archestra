@@ -1,6 +1,6 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -20,7 +20,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams, useTeams } from "@/lib/teams/team.query";
 import ModelsPage from "./page";
 
 const API_ORIGIN = "http://localhost:9000";
@@ -148,6 +148,7 @@ beforeEach(() => {
   vi.mocked(usePathname).mockReturnValue("/llm/models");
   vi.mocked(useRouter).mockReturnValue({
     push: routerPush,
+    replace: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
@@ -164,6 +165,9 @@ beforeEach(() => {
   vi.mocked(useOrganization).mockReturnValue({
     data: null,
   } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAssignableTeams).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof useAssignableTeams>);
   vi.mocked(useTeams).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useTeams>);
@@ -177,6 +181,49 @@ afterAll(() => {
 });
 
 describe("ModelsPage", () => {
+  it("opens model permissions through Edit without a duplicate row action", async () => {
+    keyCreated = true;
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
+        HttpResponse.json([]),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/resource-permissions/llmModel/${model.id}`,
+        () =>
+          HttpResponse.json({
+            resource: "llmModel",
+            scope: model.id,
+            name: model.modelId,
+            revision: 1,
+            grants: [],
+            inheritedGrants: [],
+            effectiveActions: ["read", "update", "manage-permissions"],
+          } satisfies archestraApiTypes.GetResourcePermissionsResponses["200"]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(model.modelId);
+    expect(
+      screen.queryByRole("button", { name: `Permissions ${model.modelId}` }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: `Edit ${model.modelId}` }),
+    );
+    const dialog = screen.getByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Permissions" }),
+    );
+    expect(
+      await within(dialog).findByRole("button", { name: "Add access" }),
+    ).toBeVisible();
+  });
+
   it("shows actionable database guidance when loading models fails", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/llm-models`, () =>

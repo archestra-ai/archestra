@@ -3,7 +3,6 @@
 import { Puzzle } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AgentBadge } from "@/components/agent-badge";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -33,7 +32,6 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="truncate">{skill.name}</span>
-          <AgentBadge type={skill.scope} />
           <Badge variant="secondary">Beta</Badge>
         </div>
       }

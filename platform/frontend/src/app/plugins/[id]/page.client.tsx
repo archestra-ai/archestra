@@ -18,7 +18,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { AgentBadge } from "@/components/agent-badge";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -359,7 +358,6 @@ function PluginDetailView({
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{plugin.displayName}</span>
-          <AgentBadge type={plugin.scope} className="font-normal" />
           <Badge variant="secondary" className="font-normal">
             {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
           </Badge>

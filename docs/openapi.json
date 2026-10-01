@@ -1085,7 +1085,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -5539,7 +5540,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -7386,7 +7388,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -8653,7 +8656,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -9927,7 +9931,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -11194,7 +11199,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -16030,7 +16036,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -17298,7 +17305,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -20057,7 +20065,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -21587,7 +21596,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -26231,7 +26241,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -28163,7 +28174,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -29487,7 +29499,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -30818,7 +30831,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -32142,7 +32156,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -37169,7 +37184,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -38493,7 +38509,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -41379,7 +41396,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -159375,7 +159393,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -160919,7 +160938,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -190874,7 +190894,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -191968,7 +191989,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -193905,7 +193927,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -194999,7 +195022,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -196931,7 +196955,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -198025,7 +198050,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -226771,7 +226797,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -227865,7 +227892,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -229802,7 +229830,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -230896,7 +230925,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -232828,7 +232858,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -233922,7 +233953,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -252961,7 +252993,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -254510,7 +254543,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -310320,7 +310354,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -311869,7 +311904,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {

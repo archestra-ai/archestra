@@ -64,11 +64,17 @@ export function ConversationProjectActions({
             <CommandList>
               {!canCreate && (
                 <CommandEmpty>
-                  <span>
-                    {onCreateProject && !name
-                      ? "Type a name to create a project."
-                      : "No projects found."}
-                  </span>
+                  {onCreateProject && !name && projects.length === 0 ? (
+                    <div className="space-y-1 px-3">
+                      <p>No projects yet.</p>
+                      <p className="text-xs text-muted-foreground">
+                        Enter a project name above, then press Enter to create
+                        it.
+                      </p>
+                    </div>
+                  ) : (
+                    <span>No projects found.</span>
+                  )}
                 </CommandEmpty>
               )}
               <CommandGroup>

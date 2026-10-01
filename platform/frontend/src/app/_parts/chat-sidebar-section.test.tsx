@@ -139,10 +139,6 @@ vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects }),
   usePinProject: () => ({ mutate: vi.fn() }),
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useCreateProjectFromConversation: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
 }));
 
 vi.mock("@/lib/app.query", () => ({
@@ -405,6 +401,19 @@ describe("ChatSidebarSection", () => {
     mockRuns = [];
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
+  });
+
+  it("keeps project actions in the picker without a separate create action", () => {
+    mockConversations = [
+      { ...makeConv("chat-1", "Project planning"), origin: "user" },
+    ];
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+    expect(
+      screen.getByRole("button", { name: "Add to project" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create project" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not render when no conversations exist", () => {

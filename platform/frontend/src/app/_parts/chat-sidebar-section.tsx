@@ -9,7 +9,6 @@ import {
   CalendarClock,
   ChevronDown,
   Folder,
-  FolderPlus,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -24,7 +23,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
-import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
@@ -98,7 +96,6 @@ import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
-import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import {
   useCreateProject,
   usePinProject,
@@ -191,10 +188,6 @@ export function ChatSidebarSection({
   const { data: canReadProjects } = useHasPermissions({
     project: ["read"],
   });
-  const [createProjectConv, setCreateProjectConv] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
 
   // Conversations whose title should play the typing animation (shared via chat
   // context); getSession drives the live "generating" spinner.
@@ -481,12 +474,6 @@ export function ChatSidebarSection({
       generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
-    const showCreateProject =
-      isActionAvailableForConversation(conv, "createProject") &&
-      canCreateProjectFromChat({
-        hasCreatePermission: canCreateProject === true,
-        conversation: conv,
-      });
     const showProjectActions =
       canUpdateConversation === true &&
       canReadProjects === true &&
@@ -652,9 +639,7 @@ export function ChatSidebarSection({
               controls must not be nested, and the trigger must be a real
               button rather than a bare svg. */}
           {editingId !== conv.id &&
-            (canUpdateConversation ||
-              canDeleteConversation ||
-              showCreateProject) && (
+            (canUpdateConversation || canDeleteConversation) && (
               <DropdownMenu
                 open={isMenuOpen}
                 onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
@@ -747,21 +732,6 @@ export function ChatSidebarSection({
                         />
                       )}
                     </>
-                  )}
-                  {showCreateProject && (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(null);
-                        setCreateProjectConv({
-                          id: conv.id,
-                          title: displayTitle,
-                        });
-                      }}
-                    >
-                      <FolderPlus className="h-4 w-4 mr-2" />
-                      Create project
-                    </DropdownMenuItem>
                   )}
                   {canDeleteConversation && (
                     <DropdownMenuItem
@@ -1229,13 +1199,6 @@ export function ChatSidebarSection({
           await deleteRunMutation.mutateAsync(deleteRunId);
           setDeleteRunId(null);
         }}
-      />
-
-      <CreateProjectFromChatDialog
-        conversationId={createProjectConv?.id ?? null}
-        defaultName={createProjectConv?.title ?? ""}
-        open={createProjectConv !== null}
-        onOpenChange={(open) => !open && setCreateProjectConv(null)}
       />
     </>
   );

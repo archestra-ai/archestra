@@ -90,7 +90,7 @@ describe("inline project creation", () => {
         onCreateProject={onCreateProject}
       />,
     );
-    expect(screen.getByText("Type a name to create a project.")).toBeVisible();
+    expect(screen.getByText("No projects yet.")).toBeVisible();
     await user.type(screen.getByRole("combobox"), "  New research  ");
     expect(
       screen.getByRole("option", { name: 'Create project "New research"' }),

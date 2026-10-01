@@ -66,6 +66,7 @@ describe("supportsGeminiThoughtSummaries", () => {
     ["gemini-3-pro-preview", true],
     ["gemini-3-flash-preview", true],
     ["gemini-3.5-flash", true],
+    ["gemini-4-argon", true],
     // flash-lite has thinking off by default; bare includeThoughts is a 400.
     ["gemini-2.5-flash-lite", false],
     ["gemini-3.5-flash-lite", false],

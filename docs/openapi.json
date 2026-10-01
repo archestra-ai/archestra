@@ -330768,7 +330768,7 @@
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
                               },
-                              "builtInFallback": {
+                              "notCovered": {
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
@@ -330779,7 +330779,7 @@
                               "battery",
                               "notEnforced",
                               "catchAll",
-                              "builtInFallback"
+                              "notCovered"
                             ],
                             "additionalProperties": false
                           },
@@ -331156,7 +331156,7 @@
                 "battery",
                 "root",
                 "catchall",
-                "built_in"
+                "not_covered"
               ]
             },
             "in": "query",
@@ -331239,10 +331239,10 @@
                           "policySource": {
                             "type": "string",
                             "enum": [
-                              "built_in",
-                              "fallback",
                               "root",
-                              "battery"
+                              "battery",
+                              "catchall",
+                              "not_covered"
                             ]
                           },
                           "rule": {
@@ -331253,7 +331253,8 @@
                                 "type": "string",
                                 "enum": [
                                   "root",
-                                  "battery"
+                                  "battery",
+                                  "catchall"
                                 ]
                               },
                               "battery": {
@@ -331758,7 +331759,7 @@
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
                         },
-                        "builtInFallback": {
+                        "notCovered": {
                           "type": "integer",
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
@@ -331774,7 +331775,7 @@
                         "battery",
                         "notEnforced",
                         "catchAll",
-                        "builtInFallback",
+                        "notCovered",
                         "tools"
                       ],
                       "additionalProperties": false

@@ -1857,27 +1857,38 @@ describe("Agent Runtime routes", () => {
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const helper = vi
       .spyOn(agentRuntimeManager, "runWorkspaceTransferCommand")
-      .mockImplementation(async ({ args }) => {
+      .mockImplementation(async ({ args, stdin }) => {
         const [, , command, ...rest] = args;
         if (command === "stat")
           return { ok: true, path: rest[0], present: false };
         if (command === "write-stream") {
-          return { ok: true, upload_id: rest[0], size: bytes.length, sha256 };
+          const received: Buffer[] = [];
+          for await (const chunk of stdin ?? []) received.push(chunk);
+          const stored = Buffer.concat(received);
+          return {
+            ok: true,
+            upload_id: rest[0],
+            size: stored.length,
+            sha256: createHash("sha256").update(stored).digest("hex"),
+          };
         }
+        if (command === "discard") return { ok: true, discarded: rest[0] };
         return { ok: true, path: rest[1], size: bytes.length, sha256 };
       });
+    const mint = (size: number) =>
+      app.inject({
+        method: "POST",
+        url: `/api/agent-runs/${task.id}/workspace/transfers`,
+        payload: {
+          direction: "upload",
+          location: "attachments",
+          path: "screen shot.png",
+          size,
+          sha256,
+        },
+      });
 
-    const started = await app.inject({
-      method: "POST",
-      url: `/api/agent-runs/${task.id}/workspace/transfers`,
-      payload: {
-        direction: "upload",
-        location: "attachments",
-        path: "screen shot.png",
-        size: bytes.length,
-        sha256,
-      },
-    });
+    const started = await mint(bytes.length);
     expect(started.statusCode, started.body).toBe(200);
     const { path, token, contentUrl } = started.json();
     const root = `/var/run/archestra/attachments/${task.id}`;
@@ -1899,6 +1910,32 @@ describe("Agent Runtime routes", () => {
     for (const [{ args }] of helper.mock.calls) {
       expect(args.slice(0, 2)).toEqual(["--root", root]);
     }
+
+    // Oversized files are refused before the workspace is touched, and a body
+    // larger than its ticket stops at the declared size.
+    expect(
+      (await mint(config.chat.attachmentStorageBytesLimit + 1)).statusCode,
+    ).toBe(413);
+    expect(helper).toHaveBeenCalledTimes(3);
+    const lying = (await mint(bytes.length)).json();
+    const overflow = await app.inject({
+      method: "PUT",
+      url: lying.contentUrl,
+      headers: {
+        authorization: `Bearer ${lying.token}`,
+        "content-type": "application/octet-stream",
+      },
+      payload: Buffer.alloc(64 * 1024, 1),
+    });
+    expect(overflow.statusCode, overflow.body).toBe(413);
+    expect(helper.mock.calls.map(([{ args }]) => args[2])).toEqual([
+      "stat",
+      "write-stream",
+      "finalize",
+      "stat",
+      "write-stream",
+      "discard",
+    ]);
   });
 
   test("reports a retained terminal from the reconciler's probe until the CLI exits", async () => {

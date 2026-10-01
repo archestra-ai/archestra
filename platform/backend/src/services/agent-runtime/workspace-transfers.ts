@@ -1,8 +1,9 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import path from "node:path";
-import type { Readable } from "node:stream";
+import { type Readable, Transform } from "node:stream";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { LRUCacheManager } from "@/cache-manager";
+import config from "@/config";
 import { ApiError } from "@/types";
 import {
   type WorkspaceFileStat,
@@ -86,6 +87,15 @@ class WorkspaceTransferTickets {
     sha256: string;
     location?: "workspace" | "attachments";
   }): Promise<{ ticket: WorkspaceTransferTicket; token: string }> {
+    if (
+      params.location === "attachments" &&
+      params.size > config.chat.attachmentStorageBytesLimit
+    ) {
+      throw new ApiError(
+        413,
+        `Attachments are limited to ${Math.floor(config.chat.attachmentStorageBytesLimit / 1024 / 1024)} MB`,
+      );
+    }
     const session = await authorizeAgentWorkspaceAccess(params);
     // Attachments sit beside the run's start-up inputs, outside the tree the
     // Agent works in. The prefix keeps a repeated name from replacing a file
@@ -157,6 +167,7 @@ class WorkspaceTransferTickets {
   async receive(params: { ticket: StoredTicket; body: Readable }) {
     const session = await authorizeAgentWorkspaceAccess(params.ticket);
     const driver = resolveAgentRuntimeBackendDriver(session.backend);
+    const body = limitBytes(params.body, params.ticket.size);
     const receipt = WorkspaceUploadReceiptSchema.parse(
       camelize(
         await driver.runWorkspaceTransferCommand({
@@ -166,11 +177,15 @@ class WorkspaceTransferTickets {
             "write-stream",
             params.ticket.entryId,
           ),
-          stdin: params.body,
+          stdin: body.stream,
           timeoutMs: TRANSFER_TIMEOUT_MS,
         }),
       ),
     );
+    if (body.exceeded()) {
+      await this.discard(params.ticket);
+      throw new ApiError(413, "Upload is larger than the size it declared");
+    }
     if (receipt.sha256 !== params.ticket.sha256) {
       await this.discard(params.ticket);
       throw new ApiError(
@@ -268,6 +283,29 @@ export function ticketPath(
   ticket: Pick<WorkspaceTransferTicket, "root" | "path">,
 ): string {
   return ticket.root ? path.posix.join(ticket.root, ticket.path) : ticket.path;
+}
+
+/** Forward at most the bytes a ticket declared. The request stream is
+ * unbounded, so without this a client could fill the runtime's volume. */
+function limitBytes(
+  body: Readable,
+  limit: number,
+): { stream: Readable; exceeded: () => boolean } {
+  let seen = 0;
+  let exceeded = false;
+  const stream = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      seen += chunk.length;
+      if (seen <= limit) return callback(null, chunk);
+      // End the helper's input here; the rest of the body is never forwarded.
+      exceeded = true;
+      body.unpipe(stream);
+      callback();
+      stream.end();
+    },
+  });
+  body.pipe(stream);
+  return { stream, exceeded: () => exceeded };
 }
 
 /** The in-Pod helper works in the workspace unless told otherwise. */

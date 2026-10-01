@@ -158,7 +158,7 @@ export function useContinueAgentRun() {
       message,
     }: {
       taskId: string;
-      message: string;
+      message?: string;
     }) => {
       const { data, error } = await continueAgentRun({
         path: { taskId },

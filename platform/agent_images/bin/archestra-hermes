@@ -10,6 +10,10 @@ fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
+# Restoring an interactive session does not submit another model turn.
+if [[ "${runtime_mode}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
 export HERMES_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/hermes"
 mkdir -p "${runtime_dir}" "${HERMES_HOME}"
 attention_plugin_dir="${HERMES_HOME}/plugins/archestra-attention"
@@ -325,7 +329,7 @@ chmod 0600 "${HERMES_HOME}/config.yaml"
 mkdir -p "${HOME}/.hermes"
 ln -sf "${HERMES_HOME}/config.yaml" "${HOME}/.hermes/config.yaml"
 task_file="${runtime_dir}/task.md"
-printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" > "${task_file}"
 
 completion_watcher="${runtime_dir}/hermes-completion-watch.py"
 cat > "${completion_watcher}" <<'PYTHON'
@@ -412,10 +416,11 @@ fi
 
 case "${runtime_mode}" in
   interactive)
-    exec hermes chat \
-      "${common_args[@]}" \
-      --tui \
-      --query "$(cat "${task_file}")"
+    prompt_args=()
+    if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" ]]; then
+      prompt_args+=(--query "$(cat "${task_file}")")
+    fi
+    exec hermes chat "${common_args[@]}" --tui "${prompt_args[@]}"
     ;;
   one_shot)
     if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then

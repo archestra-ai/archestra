@@ -798,7 +798,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Agents"],
         params: z.object({ taskId: z.string().uuid() }),
         body: z.object({
-          message: z.string().trim().min(1).max(100_000),
+          message: z.string().trim().max(100_000).default(""),
           attachments: agentRunAttachmentsSchema(),
         }),
         response: constructResponseSchema(StartAgentRunResponseSchema),

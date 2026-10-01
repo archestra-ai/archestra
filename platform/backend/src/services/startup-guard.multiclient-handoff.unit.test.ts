@@ -6,6 +6,8 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -136,6 +138,494 @@ process.stdout.write(JSON.stringify({models:[{slug:'one',tool_mode:'code_mode_on
     await expect(
       readFile(JSON.parse(config.split("=")[1]), "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("nested network-blocked Codex shell reuses only a recent direct catalog without discovery or config writes", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "codex nested "));
+  const shim = path.join(home, "codex.cmd");
+  const entry = path.join(home, "node_modules/@openai/codex/bin/codex.js");
+  const helper = path.join(home, "handoff.cjs");
+  const codexHome = path.join(home, "config with spaces");
+  const catalogPath = path.join(
+    codexHome,
+    "archestra-direct-model-catalog.json",
+  );
+  const seen = path.join(home, "seen.json");
+  const config = `model = "gpt-6-luna"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+`;
+  const prepared = {
+    fetched_at: new Date().toISOString(),
+    models: [
+      {
+        slug: "gpt-6-luna",
+        tool_mode: "direct",
+        supports_search_tool: false,
+      },
+    ],
+  };
+  const nested = {
+    ...process.env,
+    CODEX_HOME: codexHome,
+    CODEX_SANDBOX_NETWORK_DISABLED: "1",
+    CODEX_SANDBOX: "seatbelt",
+    CODEX_THREAD_ID: "thread-1",
+    CODEX_SESSION_ID: "session-1",
+  };
+  try {
+    await mkdir(path.dirname(entry), { recursive: true });
+    await mkdir(codexHome);
+    await writeFile(path.join(codexHome, "config.toml"), config);
+    await writeFile(catalogPath, JSON.stringify(prepared));
+    await writeFile(shim, "npm shim placeholder");
+    await writeFile(
+      entry,
+      `const fs = require('node:fs');
+const env = process.env;
+fs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify({home: env.CODEX_HOME, sandbox: env.CODEX_SANDBOX, network: env.CODEX_SANDBOX_NETWORK_DISABLED, thread: env.CODEX_THREAD_ID, session: env.CODEX_SESSION_ID}));
+process.exit(2);`,
+    );
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    for (const args of [
+      ["exec", "--help"],
+      ["exec", "verify the gateway"],
+    ]) {
+      const { stdout } = await exec(
+        process.execPath,
+        [helper, "--direct", shim, "--output-base64", ...args],
+        { env: nested },
+      );
+      expect(Buffer.from(stdout, "base64").toString("utf8")).toBe(
+        `model_catalog_json=${JSON.stringify(catalogPath)}`,
+      );
+    }
+    await expect(readFile(seen)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(JSON.parse(await readFile(catalogPath, "utf8"))).toEqual(prepared);
+    expect(await readFile(path.join(codexHome, "config.toml"), "utf8")).toBe(
+      config,
+    );
+    await writeFile(
+      catalogPath,
+      JSON.stringify({
+        models: [
+          {
+            slug: "gpt-6-luna",
+            tool_mode: "code_mode_only",
+            supports_search_tool: true,
+          },
+        ],
+      }),
+    );
+    await expect(
+      exec(
+        process.execPath,
+        [helper, "--direct", shim, "exec", "verify the gateway"],
+        { env: nested },
+      ),
+    ).rejects.toMatchObject({ code: 1 });
+    await writeFile(
+      catalogPath,
+      JSON.stringify({
+        ...prepared,
+        fetched_at: new Date(Date.now() - 86400000 - 1000).toISOString(),
+      }),
+    );
+    await expect(
+      exec(process.execPath, [helper, "--direct", shim, "exec", "verify"], {
+        env: nested,
+      }),
+    ).rejects.toMatchObject({ code: 1 });
+    await writeFile(catalogPath, JSON.stringify(prepared));
+    const stale = new Date(Date.now() - 86400000 - 1000);
+    await utimes(catalogPath, stale, stale);
+    await expect(
+      exec(process.execPath, [helper, "--direct", shim, "exec", "--help"], {
+        env: nested,
+      }),
+    ).rejects.toMatchObject({ code: 1 });
+    await expect(
+      exec(process.execPath, [helper, "--install-direct", shim], {
+        env: nested,
+      }),
+    ).rejects.toMatchObject({ code: 1 });
+    expect(await readFile(path.join(codexHome, "config.toml"), "utf8")).toBe(
+      config,
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("a normal launch still refuses a failed catalog refresh even when a prepared catalog exists", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "codex normal refuse "));
+  const shim = path.join(home, "codex.cmd");
+  const entry = path.join(home, "node_modules/@openai/codex/bin/codex.js");
+  const helper = path.join(home, "handoff.cjs");
+  const codexHome = path.join(home, "config");
+  try {
+    await mkdir(path.dirname(entry), { recursive: true });
+    await mkdir(codexHome);
+    await writeFile(
+      path.join(codexHome, "config.toml"),
+      'model = "gpt-6-luna"\n',
+    );
+    await writeFile(
+      path.join(codexHome, "archestra-direct-model-catalog.json"),
+      JSON.stringify({
+        models: [
+          {
+            slug: "gpt-6-luna",
+            tool_mode: "direct",
+            supports_search_tool: false,
+          },
+        ],
+      }),
+    );
+    await writeFile(shim, "npm shim placeholder");
+    await writeFile(entry, "process.exit(2);");
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await expect(
+      exec(process.execPath, [helper, "--direct", shim, "exec", "verify"], {
+        env: {
+          ...process.env,
+          CODEX_HOME: codexHome,
+          CODEX_THREAD_ID: "",
+          CODEX_SANDBOX_NETWORK_DISABLED: "",
+        },
+      }),
+    ).rejects.toMatchObject({ code: 1 });
+    await expect(
+      exec(process.execPath, [helper, "--direct", shim, "exec", "verify"], {
+        env: {
+          ...process.env,
+          CODEX_HOME: codexHome,
+          CODEX_SANDBOX_NETWORK_DISABLED: "1",
+          CODEX_THREAD_ID: "",
+        },
+      }),
+    ).rejects.toMatchObject({ code: 1 });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("nested Codex shell refuses when the prepared catalog lacks the selected model", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "codex nested model "));
+  const shim = path.join(home, "codex.cmd");
+  const entry = path.join(home, "node_modules/@openai/codex/bin/codex.js");
+  const helper = path.join(home, "handoff.cjs");
+  const codexHome = path.join(home, "config");
+  const nested = {
+    ...process.env,
+    CODEX_HOME: codexHome,
+    CODEX_SANDBOX_NETWORK_DISABLED: "1",
+    CODEX_THREAD_ID: "thread-1",
+  };
+  try {
+    await mkdir(path.dirname(entry), { recursive: true });
+    await mkdir(codexHome);
+    await writeFile(
+      path.join(codexHome, "config.toml"),
+      'model = "gpt-6-luna"\n',
+    );
+    await writeFile(
+      path.join(codexHome, "archestra-direct-model-catalog.json"),
+      JSON.stringify({
+        models: [
+          {
+            slug: "gpt-6-luna",
+            tool_mode: "direct",
+            supports_search_tool: false,
+          },
+        ],
+      }),
+    );
+    await writeFile(shim, "npm shim placeholder");
+    await writeFile(
+      entry,
+      `require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME, 'models_cache.json'), JSON.stringify({fetched_at: new Date().toISOString()}));
+process.stdout.write(JSON.stringify({models:[{slug:'other', tool_mode:'code_mode_only'}]}));`,
+    );
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await expect(
+      exec(
+        process.execPath,
+        [helper, "--direct", shim, "exec", "-m", "other", "verify"],
+        {
+          env: nested,
+        },
+      ),
+    ).rejects.toMatchObject({ code: 1 });
+    await writeFile(entry, "process.exit(2);");
+    await writeFile(
+      path.join(codexHome, "archestra-direct-model-catalog.json"),
+      JSON.stringify({
+        models: [
+          { slug: "other", tool_mode: "direct", supports_search_tool: false },
+        ],
+      }),
+    );
+    await expect(
+      exec(process.execPath, [helper, "--direct", shim, "exec", "--help"], {
+        env: nested,
+      }),
+    ).rejects.toMatchObject({ code: 1 });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Codex launch keeps the nested sandbox environment", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "codex launch env "));
+  const shim = path.join(home, "codex.cmd");
+  const entry = path.join(home, "node_modules/@openai/codex/bin/codex.js");
+  const helper = path.join(home, "handoff.cjs");
+  const result = path.join(home, "args.json");
+  const marker = path.join(home, "launched");
+  try {
+    await mkdir(path.dirname(entry), { recursive: true });
+    await writeFile(shim, "npm shim placeholder");
+    await writeFile(
+      entry,
+      "require('node:fs').writeFileSync(process.env.CODEX_TEST_RESULT, JSON.stringify({network:process.env.CODEX_SANDBOX_NETWORK_DISABLED,thread:process.env.CODEX_THREAD_ID,sandbox:process.env.CODEX_SANDBOX})); process.exit(23);",
+    );
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await expect(
+      exec(process.execPath, [helper, "--launch", shim], {
+        env: {
+          ...process.env,
+          CODEX_TEST_RESULT: result,
+          ARCHESTRA_CODEX_LAUNCH_MARKER: marker,
+          ARCHESTRA_CODEX_LAUNCH_ARGS: Buffer.from(
+            JSON.stringify(["exec", "verify the gateway"]),
+          ).toString("base64"),
+          CODEX_SANDBOX_NETWORK_DISABLED: "1",
+          CODEX_THREAD_ID: "thread-1",
+          CODEX_SANDBOX: "seatbelt",
+        },
+      }),
+    ).rejects.toMatchObject({ code: 23 });
+    expect(JSON.parse(await readFile(result, "utf8"))).toEqual({
+      network: "1",
+      thread: "thread-1",
+      sandbox: "seatbelt",
+    });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  "features = { code_mode_host = true, js_repl = false }",
+  '"features" = { "code_mode_host" = true, js_repl = false } # keep comment',
+  'features = { "co\\u0064e_mode_host" = true, js_repl = false }',
+  'features = { "code_mode_host" = true, "escaped\\\\U00000022" = false }',
+  'features = { js_repl = false, note = "code_mode_host = true, }", nested = { code_mode_host = true } }',
+  "features = { js_repl = false }",
+  '["features"]\n"code_mode_host" = true\njs_repl = false',
+  '["feat\\U00000075res"]\ncode_mode_host = true\njs_repl = false',
+  "['features']\n'code_mode_host' = true\njs_repl = false",
+  '"features"."code_mode_host" = true\nfeatures.js_repl = false',
+])("Codex direct setup preserves and restores valid feature syntax: %s", async (features) => {
+  const home = await mkdtemp(path.join(tmpdir(), "codex feature syntax "));
+  const shim = path.join(home, "codex.cmd");
+  const entry = path.join(home, "node_modules/@openai/codex/bin/codex.js");
+  const helper = path.join(home, "handoff.cjs");
+  const configFile = path.join(home, "config.toml");
+  const original = `"model" = "fixture-model"\n"model_catalog_json" = "user-models.json"\n"web_search" = "live"\napproval_policy = "on-request"\nsandbox_mode = "workspace-write"\n${features}\n[tools]\nother_tool = "keep"\n`;
+  const env = { ...process.env, CODEX_HOME: home };
+  try {
+    await mkdir(path.dirname(entry), { recursive: true });
+    await writeFile(shim, "npm shim placeholder");
+    await writeFile(
+      entry,
+      `const fs = require('node:fs');
+if (fs.readFileSync(require('node:path').join(process.env.CODEX_HOME, 'config.toml'), 'utf8').includes('user-models.json')) process.exit(98);
+fs.writeFileSync(require('node:path').join(process.env.CODEX_HOME, 'models_cache.json'), JSON.stringify({fetched_at:new Date().toISOString()}));
+process.stdout.write(JSON.stringify({models:[{slug:'fixture-model',tool_mode:'code_mode_only'}]}));`,
+    );
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await writeFile(configFile, original);
+    const before = parseToml(original);
+    for (let iteration = 0; iteration < 2; iteration++) {
+      await exec(process.execPath, [helper, "--install-direct", shim], { env });
+      expect(parseToml(await readFile(configFile, "utf8"))).toEqual({
+        ...before,
+        web_search: "disabled",
+        model_catalog_json: path.join(
+          home,
+          "archestra-direct-model-catalog.json",
+        ),
+        features: { ...(before.features as object), code_mode_host: false },
+      });
+    }
+    await exec(process.execPath, [helper, "--remove-direct"], { env });
+    expect(parseToml(await readFile(configFile, "utf8"))).toEqual(before);
+    const restored = await readFile(configFile, "utf8");
+    for (const line of features.split("\n")) expect(restored).toContain(line);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Codex catalog checks honor quoted profile names and model keys", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "codex quoted profile "));
+  const shim = path.join(home, "codex.cmd");
+  const entry = path.join(home, "node_modules/@openai/codex/bin/codex.js");
+  const helper = path.join(home, "handoff.cjs");
+  const configFile = path.join(home, "config.toml");
+  const original =
+    '"model" = "fixture-model"\n[profiles."future.model"]\n"model" = "missing-model"\n';
+  const env = { ...process.env, CODEX_HOME: home };
+  try {
+    await mkdir(path.dirname(entry), { recursive: true });
+    await writeFile(shim, "npm shim placeholder");
+    await writeFile(
+      entry,
+      `require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME, 'models_cache.json'), JSON.stringify({fetched_at:new Date().toISOString()}));
+process.stdout.write(JSON.stringify({models:[{slug:'fixture-model',tool_mode:'code_mode_only'}]}));`,
+    );
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await writeFile(configFile, original);
+    for (const args of [
+      ["--profile", "future.model"],
+      ["-c", '"profile"="future.model"'],
+      ["-c", '"model"="missing-model"'],
+      ["-c", '"model"="missing-model" # model selection'],
+      [
+        "--profile",
+        "future.model",
+        "-c",
+        'profiles."future.model".model="other-missing"',
+      ],
+    ]) {
+      await expect(
+        exec(process.execPath, [helper, "--install-direct", shim, ...args], {
+          env,
+        }),
+      ).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining("Selected model is missing"),
+      });
+      expect(await readFile(configFile, "utf8")).toBe(original);
+    }
+    await exec(
+      process.execPath,
+      [
+        helper,
+        "--install-direct",
+        shim,
+        "-c",
+        'developer_instructions="Keep unrelated settings" # unrelated override',
+      ],
+      { env },
+    );
+    expect(parseToml(await readFile(configFile, "utf8"))).toMatchObject({
+      model: "fixture-model",
+      profiles: { "future.model": { model: "missing-model" } },
+    });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  "refresh",
+  "file",
+  "login",
+  "logout",
+  "failure",
+  "auto",
+  "keyring",
+])("catalog discovery keeps native credentials without stale write-back during %s", async (operation) => {
+  const home = await mkdtemp(path.join(tmpdir(), "codex credentials "));
+  const shim = path.join(home, "codex.cmd");
+  const cli = path.join(home, "node_modules/@openai/codex/bin/codex.js");
+  const helper = path.join(home, "handoff.cjs");
+  const codexHome = path.join(home, "native home");
+  const authFile = path.join(codexHome, "auth.json");
+  const configFile = path.join(codexHome, "config.toml");
+  const probeFile = path.join(home, "discovery.json");
+  const config =
+    'model = "fixture-model"\napproval_policy = "on-request"\n' +
+    (["auto", "keyring", "file"].includes(operation)
+      ? `cli_auth_credentials_store = "${operation}" # credential backend\n`
+      : "");
+  try {
+    await mkdir(path.dirname(cli), { recursive: true });
+    await mkdir(codexHome);
+    await writeFile(shim, "npm shim placeholder");
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await writeFile(configFile, config);
+    await writeFile(authFile, JSON.stringify({ token: "fixture-original" }));
+    const originalAuth = await stat(authFile);
+    await writeFile(
+      cli,
+      `const fs = require('node:fs');
+const path = require('node:path');
+const nativeAuth = ${JSON.stringify(authFile)};
+const shadowAuth = path.join(process.env.CODEX_HOME, 'auth.json');
+const source = fs.statSync(nativeAuth, { bigint: true });
+const linked = fs.statSync(shadowAuth, { bigint: true });
+fs.writeFileSync(${JSON.stringify(probeFile)}, JSON.stringify({home:process.env.CODEX_HOME,shared:source.dev === linked.dev && source.ino === linked.ino}));
+fs.writeFileSync(shadowAuth, JSON.stringify({token:'fixture-rotated'}));
+if (${JSON.stringify(operation)} === 'login') {
+  fs.writeFileSync(nativeAuth + '.login', JSON.stringify({token:'fixture-new-login'}));
+  fs.renameSync(nativeAuth + '.login', nativeAuth);
+}
+if (${JSON.stringify(operation)} === 'logout') fs.unlinkSync(nativeAuth);
+if (${JSON.stringify(operation)} === 'failure') process.exit(1);
+fs.writeFileSync(path.join(process.env.CODEX_HOME, 'models_cache.json'), JSON.stringify({fetched_at:new Date().toISOString()}));
+process.stdout.write(JSON.stringify({models:[{slug:'fixture-model',tool_mode:'code_mode_only'}]}));`,
+    );
+    const discovery = exec(process.execPath, [helper, "--direct", shim], {
+      env: { ...process.env, CODEX_HOME: codexHome },
+    });
+    if (operation === "refresh" || operation === "file") {
+      await discovery;
+    } else if (operation === "auto" || operation === "keyring") {
+      await expect(discovery).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining("requires file-backed credentials"),
+      });
+    } else {
+      await expect(discovery).rejects.toMatchObject({ code: 1 });
+    }
+    if (operation === "auto" || operation === "keyring") {
+      await expect(readFile(probeFile)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      expect(JSON.parse(await readFile(authFile, "utf8"))).toEqual({
+        token: "fixture-original",
+      });
+      expect(await readFile(configFile, "utf8")).toBe(config);
+      return;
+    }
+    const probe = JSON.parse(await readFile(probeFile, "utf8"));
+    expect(probe.shared).toBe(true);
+    await expect(stat(probe.home)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(configFile, "utf8")).toBe(config);
+    if (operation === "logout") {
+      await expect(readFile(authFile)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } else {
+      expect(JSON.parse(await readFile(authFile, "utf8"))).toEqual({
+        token: operation === "login" ? "fixture-new-login" : "fixture-rotated",
+      });
+      if (operation !== "login") {
+        expect((await stat(authFile)).ino).toBe(originalAuth.ino);
+      }
+    }
+    if (operation !== "refresh" && operation !== "file") {
+      await expect(
+        readFile(path.join(codexHome, "archestra-direct-model-catalog.json")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    }
   } finally {
     await rm(home, { recursive: true, force: true });
   }

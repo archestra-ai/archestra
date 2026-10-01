@@ -215,6 +215,130 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("tells Codex to use declared collaboration spawn tools instead of a nested CLI", async () => {
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({ sessionId: "codex-native-delegation" });
+    context.headers = { originator: "codex_cli_rs" };
+    context.interactionType = "openai:responses";
+    const request = {
+      input: [
+        {
+          type: "additional_tools",
+          role: "developer",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              tools: [
+                { type: "function", name: "spawn_agent" },
+                { type: "function", name: "wait_agent" },
+              ],
+            },
+            {
+              type: "namespace",
+              name: "functions",
+              tools: [{ type: "function", name: "exec_command" }],
+            },
+          ],
+        },
+        {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: "Spin up a native subagent, wait for it, and report the result.",
+            },
+          ],
+        },
+      ],
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      const guidance = JSON.stringify(request.input);
+      expect(guidance).toContain(
+        "namespace collaboration and name spawn_agent",
+      );
+      expect(guidance).toContain("collaboration.wait_agent");
+      expect(guidance).toContain(
+        "do not report a nested CLI result as a subagent result",
+      );
+      expect(guidance).toContain(
+        "explicit user request to run a shell command stays a shell command",
+      );
+      expect(request.input).toHaveLength(3);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("does not add native-delegation guidance without a collaboration spawn declaration", async () => {
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({ sessionId: "codex-no-native-spawn" });
+    context.headers = { originator: "codex_cli_rs" };
+    context.interactionType = "openai:responses";
+    const request = {
+      input: [
+        {
+          type: "additional_tools",
+          role: "developer",
+          tools: [
+            {
+              type: "namespace",
+              name: "functions",
+              tools: [
+                { type: "function", name: "exec_command" },
+                { type: "function", name: "spawn_agent" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request.input).toHaveLength(1);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("omits wait_agent guidance when that collaboration tool is not declared", async () => {
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({ sessionId: "codex-spawn-without-wait" });
+    context.headers = { originator: "codex_cli_rs" };
+    context.interactionType = "openai:responses";
+    const request = {
+      input: [
+        {
+          type: "additional_tools",
+          role: "developer",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              tools: [{ type: "function", name: "spawn_agent" }],
+            },
+          ],
+        },
+      ],
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      const guidance = JSON.stringify(request.input);
+      expect(guidance).toContain("name spawn_agent");
+      expect(guidance).not.toContain("collaboration.wait_agent");
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("forces a native question after execute_remedy_plan requests review", async () => {
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
     const context = requestContext({ sessionId: "review-continuation" });
@@ -3536,12 +3660,15 @@ describe("delegation markers", () => {
       wrapped,
     }) => {
       const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(plugin);
       const authorized = {
         message: "Read the bounded report",
         task_name: "reader",
       };
       const context = clientContext({
         sessionId: "user:user|t0",
+        tools: true,
         interactionType: "openai:responses",
         headers: {
           "user-agent": "codex_cli_rs/0.159.2",
@@ -3579,9 +3706,12 @@ describe("delegation markers", () => {
           ],
         },
       });
-      await plugin.onSessionInit(context);
+      await registry.onSessionInit(context);
+      const validate = vi.fn(
+        async (_calls: LlmProxyToolCallsContext["toolCalls"]) => null,
+      );
 
-      const outcome = await plugin.onToolCalls(
+      const outcome = await registry.onToolCalls(
         toolCalls(context, [
           {
             id: "call_retry",
@@ -3626,9 +3756,14 @@ describe("delegation markers", () => {
             }),
           },
         ]),
+        validate,
       );
 
       const evaluated = evaluate.mock.calls.at(-1)?.[1];
+      expect(validate).toHaveBeenCalledOnce();
+      const validated = validate.mock.calls[0][0];
+      expect(validated[0].namespace).toBe("collaboration");
+      expect(JSON.parse(String(validated[0].arguments))).toEqual(authorized);
       expect(
         evaluated?.map((call) => JSON.parse(String(call.arguments))),
       ).toEqual([
@@ -3674,14 +3809,73 @@ describe("delegation markers", () => {
       expect(changedOptions.task_name).toBe("reader");
     });
 
-    test("does not apply an accepted spawn offer twice", async () => {
-      const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    test("does not prepare a restored spawn that host validation refuses", async () => {
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(new AppaPluginArchestra([new AppaCodexAdapter()]));
       const authorized = {
         message: "Read the bounded report",
         task_name: "reader",
       };
       const context = clientContext({
         sessionId: "user:user|t0",
+        tools: true,
+        interactionType: "openai:responses",
+        headers: {
+          "user-agent": "codex_cli_rs/0.159.2",
+          "x-codex-turn-metadata": JSON.stringify({ thread_id: "t0" }),
+        },
+        body: {
+          prompt_cache_key: "t0",
+          input: [
+            {
+              type: "function_call_output",
+              call_id: "call_remedy",
+              output: `[appa] Authorized. Call the collaboration.spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
+            },
+          ],
+        },
+      });
+      await registry.onSessionInit(context);
+      const outcome = await registry.onToolCalls(
+        toolCalls(context, [
+          {
+            id: "call_retry",
+            name: "spawn_agent",
+            namespace: "collaboration",
+            arguments: JSON.stringify({
+              ...authorized,
+              message: "Rewritten task",
+            }),
+          },
+        ]),
+        async (calls) => {
+          expect(calls[0].namespace).toBe("collaboration");
+          expect(JSON.parse(String(calls[0].arguments))).toEqual(authorized);
+          return {
+            refusalMessage: "Host policy refuses this spawn",
+            contentMessage: "Host policy refuses this spawn",
+            reason: "host_policy",
+            blockedToolName: calls[0].name,
+            toolInput: authorized,
+            allToolCallNames: calls.map((call) => call.name),
+          };
+        },
+      );
+      expect(outcome.decision).toBe("refuse");
+      expect(evaluate).not.toHaveBeenCalled();
+    });
+
+    test("does not apply an accepted spawn offer twice", async () => {
+      const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(plugin);
+      const authorized = {
+        message: "Read the bounded report",
+        task_name: "reader",
+      };
+      const context = clientContext({
+        sessionId: "user:user|t0",
+        tools: true,
         interactionType: "openai:responses",
         headers: {
           "user-agent": "codex_cli_rs/0.159.2",
@@ -3708,13 +3902,13 @@ describe("delegation markers", () => {
           ],
         },
       });
-      await plugin.onSessionInit(context);
+      await registry.onSessionInit(context);
       const rewrite = {
         message: "Another rewrite after the authorized call already ran",
         task_name: "reader",
       };
 
-      await plugin.onToolCalls(
+      await registry.onToolCalls(
         toolCalls(context, [
           {
             id: "call_again",
@@ -3730,8 +3924,13 @@ describe("delegation markers", () => {
       ).toEqual(rewrite);
     });
 
-    test("does not reuse an acceptance after a later user turn", async () => {
+    test.each([
+      "message",
+      undefined,
+    ])("does not reuse an acceptance after a later user turn with type %s", async (type) => {
       const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(plugin);
       const authorized = {
         message: "Read the bounded report",
         task_name: "reader",
@@ -3742,6 +3941,7 @@ describe("delegation markers", () => {
       };
       const context = clientContext({
         sessionId: "user:user|t0",
+        tools: true,
         interactionType: "openai:responses",
         headers: {
           "user-agent": "codex_cli_rs/0.159.2",
@@ -3756,16 +3956,16 @@ describe("delegation markers", () => {
               output: `[appa] Authorized. Call the spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
             },
             {
-              type: "message",
+              ...(type ? { type } : {}),
               role: "user",
               content: [{ type: "input_text", text: "Do something else" }],
             },
           ],
         },
       });
-      await plugin.onSessionInit(context);
+      await registry.onSessionInit(context);
 
-      await plugin.onToolCalls(
+      await registry.onToolCalls(
         toolCalls(context, [
           {
             id: "call_later",
@@ -3790,6 +3990,8 @@ describe("delegation markers", () => {
         })),
       );
       const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(plugin);
       const context = clientContext({
         sessionId: "user:user|t0",
         interactionType: "openai:responses",
@@ -3809,9 +4011,9 @@ describe("delegation markers", () => {
         },
         tools: true,
       });
-      await plugin.onSessionInit(context);
+      await registry.onSessionInit(context);
 
-      const outcome = await plugin.onToolCalls(
+      const outcome = await registry.onToolCalls(
         toolCalls(context, [
           {
             id: "call_retry",
@@ -3978,8 +4180,11 @@ context_control = true
         ).toContain("unknown trust rank");
 
         const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+        const registry = new LlmProxyPluginRegistry();
+        registry.register(plugin);
         const context = clientContext({
           sessionId: "user:user|t0",
+          tools: true,
           interactionType: "openai:responses",
           headers: {
             "user-agent": "codex_cli_rs/0.159.2",
@@ -4003,9 +4208,9 @@ context_control = true
             ],
           },
         });
-        await plugin.onSessionInit(context);
+        await registry.onSessionInit(context);
         const before = evaluate.mock.calls.length;
-        const outcome = await plugin.onToolCalls(
+        const outcome = await registry.onToolCalls(
           toolCalls(context, [
             {
               id: "call_retry",

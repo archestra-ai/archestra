@@ -64,14 +64,14 @@ describe("Connect agent instructions", () => {
       new Request(`http://localhost:3000/connect.md${query}`),
     ).text();
     expect(instructions).toContain(
-      "gateway OAuth is already cached; do not run codex mcp login again",
+      "gateway OAuth is already cached. Do not run codex mcp login again",
     );
     expect(instructions).toContain("If auth_status is oauth, skip login");
     expect(instructions).toContain(
       "Only if it is not_logged_in, run codex mcp login SERVER_NAME once",
     );
     expect(instructions).toContain(
-      "do not ask the user to run verification commands",
+      "Do not ask the user to run verification commands",
     );
     expect(instructions).not.toContain("run codex mcp login SERVER_NAME, then");
     expect(instructions).not.toContain("Run codex mcp login SERVER_NAME, then");
@@ -99,6 +99,33 @@ describe("Connect agent instructions", () => {
         "Report the connection status briefly without listing tool names or quoting the test response.",
       );
     }
+  });
+
+  it.each([
+    "",
+    "?client=codex",
+  ])("uses the deterministic native verifier in %s instructions", async (query) => {
+    const instructions = await GET(
+      new Request(`http://localhost:3000/connect.md${query}`),
+    ).text();
+    expect(instructions).toContain(
+      "run the exact Verification command printed by the installer yourself",
+    );
+    expect(instructions).toContain(
+      "Do not substitute codex exec or a model-driven shell probe",
+    );
+    expect(instructions).toContain(
+      "configured model, approval mode and sandbox unchanged",
+    );
+    expect(instructions).toContain(
+      "Report success only when the helper returns verified",
+    );
+    expect(instructions).toContain("printed native PowerShell verifier");
+    expect(instructions).toContain("ordinary native per-command approval");
+    expect(instructions).toContain("retry once");
+    expect(instructions).toContain(
+      "never auto-approve app-server permission requests",
+    );
   });
 
   it("runs the Codex installer command and cleans only its temporary script", async () => {

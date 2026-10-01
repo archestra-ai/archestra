@@ -165,7 +165,7 @@ describe.skipIf(!powershellAvailable)(
     test.each([
       false,
       true,
-    ])("Codex proxy removal restores the catalog with MCP remaining: %s", async (keepMcp) => {
+    ])("Codex nested verification preserves the catalog and proxy removal restores it, with MCP remaining: %s", async (keepMcp) => {
       const home = await mkdtemp(
         path.join(tmpdir(), "codex-windows-lifecycle-"),
       );
@@ -183,7 +183,7 @@ describe.skipIf(!powershellAvailable)(
         await writeFile(helper, CODEX_HANDOFF_HELPER);
         await writeFile(
           cli,
-          `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()})); console.log(JSON.stringify({models:[{slug:'model-a',tool_mode:'code_mode_only'}]}));`,
+          `#!/usr/bin/env node\nif (process.env.CODEX_SANDBOX_NETWORK_DISABLED) process.exit(2); require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()})); console.log(JSON.stringify({models:[{slug:'model-a',tool_mode:'code_mode_only'}]}));`,
         );
         await chmod(cli, 0o755);
         const env = { ...process.env, USERPROFILE: home, CODEX_HOME: home };
@@ -199,6 +199,20 @@ describe.skipIf(!powershellAvailable)(
           script,
           `$ErrorActionPreference = 'Stop'
 $GuardPath = Join-Path $env:CODEX_HOME 'guard.ps1'
+$configPath = Join-Path $env:CODEX_HOME 'config.toml'
+$beforeProbe = Get-Content -Raw $configPath
+$env:CODEX_SANDBOX_NETWORK_DISABLED = '1'
+$env:CODEX_THREAD_ID = 'nested-verification'
+foreach ($probe in @('--help', 'verify the gateway')) {
+  $encoded = & node ($GuardPath + '.handoff.cjs') --direct (Join-Path $env:CODEX_HOME 'codex') --output-base64 exec $probe
+  if ($LASTEXITCODE -ne 0) { throw 'Nested verification could not reuse the prepared catalog' }
+  $catalogOverride = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$encoded))
+  if ($catalogOverride -notlike 'model_catalog_json=*archestra-direct-model-catalog.json*') { throw 'Nested verification lost the direct catalog override' }
+}
+if ((Get-Content -Raw $configPath) -cne $beforeProbe) { throw 'Nested verification changed the configuration' }
+if ($env:CODEX_SANDBOX_NETWORK_DISABLED -ne '1') { throw 'Nested verification removed the sandbox restriction' }
+Remove-Item Env:CODEX_THREAD_ID
+Remove-Item Env:CODEX_SANDBOX_NETWORK_DISABLED
 function Invoke-ArchCodexLogoutIfOurs { }
 ${CODEX_GUARD_CLIENT.windows.renderProxyDisconnect({ appName: "Archestra", healthUrl: null, mcp: null, skills: null, proxy: { provider: "openai", providerLabel: "OpenAI", ref: "proxy", proxyName: "llm_proxy", url: "https://example.com/v1/openai" } })}
 Disconnect-ArchProxy
@@ -328,11 +342,13 @@ if (Test-Path $guardPath) { throw 'Failed first install created a guard' }
 if ((Get-Content -Raw $profilePath) -cne $originalProfile) { throw 'Failed first install changed the profile' }
 $env:ARCHESTRA_TEST_FAIL_ADD = '0'
 Invoke-Expression $setup
+if ('${clientId}' -eq 'codex' -and -not (Test-Path ($guardPath + '.verify.ps1'))) { throw 'Native verification script was not installed' }
 $invokeArgs = @('invoke', 'two words', '', 'single''quote', '$HOME', '*')
 foreach ($attempt in 1..2) {
   $priorFunction = (Get-Item Function:${binary}).ScriptBlock
   $priorProfile = Get-Content -Raw $profilePath
   $priorGuard = Get-Content -Raw $guardPath
+  if ('${clientId}' -eq 'codex') { $priorVerifier = Get-Content -Raw ($guardPath + '.verify.ps1') }
   $env:ARCHESTRA_TEST_FAIL_ADD = '1'
   $failed = $false
   try { Invoke-Expression $setup } catch {
@@ -344,6 +360,7 @@ foreach ($attempt in 1..2) {
   if (-not $restoredFunction -or $restoredFunction.ScriptBlock.ToString() -cne $priorFunction.ToString()) { throw 'Loaded wrapper was not restored' }
   if ((Get-Content -Raw $profilePath) -cne $priorProfile) { throw 'Failed reconnect changed the profile' }
   if ((Get-Content -Raw $guardPath) -cne $priorGuard) { throw 'Failed reconnect changed the guard' }
+  if ('${clientId}' -eq 'codex' -and (Get-Content -Raw ($guardPath + '.verify.ps1')) -cne $priorVerifier) { throw 'Failed reconnect changed the verifier' }
   ${binary} @invokeArgs
   if ($LASTEXITCODE -ne ${clientId === "codex" ? 125 : 23}) { throw 'Restored wrapper lost client exit status' }
   $env:ARCHESTRA_TEST_FAIL_ADD = '0'

@@ -71,6 +71,7 @@ import type {
   LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
@@ -316,6 +317,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     binding?.adapter?.stripCarrierMetadata(context.request);
     if (binding?.compaction) return;
+    if (binding?.adapter?.id === "codex") {
+      appendNativeDelegationGuidance(context);
+    }
     if (binding && binding.adapter?.id !== "archestra-chat") {
       if (binding.request.tools?.control) {
         appendQuestionContinuation({
@@ -399,8 +403,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     const tools = binding?.request.tools;
     if (!binding || !tools) return;
-    let changed = false;
-    let incomingToolCalls = context.toolCalls;
+    // Restore before host validation; finalization may only append the child
+    // receipt, never change the arguments the other policies already checked.
+    let incomingToolCalls = restoreAuthorizedSpawnRetry({
+      calls: context.toolCalls,
+      requestBody: binding.requestBody,
+      isSpawn: (name, namespace) =>
+        binding.adapter?.isSpawnTool(name, namespace) === true,
+    });
+    let changed = incomingToolCalls !== context.toolCalls;
     if (binding.nativeHitlRulings.length > 0) {
       const blocked = context.toolCalls[0];
       if (!blocked) return;
@@ -644,17 +655,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         "OpenAPPA rejected tool calls from a compaction response",
       );
     }
-    // A return-label acceptance covers one exact spawn. Codex retries that
-    // spawn under a new call id and often rewrites the prompt, which the
-    // runtime treats as a new undeclared spawn and offers again. Evaluate and
-    // release the authorized arguments, not the rewrite. A different task or
-    // tool is left unchanged.
-    const calls = restoreAuthorizedSpawnRetry({
-      calls: context.toolCalls,
-      requestBody: binding.requestBody,
-      isSpawn: (name, namespace) =>
-        binding.adapter?.isSpawnTool(name, namespace) === true,
-    });
+    const calls = context.toolCalls;
     const session = this.governedSession(binding);
     const handbackIds = new Set(
       binding.session.parent_id && binding.adapter?.isChildHandbackTool
@@ -1686,7 +1687,11 @@ function pendingAuthorizedSpawn(body: unknown): AuthorizedSpawn | undefined {
       }
       continue;
     }
-    if (pending && item.type === "message" && item.role === "user") {
+    if (
+      pending &&
+      (item.type === "message" || item.type === undefined) &&
+      item.role === "user"
+    ) {
       pending = undefined;
       continue;
     }
@@ -2115,6 +2120,40 @@ const QUESTION_CONTINUATION_GUIDANCE = [
 
 const REMEDY_OFFER_CONTINUATION_GUIDANCE =
   "The get_remedy_plans result immediately above offers a remedy for the blocked call. Do not reply to the user and do not ask whether to continue. Immediately call execute_remedy_plan with the exact offer_id and plan from that result. The control call opens the human review when required.";
+
+const NATIVE_DELEGATION_GUIDANCE_MARKER =
+  "collaboration.spawn_agent is declared.";
+
+function nativeDelegationGuidance(waitDeclared: boolean): string {
+  const wait = waitDeclared
+    ? " Then call collaboration.wait_agent for its result."
+    : "";
+  return [
+    NATIVE_DELEGATION_GUIDANCE_MARKER,
+    `A request for a native subagent is a direct function call with namespace collaboration and name spawn_agent.${wait}`,
+    "Do not run a nested Codex CLI as that subagent, and do not report a nested CLI result as a subagent result.",
+    "An explicit user request to run a shell command stays a shell command. Do not rewrite it into spawn_agent.",
+  ].join(" ");
+}
+
+function appendNativeDelegationGuidance(
+  context: LlmProxyBeforeModelContext,
+): void {
+  if (context.interactionType !== "openai:responses") return;
+  const declared = collectDeclaredToolNames(context.request);
+  const spawnDeclared = declared.some(
+    (tool) => tool.namespace === "collaboration" && tool.name === "spawn_agent",
+  );
+  if (!spawnDeclared) return;
+  const waitDeclared = declared.some(
+    (tool) => tool.namespace === "collaboration" && tool.name === "wait_agent",
+  );
+  appendQuestionContinuation({
+    request: context.request,
+    interactionType: context.interactionType,
+    guidance: nativeDelegationGuidance(waitDeclared),
+  });
+}
 
 const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE =
   "When get_remedy_plans offers a remedy for a blocked call, do not ask the user whether to submit it. Immediately call execute_remedy_plan with the exact offer_id and plan from that ruling. If execute_remedy_plan returns outcome review_required, do not reply that review is pending. Immediately call the declared ask_user tool with that offer ID in remedy_offer_ids, header Approval, and options Approve and Deny. The platform supplies the exact review text. Wait for successful authorization before retrying the blocked tool.";

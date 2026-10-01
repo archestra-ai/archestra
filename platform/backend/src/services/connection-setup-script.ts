@@ -469,6 +469,11 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
           `If registration printed "Successfully logged in.", OAuth for "${ctx.mcp.serverName}" is already cached; do not repeat login. Otherwise check \`codex mcp list\` and run \`codex mcp login ${ctx.mcp.serverName}\` only when Auth is "Not logged in". Keep any pending login running until its browser callback finishes.`,
         );
       }
+      if (ctx.mcp || ctx.proxy) {
+        steps.push(
+          `Verification command: node "$HOME/${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs" --verify "$(command -v codex)" ${sh(Buffer.from(JSON.stringify({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName })).toString("base64"))}`,
+        );
+      }
       if (ctx.proxy) {
         if (!ctx.proxy.virtualKey) {
           steps.push(

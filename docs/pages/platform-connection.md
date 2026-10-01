@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-30
+lastUpdated: 2026-10-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -48,6 +48,10 @@ Follow the installer output to authenticate the gateway and reload your client.
 Verify that the gateway can list tools before considering the connection complete.
 
 For OpenCode, the connection agent checks `opencode mcp list` after installation. If the gateway is already connected, it skips OAuth. Otherwise, it starts the gateway's native OAuth sign-in. Restart OpenCode after setup.
+
+For Codex, the connection agent runs the installer's verification command. Windows uses a native PowerShell launcher. macOS and Linux use Node. Both start a fresh native client with your configured model, approvals, and sandbox. They call a read-only gateway tool and check inference through the selected proxy. The gateway check does not ask a model to run a shell command.
+
+If the operating system blocks startup, Codex can request approval for that one verification command. Your configured sandbox and approval settings stay unchanged. The verifier never approves permission requests automatically. Installation and OAuth alone do not prove the connection works.
 
 Cursor still requires native gateway OAuth. Connecting its gateway does not route inference through the LLM Proxy. To route supported OpenAI chat models, select the proxy under **Customize setup**, then apply the printed key and base URL in Cursor's model settings.
 The installer places shared skills in Cursor's skills folder; reload Cursor to see them.
@@ -132,6 +136,10 @@ For Claude Code, Codex, Copilot CLI, and OpenCode, the script installs a startup
 
 A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote — "Disconnect MCP gateway (name) from Codex now? (Y/n)", naming your client, or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the exact reverse of the connect steps; plugins are uninstalled before their marketplace is removed. `n` keeps them. The guard reads the client's config back to confirm each removal landed. A removal it cannot confirm gets a ✗ line with the command to run by hand, and the guard stays installed to try again. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with the CLI starting; the guard never blocks a launch. Non-interactive runs, `codex exec` or `claude -p` for example, only get a warning on stderr.
 
+For Codex proxy connections, the model catalog check is a separate launch requirement. A failed catalog refresh stops the launch, even if you skip the health checks.
+
+Codex catalog discovery supports file-backed credentials. It does not support the `auto` or `keyring` credential stores. The Codex home filesystem must support hard links. Setup reports an error if these requirements are not met. It does not change your credential-store setting.
+
 After an interactive client session exits, its Bash or PowerShell wrapper refreshes the Archestra marketplace and installed plugins if the last successful refresh was more than 24 hours ago. Refresh happens after the session, never in the startup path, and one-shot invocations such as `claude -p` and `codex exec` skip it.
 
 Under the checks the guard always shows its two keys: "To skip press [Space] · to reconfigure your Archestra connection press [C]". Press `Space` at any point to skip the rest of the checks and start the CLI at once — nothing is disconnected or remembered. When everything is healthy the guard waits about a second and a half for a key, then starts the CLI. Press `C` and the rows turn into a numbered menu — one per remote — so you can disconnect any of them, reachable or not, by pressing its number. The row lands on a check, later launches skip it, and removing the last connected remote uninstalls the guard. Press `Esc` to leave the menu and start the CLI.
@@ -181,7 +189,7 @@ The `codex` CLI must be on your `PATH`.
 - **LLM proxy** — adds a `[model_providers.<name>]` block to `~/.codex/config.toml` and selects it as the default provider. New `codex` sessions use the proxy automatically. Codex can use an existing ChatGPT subscription or OpenAI API key. In virtual-key mode, the script signs in with `codex login --with-api-key`.
 - **Skills** — runs `codex plugin marketplace add`.
 - **Plugins** — runs `codex plugin add` for each plugin. Codex delivers the plugin but does not execute its hooks until you open `/hooks` and approve that content hash.
-- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `codex` launch. Connecting the LLM proxy also installs direct-tool settings, including a model catalog, in `~/.codex`. Connection probes use these settings without requiring a shell profile. While the proxy is connected, the launcher refreshes the catalog before starting Codex, including newly released models. An unverified refresh stops the proxy-connected launch instead of falling back to code mode. MCP-only connections leave tool mode unchanged. See [Startup Guard](#startup-guard).
+- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `codex` launch. Connecting the LLM proxy also installs direct-tool settings, including a model catalog, in `~/.codex`. Connection probes use these settings without requiring a shell profile. Normal launches refresh the catalog, including newly released models. An unverified refresh stops the proxy-connected launch instead of falling back to code mode. A network-blocked shell inside Codex can reuse a validated direct catalog from the last 24 hours. The selected model must be present. This does not change sandbox restrictions or approval settings. MCP-only connections leave tool mode unchanged. See [Startup Guard](#startup-guard).
 - **MCP forms** — Codex's Full Access preset does not show required MCP forms. Connection setup does not change your approval policy.
 - **Backup** — `~/.codex/config.toml.archestra-backup`.
 - **Revert** — removing the LLM proxy in the startup guard (press `C` at launch) restores the previous tool-mode settings and removes the generated catalog. This also applies when the MCP gateway stays connected. Removing only the gateway leaves the proxy's direct-tool settings active. By hand: restore `~/.codex/config.toml.archestra-backup`, or delete the `# >>> archestra:<name> >>>` block and remove `model_provider`; restore any `# original:` entries inside the `archestra:codex-direct` blocks before deleting those blocks. Run `codex mcp remove <name>` and `codex plugin marketplace remove <name>`. If the script signed Codex in with a virtual key, run `codex logout`, then sign in with your own account.

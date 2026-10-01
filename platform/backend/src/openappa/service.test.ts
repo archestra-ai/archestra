@@ -9,6 +9,7 @@ import * as database from "@/database";
 import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
 import {
@@ -1023,18 +1024,27 @@ describe("APPA feature boundary", () => {
     );
   });
 
-  test("keeps a successful spawn launch pending until the child binds", async () => {
+  test.each([
+    '{"agent_id":"child-1"}',
+    '{"task_name":"/root/child"}',
+  ])("keeps a successful spawn launch pending until the child binds: %s", async (content) => {
+    const adapter = new AppaCodexAdapter();
+    const launch = {
+      id: "spawn",
+      name: "spawn_agent",
+      namespace: "collaboration",
+      content,
+      isError: false,
+    };
     native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
     const result = await processProxyResults({
       session,
       canonicalize: (name) => name,
-      classifySpawnResult: (answer) =>
-        answer.name === "spawn_agent" ? "pending" : undefined,
+      classifySpawnResult: (answer) => adapter.classifySpawnResult(answer),
       results: [
         {
-          id: "spawn",
-          name: "spawn_agent",
-          content: '{"agent_id":"child-1"}',
+          ...launch,
+          content: adapter.normalizeChildLaunchResult(launch) ?? content,
           isError: false,
         },
       ],

@@ -26,6 +26,8 @@ import {
 
 const SPAWN_TOOLS = new Set(["spawn_agent"]);
 const CHILD_ID_KEYS = ["agent_id", "thread_id", "receiver_thread_id"] as const;
+const LAUNCH_AGENT_ID = /^[A-Za-z0-9_.:-]{1,512}$/;
+const LAUNCH_TASK_NAME = /^[A-Za-z0-9_.:@/-]{1,512}$/;
 
 /** Identifies Codex Responses requests and normalizes local tool names. */
 export class AppaCodexAdapter implements AppaClientAdapter {
@@ -187,14 +189,18 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       typeof result.content === "string"
         ? parseJsonObject(result.content)
         : asRecord(result.content);
-    const id = stringField(output?.agent_id) ?? stringField(output?.task_name);
-    if (!id || !/^[A-Za-z0-9_.:-]{1,512}$/.test(id)) {
-      throw new ApiError(
-        409,
-        "OpenAPPA withheld an invalid child launch acknowledgment",
-      );
+    if (output && Object.hasOwn(output, "agent_id")) {
+      const agentId = output.agent_id;
+      if (typeof agentId !== "string" || !LAUNCH_AGENT_ID.test(agentId)) {
+        throw withheldChildLaunch();
+      }
+      return JSON.stringify({ agent_id: agentId });
     }
-    return JSON.stringify({ agent_id: id });
+    const taskName = output?.task_name;
+    if (typeof taskName !== "string" || !LAUNCH_TASK_NAME.test(taskName)) {
+      throw withheldChildLaunch();
+    }
+    return JSON.stringify({ task_name: taskName });
   }
 
   spawnPromptField(
@@ -300,6 +306,13 @@ function isGuardianReview(context: AppaMatchContext): boolean {
     turn?.turn_trigger === "guardian_review" ||
     turn?.thread_source === "guardian_review" ||
     turn?.subagent_kind === "guardian"
+  );
+}
+
+function withheldChildLaunch(): ApiError {
+  return new ApiError(
+    409,
+    "OpenAPPA withheld an invalid child launch acknowledgment",
   );
 }
 

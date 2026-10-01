@@ -193,6 +193,8 @@ export interface StartupGuardClient {
   mcpDisconnectVerify?: string;
   /** As `mcpDisconnectVerify`, for the `skills)` case. */
   skillsDisconnectVerify?: string;
+  /** Verify the proxy settings and any owned client preferences were removed. */
+  renderProxyDisconnectVerify?(ctx: StartupGuardContext): string;
   /**
    * The `disconnect_proxy()` and `proxy_disconnect_notes()` shell function
    * definitions, fully client-specific (settings.json strip / TOML block strip
@@ -237,6 +239,8 @@ export interface StartupGuardWindowsClient {
   mcpDisconnectVerify?: string;
   /** As `mcpDisconnectVerify`, for the `'skills'` case. */
   skillsDisconnectVerify?: string;
+  /** PowerShell counterpart of the client proxy disconnect verifier. */
+  renderProxyDisconnectVerify?(ctx: StartupGuardContext): string;
   /**
    * Defines `function Disconnect-ArchProxy { … }` — the client-specific proxy
    * reversal (settings.json strip / config.toml block strip / env removal).
@@ -671,6 +675,13 @@ ${client.mcpDisconnectVerify}
       ? `
     skills)
 ${client.skillsDisconnectVerify}
+      ;;`
+      : ""
+  }${
+    ctx.proxy && client.renderProxyDisconnectVerify
+      ? `
+    proxy)
+${client.renderProxyDisconnectVerify(ctx)}
       ;;`
       : ""
   }

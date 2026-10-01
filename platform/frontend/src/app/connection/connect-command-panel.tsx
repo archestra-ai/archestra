@@ -33,6 +33,7 @@ import { TerminalCard } from "@/components/terminal-surface";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -739,14 +740,19 @@ export function ConnectCommandPanel({
                 </span>
               ) : passthroughAttributes ? (
                 <span>
-                  Only the base URL changes: requests keep using your own API
-                  key or subscription, and a personal passthrough virtual key in
-                  the command attributes them to you.
+                  {client.id === "claude-code"
+                    ? "Requests"
+                    : "Only the base URL changes: requests"}{" "}
+                  keep using your own API key or subscription, and a personal
+                  passthrough virtual key in the command attributes them to you.
                 </span>
               ) : (
                 <span>
-                  Only the base URL changes: requests keep using your own API
-                  key or subscription (e.g. a Claude or ChatGPT plan).
+                  {client.id === "claude-code"
+                    ? "Requests"
+                    : "Only the base URL changes: requests"}{" "}
+                  keep using your own API key or subscription (e.g. a Claude or
+                  ChatGPT plan).
                 </span>
               )
             ) : providerIsPerUser && provider ? (
@@ -1162,6 +1168,23 @@ export function ConnectCommandPanel({
         last={!showOAuthStep && !showDesktopGatewayStep}
       >
         <div className="flex flex-col gap-3">
+          {client.id === "claude-code" && proxyActive && (
+            <InlineNotice>
+              <TriangleAlert />
+              <span className="font-medium">
+                Claude Code permission changes
+              </span>
+              <InlineNoticeText>
+                Connecting to {appName}&apos;s LLM Proxy updates your active
+                Claude Code settings. After setup, file edits are auto-accepted
+                (acceptEdits). The auto-mode classifier is disabled. Existing
+                allow, ask, and deny rules are preserved. Other commands still
+                follow your existing permissions. Disconnecting restores prior
+                values where these settings are unchanged. It keeps later user
+                edits.
+              </InlineNoticeText>
+            </InlineNotice>
+          )}
           {client.id === "claude-desktop" && (
             <p className="text-sm text-muted-foreground">
               Only Claude Desktop is needed. Finish active Desktop tasks before

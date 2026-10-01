@@ -275,6 +275,49 @@ describe("ConnectCommandPanel", () => {
     );
   });
 
+  it("discloses Claude proxy permission changes and removes them when the selected setup changes", async () => {
+    vi.mocked(useAppName).mockReturnValue("Example Platform");
+    const props = renderPanelProps();
+    const { rerender } = render(<ConnectCommandPanel {...props} />);
+    await screen.findByText(COMMAND);
+
+    const notice = screen.getByRole("alert");
+    expect(notice).toHaveTextContent("Claude Code permission changes");
+    expect(notice).toHaveTextContent(
+      "Connecting to Example Platform's LLM Proxy",
+    );
+    expect(notice).toHaveTextContent(
+      "file edits are auto-accepted (acceptEdits)",
+    );
+    expect(notice).toHaveTextContent("auto-mode classifier is disabled");
+    expect(notice).toHaveTextContent(
+      "allow, ask, and deny rules are preserved",
+    );
+    expect(notice).toHaveTextContent(
+      "Other commands still follow your existing permissions",
+    );
+
+    for (const overrides of [
+      { client: findClient("claude-desktop") },
+      { client: findClient("codex") },
+      { client: findClient("opencode") },
+      { client: findClient("cursor") },
+      { client: findClient("copilot-cli") },
+      { llmProxyId: null, skillsEnabled: false, pluginsEnabled: false },
+      { llmProxyId: null, mcpGatewayId: null, pluginsEnabled: false },
+      { shownProviders: [] },
+    ]) {
+      rerender(<ConnectCommandPanel {...props} {...overrides} />);
+      expect(
+        screen.queryByText("Claude Code permission changes"),
+      ).not.toBeInTheDocument();
+    }
+
+    rerender(<ConnectCommandPanel {...props} />);
+    expect(screen.getByText("Claude Code permission changes")).toBeVisible();
+    await screen.findByText(COMMAND);
+  });
+
   it("switches between coding prompts and Desktop setup without preparing coding-client scripts", async () => {
     vi.mocked(useRouter).mockReturnValue({
       replace: vi.fn(),
@@ -564,6 +607,18 @@ describe("ConnectCommandPanel", () => {
     );
     try {
       await screen.findByText("ABCD-1234");
+      const permissionNotice = screen
+        .getByText("Claude Code permission changes")
+        .closest('[role="alert"]');
+      expect(permissionNotice).toHaveTextContent(
+        "file edits are auto-accepted (acceptEdits)",
+      );
+      expect(permissionNotice).toHaveTextContent(
+        "auto-mode classifier is disabled",
+      );
+      expect(permissionNotice).toHaveTextContent(
+        "Other commands still follow your existing permissions",
+      );
       await user.click(
         await screen.findByRole("button", { name: "Retry setup" }),
       );
@@ -594,6 +649,9 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.queryByRole("checkbox", { name: "Install shared skills" }),
       ).toBeNull();
+      expect(
+        screen.getAllByText("Claude Code permission changes"),
+      ).toHaveLength(1);
       await user.click(
         screen.getByRole("checkbox", {
           name: "This code matches the code in my terminal.",
@@ -691,7 +749,7 @@ describe("ConnectCommandPanel", () => {
 
     // the summary reflects the defaults without any clicks
     expect(screen.getByText(/My Gateway/)).toBeInTheDocument();
-    expect(screen.getByText(/LLM Proxy/)).toBeInTheDocument();
+    expect(screen.getByText("the LLM Proxy")).toBeInTheDocument();
     expect(
       screen.getByText(
         (_, el) =>

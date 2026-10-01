@@ -13,6 +13,7 @@ import {
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
 import { archestraMarkWithText } from "./archestra-mark";
+import { renderClaudePermissionSettingsScript } from "./claude-permission-settings";
 import {
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
@@ -508,6 +509,15 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the er
   }
 
   if (ctx.proxy) {
+    sections.push(`Say 'Configuring Claude Code: acceptEdits by default, auto mode disabled'
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  throw 'Node.js 18 or newer is required to configure Claude permission settings'
+}
+$archClaudeModeScript = @'
+${renderClaudePermissionSettingsScript("connect", ctx.proxy.url)}
+'@
+$archClaudeModeScript | & node --input-type=commonjs
+if ($LASTEXITCODE -ne 0) { throw 'Could not configure Claude permission settings' }`);
     sections.push(
       ctx.proxy.provider === "bedrock"
         ? claudeBedrockProxySection(ctx.proxy)
@@ -689,7 +699,7 @@ if ($archAutoUpdateState -eq 'enabled') {
 }
 
 const CLAUDE_SETTINGS_PATH =
-  "(Join-Path $env:USERPROFILE '.claude\\settings.json')";
+  "(Join-Path $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }) 'settings.json')";
 
 // Same shared env-key source as the bash renderer, so connect and every
 // disconnect surface write/strip identical settings.json keys.

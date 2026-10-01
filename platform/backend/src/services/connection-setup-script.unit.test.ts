@@ -32,6 +32,8 @@ import {
   renderSetupScript,
   type SetupScriptContext,
 } from "@/services/connection-setup-script";
+import { buildStartupGuardContext } from "@/services/startup-guard";
+import { CLAUDE_CODE_GUARD_CLIENT } from "@/services/startup-guard.clients";
 
 const execFileAsync = promisify(execFile);
 
@@ -927,6 +929,83 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     // in a NEW session — the current one never sees the gateway.
     expect(script).toContain("Start a new `claude` session, run `/mcp` there");
     expect(script).toContain(`select "${MCP.serverName}"`);
+  });
+
+  test.each([
+    "anthropic",
+    "bedrock",
+  ] as const)("Claude %s setup and disconnect preserve permissions in the active profile", async (provider) => {
+    const home = await mkdtemp(path.join(tmpdir(), "archestra-claude-mode-"));
+    try {
+      const configDir = path.join(home, "profiles", "work profile");
+      const settingsFile = path.join(configDir, "settings.json");
+      const defaultFile = path.join(home, ".claude", "settings.json");
+      const bin = path.join(home, "bin");
+      await mkdir(configDir, { recursive: true });
+      await mkdir(path.dirname(defaultFile), { recursive: true });
+      await mkdir(bin);
+      const original = {
+        permissions: {
+          defaultMode: "plan",
+          allow: ["Read"],
+          deny: ["Bash(rm *)"],
+        },
+        env: { KEEP: "present" },
+        hooks: {},
+      };
+      await writeFile(settingsFile, JSON.stringify(original));
+      await writeFile(defaultFile, '{"untouched":true}');
+      await writeFile(path.join(bin, "claude"), "#!/bin/sh\nexit 0\n");
+      await chmod(path.join(bin, "claude"), 0o755);
+      const ctx: SetupScriptContext = {
+        ...fullContext("claude-code"),
+        mcp: null,
+        skills: null,
+        proxy: {
+          ...PROXY,
+          provider,
+          url: `https://archestra.example.com/v1/${provider}`,
+        },
+      };
+      const env = {
+        ...process.env,
+        HOME: home,
+        CLAUDE_CONFIG_DIR: configDir,
+        PATH: `${bin}:${process.env.PATH}`,
+        NO_COLOR: "1",
+      };
+      const setup = path.join(home, "setup.sh");
+      await writeFile(setup, renderSetupScript(ctx));
+      await execFileAsync("bash", [setup], { env });
+      await execFileAsync("bash", [setup], { env });
+      const configured = JSON.parse(await readFile(settingsFile, "utf8"));
+      expect(configured).toMatchObject({
+        disableAutoMode: "disable",
+        permissions: { ...original.permissions, defaultMode: "acceptEdits" },
+        hooks: {},
+        env: { KEEP: "present" },
+      });
+      expect(
+        JSON.parse(await readFile(`${settingsFile}.archestra-backup`, "utf8")),
+      ).toEqual(original);
+      const disconnect = path.join(home, "disconnect.sh");
+      await writeFile(
+        disconnect,
+        `set -e\n${CLAUDE_CODE_GUARD_CLIENT.renderProxyDisconnect(buildStartupGuardContext(ctx))}\ndisconnect_proxy\n`,
+      );
+      await execFileAsync("bash", [disconnect], { env });
+      expect(JSON.parse(await readFile(settingsFile, "utf8"))).toEqual(
+        original,
+      );
+      await expect(
+        stat(path.join(configDir, ".archestra-permission-mode.json")),
+      ).rejects.toThrow();
+      expect(JSON.parse(await readFile(defaultFile, "utf8"))).toEqual({
+        untouched: true,
+      });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 
   test("claude-code: skips re-registration on matching normalized marketplace sources", async () => {
@@ -2304,7 +2383,8 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("ANTHROPIC_BASE_URL");
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
     expect(script).toContain("ConvertTo-Json -Depth 32");
-    expect(script).toContain(".claude\\settings.json");
+    expect(script).toContain("if ($env:CLAUDE_CONFIG_DIR)");
+    expect(script).toContain("'settings.json'");
     expect(script).toContain(
       `claude plugin marketplace add --scope user '${SKILLS.cloneUrl}'`,
     );
@@ -2631,7 +2711,7 @@ describe("idempotent re-runs", () => {
     // Guarded so a second run keeps the original (pre-Archestra) backup. The
     // path is double-quoted: $HOME must expand for the guard to ever match.
     expect(claude).toContain(
-      '[ ! -f "$HOME/.claude/settings.json.archestra-backup" ]',
+      '[ ! -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json.archestra-backup" ]',
     );
 
     const codex = renderSetupScript(fullContext("codex"));

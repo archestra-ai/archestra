@@ -177,14 +177,20 @@ For a full walkthrough, see [Using Claude Code with a Pro or Max Subscription](/
 The `claude` CLI must be on your `PATH`.
 
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
-- **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it merges the Bedrock variables, including `AWS_BEARER_TOKEN_BEDROCK` in virtual-key mode.
+- **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into the active Claude settings. It uses `CLAUDE_CONFIG_DIR/settings.json` when that variable is set, otherwise `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it merges the Bedrock variables, including `AWS_BEARER_TOKEN_BEDROCK` in virtual-key mode.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`, and turns on auto-update for the marketplace so Claude Code picks up new skill versions at startup. A choice you already made for that marketplace is kept.
 - **Plugins** — installs the selected Claude Code plugins. You can import OpenAPPA from the Plugins catalog, then select it here.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
-- **Backup** — `~/.claude/settings.json.archestra-backup`.
+- **Backup** — `settings.json.archestra-backup` beside the active settings file.
 - **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore the backup, delete the Archestra env keys, run `claude mcp remove <name>` and `claude plugin marketplace remove <name>`, and drop the exported Bedrock token from your profile.
 
-Switching to passthrough removes saved Archestra keys from that provider's authentication variables in `~/.claude/settings.json`. Your provider credentials stay unchanged. Switching to virtual-key mode removes the old passthrough header. For Anthropic, it also removes saved Archestra keys from `ANTHROPIC_API_KEY`. Restart Claude Code after changing modes. Remove stale Archestra credentials from shell or project settings separately if you configured them there.
+Switching to passthrough removes saved Archestra keys from that provider's authentication variables in the active settings file. Your provider credentials stay unchanged. Switching to virtual-key mode removes the old passthrough header. For Anthropic, it also removes saved Archestra keys from `ANTHROPIC_API_KEY`. Restart Claude Code after changing modes. Remove stale Archestra credentials from shell or project settings separately if you configured them there.
+
+Connecting Claude Code to an LLM proxy selects `acceptEdits` as the default mode. It also disables auto mode. The approval page discloses these changes before installation. Start a new Claude session after setup.
+
+File edits are accepted automatically in this mode. Other commands still follow your existing permissions. The installer adds no blanket Bash permission and preserves your allow, ask, and deny rules. Managed policies and explicit denials still apply. MCP-only and skills-only setups do not change permission modes.
+
+The installer records the prior mode values in `.archestra-permission-mode.json` inside the active configuration directory. The startup guard's proxy-disconnect action restores values that remain unchanged since setup. Later user edits are kept. Removing only proxy environment variables does not restore the mode settings.
 
 ### Codex
 

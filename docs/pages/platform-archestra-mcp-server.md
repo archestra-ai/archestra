@@ -2207,7 +2207,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 |------|-------------|--------------------------|
 | `create_project_from_conversation` | Turn the current chat into a project. | `project:create` |
 | `list_projects` | List the projects the caller can reach — the ones they own plus those shared with them. | `project:read` † |
-| `get_project` | Read one project's context in a single call: its metadata, its instructions (the `instructions.md` that steers every chat in the project), and the list of files it owns. | `project:read` † |
+| `get_project` | Read one project's context in a single call: its metadata, its instructions (the `instructions.md` that steers every chat in the project), the files it owns, and the apps linked into it that you ca... | `project:read` † |
 | `create_schedule_trigger` | Create a scheduled agent task in a project you can access. | `scheduledTask:create` |
 | `update_schedule_trigger` | Edit a scheduled task. | `scheduledTask:update` † |
 | `delete_schedule_trigger` | Delete a scheduled task and its run history. | `scheduledTask:delete` † |
@@ -2315,6 +2315,10 @@ Additional access requirement: Readable only for projects the caller owns or tha
 | `files[].filename` | `string` | Yes | The file's name. |
 | `files[].mime_type` | `string` | Yes | The file's MIME type. |
 | `files[].size_bytes` | `integer` | Yes | Size in bytes. |
+| `apps` | `object[]` | Yes | Apps linked into the project that you can open. Read or edit one with the app tools, passing this id. |
+| `apps[].id` | `string` | Yes | The app's id. |
+| `apps[].name` | `string` | Yes | The app's name. |
+| `apps[].description` | `string \| null` | Yes | The app's description. |
 
 #### create_schedule_trigger
 

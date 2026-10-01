@@ -32,8 +32,7 @@ export function formatPermissionConstraint(permissions: Permissions): string {
 }
 
 export function permissionResourceLabel(resource: string): string {
-  const label = resourceLabels[resource as Resource] ?? resource;
-  return resource.startsWith("openappa") ? `OpenAPPA ${label}` : label;
+  return resourceLabels[resource as Resource] ?? resource;
 }
 
 export function hasPermissions(

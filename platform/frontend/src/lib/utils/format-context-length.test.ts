@@ -1,4 +1,5 @@
 // @vitest-environment node
+// VERIFY-ONLY: frontend-only diff to exercise the backend shard skip path.
 import { describe, expect, it } from "vitest";
 import { formatContextLength } from "./format-context-length";
 

@@ -19,6 +19,8 @@ describe("isUsableGeminiCatalogModel", () => {
     ["gemini-3-pro", true],
     ["gemini-3.1-pro-preview", true],
     ["gemini-3.5-flash", true],
+    // Generation 4 needs no catalog change.
+    ["gemini-4-argon", true],
     // First-class Gemini embeddings are kept regardless of version.
     ["gemini-embedding-001", true],
     ["gemini-embedding-2", true],
@@ -89,7 +91,8 @@ describe("supportsGeminiThoughtSummaries", () => {
 
 describe("supportsGeminiThinkingEffort", () => {
   test.each([
-    // The 3.x line takes a thinkingLevel, Pro included.
+    // The 3.x line and later take a thinkingLevel, Pro included.
+    ["gemini-4-argon", true],
     ["gemini-3.6-flash", true],
     ["gemini-3.5-flash", true],
     ["gemini-3.5-flash-lite", true],
@@ -168,6 +171,7 @@ describe("isLegacyGeminiModel", () => {
     // > 3.0 is current.
     ["gemini-3.1-pro-preview", false],
     ["gemini-3.5-flash", false],
+    ["gemini-4-argon", false],
     // Embeddings are never badged.
     ["gemini-embedding-001", false],
     ["gemini-embedding-2-preview", false],
@@ -188,6 +192,7 @@ describe("requiresGlobalVertexEndpoint", () => {
     ["gemini-3.1-pro-preview", true],
     ["gemini-3.5-flash", true],
     ["gemini-3.7-flash", true],
+    ["gemini-4-argon", true],
     // Anything above the threshold is covered without touching the constant.
     ["gemini-4-pro", true],
     // The 2.5 family answers regionally as well, so it keeps the configured

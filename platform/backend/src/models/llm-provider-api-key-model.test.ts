@@ -610,6 +610,12 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         expected: "gemini-3.6-flash",
       },
       {
+        // Gemini 4 Argon outranks the current 3.x flagship once it ships.
+        provider: "gemini",
+        catalog: ["gemini-3.5-pro", "gemini-4-argon"],
+        expected: "gemini-4-argon",
+      },
+      {
         provider: "bedrock",
         catalog: ["anthropic.claude-sonnet-4-8"],
         expected: "anthropic.claude-sonnet-4-8",

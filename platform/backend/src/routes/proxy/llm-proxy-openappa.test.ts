@@ -987,10 +987,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "Send X-Appa-Session-ID to use guardrails",
+      "Add an X-Appa-Session-ID header to each request",
     );
     expect(response.json().error.message).toContain(
-      "choose Bypass on the Guardrails Overview tab",
+      "ask an administrator to allow unrecognized clients",
     );
     expect(providerRequests).toHaveLength(0);
     expect(events).toHaveLength(0);
@@ -1025,7 +1025,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "This client cannot use Guardrails",
+      "Guardrails do not recognize this client",
     );
     expect(providerRequests).toHaveLength(0);
     expect(events).toHaveLength(0);

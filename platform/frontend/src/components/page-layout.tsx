@@ -288,7 +288,7 @@ export function PageLayout({
                 <div
                   data-page-actions
                   className={cn(
-                    "col-start-2 flex min-h-9 items-center justify-self-end self-start md:self-center",
+                    "col-start-2 flex min-h-9 items-center justify-self-end self-start lg:self-center",
                     backLink ? "row-start-2" : "row-start-1",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
                     // Tablet and phone actions align with the title; desktop

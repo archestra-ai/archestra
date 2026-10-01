@@ -2,7 +2,7 @@ import { expect, test } from "./fixtures";
 
 // Exercise actual browser layout: jsdom cannot detect actions moving below
 // the description or copy being squeezed into the title column.
-for (const width of [320, 360, 640, 768, 1280]) {
+for (const width of [320, 360, 640, 768, 1024, 1280]) {
   test.describe(`Page header at ${width}px`, () => {
     test.use({ viewport: { width, height: 800 } });
 
@@ -32,12 +32,12 @@ for (const width of [320, 360, 640, 768, 1280]) {
               ? await description.boundingBox()
               : null;
             const expectedCenter =
-              width >= 768 && copy
+              width >= 1024 && copy
                 ? (title.y + copy.y + copy.height) / 2
                 : title.y + title.height / 2;
             // Wrapped phone titles can be taller than a single action row.
             const verticallyAligned =
-              width < 768
+              width < 1024
                 ? rect.y < title.y + title.height
                 : Math.abs(rect.y + rect.height / 2 - expectedCenter) < 5;
             return (

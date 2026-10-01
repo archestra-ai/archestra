@@ -2283,6 +2283,8 @@ function assertVerificationResponse(value: unknown): void {
       "Invalid response during Codex connection verification.",
     );
   const type = record.type;
+  // This probe permits only text and reasoning. Unknown events fail closed so
+  // new provider tool types cannot reach the native dispatcher by default.
   if (
     typeof type === "string" &&
     ![

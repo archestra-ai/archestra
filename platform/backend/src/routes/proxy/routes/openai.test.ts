@@ -1473,7 +1473,12 @@ describe("OpenAI Responses proxy", () => {
 
   test.for(
     [false, true].flatMap((stream) =>
-      ["function_call", "custom_tool_call", "local_shell_call"].map((kind) => ({
+      [
+        "function_call",
+        "custom_tool_call",
+        "local_shell_call",
+        ...(stream ? ["generated_frame"] : []),
+      ].map((kind) => ({
         stream,
         kind,
       })),
@@ -1494,7 +1499,7 @@ describe("OpenAI Responses proxy", () => {
     });
     const calls: Record<string, unknown>[] = [];
     const item = {
-      type: kind,
+      type: kind === "generated_frame" ? "message" : kind,
       id: "verification-item",
       call_id: "verification-call",
       name: "exec_command",
@@ -1512,6 +1517,23 @@ describe("OpenAI Responses proxy", () => {
       output: [item],
       usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
     };
+    if (kind === "generated_frame") {
+      const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+      // A safe provider event must not allow a synthesized executable frame.
+      vi.spyOn(adapter, "processChunk").mockReturnValue({
+        sseData: `event: response.output_item.added\ndata: ${JSON.stringify({
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { ...item, type: "function_call" },
+        })}\n\n`,
+        isToolCallChunk: false,
+        isFinal: false,
+      });
+      vi.spyOn(
+        openAiResponsesAdapterFactory,
+        "createStreamAdapter",
+      ).mockReturnValue(adapter);
+    }
     vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
       () =>
         ({
@@ -1581,8 +1603,9 @@ describe("OpenAI Responses proxy", () => {
       headers: { ...headers, originator: "archestra_codex_connection" },
       payload,
     });
-    expect(result.statusCode, result.body).toBe(stream ? 200 : 409);
-    if (stream) expect(result.body).toContain('"type":"error"');
+    const streamStarted = stream && kind !== "generated_frame";
+    expect(result.statusCode, result.body).toBe(streamStarted ? 200 : 409);
+    if (streamStarted) expect(result.body).toContain('"type":"error"');
     expect(result.body).toContain("does not permit model tool calls");
     expect(result.body).not.toContain("do-not-execute");
     expect(result.body).not.toContain('"type":"function_call"');

@@ -885,6 +885,72 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
   });
 
   test.each([
+    "function_call",
+    "custom_tool_call",
+  ])("backfills late %s identity without mutating source or retained events", (type) => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const added = {
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: {
+        id: "item_late",
+        call_id: "call_late",
+        type,
+        name: "",
+        ...(type === "function_call" ? { arguments: "" } : { input: "" }),
+        status: "in_progress",
+      },
+    };
+    const done = {
+      ...added,
+      type: "response.output_item.done",
+      sequence_number: 2,
+      item: { ...added.item, status: "completed" },
+    };
+    const originals = structuredClone([added, done]);
+    adapter.processChunk(added as never);
+    adapter.processChunk(done as never);
+    const retained = [...adapter.state.rawToolCallEvents];
+    expect(retained[0]).toBe(added);
+    expect(retained[1]).toBe(done);
+
+    adapter.processChunk({
+      ...done,
+      sequence_number: 3,
+      item: { ...done.item, name: "read_file", namespace: "functions" },
+    } as never);
+
+    expect([added, done]).toEqual(originals);
+    expect(retained).toEqual(originals);
+    expect(adapter.state.rawToolCallEvents[0]).not.toBe(added);
+    expect(adapter.state.rawToolCallEvents[1]).not.toBe(done);
+    const enriched = adapter
+      .getRawToolCallEvents()
+      .map((frame) =>
+        JSON.parse(
+          (typeof frame === "string"
+            ? frame
+            : new TextDecoder().decode(frame)
+          ).replace(/^data: /, ""),
+        ),
+      );
+    expect(enriched).toHaveLength(3);
+    for (const event of enriched) {
+      expect(event.item).toMatchObject({
+        type,
+        name: "read_file",
+        namespace: "functions",
+      });
+    }
+    expect(adapter.toProviderResponse().output[0]).toMatchObject({
+      type,
+      name: "read_file",
+      namespace: "functions",
+    });
+  });
+
+  test.each([
     undefined,
     "collaboration",
   ])("normalizes a declared qualified retry name with namespace %s", (namespace) => {

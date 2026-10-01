@@ -143,6 +143,8 @@ For Codex proxy connections, the model catalog check is a separate launch requir
 
 Codex catalog discovery supports file-backed credentials. It does not support the `auto` or `keyring` credential stores. The Codex home filesystem must support hard links. Setup reports an error if these requirements are not met. It does not change your credential-store setting.
 
+The managed `web_search` and `model_catalog_json` settings require single-line values. Multiline inline feature tables are also unsupported. Setup rejects these forms before changing the configuration. Other multiline settings remain unchanged.
+
 After an interactive client session exits, its Bash or PowerShell wrapper refreshes the Archestra marketplace and installed plugins if the last successful refresh was more than 24 hours ago. Refresh happens after the session, never in the startup path, and one-shot invocations such as `claude -p` and `codex exec` skip it.
 
 Under the checks the guard always shows its two keys: "To skip press [Space] · to reconfigure your Archestra connection press [C]". Press `Space` at any point to skip the rest of the checks and start the CLI at once — nothing is disconnected or remembered. When everything is healthy the guard waits about a second and a half for a key, then starts the CLI. Press `C` and the rows turn into a numbered menu — one per remote — so you can disconnect any of them, reachable or not, by pressing its number. The row lands on a check, later launches skip it, and removing the last connected remote uninstalls the guard. Press `Esc` to leave the menu and start the CLI.

@@ -472,6 +472,65 @@ process.stdout.write(JSON.stringify({models:[{slug:'fixture-model',tool_mode:'co
   }
 });
 
+test.each([
+  {
+    key: "web_search",
+    assignment: 'web_search = """li\\\n  ve"""',
+    value: "live",
+  },
+  {
+    key: "model_catalog_json",
+    assignment: '"model_catalog_json" = """user-\\\r\n  models.json"""',
+    value: "user-models.json",
+  },
+])("Codex direct setup rejects multiline managed root $key without writes", async ({
+  key,
+  assignment,
+  value,
+}) => {
+  const home = await mkdtemp(path.join(tmpdir(), "codex multiline root "));
+  const shim = path.join(home, "codex.cmd");
+  const entry = path.join(home, "node_modules/@openai/codex/bin/codex.js");
+  const helper = path.join(home, "handoff.cjs");
+  const configFile = path.join(home, "config.toml");
+  const discovery = path.join(home, "discovery-started");
+  const original = `model = "fixture-model"\n${assignment}\n[features]\ncode_mode_host = true\n`;
+  try {
+    await mkdir(path.dirname(entry), { recursive: true });
+    await writeFile(shim, "npm shim placeholder");
+    await writeFile(
+      entry,
+      `const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(discovery)}, '');
+fs.writeFileSync(require('node:path').join(process.env.CODEX_HOME, 'models_cache.json'), JSON.stringify({fetched_at:new Date().toISOString()}));
+process.stdout.write(JSON.stringify({models:[{slug:'fixture-model'}]}));`,
+    );
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await writeFile(configFile, original);
+    expect(parseToml(original)[key]).toBe(value);
+    await expect(
+      exec(process.execPath, [helper, "--install-direct", shim], {
+        env: { ...process.env, CODEX_HOME: home },
+      }),
+    ).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining(
+        `Unsupported multiline Codex ${key} value; use a single-line string.`,
+      ),
+    });
+    expect(await readFile(configFile)).toEqual(Buffer.from(original));
+    expect(await readFile(configFile, "utf8")).not.toContain(
+      "# >>> archestra:codex-direct:",
+    );
+    await expect(readFile(discovery)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(path.join(home, "archestra-direct-model-catalog.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("Codex catalog checks honor quoted profile names and model keys", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "codex quoted profile "));
   const shim = path.join(home, "codex.cmd");

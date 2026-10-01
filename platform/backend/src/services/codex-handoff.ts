@@ -218,7 +218,9 @@ function prepareDirectCatalog(executable, clientArgs = []) {
     chmodSync(shadow, 0o700);
     const content = restoreManagedConfig(original);
     const lines = content.split(/\r?\n/);
-    const { tables, active } = tomlTables(lines);
+    const scanned = tomlTables(lines);
+    assertSingleLineManagedRootValues(lines, scanned);
+    const { tables, active } = scanned;
     const rootEnd = tables[0]?.index ?? lines.length;
     for (let i = 0; i < rootEnd; i++) {
       const assignment = active.has(i) ? tomlAssignment(lines[i]) : undefined;
@@ -334,6 +336,16 @@ function tomlKey(text) {
 function tomlAssignment(line) {
   const match = /^\s*((?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*')(?:\s*\.\s*(?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*'))*)\s*=\s*(.*)$/.exec(line);
   return match ? { key: tomlKey(match[1]), value: match[2] } : undefined;
+}
+function assertSingleLineManagedRootValues(lines, scanned) {
+  const rootEnd = scanned.tables[0]?.index ?? lines.length;
+  for (let i = 0; i < rootEnd; i++) {
+    const assignment = scanned.active.has(i) ? tomlAssignment(lines[i]) : undefined;
+    // Managed replacements preserve one source line, not a multiline value.
+    if ((assignment?.key === 'web_search' || assignment?.key === 'model_catalog_json') && i + 1 < lines.length && !scanned.active.has(i + 1)) {
+      throw new Error('Unsupported multiline Codex ' + assignment.key + ' value; use a single-line string.');
+    }
+  }
 }
 function disableInlineCodeMode(value) {
   if (!value.startsWith('{')) throw new Error('Unsupported Codex features value; use a [features] table.');
@@ -460,6 +472,7 @@ function updateDirectConfig(home, filename) {
   }
   const lines = content.split(/\r?\n/);
   const scanned = tomlTables(lines);
+  assertSingleLineManagedRootValues(lines, scanned);
   const existingTables = scanned.tables;
   const rootEnd = existingTables[0]?.index ?? lines.length;
   const rootAssignments = lines.slice(0, rootEnd).flatMap((line, i) => {

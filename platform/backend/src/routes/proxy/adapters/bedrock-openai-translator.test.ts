@@ -315,26 +315,27 @@ describe("openaiToConverse — image_url content blocks", () => {
     });
   });
 
-  test("image_url with unsupported mime type is silently dropped", () => {
-    const { converseBody } = openaiToConverse(
-      req({
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "hello" },
-              {
-                type: "image_url",
-                image_url: {
-                  url: "data:application/octet-stream;base64,AAAA==",
+  test("image_url with unsupported mime type is rejected", () => {
+    expect(() =>
+      openaiToConverse(
+        req({
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "hello" },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: "data:application/octet-stream;base64,AAAA==",
+                  },
                 },
-              },
-            ],
-          },
-        ],
-      }),
-    );
-    expect(converseBody.messages?.[0].content).toEqual([{ text: "hello" }]);
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/Unsupported Bedrock/);
   });
 
   test("text + valid image + json file → text, image, document blocks in order", () => {
@@ -531,23 +532,24 @@ describe("openaiToConverse — images", () => {
     });
   });
 
-  test("non-data-URL image_url is silently dropped", () => {
-    const { converseBody } = openaiToConverse(
-      req({
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image_url",
-                image_url: { url: "https://example.com/cat.png" },
-              },
-            ],
-          },
-        ],
-      }),
-    );
-    expect(converseBody.messages?.[0].content).toEqual([]);
+  test("non-data-URL image_url is rejected", () => {
+    expect(() =>
+      openaiToConverse(
+        req({
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image_url",
+                  image_url: { url: "https://example.com/cat.png" },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/base64 data URL/);
   });
 });
 

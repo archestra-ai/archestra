@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { makeAnthropicOpenaiAdapterFactory } from "./anthropic-openai";
 import type { AnthropicOpenaiContext } from "./anthropic-openai-translator";
+import { makeResponsesFromChatAdapterFactory } from "./openai-responses-from-chat";
 
 const ctx: AnthropicOpenaiContext = {
   chatcmplId: "chatcmpl-test",
@@ -19,6 +20,56 @@ const ctx: AnthropicOpenaiContext = {
 function makeAdapter() {
   return makeAnthropicOpenaiAdapterFactory(ctx).createStreamAdapter();
 }
+
+it("completes translated Anthropic text once after the policy verdict", () => {
+  const adapter = makeResponsesFromChatAdapterFactory(
+    makeAnthropicOpenaiAdapterFactory(ctx),
+    {
+      responseId: "resp-test",
+      createdUnix: 0,
+      requestedModel: "archestra:test",
+    },
+  ).createStreamAdapter();
+  const events = [
+    {
+      type: "message_start",
+      message: { usage: { input_tokens: 5, output_tokens: 0 } },
+    },
+    {
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    },
+    {
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "answer" },
+    },
+    { type: "content_block_stop", index: 0 },
+    {
+      type: "message_delta",
+      delta: { stop_reason: "end_turn" },
+      usage: { output_tokens: 2 },
+    },
+    { type: "message_stop" },
+  ];
+  const streamed = events
+    .map(
+      (event) =>
+        adapter.processChunk(
+          event as Parameters<typeof adapter.processChunk>[0],
+        ).sseData ?? "",
+    )
+    .join("");
+  expect(streamed).not.toContain("response.completed");
+  const wire = `${streamed}${adapter.formatEndSSE()}`;
+  expect(wire.match(/"type":"response.completed"/g)).toHaveLength(1);
+  expect(wire).toContain('"input_tokens":5');
+  expect(wire).toContain('"output_tokens":2');
+  expect(adapter.toProviderResponse().content).toMatchObject([
+    { type: "text", text: "answer" },
+  ]);
+});
 
 function feedParallelToolCalls(adapter: ReturnType<typeof makeAdapter>) {
   const feed = (chunk: unknown) =>

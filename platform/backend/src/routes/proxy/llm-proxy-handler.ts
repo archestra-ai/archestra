@@ -1861,6 +1861,7 @@ export async function handleLLMProxy<
           request: appaRequest,
           claims: appaClaims,
           compaction: clientCompaction && !isInternalChat,
+          enforcement: "active",
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
       }

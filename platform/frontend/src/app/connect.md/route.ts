@@ -61,9 +61,10 @@ under Settings > Plugins. Send a message to make sure that inference works.
    OpenCode: run the installer here with a timeout of 600000 ms. Keep that exact
    process running. Relay its approval URL and code if no browser opens. Do
    not start a second installer while the first request is pending.
+   Codex: ${CODEX_APPROVAL_WAIT}
    For Desktop, the separate terminal owns this process; finish the agent task after handoff.
    The browser code must match the code printed in the terminal.
-   If no browser opens, show the printed approval URL to the user.
+   If no browser opens and this session has not already printed the approval URL, show it once.
 4. The installer applies the approved configuration automatically.
    If the organization has runtime handoff instructions enabled, the setup also
    installs a system-prompt file injected into every future session launch —
@@ -176,8 +177,8 @@ Windows PowerShell:
 $p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client ${client} } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
 
 Keep the command running while the user signs in and reviews the setup in their browser.
-The browser code must match the code printed in the terminal. If no browser opens, show the printed approval URL.
-The public bootstrap downloads and applies only the approved setup. If it fails, report the exact error; do not replace this flow with manual API calls.
+The browser code must match the code printed in the terminal. If no browser opens and this session has not already printed the approval URL, show it once.
+${client === "codex" ? `${CODEX_APPROVAL_WAIT}\n` : ""}The public bootstrap downloads and applies only the approved setup. If it fails, report the exact error; do not replace this flow with manual API calls.
 Do not print the polling secret, installer source, or approved setup payload.
 If runtime handoff instructions are enabled, tell the user that future sessions inject a system-prompt file.
 
@@ -228,6 +229,16 @@ function focusedClientDetails(client: string): {
       return null;
   }
 }
+
+const CODEX_APPROVAL_WAIT = [
+  "Codex's exec_command yields a still-running terminal and returns a session id before browser approval finishes.",
+  'keep reading that same session with write_stdin, or the client\'s equivalent read of that same process, until the installer prints "Browser approval confirmed." or a terminal error.',
+  "Do not end the turn and ask the user to say when approval is finished.",
+  "Do not print the approval URL again if this session already printed it.",
+  "Do not start a second installer while that process is alive. Keep the first request and its code.",
+  "A temporarily unavailable status is not expiry. Retry that same session; do not start again.",
+  "Gateway OAuth is a later native sign-in after this installer applies the setup. It is not a new connection approval. Do not automate that sign-in, and do not change the configured approval mode or sandbox.",
+].join(" ");
 
 const CODEX_FINISH_INSTRUCTIONS = [
   "If the installer printed 'Successfully logged in.', gateway OAuth is already cached. Do not run codex mcp login again. Otherwise run codex mcp list --json and inspect auth_status for the configured server. If auth_status is oauth, skip login.",

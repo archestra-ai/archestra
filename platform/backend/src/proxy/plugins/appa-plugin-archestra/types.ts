@@ -38,6 +38,11 @@ export type AppaTrustedContext = {
   claims?: { sessionId?: string; parentId?: string };
   /** Present only for the proxy's loopback Chat call path. */
   chatSource?: AppaChatSource;
+  /**
+   * Activation captured for this request. Later phases must not re-read the
+   * switch, so a change between requests does not land mid-stream.
+   */
+  enforcement?: "active" | "inactive";
 };
 
 export type AppaMatchContext = {

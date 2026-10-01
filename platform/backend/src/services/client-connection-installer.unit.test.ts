@@ -21,6 +21,7 @@ let scriptBody: string;
 let downloads: number;
 let polls: number;
 let transientFailure: boolean;
+let readFaultStatus: number;
 let interval: number;
 let startedAt: number;
 let firstPollDelay: number;
@@ -48,6 +49,7 @@ globalThis.setTimeout = (callback, timeout, ...args) => {
   downloads = 0;
   polls = 0;
   transientFailure = false;
+  readFaultStatus = 0;
   interval = 1;
   startedAt = 0;
   firstPollDelay = 0;
@@ -69,8 +71,8 @@ globalThis.setTimeout = (callback, timeout, ...args) => {
     } else if (req.url === "/api/client-connections/poll") {
       polls++;
       if (polls === 1) firstPollDelay = Date.now() - startedAt;
-      if (transientFailure && polls === 1) {
-        res.writeHead(503);
+      if ((readFaultStatus !== 0 || transientFailure) && polls === 1) {
+        res.writeHead(readFaultStatus || 503);
         res.end();
         return;
       }
@@ -435,6 +437,23 @@ test("polling survives a temporary deployment outage", async () => {
   expect(polls).toBe(2);
   expect(downloads).toBe(1);
 }, 25_000);
+
+test("an approved-state read fault does not open a second approval", async () => {
+  readFaultStatus = 500;
+  const result = await run();
+  expect(result.code).toBe(0);
+  expect(starts).toBe(1);
+  expect(polls).toBe(2);
+  expect(downloads).toBe(1);
+  expect(result.output.match(/ABCD-1234/g)).toEqual(["ABCD-1234"]);
+  expect(result.output.match(/Open /g)).toEqual(["Open "]);
+  expect(result.output.match(/Browser approval confirmed\./g)).toEqual([
+    "Browser approval confirmed.",
+  ]);
+  expect(result.output).not.toContain("xdg-open");
+  expect(result.output).not.toContain("Start the installer again");
+  expect(await readFile(join(directory, "applied"), "utf8")).toBe("applied");
+});
 
 test("refuses plaintext remote origins before requesting credentials", async () => {
   const result = await run("http://deployment.example");

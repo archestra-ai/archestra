@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { DispatchPolicy } from "@archestra/openappa-rs";
 import {
   APPA_PARENT_HEADER,
@@ -29,7 +30,11 @@ import { openappaFailure } from "@/openappa/failure";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  type GuardrailsV2Activation,
+  isGuardrailsV2Active,
+  readGuardrailsV2Activation,
+} from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type { DeclaredToolSpelling } from "./wire";
 
@@ -177,6 +182,22 @@ type ChildEndOutcome =
     };
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
+const capturedActivation = new AsyncLocalStorage<GuardrailsV2Activation>();
+
+/** Keep one request's activation decision through later runtime calls. */
+export function withCapturedGuardrailsActivation<T>(
+  activation: GuardrailsV2Activation,
+  run: () => Promise<T>,
+): Promise<T> {
+  return capturedActivation.run(activation, run);
+}
+
+/** The rest of this request phase keeps the activation captured at its start. */
+export function enterCapturedGuardrailsActivation(
+  activation: GuardrailsV2Activation,
+): void {
+  capturedActivation.enterWith(activation);
+}
 export function openappaYellEnabled(): boolean {
   return config.openappa.enabled && config.openappa.yellEnabled;
 }
@@ -306,6 +327,16 @@ export function isAppaChatSource(
 async function binding() {
   if (!openappaEnabled()) {
     throw new Error("OpenAPPA is disabled");
+  }
+  const captured = capturedActivation.getStore();
+  if (captured === "inactive") {
+    throw new Error("OpenAPPA is disabled");
+  }
+  if (captured !== "active") {
+    const activation = await readGuardrailsV2Activation();
+    if (activation !== "active") {
+      throw new Error("OpenAPPA is disabled");
+    }
   }
   // A composed document names the helper bridge bearer as a `token_env` the
   // addon resolves from this process's environment when it compiles the
@@ -1229,7 +1260,11 @@ export async function loadChildReturns(params: {
   parentSessionId: string;
 }): Promise<AppaChildReturnRecord[]> {
   try {
-    if (!(await isGuardrailsV2Active())) return [];
+    if (
+      capturedActivation.getStore() !== "active" &&
+      !(await isGuardrailsV2Active())
+    )
+      return [];
     const module = await binding();
     const records = await module.loadChildReturns(
       params.organizationId,
@@ -1268,7 +1303,11 @@ export async function loadOfferReview(params: {
   arguments?: string;
 } | null> {
   try {
-    if (!(await isGuardrailsV2Active())) return null;
+    if (
+      capturedActivation.getStore() !== "active" &&
+      !(await isGuardrailsV2Active())
+    )
+      return null;
     const module = await binding();
     const result = await module.loadOfferReview(
       params.organizationId,

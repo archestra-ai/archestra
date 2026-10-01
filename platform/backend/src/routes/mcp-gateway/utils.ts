@@ -276,7 +276,7 @@ const rawArchestraTokenCache =
     defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
   });
 
-/** Both APPA tools are served by this endpoint whenever APPA is enabled. */
+/** Remedy tools are advertised only while Guardrails v2 is active. */
 const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
@@ -489,15 +489,15 @@ export async function createAgentServer(params: {
       config.agentRuntime.enabled || hasTaskStarter
         ? getImplicitTaskControlTools()
         : [];
-    // Both notice and remedy tools are required when OpenAPPA is active.
-    const implicitOpenAppaTools =
-      openappaEnabled() || (await isGuardrailsV2Active())
-        ? getArchestraMcpTools().filter((tool) =>
-            isImplicitOpenAppaTool(
-              archestraMcpBranding.getToolShortName(tool.name),
-            ),
-          )
-        : [];
+    // A thrown switch read must fail the list, not look like the switch is off.
+    const remediesActive = await isGuardrailsV2Active();
+    const implicitOpenAppaTools = getArchestraMcpTools().filter((tool) => {
+      const shortName = archestraMcpBranding.getToolShortName(tool.name);
+      if (APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "")) {
+        return remediesActive;
+      }
+      return shortName === "yell" && openappaYellEnabled();
+    });
     const implicitPolicyTools =
       openappaEnabled() && agent.agentType === "agent"
         ? getArchestraMcpTools().filter((tool) =>

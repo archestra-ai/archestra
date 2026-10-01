@@ -4,6 +4,7 @@ import { type MockInstance, vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
@@ -21,6 +22,7 @@ import {
   type LlmProxyRequestContext,
   type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
+import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
@@ -36,6 +38,11 @@ import {
 } from "./types";
 
 vi.mock("@/cache-manager");
+
+beforeEach(async () => {
+  config.openappa.enabled = true;
+  await GuardrailsDeploymentModel.setEnabled(true);
+});
 
 describe("APPA client adapters", () => {
   test("maps each integrated client to its real local tool namespace", () => {
@@ -5385,6 +5392,36 @@ context_control = true
         grandchild(userTurns(["Summary of the conversation so far."])),
       ).resolves.toBe("user:user|s1:g1");
     });
+  });
+});
+
+describe("activation gate on plugin dispatch", () => {
+  test("does not issue a remedy notice when the deployment switch is off", async () => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({ sessionId: "switch-off" });
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onToolCalls({
+      ...context,
+      toolCalls: [{ id: "call-1", name: "get_weather", arguments: {} }],
+    });
+    expect(outcome).toBeUndefined();
+  });
+
+  test("fails the request when the switch read throws instead of treating it as off", async () => {
+    const read = vi
+      .spyOn(guardrailsDeployment, "readGuardrailsV2Activation")
+      .mockRejectedValue(new Error("deployment row unavailable"));
+    try {
+      const plugin = new AppaPluginArchestra([]);
+      const context = requestContext({ sessionId: "switch-unreadable" });
+      await expect(plugin.onSessionInit(context)).rejects.toMatchObject({
+        statusCode: 503,
+        message: "Guardrails availability could not be confirmed",
+      });
+    } finally {
+      read.mockRestore();
+    }
   });
 });
 

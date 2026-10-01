@@ -47,6 +47,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   appConnectorAudienceRef,
@@ -1623,6 +1624,7 @@ describe("createAgentServer tools/list", () => {
   }) => {
     const previousEnabled = config.openappa.enabled;
     config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(true);
     onTestFinished(() => {
       config.openappa.enabled = previousEnabled;
     });
@@ -1689,6 +1691,127 @@ describe("createAgentServer tools/list", () => {
           archestraMcpBranding.getToolName("update_guardrails_policy"),
       )?.annotations?.readOnlyHint,
     ).not.toBe(true);
+  });
+
+  test("hides remedy tools while the deployment switch is off and still lists policy tools", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(false);
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+    });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) throw new Error("Expected tools/list handler");
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = response.tools.map((tool) => tool.name);
+    expect(names).not.toContain(
+      archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+    );
+    expect(names).not.toContain(
+      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    );
+    expect(names).toContain(
+      archestraMcpBranding.getToolName("get_guardrails_policy"),
+    );
+
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const { server: enabledServer } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const enabledList = (
+      enabledServer.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!enabledList) throw new Error("Expected tools/list handler");
+    const enabled = await enabledList({ method: "tools/list", params: {} });
+    const enabledNames = enabled.tools.map((tool) => tool.name);
+    expect(enabledNames).toContain(
+      archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+    );
+    expect(enabledNames).toContain(
+      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    );
+  });
+
+  test("refuses both remedy tools when the deployment switch is off", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(false);
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const handler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    if (!handler) throw new Error("Expected tools/call handler");
+    for (const name of [
+      archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    ]) {
+      await expect(
+        handler(
+          {
+            method: "tools/call",
+            params: {
+              name,
+              arguments: { ruling: "Blocked." },
+            },
+          },
+          { sendRequest: vi.fn() },
+        ),
+      ).rejects.toMatchObject({
+        code: -32601,
+        message: "Guardrails v2 is disabled",
+      });
+    }
   });
 
   test("assigned read-only policy tool keeps its annotation without marking writes safe", async ({

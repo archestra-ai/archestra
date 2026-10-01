@@ -59,6 +59,41 @@ describe("Connect agent instructions", () => {
   it.each([
     "",
     "?client=codex",
+  ])("keeps a yielded Codex installer on the same session in %s", async (query) => {
+    const instructions = await GET(
+      new Request(`http://localhost:3000/connect.md${query}`),
+    ).text();
+    expect(instructions).toContain(
+      "keep reading that same session with write_stdin",
+    );
+    expect(instructions).toContain('prints "Browser approval confirmed."');
+    expect(instructions).toContain(
+      "Do not end the turn and ask the user to say when approval is finished.",
+    );
+    expect(instructions).toContain(
+      "Do not print the approval URL again if this session already printed it.",
+    );
+    expect(instructions).toContain(
+      "Do not start a second installer while that process is alive.",
+    );
+    expect(instructions).toContain("Keep the first request and its code.");
+    expect(instructions).toContain(
+      "Gateway OAuth is a later native sign-in after this installer applies the setup.",
+    );
+    expect(instructions).toContain("It is not a new connection approval.");
+    expect(instructions).not.toContain("approval_policy");
+  });
+
+  it("does not tell other clients to poll a Codex session", async () => {
+    const instructions = await GET(
+      new Request("http://localhost:3000/connect.md?client=cursor"),
+    ).text();
+    expect(instructions).not.toContain("write_stdin");
+  });
+
+  it.each([
+    "",
+    "?client=codex",
   ])("does not repeat completed Codex OAuth in %s instructions", async (query) => {
     const instructions = await GET(
       new Request(`http://localhost:3000/connect.md${query}`),

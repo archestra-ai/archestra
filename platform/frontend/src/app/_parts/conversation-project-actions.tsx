@@ -1,7 +1,8 @@
 "use client";
 
-import { Check, Folder, FolderInput, FolderX } from "lucide-react";
-import { Fragment } from "react";
+import { PROJECT_NAME_MAX_LENGTH } from "@archestra/shared";
+import { Check, Folder, FolderInput, FolderPlus, FolderX } from "lucide-react";
+import { Fragment, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   Command,
@@ -23,12 +24,24 @@ export function ConversationProjectActions({
   projects,
   isPending,
   onProjectChange,
+  onCreateProject,
 }: {
   projectId: string | null;
   projects: Array<{ id: string; name: string; icon: string | null }>;
   isPending: boolean;
   onProjectChange: (projectId: string | null) => void;
+  onCreateProject?: (name: string) => void;
 }) {
+  const [search, setSearch] = useState("");
+  const name = search.trim();
+  const canCreate =
+    onCreateProject &&
+    name.length > 0 &&
+    name.length <= PROJECT_NAME_MAX_LENGTH &&
+    !projects.some(
+      (project) => project.name.toLowerCase() === name.toLowerCase(),
+    );
+
   return (
     <Fragment>
       <DropdownMenuSub>
@@ -38,9 +51,32 @@ export function ConversationProjectActions({
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="w-64 p-0">
           <Command onKeyDown={(event) => event.stopPropagation()}>
-            <CommandInput placeholder="Search projects..." />
+            <CommandInput
+              placeholder={
+                onCreateProject
+                  ? "Search or create project..."
+                  : "Search projects..."
+              }
+              value={search}
+              onValueChange={setSearch}
+              disabled={isPending}
+            />
             <CommandList>
-              <CommandEmpty>No projects found.</CommandEmpty>
+              {!canCreate && (
+                <CommandEmpty>
+                  {onCreateProject && !name && projects.length === 0 ? (
+                    <div className="space-y-1 px-3">
+                      <p>No projects yet.</p>
+                      <p className="text-xs text-muted-foreground">
+                        Enter a project name above, then press Enter to create
+                        it.
+                      </p>
+                    </div>
+                  ) : (
+                    <span>No projects found.</span>
+                  )}
+                </CommandEmpty>
+              )}
               <CommandGroup>
                 {projects.map((project) => {
                   const isCurrent = project.id === projectId;
@@ -68,6 +104,23 @@ export function ConversationProjectActions({
                   );
                 })}
               </CommandGroup>
+              {canCreate && (
+                <CommandGroup forceMount>
+                  <CommandItem
+                    value={`create-project-${name}`}
+                    forceMount
+                    disabled={isPending}
+                    onSelect={() => {
+                      if (!isPending) onCreateProject(name);
+                    }}
+                  >
+                    <FolderPlus />
+                    <span className="truncate">
+                      Create project &quot;{name}&quot;
+                    </span>
+                  </CommandItem>
+                </CommandGroup>
+              )}
             </CommandList>
           </Command>
         </DropdownMenuSubContent>

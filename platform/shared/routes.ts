@@ -145,6 +145,7 @@ export const RouteId = {
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
+  McpGatewayDelete: "mcpGatewayDelete",
   McpGatewaySseMessage: "mcpGatewaySseMessage", // Legacy HTTP+SSE message endpoint
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
   McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
@@ -831,6 +832,7 @@ export const RouteId = {
   UpdateGuardrailsDeployment: "updateGuardrailsDeployment",
   GetAppaGithubSync: "getAppaGithubSync",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
+  CreateAppaGithubRepository: "createAppaGithubRepository",
   UpdateAppaGithubSync: "updateAppaGithubSync",
   GetOpenappaBatteries: "getOpenappaBatteries",
   GetOpenappaBatteryPolicySource: "getOpenappaBatteryPolicySource",
@@ -845,6 +847,11 @@ export const RouteId = {
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
+  GetOpenAppaYells: "getOpenAppaYells",
+  GetOpenAppaYellsSummary: "getOpenAppaYellsSummary",
+  DownloadOpenAppaYell: "downloadOpenAppaYell",
+  GetOpenAppaYell: "getOpenAppaYell",
+  UpdateOpenAppaYell: "updateOpenAppaYell",
   GetOpenappaExternalConsults: "getOpenappaExternalConsults",
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
@@ -901,6 +908,9 @@ export const RouteId = {
   SetProjectInstructions: "setProjectInstructions",
   PinProject: "pinProject",
   UnpinProject: "unpinProject",
+  GetProjectApps: "getProjectApps",
+  LinkProjectApp: "linkProjectApp",
+  UnlinkProjectApp: "unlinkProjectApp",
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
   UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 
@@ -930,6 +940,7 @@ export const RouteId = {
   GetClientConnection: "getClientConnection",
   DecideClientConnection: "decideClientConnection",
   CreateConnectionSetup: "createConnectionSetup",
+  BeginConnectionPromptSession: "beginConnectionPromptSession",
   GetMfilesVafAddOnScript: "getMfilesVafAddOnScript",
   GetMfilesVafAddOnPackage: "getMfilesVafAddOnPackage",
   GetMfilesVafAddOnDistribution: "getMfilesVafAddOnDistribution",

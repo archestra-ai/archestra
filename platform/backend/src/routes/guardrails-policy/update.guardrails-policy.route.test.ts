@@ -201,9 +201,15 @@ describe("guardrails policy authoring", () => {
         { content, expectedRevision: 0 },
         context,
       ),
-    ).rejects.toThrow(
-      "The policy changed. Read it again before proposing changes.",
-    );
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "Error: The policy changed. Read it again before proposing changes.",
+        },
+      ],
+    });
   });
 
   test("an unchanged unsaved starter previews without writing and publishes once with enforcement", async () => {
@@ -245,7 +251,15 @@ describe("guardrails policy authoring", () => {
         draft,
         context,
       ),
-    ).rejects.toMatchObject({ statusCode: 409 });
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("The policy changed. Read it again"),
+        },
+      ],
+    });
     await expect(
       executeArchestraTool(
         "archestra__update_guardrails_policy",

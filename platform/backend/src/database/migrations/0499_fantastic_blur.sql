@@ -1,0 +1,1 @@
+ALTER TABLE "openappa_yells" ADD COLUMN "archive" "bytea";

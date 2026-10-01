@@ -406,6 +406,14 @@ function codexWindowsProxyDisconnect(ctx: StartupGuardContext): string {
   const selectedProvider = `model_provider = "${ctx.proxy?.proxyName ?? ""}"`;
   return `function Disconnect-ArchProxy {
   $path = Join-Path ${codexHomePs()} 'config.toml'
+  $directHelper = $GuardPath + '.handoff.cjs'
+  if (Test-Path $directHelper) {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Could not restore Codex direct tool settings.' }
+    & node $directHelper --remove-direct
+    if ($LASTEXITCODE -ne 0) { throw 'Could not restore Codex direct tool settings.' }
+  } elseif ((Test-Path $path) -and (Select-String -Path $path -Pattern 'archestra:codex-direct:root' -Quiet)) {
+    throw 'Codex direct tool settings remain without their restore helper.'
+  }
   if (Test-Path $path) {
     $start = ${psq(`# >>> ${marker} >>>`)}
     $end = ${psq(`# <<< ${marker} <<<`)}
@@ -477,6 +485,12 @@ function codexProxyDisconnect(ctx: StartupGuardContext): string {
   const selectedProvider = `model_provider = "${ctx.proxy?.proxyName ?? ""}"`;
   return `disconnect_proxy() {
   CONFIG=${codexConfigShellPath()}
+  DIRECT_HELPER="$HOME/${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs"
+  if [ -f "$DIRECT_HELPER" ]; then
+    command -v node >/dev/null 2>&1 && node "$DIRECT_HELPER" --remove-direct || return 1
+  elif [ -f "$CONFIG" ] && grep -q 'archestra:codex-direct:root' "$CONFIG"; then
+    return 1
+  fi
   if [ -f "$CONFIG" ]; then
     PREVIOUS_PROVIDER=''
     if [ -f "$CONFIG.archestra-backup" ]; then

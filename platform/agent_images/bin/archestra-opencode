@@ -10,6 +10,10 @@ fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
+# Restoring an interactive session does not submit another model turn.
+if [[ "${runtime_mode}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
 config_file="${runtime_dir}/opencode.json"
 instructions_file="${runtime_dir}/opencode-instructions.md"
 task_file="${runtime_dir}/task.md"
@@ -236,7 +240,7 @@ PLUGIN
 chmod 0600 "${transcript_plugin}"
 
 printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" > "${instructions_file}"
-printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" > "${task_file}"
 
 jq -n \
   --arg model "${model}" \
@@ -300,8 +304,11 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   fi
   resume_args=(--session "$(cat "${session_file}")")
 fi
-terminal_command=(opencode --auto --model "archestra/${model}" --prompt "$(cat "${task_file}")")
-if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+terminal_command=(opencode --auto --model "archestra/${model}" "${resume_args[@]}")
+if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" ]]; then
+  terminal_command+=(--prompt "$(cat "${task_file}")")
+fi
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" && -n "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" ]]; then
   # The full-screen TUI drops --prompt when restoring an existing session.
   # The native interactive run command both restores it and submits the new
   # instruction, while keeping terminal input available for live steering.

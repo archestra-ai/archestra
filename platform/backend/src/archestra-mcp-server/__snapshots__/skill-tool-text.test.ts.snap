@@ -298,7 +298,7 @@ exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
 {
-  "description": "Permanently delete a persistent file, identified by \`id\` (from search_files / save_file) or by \`filename\`.",
+  "description": "Permanently delete a persistent file, identified by \`id\` (from search_files / save_file) or by \`filename\`. Pass project_id to delete a project's file when working outside a chat.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -312,6 +312,10 @@ exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
       "id": {
         "description": "Id of the file to delete (from search_files / save_file).",
         "minLength": 1,
+        "type": "string",
+      },
+      "project_id": {
+        "description": "Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app".",
         "type": "string",
       },
     },
@@ -373,7 +377,7 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
 {
-  "description": "Edit an existing persistent file by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find (read the file first with read_file) and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Identify the file by \`id\` (from search_files / save_file) or by \`filename\`. Text files only — to replace a binary file, use save_file with overwrite for inline content, or download_file with overwrite for a file in the sandbox.",
+  "description": "Edit an existing persistent file by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find (read the file first with read_file) and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Identify the file by \`id\` (from search_files / save_file) or by \`filename\`. Text files only — to replace a binary file, use save_file with overwrite for inline content, or download_file with overwrite for a file in the sandbox. Pass project_id to edit a project's file when working outside a chat.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -396,6 +400,10 @@ exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
       "old_string": {
         "description": "The exact text to replace; must match the file's current content (read it first with read_file). Include enough surrounding context to be unique unless replace_all is set.",
         "minLength": 1,
+        "type": "string",
+      },
+      "project_id": {
+        "description": "Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app".",
         "type": "string",
       },
       "replace_all": {
@@ -547,7 +555,7 @@ exports[`skill and sandbox tool text > archestra__read_file 1`] = `
         "type": "integer",
       },
       "project_id": {
-        "description": "Read this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be read. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app".",
+        "description": "Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app".",
         "type": "string",
       },
     },
@@ -636,7 +644,7 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 
 exports[`skill and sandbox tool text > archestra__save_file 1`] = `
 {
-  "description": "Write bytes you are providing inline in this call — text or base64 included in the arguments — to the conversation's persistent files. Use this for content that originates in your reply: a summary or note you wrote, a short snippet you are typing out. If the content already exists as a file in the sandbox — you wrote it with a command, or the user attached it — do not read it back and paste its bytes here; export it with download_file by its path instead, so the bytes never enter your context. Pass \`overwrite: true\` to replace an existing same-named file in place (e.g. a full rewrite); otherwise a duplicate name is rejected.",
+  "description": "Write bytes you are providing inline in this call — text or base64 included in the arguments — to the conversation's persistent files. Use this for content that originates in your reply: a summary or note you wrote, a short snippet you are typing out. If the content already exists as a file in the sandbox — you wrote it with a command, or the user attached it — do not read it back and paste its bytes here; export it with download_file by its path instead, so the bytes never enter your context. Pass \`overwrite: true\` to replace an existing same-named file in place (e.g. a full rewrite); otherwise a duplicate name is rejected. Pass project_id to save into a project's files — how you write to a project when working outside a chat.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -667,6 +675,10 @@ exports[`skill and sandbox tool text > archestra__save_file 1`] = `
         "description": "Replace an existing file of the same name in place, keeping its id. Default false errors if the name is already taken.",
         "type": "boolean",
       },
+      "project_id": {
+        "description": "Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app".",
+        "type": "string",
+      },
     },
     "required": [
       "filename",
@@ -687,7 +699,7 @@ exports[`skill and sandbox tool text > archestra__search_files 1`] = `
     "description": "List or search persistent files by filename substring; omit the query to list them (the first 200). Filenames only, not contents. Lists this chat's files, the open app's files with scope: "app", or a project's files with project_id.",
     "properties": {
       "project_id": {
-        "description": "Read this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be read. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app".",
+        "description": "Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app".",
         "type": "string",
       },
       "query": {

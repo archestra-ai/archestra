@@ -1241,21 +1241,56 @@ async fn strip_mutating_skill_tools(
 }
 
 async fn resolve_tool_ids(client: &EvalClient, short_names: &[String]) -> Result<HashMap<String, String>, RunError> {
+    let tools = client.list_tools().await?;
+    pick_tool_ids(&tools, short_names)
+}
+
+fn pick_tool_ids(
+    tools: &[HashMap<String, serde_json::Value>],
+    short_names: &[String],
+) -> Result<HashMap<String, String>, RunError> {
     let mut resolved = HashMap::new();
     for short_name in short_names {
         let exact = format!("archestra__{short_name}");
-        let tools = client.list_tools().await?;
-        let matches: Vec<_> = tools
-            .into_iter()
+        // Offset pagination can serve the same row on two pages; only distinct ids are ambiguous.
+        let mut matches: HashMap<String, &HashMap<String, serde_json::Value>> = HashMap::new();
+        for tool in tools
+            .iter()
             .filter(|t| t.get("name").and_then(|v| v.as_str()) == Some(&exact))
-            .collect();
-        if matches.len() != 1 {
-            return Err(RunError::Config(format!(
-                "required tool {exact:?} not found exactly once; is sandbox tooling enabled?"
-            )));
+        {
+            matches.insert(require_id(tool, "tool")?, tool);
         }
-        let id = require_id(&matches[0], "tool")?;
-        resolved.insert(short_name.clone(), id);
+        let mut ids = matches.into_iter();
+        match (ids.next(), ids.len()) {
+            (Some((id, _)), 0) => {
+                resolved.insert(short_name.clone(), id);
+            }
+            (None, _) => {
+                return Err(RunError::Config(format!(
+                    "required tool {exact:?} not found among {} listed tools; is sandbox tooling enabled?",
+                    tools.len()
+                )));
+            }
+            (Some(first), _) => {
+                let rows: Vec<String> = std::iter::once(first)
+                    .chain(ids)
+                    .map(|(id, tool)| {
+                        let field = |key: &str| tool.get(key).cloned().unwrap_or(serde_json::Value::Null);
+                        format!(
+                            "{id} (catalogId={}, deletedAt={})",
+                            field("catalogId"),
+                            field("deletedAt")
+                        )
+                    })
+                    .collect();
+                return Err(RunError::Config(format!(
+                    "required tool {exact:?} matched {} distinct rows among {} listed tools: {}",
+                    rows.len(),
+                    tools.len(),
+                    rows.join(", ")
+                )));
+            }
+        }
     }
     Ok(resolved)
 }
@@ -3229,6 +3264,42 @@ mod tests {
         let allowed: HashSet<String> = HashSet::new();
         let v = surface_violations(&present, &required, &allowed, "archestra__submit_result");
         assert!(v.is_empty());
+    }
+
+    fn tool_row(id: &str, name: &str) -> HashMap<String, serde_json::Value> {
+        HashMap::from([
+            ("id".to_string(), serde_json::json!(id)),
+            ("name".to_string(), serde_json::json!(name)),
+        ])
+    }
+
+    #[test]
+    fn pick_tool_ids_tolerates_a_row_repeated_across_pages() {
+        let tools = vec![
+            tool_row("todo", "archestra__todo_write"),
+            tool_row("other", "archestra__run_command"),
+            tool_row("todo", "archestra__todo_write"),
+        ];
+        let ids = pick_tool_ids(&tools, &["todo_write".to_string(), "run_command".to_string()]).unwrap();
+        assert_eq!(ids["todo_write"], "todo");
+        assert_eq!(ids["run_command"], "other");
+    }
+
+    #[test]
+    fn pick_tool_ids_rejects_distinct_rows_sharing_a_name() {
+        let tools = vec![
+            tool_row("a", "archestra__todo_write"),
+            tool_row("b", "archestra__todo_write"),
+        ];
+        let err = pick_tool_ids(&tools, &["todo_write".to_string()]).unwrap_err();
+        assert!(matches!(err, RunError::Config(_)));
+    }
+
+    #[test]
+    fn pick_tool_ids_rejects_a_missing_tool() {
+        let tools = vec![tool_row("other", "archestra__run_command")];
+        let err = pick_tool_ids(&tools, &["todo_write".to_string()]).unwrap_err();
+        assert!(matches!(err, RunError::Config(_)));
     }
 
     #[test]

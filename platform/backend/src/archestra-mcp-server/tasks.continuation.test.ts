@@ -20,6 +20,7 @@ import {
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
 import { beforeEach, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
@@ -119,6 +120,36 @@ test.for([
     pageSize: 100,
   });
   expect(tasks.tasks).toHaveLength(previous ? 1 : 0);
+});
+
+test("an interactive resume starts the saved runtime without a new user instruction", async () => {
+  await connect(runtime);
+  const previous = await retainedRun();
+  const continuation = vi
+    .spyOn(backend, "continueRun")
+    .mockRejectedValue(new Error("Runtime transport unavailable"));
+  vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+  vi.spyOn(backend, "releaseRun").mockResolvedValue();
+  const task = await startDetachedAgentTask({
+    actor: { kind: "user", id: userId, organizationId: agent.organizationId },
+    agentId: agent.id,
+    message: "",
+    systemParams: {
+      runtimeMode: "interactive",
+      resumeFromTaskId: previous.taskId,
+    },
+  });
+  await expect.poll(() => continuation.mock.calls.length).toBe(1);
+  const spec = continuation.mock.calls[0][0].spec;
+  expect(spec.frozenName).toBe(previous.workloadName);
+  expect((await AgentRunModel.findByTaskId(task.id))?.title).toBe(
+    previous.title,
+  );
+  expect(spec.env.ARCHESTRA_AGENT_RUNTIME_MODE).toBe("interactive");
+  expect(spec.env.ARCHESTRA_AGENT_RUNTIME_TASK ?? "").toBe("");
+  await expect
+    .poll(async () => (await A2ATaskModel.findById(task.id))?.state)
+    .toBe("TASK_STATE_FAILED");
 });
 
 test("a continuation reuses the account after an image change and reports a later startup failure to the original thread", async () => {

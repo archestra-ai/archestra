@@ -1,6 +1,12 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -97,6 +103,9 @@ beforeEach(() => {
     ),
     http.get(`${api}/openappa/github-sync`, () => HttpResponse.json(sync)),
     http.get(`${api}/credentials`, () => HttpResponse.json([])),
+    http.get(`${api}/openappa/yells/summary`, () =>
+      HttpResponse.json({ unresolved: 0 }),
+    ),
   );
 });
 afterEach(() => server.resetHandlers());
@@ -163,7 +172,6 @@ test("a saved policy with enforcement off makes enforcement the next step", asyn
   expect(
     screen.getByRole("link", { name: "Ask about the policy" }),
   ).toBeInTheDocument();
-  expect(screen.getByText("How it works")).toBeInTheDocument();
   expect(
     screen.queryByRole("heading", { name: "Turn on the guardrail" }),
   ).not.toBeInTheDocument();
@@ -216,7 +224,7 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
   enabled = true;
   const { container } = show();
   const connect = await screen.findByRole("button", {
-    name: "Connect GitHub",
+    name: "Create repository",
   });
   expect(screen.getByText("Step 2 of 2")).toBeInTheDocument();
   expect(nextStep(container)).toHaveTextContent("GitHub sync");
@@ -233,12 +241,11 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
   expect(
     screen.getByRole("switch", { name: "Enforce the policy" }),
   ).toBeChecked();
-  expect(
-    screen.getByRole("link", { name: /Read about OpenAPPA/ }),
-  ).toHaveAttribute("href", "https://www.openappa.com/how-it-works");
   fireEvent.click(connect);
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
-  expect(screen.getByText("Copy current policy")).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Create OpenAPPA repository" }),
+  ).toBeInTheDocument();
 });
 
 test("members who cannot manage sync are told who can connect it", async () => {
@@ -265,13 +272,17 @@ test("a failed sync shows its error", async () => {
     source: { ...source, lastSyncError: "appa.toml was not found" },
   };
   show();
+  expect(await screen.findByText("GitHub sync failed")).toBeVisible();
   expect(
-    await screen.findByText("appa.toml was not found"),
-  ).toBeInTheDocument();
-  expect(screen.getByText("Sync failed")).toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: "Edit connection" }),
-  ).toBeInTheDocument();
+    within(screen.getByRole("alert")).getByRole("link", {
+      name: "Review sync settings",
+    }),
+  ).toHaveAttribute("href", "/settings/openappa");
+  expect(screen.getByText("example/policies")).toBeVisible();
+  expect(screen.getByRole("link", { name: /Sync settings/ })).toHaveAttribute(
+    "href",
+    "/settings/openappa",
+  );
 });
 
 test("once sync is connected the cards stay as status with no next step", async () => {

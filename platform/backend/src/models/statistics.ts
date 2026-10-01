@@ -47,7 +47,6 @@ import type {
   SortDirection,
   StatisticsTimeSeriesData,
   StatisticsTimeSeriesPoint,
-  StatisticsUserTimeSeriesData,
   TeamStatistics,
   UserModelUsage,
   UserStatistics,
@@ -309,6 +308,9 @@ class StatisticsModel {
         inputTokens: Number(row.inputTokens) || 0,
         outputTokens: Number(row.outputTokens) || 0,
         cost: Number(row.cost) || 0,
+        ...("subscriptionCost" in row
+          ? { subscriptionCost: Number(row.subscriptionCost) || 0 }
+          : {}),
         ...("cacheReadTokens" in row
           ? {
               cacheReadTokens:
@@ -343,6 +345,7 @@ class StatisticsModel {
           // Reset before accumulating; the `...row` spread would otherwise leave
           // the first row's value in place and the merge would never sum it.
           ...("cacheReadTokens" in row ? { cacheReadTokens: 0 } : {}),
+          ...("subscriptionCost" in row ? { subscriptionCost: 0 } : {}),
         } as T);
       }
 
@@ -356,6 +359,10 @@ class StatisticsModel {
       if ("cost" in row && "cost" in existing) {
         (existing as { cost: number }).cost +=
           Number((row as { cost: number }).cost) || 0;
+      }
+      if ("subscriptionCost" in row && "subscriptionCost" in existing) {
+        (existing as { subscriptionCost: number }).subscriptionCost +=
+          Number(row.subscriptionCost) || 0;
       }
       // Aggregate cache-read tokens (present only on model/agent series)
       if ("cacheReadTokens" in row && "cacheReadTokens" in existing) {
@@ -744,6 +751,7 @@ class StatisticsModel {
     sortDirection: SortDirection;
     includeTimeSeries: boolean;
     includeModels: boolean;
+    includeModelTimeSeries?: boolean;
     requestingUserId: string;
     /**
      * When false the caller may only see their own usage. Per-user usage is
@@ -760,6 +768,7 @@ class StatisticsModel {
       sortDirection,
       includeTimeSeries,
       includeModels,
+      includeModelTimeSeries = false,
       requestingUserId,
       canReadAllUsers,
     } = params;
@@ -839,21 +848,31 @@ class StatisticsModel {
 
     // PHASE 2 — page-scoped enrichment. Skipped entirely when the page is empty
     // so an empty `inArray` never reaches SQL.
-    const [timeSeriesByUser, modelsByUser] = await Promise.all([
-      includeTimeSeries && pageUserIds.length > 0
-        ? StatisticsModel.getUserTimeSeries({
-            timeframe,
-            userIds: pageUserIds,
-            whereClause,
-          })
-        : Promise.resolve(new Map<string, StatisticsTimeSeriesPoint[]>()),
-      includeModels && pageUserIds.length > 0
-        ? StatisticsModel.getUserModelBreakdown({
-            userIds: pageUserIds,
-            whereClause,
-          })
-        : Promise.resolve(new Map<string, UserModelUsage[]>()),
-    ]);
+    const [timeSeriesByUser, modelsByUser, modelTimeSeriesByUser] =
+      await Promise.all([
+        includeTimeSeries && pageUserIds.length > 0
+          ? StatisticsModel.getUserTimeSeries({
+              timeframe,
+              userIds: pageUserIds,
+              whereClause,
+            })
+          : Promise.resolve(new Map<string, StatisticsTimeSeriesPoint[]>()),
+        (includeModels || includeModelTimeSeries) && pageUserIds.length > 0
+          ? StatisticsModel.getUserModelBreakdown({
+              userIds: pageUserIds,
+              whereClause,
+            })
+          : Promise.resolve(new Map<string, UserModelUsage[]>()),
+        includeModelTimeSeries && pageUserIds.length > 0
+          ? StatisticsModel.getUserModelTimeSeries({
+              timeframe,
+              userIds: pageUserIds,
+              whereClause,
+            })
+          : Promise.resolve(
+              new Map<string, Map<string, StatisticsTimeSeriesPoint[]>>(),
+            ),
+      ]);
 
     const data = rows.map((row) => ({
       userId: row.userId,
@@ -870,7 +889,20 @@ class StatisticsModel {
       lastActiveAt: row.lastActiveAt
         ? new Date(row.lastActiveAt).toISOString()
         : null,
-      ...(includeModels ? { models: modelsByUser.get(row.userId) ?? [] } : {}),
+      ...(includeModels || includeModelTimeSeries
+        ? {
+            models: (modelsByUser.get(row.userId) ?? []).map((model) => ({
+              ...model,
+              ...(includeModelTimeSeries
+                ? {
+                    timeSeries:
+                      modelTimeSeriesByUser.get(row.userId)?.get(model.model) ??
+                      [],
+                  }
+                : {}),
+            })),
+          }
+        : {}),
       ...(includeTimeSeries
         ? { timeSeries: timeSeriesByUser.get(row.userId) ?? [] }
         : {}),
@@ -2168,45 +2200,86 @@ class StatisticsModel {
     userIds: string[];
     whereClause: SQL | undefined;
   }): Promise<Map<string, StatisticsTimeSeriesPoint[]>> {
-    const { timeframe, userIds, whereClause } = params;
-    const timeBucket = StatisticsModel.getTimeBucket(timeframe);
-
-    const rawRows = await db
-      .select({
-        userId: schema.interactionsTable.userId,
-        timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
-        requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
-        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
-        cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
-      })
-      .from(schema.interactionsTable)
-      .where(
-        and(whereClause, inArray(schema.interactionsTable.userId, userIds)),
-      )
-      .groupBy(
-        schema.interactionsTable.userId,
-        sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
-      )
-      .orderBy(
-        sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
-      );
-
-    const bucketed = StatisticsModel.groupTimeSeries(
-      // `user_id` is non-null here: the caller's WHERE already restricts to the
-      // page's user ids, which come from an inner join on users.
-      rawRows as StatisticsUserTimeSeriesData[],
-      timeframe,
-      "userId",
-    );
-
+    const rows = await StatisticsModel.getUserUsageTimeSeries(params);
     const byUser = new Map<string, StatisticsTimeSeriesPoint[]>();
-    for (const row of bucketed) {
+    for (const row of rows) {
+      if (!row.userId) continue;
       const points = byUser.get(row.userId) ?? [];
-      points.push({ timestamp: row.timeBucket, value: Number(row.cost) || 0 });
+      points.push(userUsageTimeSeriesPoint(row));
       byUser.set(row.userId, points);
     }
     return byUser;
+  }
+
+  private static async getUserModelTimeSeries(params: {
+    timeframe: StatisticsTimeFrame;
+    userIds: string[];
+    whereClause: SQL | undefined;
+  }): Promise<Map<string, Map<string, StatisticsTimeSeriesPoint[]>>> {
+    const rows = await StatisticsModel.getUserUsageTimeSeries({
+      ...params,
+      byModel: true,
+    });
+    const byUser = new Map<string, Map<string, StatisticsTimeSeriesPoint[]>>();
+    for (const row of rows) {
+      if (!row.userId || !row.model) continue;
+      const models =
+        byUser.get(row.userId) ??
+        new Map<string, StatisticsTimeSeriesPoint[]>();
+      const points = models.get(row.model) ?? [];
+      points.push(userUsageTimeSeriesPoint(row));
+      models.set(row.model, points);
+      byUser.set(row.userId, models);
+    }
+    return byUser;
+  }
+
+  /** Aggregate only the requested page, preserving both dimensions during rebucketing. */
+  private static async getUserUsageTimeSeries(params: {
+    timeframe: StatisticsTimeFrame;
+    userIds: string[];
+    whereClause: SQL | undefined;
+    byModel?: boolean;
+  }) {
+    const { timeframe, userIds, whereClause, byModel = false } = params;
+    const timeBucket = StatisticsModel.getTimeBucket(timeframe);
+    const model = byModel
+      ? schema.interactionsTable.model
+      : sql<null>`NULL::text`;
+    // created_at stores UTC without a timezone. Return an explicit instant so
+    // database drivers cannot interpret the bucket in the server's local zone.
+    const bucket = sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt}) AT TIME ZONE 'UTC'`;
+    const rows = await db
+      .select({
+        userId: schema.interactionsTable.userId,
+        model,
+        timeBucket: bucket,
+        requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
+        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
+        cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
+        cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
+        subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          whereClause,
+          inArray(schema.interactionsTable.userId, userIds),
+          byModel ? isNotNull(schema.interactionsTable.model) : undefined,
+        ),
+      )
+      .groupBy(schema.interactionsTable.userId, model, bucket)
+      .orderBy(bucket);
+
+    return StatisticsModel.groupTimeSeries(
+      rows.map((row) => ({
+        ...row,
+        groupKey: JSON.stringify([row.userId, row.model]),
+      })),
+      timeframe,
+      "groupKey",
+    );
   }
 
   /**
@@ -2490,3 +2563,25 @@ function sortAppStatistics(
 }
 
 export default StatisticsModel;
+
+function userUsageTimeSeriesPoint(row: {
+  timeBucket: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cost: number;
+  subscriptionCost: number;
+}): StatisticsTimeSeriesPoint {
+  const billedCost = Number(row.cost) || 0;
+  return {
+    timestamp: new Date(row.timeBucket).toISOString(),
+    value: billedCost,
+    requests: Number(row.requests) || 0,
+    inputTokens: Number(row.inputTokens) || 0,
+    outputTokens: Number(row.outputTokens) || 0,
+    cacheReadTokens: Number(row.cacheReadTokens) || 0,
+    billedCost,
+    subscriptionCost: Number(row.subscriptionCost) || 0,
+  };
+}

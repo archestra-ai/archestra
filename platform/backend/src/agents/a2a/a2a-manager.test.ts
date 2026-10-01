@@ -313,6 +313,41 @@ describe("A2AManager.sendMessage", () => {
     expect(executeA2AMessage.mock.calls[0][0].message).toBe("first\nsecond");
   });
 
+  test("a team actor passes its team id to execution", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1" });
+    const manager = new A2AManager({ stateless: true });
+    executeA2AMessage.mockClear();
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+
+    await manager.sendMessage({
+      actor: { id: "team1", kind: "team", organizationId: "org1" },
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: crypto.randomUUID(),
+          role: A2AProtocolRole.User,
+          parts: [{ text: "hi" }],
+        },
+        configuration: {},
+        metadata: {},
+      },
+    });
+
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+    const call = executeA2AMessage.mock.calls[0][0];
+    expect(call.userId).toBe("system");
+    expect(call.actorTeamId).toBe("team1");
+  });
+
   test("a blank text part does not pad the joined turn", async ({
     makeAgent,
   }) => {

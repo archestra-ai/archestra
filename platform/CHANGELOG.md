@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.4.0-rc.28](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.27...platform-v1.4.0-rc.28) (2026-09-30)
+
+
+### Features
+
+* **agents:** configure popular agent and runtime choices ([#8293](https://github.com/archestra-ai/archestra/issues/8293)) ([47a324b](https://github.com/archestra-ai/archestra/commit/47a324bbcca5cf499952cd067fc7915a64c75ad5))
+* expose per-model time series in user usage statistics ([#8311](https://github.com/archestra-ai/archestra/issues/8311)) ([c84e13a](https://github.com/archestra-ai/archestra/commit/c84e13ac1030f53cf28750b9b31bda5ecc51991a))
+* **mcp:** allow users to pin gateways ([#8292](https://github.com/archestra-ai/archestra/issues/8292)) ([c95b3d3](https://github.com/archestra-ai/archestra/commit/c95b3d38f248f02727e7aa9ab89e1c68570944ae))
+* **openappa:** configure proxy behavior for unsupported clients ([#8290](https://github.com/archestra-ai/archestra/issues/8290)) ([bd58629](https://github.com/archestra-ai/archestra/commit/bd58629e1570161153190d2c8673842588dd73a5))
+* **openappa:** create GitHub sync repositories through chat ([#8226](https://github.com/archestra-ai/archestra/issues/8226)) ([45d5946](https://github.com/archestra-ai/archestra/commit/45d5946ca7218d14aaea010e2851554f91ac8285))
+* **openappa:** explain what attaching and detaching a battery does ([#8285](https://github.com/archestra-ai/archestra/issues/8285)) ([09c2e44](https://github.com/archestra-ai/archestra/commit/09c2e44c9ddac1446270a504214cabef941196bc))
+* store and investigate OpenAPPA yells ([#8314](https://github.com/archestra-ai/archestra/issues/8314)) ([6f0e0e9](https://github.com/archestra-ai/archestra/commit/6f0e0e96555f9ba8a6140949cbc3a7b42e155ab5))
+
+
+### Bug Fixes
+
+* **a2a:** resolve team-token identity for MCP gateway lookups ([#8308](https://github.com/archestra-ai/archestra/issues/8308)) ([6e9a4a1](https://github.com/archestra-ai/archestra/commit/6e9a4a1342eece93a1ef1fbe48725b53799ccccb))
+* **agents:** keep Tools and Subagents columns compact ([#8288](https://github.com/archestra-ai/archestra/issues/8288)) ([acc729a](https://github.com/archestra-ai/archestra/commit/acc729a0b3d72fddd3ebcdd5bc51c9648e1fabdb))
+* **agents:** preserve terminal replay layout and add artifact links ([#8313](https://github.com/archestra-ai/archestra/issues/8313)) ([717756b](https://github.com/archestra-ai/archestra/commit/717756bde6a985a54a730cec48e52a7b7471d56a))
+* **chat:** cache Anthropic tool results between steps ([#8287](https://github.com/archestra-ai/archestra/issues/8287)) ([de2f5ee](https://github.com/archestra-ai/archestra/commit/de2f5ee393201e0e2b36ab2eb43008c4c93cb3dc))
+* **ci:** align MCP lockfile header with regeneration command ([#8309](https://github.com/archestra-ai/archestra/issues/8309)) ([07a1822](https://github.com/archestra-ai/archestra/commit/07a1822bd886c6c4bb2913eded767a87891d5e58))
+* **connection:** allow scoped setup requests through OpenAPPA ([#8303](https://github.com/archestra-ai/archestra/issues/8303)) ([e74408d](https://github.com/archestra-ai/archestra/commit/e74408d13df1641d7d5e3f3c1d2605324e26efb6))
+* **deps:** patch dependencies blocking docker image scans ([#8298](https://github.com/archestra-ai/archestra/issues/8298)) ([99f7dd1](https://github.com/archestra-ai/archestra/commit/99f7dd1a4ee6caed9ecd230af24a4bd0d0d34b5f))
+* **mcp:** report a missing Entra target as a configuration error ([#8284](https://github.com/archestra-ai/archestra/issues/8284)) ([ccc025d](https://github.com/archestra-ai/archestra/commit/ccc025deca87167b43a8a0caa3461c4aa9243591))
+* **mcp:** stop recovery from closing connections that sibling calls still use ([#8297](https://github.com/archestra-ai/archestra/issues/8297)) ([3476dc2](https://github.com/archestra-ai/archestra/commit/3476dc27ed78d573be8de6d99247f6a97f681a85))
+
+
+### Dependencies
+
+* bump the rust-dependencies group across 1 directory with 5 updates ([#8113](https://github.com/archestra-ai/archestra/issues/8113)) ([d70fe48](https://github.com/archestra-ai/archestra/commit/d70fe483ab6b212da39a25feaeab66f079202c44))
+
+
+### Code Refactoring
+
+* **frontend:** remove unmounted messaging channels section ([#8318](https://github.com/archestra-ai/archestra/issues/8318)) ([00daef7](https://github.com/archestra-ai/archestra/commit/00daef7b735a3382797fa3fe44b59bb53b86e713))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump undici from 7.29.0 to 7.29.1 in /platform/backend ([#8280](https://github.com/archestra-ai/archestra/issues/8280)) ([2af849c](https://github.com/archestra-ai/archestra/commit/2af849ccb2713f98b648d7ca72e99e32712d0d19))
+
 ## [1.4.0-rc.27](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.26...platform-v1.4.0-rc.27) (2026-09-29)
 
 

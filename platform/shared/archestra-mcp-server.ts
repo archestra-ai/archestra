@@ -139,6 +139,11 @@ export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
 // client on a gateway can pull a project's context into its own session.
 export const TOOL_LIST_PROJECTS_SHORT_NAME = "list_projects";
 export const TOOL_GET_PROJECT_SHORT_NAME = "get_project";
+// Link an existing app into a project, or remove that link. Headless like the
+// reads above; the app keeps its own permissions.
+export const TOOL_LINK_APP_TO_PROJECT_SHORT_NAME = "link_app_to_project";
+export const TOOL_UNLINK_APP_FROM_PROJECT_SHORT_NAME =
+  "unlink_app_from_project";
 // Scheduled tasks — the cron-driven agent triggers that live inside a project.
 // Tools manage project schedules and inspect their execution history.
 export const TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME =
@@ -244,12 +249,20 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "yell",
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   "get_guardrails_policy",
+  "get_openappa_yell",
   "list_guardrails_battery_fits",
   "inspect_guardrails_server",
   "validate_guardrails_policy",
   "preview_guardrails_policy_change",
   "update_guardrails_policy",
   "get_guardrails_policy_change_status",
+  "list_runtime_credentials",
+  "get_runtime_credential",
+  "create_runtime_credential",
+  "update_runtime_credential",
+  "delete_runtime_credential",
+  "request_runtime_credential_setup",
+  "create_guardrails_repository",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
@@ -325,6 +338,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_LIST_PROJECTS_SHORT_NAME,
   TOOL_GET_PROJECT_SHORT_NAME,
+  TOOL_LINK_APP_TO_PROJECT_SHORT_NAME,
+  TOOL_UNLINK_APP_FROM_PROJECT_SHORT_NAME,
   TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_UPDATE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_DELETE_SCHEDULE_TRIGGER_SHORT_NAME,
@@ -452,12 +467,20 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   yell: "openappa",
   get_remedy_plans: "openappa",
   get_guardrails_policy: "openappa",
+  get_openappa_yell: "openappa",
   list_guardrails_battery_fits: "openappa",
   inspect_guardrails_server: "openappa",
   validate_guardrails_policy: "openappa",
   preview_guardrails_policy_change: "openappa",
   update_guardrails_policy: "openappa",
   get_guardrails_policy_change_status: "openappa",
+  create_guardrails_repository: "openappa",
+  list_runtime_credentials: "openappa",
+  get_runtime_credential: "openappa",
+  create_runtime_credential: "openappa",
+  update_runtime_credential: "openappa",
+  delete_runtime_credential: "openappa",
+  request_runtime_credential_setup: "openappa",
 
   create_agent: "agents",
   get_agent: "agents",
@@ -543,6 +566,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   create_project_from_conversation: "projects",
   list_projects: "projects",
   get_project: "projects",
+  link_app_to_project: "projects",
+  unlink_app_from_project: "projects",
   // Scheduled tasks are a project surface in the product (a project's
   // Schedules section and its run history), so they group with Projects.
   create_schedule_trigger: "projects",

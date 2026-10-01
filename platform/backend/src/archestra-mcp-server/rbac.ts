@@ -33,6 +33,7 @@ export const TOOL_PERMISSIONS: Record<
   execute_remedy_plan: null,
   yell: null,
   get_remedy_plans: null,
+  get_openappa_yell: { resource: "log", action: "read" },
   get_guardrails_policy: { resource: "toolPolicy", action: "read" },
   list_guardrails_battery_fits: { resource: "toolPolicy", action: "read" },
   inspect_guardrails_server: { resource: "toolPolicy", action: "read" },
@@ -45,6 +46,16 @@ export const TOOL_PERMISSIONS: Record<
   get_guardrails_policy_change_status: {
     resource: "toolPolicy",
     action: "read",
+  },
+  create_guardrails_repository: { resource: "toolPolicy", action: "update" },
+  list_runtime_credentials: { resource: "credential", action: "read" },
+  get_runtime_credential: { resource: "credential", action: "read" },
+  create_runtime_credential: { resource: "credential", action: "create" },
+  update_runtime_credential: { resource: "credential", action: "update" },
+  delete_runtime_credential: { resource: "credential", action: "delete" },
+  request_runtime_credential_setup: {
+    resource: "credential",
+    action: "create",
   },
 
   // Agents
@@ -174,6 +185,10 @@ export const TOOL_PERMISSIONS: Record<
   // shared-with), so `project:read` never widens visibility past their own set.
   list_projects: { resource: "project", action: "read" },
   get_project: { resource: "project", action: "read" },
+  // Mirror the LinkProjectApp/UnlinkProjectApp routes: project membership is
+  // the floor, and the handler re-checks the caller's read access to the app.
+  link_app_to_project: { resource: "project", action: "read" },
+  unlink_app_from_project: { resource: "project", action: "read" },
 
   // Scheduled tasks — mirror the /api/schedule-triggers routes. As with the
   // project reads the permission is only the floor: every handler runs the

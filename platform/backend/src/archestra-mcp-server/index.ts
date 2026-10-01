@@ -25,6 +25,7 @@ import {
 } from "@/openappa/service";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
@@ -409,6 +410,15 @@ export async function executeArchestraTool(
   } catch (error) {
     if (error instanceof ZodError) {
       return zodValidationErrorResult({ toolName, error });
+    }
+    // Expected policy conflicts belong in the tool result so the agent can
+    // re-read and retry. Throwing makes the chat report a provider failure.
+    if (
+      error instanceof ApiError &&
+      error.statusCode === 409 &&
+      isOpenappaTool(archestraMcpBranding.getToolShortName(toolName))
+    ) {
+      return errorResult(error.message);
     }
     throw error;
   }

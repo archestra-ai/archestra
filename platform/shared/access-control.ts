@@ -641,6 +641,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetClientConnection]: {},
   [RouteId.DecideClientConnection]: {},
   [RouteId.CreateConnectionSetup]: {},
+  // A signed-in member may start a short connection window for their own user.
+  [RouteId.BeginConnectionPromptSession]: {},
   // Reports whether a pre-built VAF Add On package exists for this
   // installation, so the connector form can offer a download link that is
   // never a known 404. Reads nothing protected — the answer is the same for
@@ -1748,6 +1750,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateGuardrailsDeployment]: { organization: ["update"] },
   [RouteId.GetAppaGithubSync]: { toolPolicy: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organization: ["update"] },
+  [RouteId.CreateAppaGithubRepository]: { organization: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
   [RouteId.GetOpenappaBatteries]: { toolPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { toolPolicy: ["read"] },
@@ -1767,6 +1770,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
   // log:read sees the caller's own consults; log:admin lifts it org-wide in the handler.
+  [RouteId.GetOpenAppaYells]: { log: ["read"] },
+  [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
+  [RouteId.DownloadOpenAppaYell]: { log: ["read"] },
+  [RouteId.GetOpenAppaYell]: { log: ["read"] },
+  [RouteId.UpdateOpenAppaYell]: { log: ["read"], toolPolicy: ["update"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
   [RouteId.GetOpenappaCoverageEntities]: { toolPolicy: ["read"] },
@@ -1852,6 +1860,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetProjectInstructions]: { project: ["update"] },
   [RouteId.PinProject]: { project: ["read"] },
   [RouteId.UnpinProject]: { project: ["read"] },
+  // Linked apps: project membership plus app read. Each app is re-checked
+  // against the caller's own app access in the handler, so a link never
+  // widens who can open an app.
+  [RouteId.GetProjectApps]: { project: ["read"], app: ["read"] },
+  [RouteId.LinkProjectApp]: { project: ["read"], app: ["read"] },
+  [RouteId.UnlinkProjectApp]: { project: ["read"], app: ["read"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
   // Editing a file's text content shares the delete path's authorization
   // (author / project access), enforced per-file in the store handler.
@@ -1957,6 +1971,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // MCP Gateway Routes - available to all authenticated users
   [RouteId.McpGatewayGet]: {}, // MCP transport probe; authenticates gateway credentials
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
+  [RouteId.McpGatewayDelete]: {}, // Session cleanup; validates gateway credentials and signed session ownership
   [RouteId.McpGatewaySseMessage]: {}, // Legacy HTTP+SSE message endpoint; authenticates gateway credentials
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
   [RouteId.McpServerProxyPost]: {}, // Server-scoped Apps proxy; access enforced in-handler

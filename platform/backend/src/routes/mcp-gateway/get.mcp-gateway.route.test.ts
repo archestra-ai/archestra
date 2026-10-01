@@ -9,6 +9,10 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { TeamTokenModel } from "@/models";
+import {
+  CONNECTION_SETUP_CONTEXT_PARAM,
+  issueConnectionSetupContext,
+} from "@/services/connection-setup-context";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "../oauth-server";
@@ -153,6 +157,59 @@ describe("MCP Gateway GET transport", () => {
         `/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}`,
       );
       expect(response.json()).not.toHaveProperty("agentId");
+    }
+  });
+
+  test("unauthenticated setup-context gateway URL challenges advertise the query-free metadata URL", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ agentType: "mcp_gateway" });
+    const setupContext = issueConnectionSetupContext({
+      userId: crypto.randomUUID(),
+      organizationId: agent.organizationId,
+      gatewayId: agent.id,
+      setupId: crypto.randomUUID(),
+      secret: "test-setup-signing-key",
+    });
+    const gatewayUrl = new URL(`http://localhost:9000/v1/mcp/${agent.slug}`);
+    gatewayUrl.searchParams.set(CONNECTION_SETUP_CONTEXT_PARAM, setupContext);
+    const requestUrl = `${gatewayUrl.pathname}${gatewayUrl.search}`;
+    const canonicalMetadataUrl = `http://localhost:9000/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}`;
+
+    for (const method of ["GET", "POST"] as const) {
+      const response = await app.inject({
+        method,
+        url: requestUrl,
+        headers: {
+          host: "localhost:9000",
+          accept:
+            method === "GET"
+              ? "text/event-stream"
+              : "application/json, text/event-stream",
+          ...(method === "POST" && { "content-type": "application/json" }),
+        },
+        ...(method === "POST" && {
+          payload: {
+            jsonrpc: "2.0",
+            method: "initialize",
+            params: {
+              protocolVersion: "2024-11-05",
+              capabilities: {},
+              clientInfo: { name: "test-client", version: "1.0.0" },
+            },
+            id: 1,
+          },
+        }),
+      });
+
+      expect(response.statusCode, method).toBe(401);
+      const challenge = String(response.headers["www-authenticate"]);
+      expect(challenge, method).toBe(
+        `Bearer resource_metadata="${canonicalMetadataUrl}"`,
+      );
+      expect(challenge, method).not.toContain("cs1_");
+      expect(challenge, method).not.toContain(setupContext);
+      expect(challenge, method).not.toContain("?");
     }
   });
 

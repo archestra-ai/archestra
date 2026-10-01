@@ -81,6 +81,18 @@ test("remedy tools open human review without asking for prior consent", () => {
   );
 });
 
+test("only the policy read advertises a read-only MCP annotation", () => {
+  const tools = getAllArchestraMcpTools();
+  expect(
+    tools.find((tool) => tool.name.endsWith("__get_guardrails_policy"))
+      ?.annotations,
+  ).toMatchObject({ readOnlyHint: true });
+  expect(
+    tools.find((tool) => tool.name.endsWith("__update_guardrails_policy"))
+      ?.annotations?.readOnlyHint,
+  ).not.toBe(true);
+});
+
 describe("openappa remedy plan HITL execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;

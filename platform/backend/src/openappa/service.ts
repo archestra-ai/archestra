@@ -17,6 +17,7 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   expandCommandExecutionPolicyRules,
@@ -25,6 +26,7 @@ import {
 import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
 import { openappaFailure } from "@/openappa/failure";
+import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
@@ -231,13 +233,55 @@ export async function executeYell(params: {
 }): Promise<CallToolResult> {
   if (!openappaYellEnabled())
     throw new ApiError(404, "OpenAPPA reporting is disabled");
-  return runtimeToolResult(
-    await dispatch(params.session, {
-      event: "yell",
-      operation_id: `yell:${params.toolCallId}`,
-      arguments: params.args,
-    }),
-  );
+  const record = await OpenAppaYellModel.record({
+    organizationId: params.session.organization_id,
+    callerId: params.session.caller_id ?? "unknown",
+    sessionId: params.session.session_id,
+    toolCallId: params.toolCallId,
+    message: params.args.message,
+    withTrajectory: params.args.with_trajectory,
+  });
+  try {
+    const result = await captureYellReport({
+      id: record.id,
+      organizationId: record.organizationId,
+      send: async (receiver) =>
+        runtimeToolResult(
+          await dispatch(params.session, {
+            event: "yell",
+            operation_id: `yell:${params.toolCallId}`,
+            arguments: params.args,
+            yell_receiver: receiver,
+          }),
+        ),
+    });
+    if (config.analytics.enabled) {
+      await OpenAppaYellModel.recordDelivery({
+        id: record.id,
+        organizationId: record.organizationId,
+        failed: Boolean(result.isError),
+      });
+    }
+    if (!result.isError) {
+      return {
+        ...result,
+        content: [
+          {
+            type: "text",
+            text: "Report saved. You can download it or investigate it in chat from Guardrails → Yells.",
+          },
+        ],
+      };
+    }
+    return result;
+  } catch (error) {
+    await OpenAppaYellModel.recordDelivery({
+      id: record.id,
+      organizationId: record.organizationId,
+      failed: true,
+    });
+    throw error;
+  }
 }
 
 /** The A2A executor identifies nested runs with a chain of agent UUIDs. */
@@ -700,14 +744,17 @@ export async function evaluateToolCalls(
       // The target is already canonical, so it is read, not re-canonicalized.
       const tool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn = options.isSpawn?.(call.name, call.namespace) === true;
+      const spelling = spawnRetrySpelling({
+        call,
+        tool,
+        spawn,
+        canonicalize: options.canonicalize,
+      });
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
         tool,
-        ...(tool !== call.name &&
-        options.canonicalize(call.name, call.namespace) === tool
-          ? { spelling: call.name }
-          : {}),
+        ...(spelling ? { spelling } : {}),
         presentation: nativePresentation(
           options.control?.name,
           options.supportsDelegation,
@@ -1243,6 +1290,37 @@ export async function loadOfferReview(params: {
     );
     throw openappaFailure(error);
   }
+}
+
+/**
+ * The name the authorized retry instruction should use. A direct dispatch
+ * keeps the client's spelling. A native spawn also names its namespace:
+ * Codex routes `collaboration.spawn_agent` on that field, and an instruction
+ * that says only `spawn_agent` is not a call the client can replay.
+ */
+function spawnRetrySpelling(params: {
+  call: { name: string; namespace?: string };
+  tool: string;
+  spawn: boolean;
+  canonicalize: (name: string, namespace?: string) => string;
+}): string | undefined {
+  if (
+    params.tool !== params.call.name &&
+    params.canonicalize(params.call.name, params.call.namespace) === params.tool
+  ) {
+    return params.call.name;
+  }
+  if (
+    !params.spawn ||
+    !params.call.namespace ||
+    params.call.namespace === "functions"
+  ) {
+    return undefined;
+  }
+  const prefix = `${params.call.namespace}.`;
+  return params.call.name.startsWith(prefix)
+    ? params.call.name
+    : `${prefix}${params.call.name}`;
 }
 
 function nativePresentation(

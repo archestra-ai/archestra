@@ -9,6 +9,8 @@ import * as database from "@/database";
 import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaYellModel from "@/models/openappa-yell";
+import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
 import {
@@ -18,6 +20,7 @@ import {
   evaluateHostedToolCalls,
   evaluateToolCalls,
   executeRemedyByOffer,
+  executeYell,
   loadChildReturns,
   loadOfferReview,
   processProxyResults,
@@ -135,6 +138,7 @@ describe("APPA feature boundary", () => {
     ).rejects.toMatchObject({ code: -32601 });
     expect(native.dispatchHook).not.toHaveBeenCalled();
     config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
     expect(
       getArchestraMcpTools().some((tool) => tool.name === "archestra__yell"),
     ).toBe(true);
@@ -187,8 +191,49 @@ describe("APPA feature boundary", () => {
     );
   });
 
+  test.each([
+    "spawn_agent",
+    "collaboration.spawn_agent",
+  ])("names a collaboration spawn in the retry spelling without changing its tool: %s", async (name) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call", spawn_binding: "fork-1" }),
+    );
+
+    await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "spawn",
+          name,
+          namespace: "collaboration",
+          arguments: { message: "Read the report", task_name: "reader" },
+        },
+      ],
+      {
+        canonicalize: (name) => name,
+        isSpawn: (candidate, namespace) =>
+          (candidate === "spawn_agent" ||
+            candidate === "collaboration.spawn_agent") &&
+          (namespace === undefined ||
+            namespace === "functions" ||
+            namespace === "collaboration"),
+      },
+    );
+
+    expect(
+      JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
+    ).toMatchObject({
+      event: "tool_call",
+      tool: name,
+      spelling: "collaboration.spawn_agent",
+      spawn: true,
+      arguments: { message: "Read the report", task_name: "reader" },
+    });
+  });
+
   test("reports through the authenticated native session after policy checking", async () => {
     config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
     const args = { message: "Confusing feedback", with_trajectory: true };
     native.dispatchHook
       .mockResolvedValueOnce(JSON.stringify({ decision: "allow_call" }))
@@ -214,8 +259,26 @@ describe("APPA feature boundary", () => {
       currentToolCallId: "report",
     });
     expect(result.content).toEqual([
-      { type: "text", text: "Receipt report-1" },
+      {
+        type: "text",
+        text: expect.stringContaining("Report saved"),
+      },
     ]);
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      message: args.message,
+      withTrajectory: args.with_trajectory,
+      callerId: session.caller_id,
+      sessionId: session.session_id,
+      reportFailed: false,
+      reportedAt: expect.any(Date),
+      resolvedAt: null,
+    });
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
     ).toEqual([
@@ -234,14 +297,99 @@ describe("APPA feature boundary", () => {
       {
         ...session,
         event: "yell",
+        yell_receiver: { port: expect.any(Number), token: expect.any(String) },
         operation_id: "yell:report",
         arguments: args,
       },
     ]);
   });
 
+  test("keeps a report when external delivery fails and deduplicates a retry", async () => {
+    config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
+    const params = {
+      session,
+      toolCallId: "retry-report",
+      args: { message: "A block needs investigation", with_trajectory: false },
+    };
+    native.dispatchHook.mockRejectedValueOnce(
+      new Error("Reporting unavailable"),
+    );
+    await expect(executeYell(params)).rejects.toThrow(
+      "policy runtime is unavailable",
+    );
+    let saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      reportFailed: true,
+      reportedAt: null,
+      message: params.args.message,
+    });
+    await OpenAppaYellModel.setResolved({
+      id: saved.data[0].id,
+      organizationId,
+      userId: "alice",
+      resolved: true,
+    });
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "Receipt" }] },
+      }),
+    );
+    await executeYell(params);
+    saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      reportFailed: false,
+      reportedAt: expect.any(Date),
+      resolvedAt: expect.any(Date),
+    });
+  });
+
+  test("records a native reporting refusal as failed delivery without resolving the yell", async () => {
+    config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: {
+          isError: true,
+          content: [{ type: "text", text: "Reporting service unavailable" }],
+        },
+      }),
+    );
+    const result = await executeYell({
+      session,
+      toolCallId: "failed-delivery",
+      args: { message: "A confusing remedy", with_trajectory: false },
+    });
+    expect(result.isError).toBe(true);
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "unresolved",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      message: "A confusing remedy",
+      reportFailed: true,
+      reportedAt: null,
+      resolvedAt: null,
+    });
+  });
+
   test("a gateway yell reports under the session and call the proxy allowed", async () => {
     config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
     const args = { message: "Confusing feedback", with_trajectory: false };
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({
@@ -269,14 +417,33 @@ describe("APPA feature boundary", () => {
     };
     const result = await executeArchestraTool("archestra__yell", args, gateway);
     expect(result.content).toEqual([
-      { type: "text", text: "Receipt report-1" },
+      {
+        type: "text",
+        text: expect.stringContaining("Report saved"),
+      },
     ]);
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      message: args.message,
+      withTrajectory: args.with_trajectory,
+      callerId: session.caller_id,
+      sessionId: session.session_id,
+      reportFailed: false,
+      reportedAt: expect.any(Date),
+      resolvedAt: null,
+    });
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
     ).toEqual([
       {
         ...session,
         event: "yell",
+        yell_receiver: { port: expect.any(Number), token: expect.any(String) },
         operation_id: "yell:toolu_report",
         arguments: args,
       },
@@ -288,6 +455,7 @@ describe("APPA feature boundary", () => {
 
   test("a gateway yell finds only the platform's yell, in its organization, with its arguments", async () => {
     config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
     const args = { message: "Confusing feedback", with_trajectory: true };
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "mcp_result", result: { content: [] } }),
@@ -335,6 +503,7 @@ describe("APPA feature boundary", () => {
 
   test("a yell takes its session and call from one source", async () => {
     config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
     const args = { message: "Confusing feedback", with_trajectory: false };
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "mcp_result", result: { content: [] } }),
@@ -373,6 +542,7 @@ describe("APPA feature boundary", () => {
 
   test("reporting refuses missing identity and unprotected child calls", async () => {
     config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
     const args = { message: "Confusing feedback", with_trajectory: false };
     await expect(
       executeArchestraTool("archestra__yell", args, {
@@ -987,18 +1157,27 @@ describe("APPA feature boundary", () => {
     );
   });
 
-  test("keeps a successful spawn launch pending until the child binds", async () => {
+  test.each([
+    '{"agent_id":"child-1"}',
+    '{"task_name":"/root/child"}',
+  ])("keeps a successful spawn launch pending until the child binds: %s", async (content) => {
+    const adapter = new AppaCodexAdapter();
+    const launch = {
+      id: "spawn",
+      name: "spawn_agent",
+      namespace: "collaboration",
+      content,
+      isError: false,
+    };
     native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
     const result = await processProxyResults({
       session,
       canonicalize: (name) => name,
-      classifySpawnResult: (answer) =>
-        answer.name === "spawn_agent" ? "pending" : undefined,
+      classifySpawnResult: (answer) => adapter.classifySpawnResult(answer),
       results: [
         {
-          id: "spawn",
-          name: "spawn_agent",
-          content: '{"agent_id":"child-1"}',
+          ...launch,
+          content: adapter.normalizeChildLaunchResult(launch) ?? content,
           isError: false,
         },
       ],

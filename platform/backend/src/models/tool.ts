@@ -825,7 +825,7 @@ class ToolModel {
         eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
       )
       .where(whereClause)
-      .orderBy(desc(schema.toolsTable.createdAt))
+      .orderBy(desc(schema.toolsTable.createdAt), asc(schema.toolsTable.id))
       .limit(params.pagination.limit)
       .offset(params.pagination.offset);
 

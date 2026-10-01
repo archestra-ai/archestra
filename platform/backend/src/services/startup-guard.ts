@@ -392,6 +392,17 @@ remember_disconnected() { printf '%s\\n' "$1" >> "$SKIP_FILE" 2>/dev/null || tru
 # longer exists.
 GUARD_UNINSTALLED=0
 uninstall_guard() {
+  ${
+    client.clientId === "codex"
+      ? `if [ -f "$GUARD_PATH.handoff.cjs" ]; then
+    if ! command -v node >/dev/null 2>&1 || ! node "$GUARD_PATH.handoff.cjs" --remove-direct; then
+      printf '%s\n' 'Could not restore Codex settings; keeping the startup guard for a later retry.' >&2
+      return 0
+    fi
+  fi
+  rm -f "$GUARD_PATH.handoff.cjs" 2>/dev/null || true`
+      : ""
+  }
   GUARD_UNINSTALLED=1
   rm -f "$GUARD_PATH" "$SKIP_FILE" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
@@ -1169,9 +1180,7 @@ export function buildStartupGuardInstallSection(
     : `rm -f "${promptPath}"`;
   const extraInstall =
     client.clientId === "codex"
-      ? handoffEnabled
-        ? `printf '%s' ${sh(CODEX_HANDOFF_HELPER)} > "${guardPath}.handoff.cjs"`
-        : `rm -f "${guardPath}.handoff.cjs"`
+      ? `printf '%s' ${sh(CODEX_HANDOFF_HELPER)} > "${guardPath}.handoff.cjs"`
       : client.clientId === "copilot-cli"
         ? handoffEnabled
           ? `mkdir -p "${guardPath}.instructions"\ncp "${promptPath}" "${guardPath}.instructions/AGENTS.md"`
@@ -1209,6 +1218,7 @@ export function buildStartupGuardInstallSection(
 mkdir -p "$(dirname "${guardPath}")"
 ${promptInstall}
 ${extraInstall}
+${client.clientId === "codex" ? `node "${guardPath}.handoff.cjs" ${ctx.proxy ? '--install-direct "$(command -v codex)"' : "--remove-direct"}` : ""}
 # A guard installed BEFORE the version-check feature has no GUARD_FORMAT_VERSION
 # stamp and no [U] update check, so at launch it can never nudge the user to
 # re-connect on its own — the [U] launch prompt only exists in version-aware
@@ -1252,6 +1262,20 @@ ${client.binary}() {
   if [ -x "$HOME/${client.scriptRelpath}" ]; then
     "$HOME/${client.scriptRelpath}" "$@" || true
   fi${promptArgs}
+  ${
+    client.clientId === "codex" && ctx.proxy
+      ? `local archestra_direct_config
+  if [ -f "$HOME/${client.scriptRelpath}" ] && ! grep -qx proxy "$HOME/${client.skipRelpath}" 2>/dev/null; then
+    if ! command -v node >/dev/null 2>&1 || [ ! -r "${guardPath}.handoff.cjs" ]; then
+      printf '%s\n' 'Could not prepare Codex direct tool mode; refusing a proxy-connected launch.' >&2
+      return 1
+    fi
+    archestra_direct_config=$(node "${guardPath}.handoff.cjs" --direct "$(command -v codex)" "$@") || return 1
+    set -- -c 'features.code_mode_host=false' -c 'web_search="disabled"' -c "$archestra_direct_config" "$@"
+  fi
+  `
+      : ""
+  }
   ${
     handoffEnabled && client.clientId === "copilot-cli"
       ? `if [ -n "$archestra_instructions_dir" ]; then

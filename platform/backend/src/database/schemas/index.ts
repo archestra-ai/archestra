@@ -196,6 +196,7 @@ export { default as oauthRefreshTokensTable } from "./oauth-refresh-token";
 export * from "./openappa";
 export * from "./openappa-batteries";
 export * from "./openappa-github-sync";
+export { openappaYellsTable } from "./openappa-yell";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as pluginsTable } from "./plugin";
@@ -211,6 +212,7 @@ export {
   projectShareTeamsTable,
   projectShareUsersTable,
 } from "./project";
+export { default as projectAppsTable } from "./project-app";
 export { default as projectLabelsTable } from "./project-label";
 export { default as projectPinsTable } from "./project-pin";
 export { default as resourcePermissionPoliciesTable } from "./resource-permission-policy";

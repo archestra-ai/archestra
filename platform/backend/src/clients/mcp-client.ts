@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
@@ -4910,8 +4911,11 @@ class McpClient {
     );
     const toolsByCatalogId = new Map<string, McpToolAssignment>();
     for (const tool of assignedTools) {
+      // Built-ins run in this gateway; discovering them must not look for
+      // an external installation or manufacture an auth error in the audit log.
       if (
         tool.catalogId &&
+        tool.catalogId !== ARCHESTRA_MCP_CATALOG_ID &&
         !toolsByCatalogId.has(tool.catalogId) &&
         !isToolIdentityExcluded(
           { catalogId: tool.catalogId, name: tool.toolName },

@@ -26,6 +26,7 @@ import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
@@ -256,6 +257,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "per-user pin on a project; personal preference, not an access change",
+  },
+  projectAppsTable: {
+    audited: false,
+    reason:
+      "join: project × app; audited as project.updated via the project's appIds snapshot",
   },
   userOnboardingSeenItemsTable: {
     audited: false,
@@ -993,6 +999,7 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "authenticated adapter identity mapping",
   },
+  openappaYellsTable: { audited: true, model: OpenAppaYellModel },
   openappaExternalConsultsTable: {
     audited: false,
     reason: "external consult dataset the native runtime appends",

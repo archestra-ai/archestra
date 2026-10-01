@@ -109,6 +109,7 @@ export interface ChatPromptInputToolsProps {
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
   selectorAgentId?: string | null;
+  agentSelectorReadOnly?: boolean;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
   /** Source of the currently selected model (agent, organization, user, or null) */
@@ -187,6 +188,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   isContextCompacting = false,
   agentLlmApiKeyId,
   selectorAgentId,
+  agentSelectorReadOnly = false,
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
@@ -408,6 +410,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       <InitialAgentSelector
                         currentAgentId={selectorAgentId}
                         onAgentChange={handleAgentChange}
+                        readOnly={agentSelectorReadOnly}
                       />
                     </div>
                   )}
@@ -657,6 +660,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               <InitialAgentSelector
                 currentAgentId={selectorAgentId}
                 onAgentChange={handleAgentChange}
+                readOnly={agentSelectorReadOnly}
               />
             )}
           {!runtimeMode &&

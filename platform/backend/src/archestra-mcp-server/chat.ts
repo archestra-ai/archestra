@@ -60,7 +60,7 @@ const AskUserOptionSchema = z
 const AskUserOutputSchema = z.object({
   action: z
     .enum(["accept", "decline", "cancel"])
-    .describe("Whether the user submitted, declined, or canceled."),
+    .describe("Whether the choice form was submitted, declined, or canceled."),
   selected: z
     .array(z.string())
     .describe("The labels the user selected. Empty when declined or canceled."),
@@ -203,7 +203,12 @@ const registry = defineArchestraTools([
         header: effectiveArgs.header,
       });
 
-      if (outcome.status === "no_viewer") {
+      if (
+        outcome.status === "no_viewer" ||
+        (outcome.status === "answered" &&
+          outcome.result.action === "decline" &&
+          outcome.result._meta?.approvals_reviewer === "auto_review")
+      ) {
         return errorResult(
           hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_CHOICE_FORM_MESSAGE,
         );
@@ -233,9 +238,9 @@ const registry = defineArchestraTools([
             outcome.status === "unanswered"
               ? "The user did not answer the question in time."
               : action === "decline"
-                ? "The user declined to pick."
+                ? "The MCP client declined the choice form. It may not have reached the user."
                 : "The user dismissed the question.",
-            "This is the user's final decision on this question for this turn. Do not ask it again, offer the same options in prose, or end with a follow-up question or invitation. Wait for a new user message before revisiting this question.",
+            "No selection was returned. Do not ask again, offer the same options in prose, or end with a follow-up question or invitation. Wait for a new user message before revisiting this question.",
             // Several questions asked in one turn all carry the turn's offers,
             // so a dismissed one only refuses the remedy if it offered it.
             liveOffers.length > 0

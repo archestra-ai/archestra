@@ -13,6 +13,45 @@ const live = {
 };
 
 describe("runStatusMarks", () => {
+  it("shows a deadline-expired session without a failure badge", () => {
+    expect(
+      runStatusMarks(
+        {
+          ...live,
+          state: "TASK_STATE_FAILED",
+          endedAt: minutesAgo(1),
+          hardDeadlineAt: minutesAgo(2),
+        },
+        NOW,
+      ),
+    ).toMatchObject({ label: "Expired", dot: null, chip: null });
+  });
+  it("uses the retained workspace deadline when a resumed turn has a later estimated deadline", () => {
+    expect(
+      runStatusMarks(
+        {
+          ...live,
+          state: "TASK_STATE_FAILED",
+          endedAt: minutesAgo(1),
+          workspace: { state: "deleted", expiresAt: minutesAgo(2) },
+        },
+        NOW,
+      ),
+    ).toMatchObject({ label: "Expired", chip: null });
+  });
+  it("preserves a real failure that happened before the workspace expired", () => {
+    expect(
+      runStatusMarks(
+        {
+          ...live,
+          state: "TASK_STATE_FAILED",
+          endedAt: minutesAgo(5),
+          hardDeadlineAt: minutesAgo(2),
+        },
+        NOW,
+      ),
+    ).toMatchObject({ chip: { label: "Failed" } });
+  });
   it.each([
     [
       "booting",

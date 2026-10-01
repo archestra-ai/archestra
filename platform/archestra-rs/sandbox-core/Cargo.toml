@@ -50,7 +50,7 @@ tokio = { version = "1", features = [
     "io-util",
 ] }
 tracing = "0.1"
-tracing-opentelemetry = "0.33"
+tracing-opentelemetry = "0.34"
 tracing-subscriber = { version = "0.3", default-features = false, features = [
     "std",
     "fmt",

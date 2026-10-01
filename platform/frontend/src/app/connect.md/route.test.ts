@@ -68,7 +68,7 @@ describe("Connect agent instructions", () => {
     );
     expect(instructions).toContain("If auth_status is oauth, skip login");
     expect(instructions).toContain(
-      "Only if it is not_logged_in, run codex mcp login SERVER_NAME once",
+      "Only if auth_status is not_logged_in, run codex mcp login SERVER_NAME once",
     );
     expect(instructions).toContain(
       "Do not ask the user to run verification commands",

@@ -312,8 +312,6 @@ The following table lists all available permissions that can be assigned to cust
 | `toolPolicy:delete` | Remove tools and security policies |
 
 
-OpenAPPA chat actions also require Chat read/create, Agent read, and Skill read permissions. Investigation requires Policy read alongside Diagnostics read. Reading attached diagnostic archives requires Files manage and Code Sandbox execute permissions. Target-specific questions also require access to the target agent, MCP gateway, or MCP server.
-
 ## LLM API Permissions
 
 | API data | Required permissions | Visibility |

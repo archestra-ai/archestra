@@ -133,6 +133,56 @@ describe("gemini model fetchers", () => {
       ]);
     });
 
+    test("reads every catalog page, not only the first", async () => {
+      const page = (name: string, nextPageToken?: string) => ({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            models: [
+              {
+                name: `models/${name}`,
+                displayName: name,
+                supportedGenerationMethods: ["generateContent"],
+              },
+            ],
+            ...(nextPageToken ? { nextPageToken } : {}),
+          }),
+      });
+      mockFetch
+        .mockResolvedValueOnce(page("gemini-3.5-flash", "token-2"))
+        .mockResolvedValueOnce(page("gemini-3.8-flash"));
+
+      const models = await fetchGeminiModels("test-api-key");
+
+      expect(models.map((model) => model.id)).toEqual([
+        "gemini-3.5-flash",
+        "gemini-3.8-flash",
+      ]);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(String(mockFetch.mock.calls[0][0])).not.toContain("pageToken");
+      expect(String(mockFetch.mock.calls[1][0])).toContain("pageToken=token-2");
+    });
+
+    test("stops when the catalog repeats a page token", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            models: [
+              {
+                name: "models/gemini-3.5-flash",
+                supportedGenerationMethods: ["generateContent"],
+              },
+            ],
+            nextPageToken: "same-token",
+          }),
+      });
+
+      await fetchGeminiModels("test-api-key");
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
     test("throws error on API failure", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,

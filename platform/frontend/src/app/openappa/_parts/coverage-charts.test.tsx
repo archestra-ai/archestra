@@ -4,12 +4,24 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  test,
+  vi,
+} from "vitest";
+import { authClient } from "@/lib/clients/auth/auth-client";
+import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
 import { CoverageCharts } from "./coverage-charts";
 
 vi.mock("sonner");
 
 const origin = "http://localhost:9000";
+vi.mock("@/lib/clients/auth/auth-client");
+
 const server = setupServer(
   http.get("http://localhost:9000/api/agents/all", () =>
     HttpResponse.json([
@@ -28,6 +40,17 @@ const server = setupServer(
 beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
   archestraApiClient.setConfig({ baseUrl: origin });
+});
+beforeEach(() => {
+  vi.mocked(authClient.getSession).mockResolvedValue({
+    data: makeSession(),
+    error: null,
+  } as Awaited<ReturnType<typeof authClient.getSession>>);
+  server.use(
+    http.get("http://localhost:9000/api/user/permissions", () =>
+      HttpResponse.json(makeUserPermissions()),
+    ),
+  );
 });
 afterEach(() => server.resetHandlers());
 afterAll(() => {

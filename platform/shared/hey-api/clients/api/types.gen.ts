@@ -86922,6 +86922,12 @@ export type GetOpenAppaYellsResponses = {
             resolvedAt: string | null;
             resolvedBy: string | null;
             hasArchive: boolean;
+            caller: {
+                id: string;
+                type?: 'user' | 'service_account';
+                name: string | null;
+                email: string | null;
+            } | null;
         }>;
         pagination: {
             limit: number;
@@ -87108,6 +87114,12 @@ export type GetOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -87207,6 +87219,12 @@ export type UpdateOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -87500,7 +87518,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -87524,7 +87542,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
     };
     path?: never;
@@ -87608,7 +87626,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87794,7 +87812,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87809,7 +87827,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
     };
     path: {
@@ -87898,7 +87916,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -108085,7 +108103,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
     }>;
 };
@@ -108169,7 +108187,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
     };
 };
 

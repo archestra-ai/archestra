@@ -7402,6 +7402,24 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       expect(response.statusCode, response.body).toBe(403);
     });
 
+    test("rate limits invalid shell tickets per IP before remedy execution", async () => {
+      enableExperiment();
+      const request = (remoteAddress: string) =>
+        app.inject({
+          method: "POST",
+          url: "/v1/openai/openappa/execute-remedy",
+          remoteAddress,
+          payload: { ticket: "not-issued" },
+        });
+      for (let i = 0; i < 60; i++) {
+        expect((await request("198.51.100.10")).statusCode).toBe(403);
+      }
+      const limited = await request("198.51.100.10");
+      expect(limited.statusCode, limited.body).toBe(429);
+      expect((await request("198.51.100.11")).statusCode).toBe(403);
+      expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
+    });
+
     test("refuses an invented offer as text without exposing a control tool", async () => {
       enableExperiment();
       stubProvider([

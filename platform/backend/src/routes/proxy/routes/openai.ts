@@ -3,8 +3,9 @@ import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isRateLimited } from "@/agents/utils";
 import { executeArchestraTool } from "@/archestra-mcp-server";
-import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { verifyOfferClaims } from "@/openappa/offer-claims";
@@ -86,6 +87,17 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request) => {
       if (!config.openappa.opencodeShellRemedy) {
         throw new ApiError(404, "OpenAPPA shell execution is disabled");
+      }
+      if (
+        await isRateLimited(
+          `${CacheKey.OpenAppaShellExecutionRateLimit}-${request.ip}`,
+          { windowMs: 60_000, maxRequests: 60 },
+        )
+      ) {
+        throw new ApiError(
+          429,
+          "Too many shell remedy requests. Try again later.",
+        );
       }
       const ticket = verifyShellExecutionTicket({
         token: request.body.ticket,

@@ -57,6 +57,8 @@ export const CacheKey = {
   OpenAppaShellExecution: "openappa-shell-execution",
   /** EXPERIMENTAL: identifies issued control calls across client-history turns */
   OpenAppaShellExecutionCall: "openappa-shell-execution-call",
+  /** EXPERIMENTAL: bounds signed remedy requests before ticket verification */
+  OpenAppaShellExecutionRateLimit: "openappa-shell-execution-rate-limit",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */

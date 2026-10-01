@@ -1530,7 +1530,7 @@ async function admitRelayArrivals(params: {
   };
   // A teammate's envelope names it by its name, and its child id is
   // `<name>@<team>`. So its message counts only against what the one child
-  // that name fits crossed; a name that fits several children fits none. A
+  // with that name crossed. A name that fits several children fits none. A
   // sibling's or the parent's message reaches a teammate as an address from
   // its parent.
   const fromTeammate = new Map<string, Promise<string[]>>();

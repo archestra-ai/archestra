@@ -44,7 +44,7 @@ A subagent's answer reaches its session only through a return check. Before the 
 
 Claude Code teammates pass the same check. A teammate's message to its lead crosses the check, and the lead takes on the message's restrictions. A lead's message carries the lead's restrictions to the teammate. After the lead reads a private report, for example, the teammate it messages cannot post the report publicly either.
 
-The model reads a message only if it passed the check on its way. Any other message is withheld, and the model reads a notice in its place. This includes messages from other sessions, and messages that arrived while enforcement was off, even ones the model already read. Claude Code's own team notices, such as a teammate going idle or a plan approval without feedback, carry no agent text, so they pass as they are.
+The model reads a message only if it passed the check on its way. Any other message is withheld, and the model reads a notice in its place. This holds for messages from other sessions too. It also holds for messages from before enforcement turned on — even ones the model already read. Claude Code's own team notices, such as a teammate going idle, carry no agent text. They pass as they are.
 
 A teammate that started while enforcement was off cannot be checked. OpenAPPA refuses its requests and does not send it messages. Start a new teammate, under a new name, to continue its work. OpenAPPA checks each teammate from its own spawn, so it refuses a second teammate under a name the session already used.
 

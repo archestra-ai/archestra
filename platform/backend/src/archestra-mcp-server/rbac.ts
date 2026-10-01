@@ -33,6 +33,7 @@ export const TOOL_PERMISSIONS: Record<
   execute_remedy_plan: null,
   yell: null,
   get_remedy_plans: null,
+  get_openappa_yell: { resource: "log", action: "read" },
   get_guardrails_policy: { resource: "toolPolicy", action: "read" },
   list_guardrails_battery_fits: { resource: "toolPolicy", action: "read" },
   inspect_guardrails_server: { resource: "toolPolicy", action: "read" },
@@ -45,6 +46,16 @@ export const TOOL_PERMISSIONS: Record<
   get_guardrails_policy_change_status: {
     resource: "toolPolicy",
     action: "read",
+  },
+  create_guardrails_repository: { resource: "toolPolicy", action: "update" },
+  list_runtime_credentials: { resource: "credential", action: "read" },
+  get_runtime_credential: { resource: "credential", action: "read" },
+  create_runtime_credential: { resource: "credential", action: "create" },
+  update_runtime_credential: { resource: "credential", action: "update" },
+  delete_runtime_credential: { resource: "credential", action: "delete" },
+  request_runtime_credential_setup: {
+    resource: "credential",
+    action: "create",
   },
 
   // Agents

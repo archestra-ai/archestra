@@ -18,7 +18,7 @@ import {
   expect,
   test,
 } from "@/test";
-import type { User } from "@/types";
+import type { User, UserStatistics } from "@/types";
 
 vi.mock("@/auth");
 // `app:admin` and the skills admin gate are resolved through this module
@@ -116,6 +116,7 @@ describe("GET /api/statistics/users", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.json().data[0].models[0].timeSeries).toBeUndefined();
     expect(response.json().data[0].models).toEqual([
       expect.objectContaining({ model: "gpt-4o", requests: 1 }),
     ]);
@@ -170,13 +171,360 @@ describe("GET /api/statistics/users", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/statistics/users?timeframe=24h",
+      url: "/api/statistics/users?timeframe=24h&includeModelTimeSeries=true&includeTimeSeries=true",
     });
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.data).toHaveLength(1);
     expect(body.data[0].userId).toBe(currentUser.id);
+    expect(body.data[0].models[0].timeSeries[0]).toMatchObject({
+      requests: 1,
+      inputTokens: 5,
+    });
+    expect(body.data[0].timeSeries[0]).toMatchObject({
+      requests: 1,
+      inputTokens: 5,
+    });
+  });
+
+  test("returns daily model usage that reconciles with daily requests and user totals", async ({
+    makeAgent,
+    makeInteraction,
+    makeUser,
+    makeOrganization,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const colleague = await makeUser();
+    const otherOrg = await makeOrganization();
+    const otherAgent = await makeAgent({ organizationId: otherOrg.id });
+    const days = ["2026-09-02", "2026-09-05", "2026-09-28"];
+    for (const userId of [currentUser.id, colleague.id]) {
+      for (const day of days) {
+        for (const model of ["model-a", "model-b"]) {
+          await makeInteraction(agent.id, {
+            userId,
+            model,
+            inputTokens: 100,
+            outputTokens: 20,
+            cacheReadTokens: 30,
+            cost: "1.25",
+            billingMode: "metered",
+            createdAt: new Date(`${day}T01:00:00Z`),
+          });
+          await makeInteraction(agent.id, {
+            userId,
+            model,
+            inputTokens: 200,
+            outputTokens: 40,
+            cacheReadTokens: 60,
+            cost: "2.50",
+            billingMode: "subscription",
+            createdAt: new Date(`${day}T23:59:59Z`),
+          });
+        }
+      }
+    }
+    // Same identity/model in another organization, outside the range, and
+    // unattributed usage must not enter either enrichment query.
+    for (const [profileId, userId, createdAt] of [
+      [otherAgent.id, currentUser.id, "2026-09-05T12:00:00Z"],
+      [agent.id, currentUser.id, "2026-08-31T23:59:59Z"],
+      [agent.id, null, "2026-09-05T12:00:00Z"],
+    ] as const) {
+      await makeInteraction(profileId, {
+        userId,
+        model: "model-a",
+        inputTokens: 9000,
+        cost: "900",
+        createdAt: new Date(createdAt),
+      });
+    }
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?timeframe=custom:2026-09-01T00:00:00Z_2026-09-29T23:59:59Z&includeTimeSeries=true&includeModels=false&includeModelTimeSeries=true",
+    });
+    expect(response.statusCode).toBe(200);
+    const users = response.json<{ data: UserStatistics[] }>().data;
+    expect(users).toHaveLength(2);
+    for (const user of users) {
+      expect(user.models).toHaveLength(2);
+      expect(user.timeSeries).toEqual(
+        days.map((day) => ({
+          timestamp: `${day}T00:00:00.000Z`,
+          value: 2.5,
+          billedCost: 2.5,
+          requests: 4,
+          inputTokens: 600,
+          outputTokens: 120,
+          cacheReadTokens: 180,
+          subscriptionCost: 5,
+        })),
+      );
+      for (const model of user.models ?? []) {
+        expect(model.timeSeries).toEqual(
+          days.map((day) => ({
+            timestamp: `${day}T00:00:00.000Z`,
+            value: 1.25,
+            billedCost: 1.25,
+            requests: 2,
+            inputTokens: 300,
+            outputTokens: 60,
+            cacheReadTokens: 90,
+            subscriptionCost: 2.5,
+          })),
+        );
+        for (const metric of [
+          "requests",
+          "inputTokens",
+          "outputTokens",
+          "cacheReadTokens",
+          "billedCost",
+          "subscriptionCost",
+        ] as const) {
+          expect(
+            model.timeSeries?.reduce(
+              (sum, point) => sum + (point[metric] ?? 0),
+              0,
+            ),
+          ).toBe(model[metric]);
+        }
+      }
+    }
+    // One monthly response carries the same per-day values as the existing
+    // daily-request workaround, despite that request using hourly buckets.
+    for (const day of days) {
+      const daily = await app.inject({
+        method: "GET",
+        url: `/api/statistics/users?timeframe=custom:${day}T00:00:00Z_${day}T23:59:59.999Z&includeModels=true`,
+      });
+      expect(daily.statusCode).toBe(200);
+      for (const user of daily.json<{ data: UserStatistics[] }>().data) {
+        for (const model of user.models ?? []) {
+          const point = users
+            .find((row) => row.userId === user.userId)
+            ?.models?.find((row) => row.model === model.model)
+            ?.timeSeries?.find((row) => row.timestamp.startsWith(day));
+          expect(point).toMatchObject({
+            requests: model.requests,
+            inputTokens: model.inputTokens,
+            outputTokens: model.outputTokens,
+            cacheReadTokens: model.cacheReadTokens,
+            billedCost: model.billedCost,
+            subscriptionCost: model.subscriptionCost,
+          });
+        }
+      }
+    }
+  });
+
+  test("keeps null-model usage in user totals while omitting it from model series", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    for (const model of [null, "model-a"]) {
+      await makeInteraction(agent.id, {
+        userId: currentUser.id,
+        model,
+        cost: null,
+        inputTokens: null,
+        outputTokens: null,
+        cacheReadTokens: null,
+        createdAt: new Date("2026-09-05T12:00:00Z"),
+      });
+    }
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?timeframe=custom:2026-09-01T00:00:00Z_2026-09-29T23:59:59Z&includeTimeSeries=true&includeModelTimeSeries=true",
+    });
+    expect(response.statusCode).toBe(200);
+    const [user] = response.json().data;
+    expect(user.timeSeries).toEqual([
+      {
+        timestamp: "2026-09-05T00:00:00.000Z",
+        requests: 2,
+        value: 0,
+        billedCost: 0,
+        subscriptionCost: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+      },
+    ]);
+    expect(user.models).toHaveLength(1);
+    expect(user.models[0]).toMatchObject({
+      model: "model-a",
+      requests: 1,
+      timeSeries: [{ requests: 1 }],
+    });
+  });
+
+  test.for([
+    [
+      "custom:2026-08-01T00:00:00Z_2026-09-29T23:59:59Z",
+      "2026-09-07T00:00:00.000Z",
+      24 * 60 * 60 * 1000,
+    ],
+    [
+      "7d",
+      new Date(
+        Date.UTC(
+          new Date().getUTCFullYear(),
+          new Date().getUTCMonth(),
+          new Date().getUTCDate() - 1,
+        ),
+      ).toISOString(),
+      60 * 60 * 1000,
+    ],
+    [
+      "90d",
+      new Date(
+        Math.floor((Date.now() - 5 * 86400000) / (3 * 86400000)) * 3 * 86400000,
+      ).toISOString(),
+      86400000,
+    ],
+  ] as const)("preserves user/model dimensions and sums all metrics across %s buckets", async ([
+    timeframe,
+    timestamp,
+    spacing,
+  ], { makeAgent, makeInteraction, makeUser }) => {
+    const agent = await makeAgent({ organizationId });
+    const colleague = await makeUser();
+    for (const [userId, multiplier] of [
+      [currentUser.id, 1],
+      [colleague.id, 10],
+    ] as const) {
+      for (const [model, tokens] of [
+        ["model-a", 100],
+        ["model-b", 200],
+      ] as const) {
+        for (let index = 0; index < 2; index++) {
+          await makeInteraction(agent.id, {
+            userId,
+            model,
+            inputTokens: tokens * multiplier,
+            outputTokens: 20,
+            cacheReadTokens: 30,
+            cost: "1.25",
+            billingMode: "subscription",
+            createdAt: new Date(
+              new Date(timestamp).getTime() + index * spacing + 60000,
+            ),
+          });
+        }
+      }
+    }
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/statistics/users?timeframe=${timeframe}&includeTimeSeries=true&includeModelTimeSeries=true`,
+    });
+    expect(response.statusCode).toBe(200);
+    const users = response.json<{ data: UserStatistics[] }>().data;
+    expect(users).toHaveLength(2);
+    for (const user of users) {
+      const multiplier = user.userId === currentUser.id ? 1 : 10;
+      expect(user.timeSeries).toEqual([
+        {
+          timestamp,
+          value: 0,
+          billedCost: 0,
+          requests: 4,
+          inputTokens: 600 * multiplier,
+          outputTokens: 80,
+          cacheReadTokens: 120,
+          subscriptionCost: 5,
+        },
+      ]);
+      expect(user.models).toHaveLength(2);
+      for (const model of user.models ?? []) {
+        expect(model.timeSeries).toEqual([
+          {
+            timestamp,
+            value: 0,
+            billedCost: 0,
+            requests: 2,
+            inputTokens: (model.model === "model-a" ? 200 : 400) * multiplier,
+            outputTokens: 40,
+            cacheReadTokens: 60,
+            subscriptionCost: 2.5,
+          },
+        ]);
+      }
+    }
+  });
+
+  test("validates the model series flag and keeps explicit false disabled", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      model: "model-a",
+    });
+    const disabled = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?includeModelTimeSeries=false",
+    });
+    expect(disabled.statusCode).toBe(200);
+    expect(disabled.json().data[0].models).toBeUndefined();
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?includeModelTimeSeries=invalid",
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
+  test("enriches only the requested page and handles an empty page", async ({
+    makeAgent,
+    makeInteraction,
+    makeUser,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const colleague = await makeUser();
+    for (const [userId, tokens] of [
+      [currentUser.id, 100],
+      [colleague.id, 200],
+    ] as const) {
+      await makeInteraction(agent.id, {
+        userId,
+        model: "model-a",
+        inputTokens: tokens,
+        outputTokens: 0,
+      });
+    }
+    const first = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?includeModelTimeSeries=true&limit=1&sortBy=totalTokens&sortDirection=asc",
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      data: [
+        {
+          userId: currentUser.id,
+          models: [{ timeSeries: [{ inputTokens: 100, requests: 1 }] }],
+        },
+      ],
+      pagination: { total: 2 },
+    });
+    expect(first.json().data).toHaveLength(1);
+    expect(first.json().data[0].timeSeries).toBeUndefined();
+    const second = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?includeModelTimeSeries=true&limit=1&offset=1&sortBy=totalTokens&sortDirection=asc",
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().data[0]).toMatchObject({
+      userId: colleague.id,
+      models: [{ timeSeries: [{ inputTokens: 200 }] }],
+    });
+    const empty = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?includeModelTimeSeries=true&includeTimeSeries=true&offset=2",
+    });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toMatchObject({ data: [], pagination: { total: 2 } });
   });
 
   test("rejects a custom timeframe whose bounds are not dates", async () => {

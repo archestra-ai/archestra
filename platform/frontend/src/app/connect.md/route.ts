@@ -1,5 +1,8 @@
 import { requestOrigin } from "@/lib/request-origin";
 
+const opencodeRestartInstruction =
+  "Do not stop or restart OpenCode from inside this conversation. Finish your reply and ask the user to save work, close OpenCode normally, then launch `opencode` in a new terminal.";
+
 export function GET(request: Request) {
   const origin = requestOrigin(request);
   const client = new URL(request.url).searchParams.get("client");
@@ -107,10 +110,10 @@ under Settings > Plugins. Send a message to make sure that inference works.
    merely because the installer printed its settings.
    For other clients, close with one short, imperative user instruction, e.g.:
    "Open a new terminal, then run claude /mcp and select <server> to sign in."
-   OpenCode: "Close every OpenCode process, then start opencode again."
+   OpenCode: ${opencodeRestartInstruction}
 6. Verify the configured gateway can list tools before reporting a working connection —
    in the new session, after authentication. OpenCode can check its connection
-   now with opencode mcp list, but must restart to load new tools.
+   now with opencode mcp list. The user-started session loads newly configured tools.
    Configuration applied alone does not prove MCP authentication succeeded.
    For clients requiring a new session, verification is that session's job.
    Codex: perform the fresh-process verification above from this conversation's
@@ -219,8 +222,7 @@ function focusedClientDetails(client: string): {
     case "opencode":
       return {
         label: "OpenCode",
-        finish:
-          "Run opencode mcp list. If SERVER_NAME is connected, skip authentication. Otherwise run opencode mcp auth list; if authentication is missing or expired, run CI=true opencode mcp auth SERVER_NAME and keep the process running while the user completes native OAuth consent. Do not start a second auth process while one is pending. Run opencode mcp list again, then close every OpenCode process and restart it to load new tools. Verify the gateway and any selected model proxy before reporting success.",
+        finish: `Run opencode mcp list. If SERVER_NAME is connected, skip authentication. Otherwise run opencode mcp auth list; if authentication is missing or expired, run CI=true opencode mcp auth SERVER_NAME and keep the process running while the user completes native OAuth consent. Do not start a second auth process while one is pending. Run opencode mcp list again. ${opencodeRestartInstruction} Ask the user to verify gateway tools and any selected model proxy in that new session. State that the connection remains unverified until those checks pass.`,
       };
     default:
       return null;

@@ -20,7 +20,7 @@ import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { ConnectivityProvider } from "@/lib/config/connectivity";
 import { makeAgent } from "@/mocks/data/agents";
-import { adminPermissionsSeed, makeSession } from "@/mocks/data/auth";
+import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
 import { configSeed } from "@/mocks/data/config";
 import { makeLlmProviderApiKey } from "@/mocks/data/llm-keys";
 import {
@@ -79,7 +79,7 @@ const server = setupServer(
   ),
   http.get("/ready", () => HttpResponse.json({ status: "ok" })),
   http.get("/api/user/permissions", () =>
-    HttpResponse.json(adminPermissionsSeed),
+    HttpResponse.json(makeUserPermissions({ chatAgentPicker: ["enable"] })),
   ),
   http.get("/api/resource-permissions", () => HttpResponse.json([])),
   http.get("/api/organization", () => HttpResponse.json(organizationSeed)),
@@ -197,6 +197,11 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   expect(
     await screen.findByRole("button", { name: "Chat actions" }),
   ).toBeInTheDocument();
+  expect(
+    screen.getByRole("combobox", {
+      name: "OpenAPPA Configuration Agent (locked)",
+    }),
+  ).toBeDisabled();
 
   await user.type(
     await screen.findByPlaceholderText("Ask a follow-up..."),
@@ -206,6 +211,22 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   expect(sent[1]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
+});
+
+test("a new OpenAPPA configuration chat keeps its agent selected", async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams({ agentId: agent.id }) as unknown as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+  renderChat();
+
+  expect(
+    await screen.findByRole("combobox", {
+      name: "OpenAPPA Configuration Agent (locked)",
+    }),
+  ).toBeDisabled();
+  expect(createBodies).toHaveLength(0);
 });
 
 test("an ordinary launch ready on mount creates and sends once under StrictMode", async () => {

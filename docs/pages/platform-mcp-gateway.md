@@ -28,6 +28,10 @@ Tool assignments can point to a specific installed MCP server connection or use 
 
 After the gateway is configured, use its **Connect** tab to copy connection details for supported clients.
 
+## Personal Pins
+
+Pinned gateways appear first, with the most recently pinned gateway at the top. Pins belong to you and do not affect other members' lists. Search and visibility filters still apply to pinned gateways.
+
 ## Ownership Transfers
 
 MCP gateways support [ownership transfers](/docs/platform-agents#ownership-transfers) between organization members. Their endpoint, assigned tools, and sharing settings stay unchanged. Your automatically created personal gateway stays with your account.

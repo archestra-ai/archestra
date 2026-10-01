@@ -8,7 +8,11 @@ import { AgentModel, AgentPinModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-describe("PUT/DELETE /api/agents/:id/pin", () => {
+describe.each([
+  "agent",
+  "mcp_gateway",
+  "profile",
+] as const)("PUT/DELETE /api/agents/:id/pin (%s)", (agentType) => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let admin: User;
@@ -40,7 +44,7 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: admin.id,
-      agentType: "agent",
+      agentType,
     });
 
     const pin = await app.inject({
@@ -55,7 +59,7 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
 
     const unpaginated = await app.inject({
       method: "GET",
-      url: "/api/agents/all?agentType=agent&excludeBuiltIn=true",
+      url: `/api/agents/all?agentType=${agentType}&excludeBuiltIn=true`,
     });
     expect(unpaginated.statusCode).toBe(200);
     const allItem = unpaginated
@@ -77,7 +81,7 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: admin.id,
-      agentType: "agent",
+      agentType,
     });
     const member = await makeUser({ email: "agent-pin-member@test.com" });
     await makeMember(member.id, organizationId, {});
@@ -114,7 +118,7 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
     const privateAgent = await makeAgent({
       organizationId,
       authorId: otherAuthor.id,
-      agentType: "agent",
+      agentType,
       access: "personal",
     });
     const stranger = await makeUser({ email: "agent-pin-stranger@test.com" });
@@ -134,7 +138,7 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
     const agent = await makeAgent({
       organizationId,
       authorId: admin.id,
-      agentType: "agent",
+      agentType,
     });
     await app.inject({ method: "PUT", url: `/api/agents/${agent.id}/pin` });
     await AgentModel.delete(agent.id);
@@ -162,25 +166,25 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
       name: `Alpha ${suffix}`,
       organizationId,
       authorId: admin.id,
-      agentType: "agent",
+      agentType,
     });
     const bravo = await makeAgent({
       name: `Bravo ${suffix}`,
       organizationId,
       authorId: admin.id,
-      agentType: "agent",
+      agentType,
     });
     const charlie = await makeAgent({
       name: `Charlie ${suffix}`,
       organizationId,
       authorId: admin.id,
-      agentType: "agent",
+      agentType,
     });
     const zulu = await makeAgent({
       name: `Zulu ${suffix}`,
       organizationId,
       authorId: admin.id,
-      agentType: "agent",
+      agentType,
     });
 
     await AgentPinModel.pin({ userId: admin.id, agentId: alpha.id });
@@ -229,6 +233,39 @@ describe("PUT/DELETE /api/agents/:id/pin", () => {
     ]);
     expect(unpinned.pagination.total).toBe(2);
     expect(unpinned.data.every((agent) => agent.pinnedAt === null)).toBe(true);
+  });
+
+  test("readers can pin without update permissions", async ({
+    makeCustomRole,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    await makeCustomRole(organizationId, {
+      role: "gateway_reader",
+      permission: {
+        [agentType === "mcp_gateway" ? "mcpGateway" : "agent"]: ["read"],
+      },
+    });
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId, { role: "gateway_reader" });
+    const resource = await makeAgent({
+      organizationId,
+      authorId: admin.id,
+      agentType,
+      access: { users: [reader.id], preset: "view" },
+    });
+    actingUser = reader;
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${resource.id}/pin`,
+    });
+    expect(response.statusCode).toBe(200);
+    const pins = await AgentPinModel.getPinnedAtForAgents({
+      userId: reader.id,
+      agentIds: [resource.id],
+    });
+    expect(pins.has(resource.id)).toBe(true);
   });
 
   test("pin routes are registered for dynamic agent authorization", () => {

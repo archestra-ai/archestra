@@ -1,11 +1,17 @@
 "use client";
 
+import {
+  buildConnectionPrompt,
+  hasNativeSetupSession,
+} from "@archestra/shared/connection-setup";
 import { Check, Copy, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import type { ConnectClient } from "./clients";
 
@@ -13,13 +19,24 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
   const appName = useAppName();
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
+  const connectionClientId = hasNativeSetupSession(client.id)
+    ? client.id
+    : undefined;
+  const { isError, refetch } = useConnectionPromptSession(
+    connectionClientId,
+    origin,
+  );
   useEffect(() => setOrigin(window.location.origin), []);
   useEffect(() => {
     if (!copied) return;
     const timeout = setTimeout(() => setCopied(false), 2000);
     return () => clearTimeout(timeout);
   }, [copied]);
-  const prompt = `Read ${origin}/connect.md?client=${encodeURIComponent(client.id)} and connect ${client.label}.`;
+  const prompt = buildConnectionPrompt({
+    origin,
+    clientId: client.id,
+    label: client.label,
+  });
 
   return (
     <div className="space-y-4">
@@ -48,6 +65,21 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
         Paste this prompt into {client.label}. Review and approve the setup in
         your browser.
       </p>
+      {connectionClientId && isError && (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <span className="font-medium">Could not start connection setup.</span>
+          <InlineNoticeText>Retry before you copy the prompt.</InlineNoticeText>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={() => refetch()}
+          >
+            Retry
+          </Button>
+        </InlineNotice>
+      )}
       <div className="space-y-2">
         <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
           <code className="min-w-0 flex-1 break-words font-mono text-sm leading-6">
@@ -62,6 +94,17 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
             title={copied ? "Copied" : "Copy prompt"}
             onClick={async () => {
               try {
+                if (connectionClientId) {
+                  const refreshed = await refetch();
+                  if (
+                    refreshed.isError ||
+                    !refreshed.data ||
+                    Date.parse(refreshed.data.expiresAt) <= Date.now()
+                  ) {
+                    toast.error("Could not start connection setup. Retry.");
+                    return;
+                  }
+                }
                 await copyToClipboard(prompt);
                 setCopied(true);
               } catch {

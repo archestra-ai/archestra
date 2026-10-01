@@ -102,7 +102,7 @@ export function RuntimeCredentialConnectionDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      size="small"
+      size={definition.kind === "github_app" ? "medium" : "small"}
       title={
         <span className="flex items-center gap-2">
           <RuntimeCredentialIcon icon={definition.icon} />
@@ -147,16 +147,23 @@ export function RuntimeCredentialConnectionDialog({
                   ? "Private key (PEM)"
                   : "Secret value"}
               </FormLabel>
-              <RuntimeCredentialDescription
-                definition={definition}
-                className=""
-              />
+              {definition.kind === "github_app" ? (
+                <p className="text-sm text-muted-foreground">
+                  Paste the PEM file downloaded from your GitHub App settings.
+                </p>
+              ) : (
+                <RuntimeCredentialDescription
+                  definition={definition}
+                  className=""
+                />
+              )}
               <FormControl>
                 {definition.kind === "github_app" ? (
                   <SecretTextarea
                     {...field}
                     autoComplete="off"
                     placeholder="Paste private key"
+                    className="field-sizing-fixed h-40 max-h-[40vh] resize-y overflow-y-auto font-mono text-xs"
                   />
                 ) : (
                   <SecretInput

@@ -1,3 +1,4 @@
+import { gzipSync } from "node:zlib";
 import {
   getModelReadableMimeTypes,
   INLINE_TEXT_MAX_BYTES,
@@ -7,6 +8,7 @@ import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
+import { extractInlineAttachments } from "./extract-inline-attachments";
 import { materializeAttachments } from "./materialize-attachments";
 
 const INGESTIBLE = new Set(["text/plain", "application/pdf", "image/png"]);
@@ -1277,4 +1279,106 @@ test("no refs in messages returns a clone without DB hits", async () => {
   // Confirm deep copy: mutating output does not affect input
   expectPresent(output[0].parts?.[0]).text = "mutated";
   expect(expectPresent(messages[0].parts?.[0]).text).toBe("hello");
+});
+
+test("gzip diagnostics remain downloadable and are readable without a sandbox", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = gzipSync(
+    JSON.stringify({
+      message: "Project read unexpectedly blocked",
+      policy: "allow_read=false",
+    }),
+  );
+  const messages: ChatMessage[] = [
+    {
+      id: "new-report",
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          mediaType: "application/gzip",
+          filename: "report.json.gz",
+          url: `data:application/gzip;base64,${bytes.toString("base64")}`,
+        },
+      ],
+    },
+  ];
+  await extractInlineAttachments({
+    messages,
+    conversationId: conversation.id,
+    organizationId: conversation.organizationId,
+    uploadedByUserId: conversation.userId,
+  });
+  const output = await materializeAttachments({
+    messages,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: new Set(["text/plain"]),
+    sandboxAvailable: false,
+  });
+  expect(output[0].parts?.[0]).toMatchObject({
+    type: "text",
+    text: expect.stringContaining("Project read unexpectedly blocked"),
+  });
+  expect(output[0].parts?.[0].text).toContain("allow_read=false");
+  expect(messages[0].parts?.[0].type).toBe("file");
+  const limited = await materializeAttachments({
+    messages,
+    conversationId: conversation.id,
+    inlineByteLimit: 20,
+  });
+  expect(limited[0].parts?.[0].text).toContain("preview is truncated");
+  const foreign = await materializeAttachments({
+    messages,
+    conversationId: "another-conversation",
+  });
+  expect(foreign[0].parts?.[0].type).toBe("file");
+});
+
+test.for([
+  Buffer.from("not gzip"),
+  gzipSync("not JSON"),
+  gzipSync(Buffer.alloc(33 * 1024 * 1024, 65)),
+])("invalid or oversized gzip contents never enter the model context", async (bytes, {
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const messages: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          mediaType: "application/gzip",
+          filename: "report.json.gz",
+          url: `data:application/gzip;base64,${bytes.toString("base64")}`,
+        },
+      ],
+    },
+  ];
+  await extractInlineAttachments({
+    messages,
+    conversationId: conversation.id,
+    organizationId: conversation.organizationId,
+    uploadedByUserId: conversation.userId,
+  });
+  const output = await materializeAttachments({
+    messages,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: new Set(["text/plain"]),
+    sandboxAvailable: false,
+  });
+  expect(output[0].parts?.[0]).toMatchObject({
+    type: "text",
+    text: expect.stringContaining("can't be read"),
+  });
 });

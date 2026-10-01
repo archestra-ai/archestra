@@ -481,13 +481,8 @@ class McpClient {
     maxSize: ACTIVE_CONNECTION_CACHE_MAX_SIZE,
     defaultTtl: ACTIVE_CONNECTION_CACHE_TTL_MS,
     onEviction: (key: string, value: unknown) => {
-      const client = value as Client;
-      Promise.resolve(client.close()).catch((error) => {
-        logger.warn(
-          { connectionKey: key, error },
-          "Error closing evicted active MCP connection",
-        );
-      });
+      // An idle-expired entry can still carry a long-running call.
+      this.closeWhenIdle(key, value as Client);
       this.activeConnectionServerState.delete(key);
       this.toolNameCache.delete(key);
       this.pendingHttpSessionMetadata.delete(key);
@@ -497,6 +492,11 @@ class McpClient {
   });
   private activeConnectionServerState = new Map<string, CachedServerState>();
   private activeConnectionLastValidatedAt = new Map<string, number>();
+  // Requests in flight per client. A client that recovery replaces is closed
+  // only once they settle: closing it earlier fails every sibling call on it
+  // with "Connection closed", which cannot be retried safely.
+  private clientRequestsInFlight = new Map<Client, number>();
+  private clientsClosingWhenIdle = new Set<Client>();
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
@@ -925,6 +925,9 @@ class McpClient {
         currentSecrets: Record<string, unknown>,
         isRetry = false,
       ): Promise<CommonToolResult> => {
+        // The client this attempt ran on. Recovery closes only this one: the
+        // cached client may already be a fresh one a sibling call is using.
+        let attemptClient: Client | undefined;
         try {
           const hasRefreshToken = !!(
             currentSecrets as { refresh_token?: string }
@@ -939,6 +942,7 @@ class McpClient {
           if (shouldRefreshBeforeCall) {
             const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
               secretId,
+              staleSecrets: currentSecrets,
               catalogId: catalogItem.id,
               connectionKey,
               toolCall,
@@ -975,6 +979,11 @@ class McpClient {
             targetMcpServerId,
             serverState,
             options?.elicitationHandler,
+          );
+          attemptClient = client;
+          this.clientRequestsInFlight.set(
+            client,
+            (this.clientRequestsInFlight.get(client) ?? 0) + 1,
           );
 
           // Determine the actual upstream tool name. Prefer the stored raw name
@@ -1078,6 +1087,7 @@ class McpClient {
           ) {
             const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
               secretId,
+              staleSecrets: currentSecrets,
               catalogId: catalogItem.id,
               connectionKey,
               toolCall,
@@ -1207,19 +1217,12 @@ class McpClient {
                   "Failed to delete stale MCP HTTP session",
                 );
               }
-              // Close the stale client so its AbortController is cleaned up
-              const staleClient = this.activeConnections.get(connectionKey);
-              if (staleClient) {
-                try {
-                  await staleClient.close();
-                } catch {
-                  logger.warn(
-                    { connectionKey },
-                    "Failed to close stale MCP client",
-                  );
-                }
+              // Retire the client this attempt ran on. When a sibling already
+              // replaced it, the cached client is fresh and in use: leave it
+              // for the retry to reuse.
+              if (attemptClient) {
+                this.retireClient(connectionKey, attemptClient);
               }
-              this.clearConnectionState(connectionKey);
               return await executeToolCall(getTransport, currentSecrets, true);
             } finally {
               resolveRecovery();
@@ -1279,6 +1282,7 @@ class McpClient {
           if (canAttemptRecovery) {
             const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
               secretId,
+              staleSecrets: currentSecrets,
               catalogId: catalogItem.id,
               connectionKey,
               toolCall,
@@ -1401,6 +1405,8 @@ class McpClient {
             authInfo,
             lockedChatContent,
           });
+        } finally {
+          if (attemptClient) this.releaseClient(attemptClient);
         }
       };
 
@@ -1521,15 +1527,7 @@ class McpClient {
           },
           "Discarding cached MCP client after MCP server credentials changed",
         );
-        try {
-          await existingClient.close();
-        } catch (error) {
-          logger.warn(
-            { connectionKey, targetMcpServerId, error },
-            "Error closing stale cached MCP client after credential change",
-          );
-        }
-        this.clearConnectionState(connectionKey);
+        this.retireClient(connectionKey, existingClient);
       }
     }
 
@@ -1687,6 +1685,41 @@ class McpClient {
       Date.now() - lastValidatedAt >=
       ACTIVE_CONNECTION_PING_VALIDATION_INTERVAL_MS
     );
+  }
+
+  /**
+   * Stop handing out `client` for `connectionKey` and close it once no call
+   * is using it. A no-op on the cache when a sibling already replaced it.
+   */
+  private retireClient(connectionKey: string, client: Client): void {
+    if (this.activeConnections.get(connectionKey) === client) {
+      this.clearConnectionState(connectionKey);
+    }
+    this.closeWhenIdle(connectionKey, client);
+  }
+
+  private closeWhenIdle(connectionKey: string, client: Client): void {
+    if (this.clientRequestsInFlight.has(client)) {
+      this.clientsClosingWhenIdle.add(client);
+      return;
+    }
+    Promise.resolve(client.close()).catch((error) => {
+      logger.warn({ connectionKey, error }, "Error closing retired MCP client");
+    });
+  }
+
+  private releaseClient(client: Client): void {
+    const remaining = (this.clientRequestsInFlight.get(client) ?? 1) - 1;
+    if (remaining > 0) {
+      this.clientRequestsInFlight.set(client, remaining);
+      return;
+    }
+    this.clientRequestsInFlight.delete(client);
+    if (this.clientsClosingWhenIdle.delete(client)) {
+      Promise.resolve(client.close()).catch((error) => {
+        logger.warn({ error }, "Error closing retired MCP client");
+      });
+    }
   }
 
   private clearConnectionState(connectionKey: string): void {
@@ -3024,6 +3057,8 @@ class McpClient {
    */
   private async attemptTokenRefreshAndRetry(params: {
     secretId: string;
+    /** The secret the failing call was built with. */
+    staleSecrets: Record<string, unknown>;
     catalogId: string;
     connectionKey: string;
     toolCall: CommonToolCall;
@@ -3043,6 +3078,7 @@ class McpClient {
   }): Promise<CommonToolResult | null> {
     const {
       secretId,
+      staleSecrets,
       catalogId,
       connectionKey,
       toolCall,
@@ -3067,6 +3103,7 @@ class McpClient {
     // race a rotating refresh token or thrash connection teardown state.
     const refreshResult = await this.refreshOAuthTokenWithLock({
       secretId,
+      staleAccessToken: staleSecrets.access_token,
       catalogId,
       connectionKey,
       targetMcpServerId,
@@ -3184,6 +3221,8 @@ class McpClient {
 
   private async refreshOAuthTokenWithLock(params: {
     secretId: string;
+    /** The access token the caller's failing or expiring call was built with. */
+    staleAccessToken: unknown;
     catalogId: string;
     connectionKey: string;
     targetMcpServerId: string;
@@ -3192,7 +3231,13 @@ class McpClient {
     updatedSecret: Record<string, unknown> | null;
     outcome: OAuthRefreshOutcome;
   }> {
-    const { secretId, catalogId, connectionKey, targetMcpServerId } = params;
+    const {
+      secretId,
+      staleAccessToken,
+      catalogId,
+      connectionKey,
+      targetMcpServerId,
+    } = params;
     const existingRefresh = this.oauthRefreshLocks.get(secretId);
     if (existingRefresh) {
       logger.info(
@@ -3207,14 +3252,31 @@ class McpClient {
       updatedSecret: Record<string, unknown> | null;
       outcome: OAuthRefreshOutcome;
     }> => {
+      // A caller that queued behind the per-connection limiter holds secrets
+      // read before it queued. When another caller already rotated the token
+      // since then, use the stored one: refreshing again would retire the
+      // fresh client that sibling calls are using and spend a rotating
+      // refresh token for nothing.
+      const storedSecret = (await secretManager().getSecret(secretId))?.secret;
+      if (
+        storedSecret &&
+        storedSecret.access_token !== staleAccessToken &&
+        !shouldProactivelyRefreshOAuthToken(storedSecret)
+      ) {
+        this.secretsCache.set(targetMcpServerId, {
+          secrets: storedSecret,
+          secretId,
+        });
+        return {
+          refreshed: true,
+          updatedSecret: storedSecret,
+          outcome: { ok: true },
+        };
+      }
+
       const existingClient = this.activeConnections.get(connectionKey);
       if (existingClient) {
-        try {
-          await existingClient.close();
-        } catch {
-          // Ignore close errors during refresh teardown.
-        }
-        this.clearConnectionState(connectionKey);
+        this.retireClient(connectionKey, existingClient);
       }
 
       const outcome = await refreshOAuthToken(secretId, catalogId);

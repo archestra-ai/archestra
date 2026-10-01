@@ -19,6 +19,7 @@ import {
   mintChildReturnMarker,
 } from "@/openappa/child-return";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import { recordOpenAppaClientFailure } from "@/openappa/client-failure-report";
 import { delegationEnabled, mintDelegationMarker } from "@/openappa/delegation";
 import {
   getHitlAskUserArguments,
@@ -823,6 +824,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           ),
           policy,
         );
+        await recordOpenAppaClientFailure({
+          session,
+          toolCallId: call.id,
+          ruling: decision.feedback,
+        });
         const contentMessage =
           binding.request.declaredTools.length === 0
             ? `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`

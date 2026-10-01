@@ -12,12 +12,14 @@ import {
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
+  PopularAgentOverridesSchema,
   RoleAssignmentSchema,
   SESSION_MAX_AGE_MAX_SECONDS,
   SESSION_MAX_AGE_MIN_SECONDS,
   StoredKnowledgeConnectorOverridesSchema,
   StoredMessagingChannelOverridesSchema,
   StoredModelProviderOverridesSchema,
+  StoredPopularAgentOverridesSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -350,6 +352,7 @@ const extendedFields = {
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
   // The stored (lenient) shapes: a jsonb value written by an older build must
   // not 500 the organization read.
+  popularAgentOverrides: StoredPopularAgentOverridesSchema.nullable(),
   modelProviderOverrides: StoredModelProviderOverridesSchema.nullable(),
   messagingChannelOverrides: StoredMessagingChannelOverridesSchema.nullable(),
   knowledgeConnectorOverrides:
@@ -623,6 +626,7 @@ export const UpdateConnectionSettingsSchema = z.object({
  * fields are left untouched, so the three surfaces can be saved independently.
  */
 export const UpdateIntegrationSettingsSchema = z.object({
+  popularAgentOverrides: PopularAgentOverridesSchema.nullable().optional(),
   modelProviderOverrides: ModelProviderOverridesSchema.nullable().optional(),
   messagingChannelOverrides:
     MessagingChannelOverridesSchema.nullable().optional(),

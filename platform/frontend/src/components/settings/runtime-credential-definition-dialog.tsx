@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft } from "lucide-react";
+import type { ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -17,6 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -38,14 +40,20 @@ export function RuntimeCredentialDefinitionDialog({
   onClose,
   initialKind,
   initialScope,
+  initialValues,
+  setupNotice,
+  hideProvidedBy = false,
   onCreated,
   backLabel,
-  size = "small",
+  size = "medium",
 }: {
   definition: RuntimeCredentialDefinition | null;
   onClose: () => void;
   initialKind?: "secret" | "github_app" | "github_app_user";
   initialScope?: "personal" | "organization";
+  initialValues?: { name: string; description: string; icon: string };
+  setupNotice?: ReactNode;
+  hideProvidedBy?: boolean;
   onCreated?: (id: string) => void;
   backLabel?: string;
   size?: "small" | "medium";
@@ -53,8 +61,8 @@ export function RuntimeCredentialDefinitionDialog({
   const create = useCreateRuntimeCredential();
   const {
     data: credentials = [],
-    isPending: loadingCredentials,
     isError: credentialsFailed,
+    refetch: refetchCredentials,
   } = useRuntimeCredentials();
   const githubApps = credentials.filter(
     (entry) =>
@@ -68,15 +76,15 @@ export function RuntimeCredentialDefinitionDialog({
   const form = useForm<DefinitionFormValues>({
     resolver: zodResolver(DefinitionFormSchema),
     defaultValues: {
-      name: definition?.name ?? "",
+      name: definition?.name ?? initialValues?.name ?? "",
       kind: definition?.kind ?? initialKind ?? "secret",
       githubUrl: definition?.githubUrl ?? "https://api.github.com",
       appId: definition?.appId ?? "",
       installationId: definition?.installationId ?? "",
       githubClientId: definition?.githubClientId ?? "",
       githubAppCredentialKey: definition?.githubAppCredentialKey ?? "",
-      description: definition?.description ?? "",
-      icon: definition?.icon ?? null,
+      description: definition?.description ?? initialValues?.description ?? "",
+      icon: definition?.icon ?? initialValues?.icon ?? null,
       scope: definition?.allowOrganization
         ? "organization"
         : (initialScope ?? "personal"),
@@ -148,8 +156,18 @@ export function RuntimeCredentialDefinitionDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={definition ? `Edit ${definition.name}` : "Add credential"}
-      description="Choose the credential type and who provides its value. Use it across the platform."
+      title={
+        definition
+          ? `Edit ${definition.name}`
+          : initialKind === "github_app"
+            ? "Add GitHub App credential"
+            : "Add credential"
+      }
+      description={
+        initialKind === "github_app" && !definition
+          ? "Enter the App details, then connect its private key."
+          : "Choose the credential type and who provides its value. Use it across the platform."
+      }
       size={size}
       onSubmit={form.handleSubmit(save)}
       bodyClassName="space-y-4"
@@ -166,6 +184,7 @@ export function RuntimeCredentialDefinitionDialog({
       }
     >
       <Form {...form}>
+        {setupNotice}
         <FormField
           control={form.control}
           name="name"
@@ -228,6 +247,12 @@ export function RuntimeCredentialDefinitionDialog({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Credential type</FormLabel>
+              {field.value === "github_app" && initialKind !== "github_app" && (
+                <FormDescription>
+                  Add the App details, then connect its private key after
+                  saving.
+                </FormDescription>
+              )}
               <Select
                 value={field.value}
                 onValueChange={(value) => {
@@ -279,6 +304,7 @@ export function RuntimeCredentialDefinitionDialog({
                   <SelectItem
                     value="github_app_user"
                     disabled={githubApps.length === 0}
+                    description="Requires a connected organization GitHub App with an OAuth client ID."
                     icon={
                       <RuntimeCredentialIcon
                         icon="logo:github"
@@ -290,39 +316,34 @@ export function RuntimeCredentialDefinitionDialog({
                   </SelectItem>
                 </SelectContent>
               </Select>
-              {!definition && githubApps.length === 0 && (
-                <FormDescription>
-                  {loadingCredentials ? (
-                    <span>Checking available GitHub Apps…</span>
-                  ) : credentialsFailed ? (
-                    <span>
-                      Couldn’t check GitHub Apps. Reopen this dialog to try
-                      again.
-                    </span>
-                  ) : (
-                    <span>
-                      GitHub user connections need an organization GitHub App
-                      first. Choose GitHub App, add its OAuth client ID, then
-                      save and connect its private key and client secret. Each
-                      user can then connect their GitHub account once for all
-                      agents.
-                    </span>
-                  )}
-                </FormDescription>
-              )}
-              {field.value === "github_app" && (
-                <FormDescription>
-                  Add the app details below, then connect its private key after
-                  saving. Integrations use an installation token; the private
-                  key stays in the secrets manager.
-                </FormDescription>
-              )}
+              {!definition &&
+                initialKind !== "github_app" &&
+                credentialsFailed && (
+                  <InlineNotice variant="error">
+                    <InlineNoticeText>
+                      Couldn&apos;t check GitHub Apps.
+                    </InlineNoticeText>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="ml-auto h-auto p-0 text-xs"
+                      onClick={() => refetchCredentials()}
+                    >
+                      Retry
+                    </Button>
+                  </InlineNotice>
+                )}
               <FormMessage />
             </FormItem>
           )}
         />
         {form.watch("kind") === "github_app" && (
-          <div className="space-y-4">
+          <div
+            className={
+              size === "medium" ? "grid gap-4 sm:grid-cols-2" : "space-y-4"
+            }
+          >
             {(
               [
                 "githubUrl",
@@ -386,49 +407,50 @@ export function RuntimeCredentialDefinitionDialog({
             )}
           />
         )}
-        {!definition && (
-          <FormField
-            control={form.control}
-            name="scope"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Provided by</FormLabel>
-                {form.watch("kind") === "github_app" && (
-                  <FormDescription>
-                    GitHub Apps use an organization-managed installation and
-                    private key.
-                  </FormDescription>
-                )}
-                <Select
-                  value={field.value}
-                  onValueChange={field.onChange}
-                  disabled={form.watch("kind") !== "secret"}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent position="popper">
-                    <SelectItem
-                      value="personal"
-                      description="Each person connects a private value for runs they start."
-                    >
-                      Each user
-                    </SelectItem>
-                    <SelectItem
-                      value="organization"
-                      description="Admins connect one value used by everyone in the organization."
-                    >
-                      The organization
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
+        {!definition &&
+          (!hideProvidedBy || form.watch("kind") !== "github_app") && (
+            <FormField
+              control={form.control}
+              name="scope"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Provided by</FormLabel>
+                  {form.watch("kind") === "github_app" && (
+                    <FormDescription>
+                      GitHub Apps use an organization-managed installation and
+                      private key.
+                    </FormDescription>
+                  )}
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={form.watch("kind") !== "secret"}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent position="popper">
+                      <SelectItem
+                        value="personal"
+                        description="Each person connects a private value for runs they start."
+                      >
+                        Each user
+                      </SelectItem>
+                      <SelectItem
+                        value="organization"
+                        description="Admins connect one value used by everyone in the organization."
+                      >
+                        The organization
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
       </Form>
     </StandardFormDialog>
   );

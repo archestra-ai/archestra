@@ -678,6 +678,8 @@ describe("McpElicitationCard", () => {
     expect(screen.getByRole("list", { name: "Answers" })).toHaveTextContent(
       "Pick a colorBluePick a fruitApple",
     );
+    expect(screen.queryByRole("button", { name: "Blue" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Apple" })).toBeNull();
   });
 
   it("orders tabs by members even when requests arrive in reverse order", async () => {

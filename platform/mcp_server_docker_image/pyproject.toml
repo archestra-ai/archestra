@@ -15,13 +15,15 @@ dependencies = [
   "requests>=2.31.0",
   "python-dotenv>=1.0.0",
   # urllib3 < 2.7.0: CVE-2026-44432 (data amplification), CVE-2026-44431 (info disclosure)
-  "urllib3>=2.7.0",
+  # urllib3 < 2.8.0: CVE-2026-97689 (resource allocation), CVE-2026-97687 (certificate validation)
+  "urllib3>=2.8.0",
   # python-multipart < 0.0.27: CVE-2026-42561 (unthrottled resource allocation)
   # python-multipart < 0.0.30: CVE-2026-53539 (uncontrolled resource consumption)
   "python-multipart>=0.0.30",
   # Transitive constraints (pulled in via mcp[cli]):
   # pyjwt < 2.13.0: CVE-2026-48526 (improper authentication)
-  "pyjwt>=2.13.0",
+  # CVE-2026-102266 through CVE-2026-102271 require 2.14.0.
+  "pyjwt>=2.14.0",
   # cryptography < 48.0.1: GHSA-537c-gmf6-5ccf (out-of-bounds read)
   # cryptography < 50.0.0: CVE-2026-69247 (observable timing discrepancy)
   "cryptography>=50.0.0",

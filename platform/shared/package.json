@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.4.0-rc.27",
+  "version": "1.4.0-rc.28",
   "description": "",
   "type": "module",
   "private": true,
@@ -12,6 +12,7 @@
     "./chat-error": "./chat-error.ts",
     "./consts": "./consts.ts",
     "./chat": "./chat.ts",
+    "./connection-setup": "./connection-setup.ts",
     "./citation-quotes": "./citation-quotes.ts",
     "./e2e-test-ids": "./e2e-test-ids.ts",
     "./handlebars-expressions": "./handlebars-expressions.ts",

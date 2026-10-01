@@ -204,17 +204,19 @@ export async function handleDelegation(
         "Outbound A2A delegation is not available for environment-bound agents yet.",
       );
     }
-    const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
-      agentId,
-      toolName,
-      toolInput: { message },
-      organizationId,
-      contextIsTrusted: context.contextIsTrusted ?? true,
-      sensitiveContextOrigin: context.sensitiveContextOrigin,
-      enabledToolNames: new Set([toolName]),
-      resolvedToolId: outboundTarget.tool.id,
-      enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
-    });
+    const policyBlock = context.connectionSetupBypass
+      ? null
+      : await evaluateSingleMcpToolInvocationPolicy({
+          agentId,
+          toolName,
+          toolInput: { message },
+          organizationId,
+          contextIsTrusted: context.contextIsTrusted ?? true,
+          sensitiveContextOrigin: context.sensitiveContextOrigin,
+          enabledToolNames: new Set([toolName]),
+          resolvedToolId: outboundTarget.tool.id,
+          enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
+        });
     if (policyBlock) {
       return structuredToolErrorResult({
         error: policyBlockToToolError(policyBlock),

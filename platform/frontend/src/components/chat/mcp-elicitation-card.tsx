@@ -525,10 +525,17 @@ export function McpElicitationCard({
           : questionMessageId(activeQuestion.request.id)
       }
       className={cn(
-        "not-prose relative mb-4 w-full overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm",
-        isMultiple || activeQuestion?.request.kind === "openappa_review"
-          ? "max-w-4xl"
-          : "max-w-2xl",
+        "not-prose relative mb-4 w-full overflow-hidden rounded-lg",
+        allMembersSettled
+          ? "max-w-2xl"
+          : "border border-border/60 bg-card shadow-sm",
+        !allMembersSettled &&
+          (isMultiple || activeQuestion?.request.kind === "openappa_review") &&
+          "max-w-4xl",
+        !allMembersSettled &&
+          !isMultiple &&
+          activeQuestion?.request.kind !== "openappa_review" &&
+          "max-w-2xl",
       )}
       onPointerDown={() => {
         lastInputRef.current = "pointer";
@@ -728,21 +735,33 @@ function AnswerSummary({
   label?: string;
 }) {
   return (
-    <ul aria-label={label} className="flex min-w-0 flex-col gap-3 p-4">
+    <ul
+      aria-label={label}
+      className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
+    >
       {members.map((member) => (
-        <li key={member.toolCallId} className="flex min-w-0 flex-col gap-1">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
+        <li
+          key={member.toolCallId}
+          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-5"
+        >
+          {member.outcome?.status === "answered" ? (
+            <CheckIcon
+              className="size-3.5 shrink-0 text-emerald-600"
+              aria-hidden
+            />
+          ) : null}
+          <span className="min-w-0 flex-1 whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
             {member.question || "Question"}
-          </p>
-          <span
-            className={
-              member.outcome?.status === "answered"
-                ? "text-sm text-foreground [overflow-wrap:anywhere]"
-                : "text-xs text-muted-foreground [overflow-wrap:anywhere]"
-            }
-          >
-            {getOutcomeSummary(member)}
           </span>
+          {member.outcome?.status === "answered" ? (
+            <span className="ml-auto shrink-0 font-medium text-foreground">
+              {getOutcomeSummary(member)}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {getOutcomeSummary(member)}
+            </span>
+          )}
         </li>
       ))}
     </ul>

@@ -1,0 +1,25 @@
+/* Official alert-mark animation from https://www.openappa.com/branding. */
+.body {
+  animation: yell-shake 4.5s ease-in-out infinite;
+}
+
+.sparks {
+  animation: sparks-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes yell-shake {
+  0%, 86%, 100% { transform: translateY(0) rotate(0); }
+  88% { transform: translateY(-2px) rotate(-1.5deg) scale(1.02); }
+  90% { transform: translateY(1px) rotate(1.5deg) scale(1.02); }
+  92% { transform: translateY(-2px) rotate(-1deg) scale(1.02); }
+  94% { transform: translateY(1px) rotate(1deg) scale(1.01); }
+}
+
+@keyframes sparks-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .body, .sparks { animation: none; }
+}

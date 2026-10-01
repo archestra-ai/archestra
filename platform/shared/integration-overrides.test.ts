@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   allowedIntegrationIds,
   integrationLabel,
   isIntegrationHidden,
   KnowledgeConnectorIdSchema,
   MessagingChannelIdSchema,
+  PopularAgentIdSchema,
+  PopularAgentOverridesSchema,
   pruneIntegrationOverrides,
   withAllowedIntegrationIds,
 } from "./integration-overrides";
@@ -155,5 +158,16 @@ describe("withAllowedIntegrationIds", () => {
       anthropic: { hidden: true },
       gemini: { hidden: true },
     });
+  });
+});
+
+describe("popular agent request contract", () => {
+  it("exposes the accepted optional template IDs to JSON Schema consumers", () => {
+    const schema = z.toJSONSchema(PopularAgentOverridesSchema);
+    expect(schema.additionalProperties).toBe(false);
+    expect(Object.keys(schema.properties ?? {})).toEqual(
+      PopularAgentIdSchema.options,
+    );
+    expect(schema.required ?? []).toEqual([]);
   });
 });

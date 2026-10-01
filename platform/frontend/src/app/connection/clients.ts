@@ -7,6 +7,7 @@ import {
   openCodePassthroughBaseUrl,
   type SupportedProvider,
 } from "@archestra/shared";
+import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 
 const [ANTHROPIC_BASE_URL_KEY] = CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
 const [CLAUDE_USE_BEDROCK_KEY, AWS_REGION_KEY, BEDROCK_BASE_URL_KEY] =
@@ -200,7 +201,7 @@ const OPENCODE_ACCENT_PATH = "M16.8 19.2H7.2V9.6h9.6Z";
 export const CONNECT_CLIENTS: ConnectClient[] = [
   {
     id: "claude-code",
-    label: "Claude Code",
+    label: NATIVE_SESSION_CLIENT_LABELS["claude-code"],
     sub: "Anthropic CLI",
     svg: CLAUDE_PATH,
     iconColor: "#D97757",
@@ -429,7 +430,7 @@ claude`,
   },
   {
     id: "codex",
-    label: "Codex",
+    label: NATIVE_SESSION_CLIENT_LABELS.codex,
     sub: "OpenAI CLI",
     svg: OPENAI_PATH,
     iconColor: "#10a37f",
@@ -465,7 +466,7 @@ claude`,
   },
   {
     id: "opencode",
-    label: "OpenCode",
+    label: NATIVE_SESSION_CLIENT_LABELS.opencode,
     sub: "Open-source CLI",
     svg: OPENCODE_PATH,
     svgAccent: { path: OPENCODE_ACCENT_PATH, color: "#CFCECD" },

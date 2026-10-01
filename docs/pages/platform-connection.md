@@ -23,6 +23,9 @@ You can also give your coding agent this prompt, replacing the example hostname:
 
 > Read https://ai.example.com/connect.md?client=cursor and connect Cursor.
 
+If a security policy blocks setup in Claude Code, Codex, or OpenCode, sign in and use Copy on the Connection page. This starts a ten-minute setup window for your account and copies the unchanged prompt.
+Approved installer gateway requests get a separate ten-minute policy exception for scripted clients. Manual n8n and other-client setups continue through normal policy checks.
+
 The public instructions need no installed skill or platform login.
 They support Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
 The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.
@@ -47,7 +50,7 @@ Browser approval authorizes installation. MCP gateway authentication remains the
 Follow the installer output to authenticate the gateway and reload your client.
 Verify that the gateway can list tools before considering the connection complete.
 
-For OpenCode, the connection agent checks `opencode mcp list` after installation. If the gateway is already connected, it skips OAuth. Otherwise, it starts the gateway's native OAuth sign-in. Restart OpenCode after setup.
+For OpenCode, the connection agent checks `opencode mcp list` after installation. If the gateway is already connected, it skips OAuth. Otherwise, it starts the gateway's native OAuth sign-in. After the agent finishes, save your work and close OpenCode normally. Start a new session in a fresh terminal. An in-session process restart can terminate the agent before it finishes.
 
 For Codex, the connection agent runs the installer's verification command. Windows uses a native PowerShell launcher. macOS and Linux use Node. Both start a fresh native client with your configured model, approvals, and sandbox. They call a read-only gateway tool and check inference through the selected proxy. The gateway check does not ask a model to run a shell command.
 

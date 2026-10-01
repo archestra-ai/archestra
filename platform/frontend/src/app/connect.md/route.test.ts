@@ -173,6 +173,30 @@ describe("Connect agent instructions", () => {
     }
   });
 
+  it.each([
+    "http://localhost:3000/connect.md",
+    "http://localhost:3000/connect.md?client=opencode",
+  ])("leaves the OpenCode restart to the user in %s", async (url) => {
+    const instructions = await GET(new Request(url)).text();
+    expect(instructions).toContain(
+      "Do not stop or restart OpenCode from inside this conversation",
+    );
+    expect(instructions).toContain(
+      "ask the user to save work, close OpenCode normally",
+    );
+    expect(instructions).not.toContain("Close every OpenCode process");
+  });
+
+  it.each([
+    "http://localhost:3000/connect.md",
+    "http://localhost:3000/connect.md?client=codex",
+  ])("keeps the bootstrap cleanup compatible with Codex direct tools in %s", async (url) => {
+    const instructions = await GET(new Request(url)).text();
+    expect(instructions).toContain("trap 'unlink \"$p\"' EXIT");
+    expect(instructions).not.toContain("trap 'rm -f \"$p\"' EXIT");
+    expect(instructions).toContain("or quoting the test response");
+  });
+
   it("focuses Claude Desktop on its host installer", async () => {
     const response = GET(
       new Request("http://localhost:3000/connect.md?client=claude-desktop"),

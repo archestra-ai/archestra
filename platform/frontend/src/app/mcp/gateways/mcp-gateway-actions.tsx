@@ -1,5 +1,14 @@
 import { E2eTestId } from "@archestra/shared";
-import { Copy, History, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Copy,
+  History,
+  Pencil,
+  Pin,
+  PinOff,
+  Plug,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import {
   agentAction,
   getAgentActionModel,
@@ -27,6 +36,7 @@ type McpGatewayActionsProps = {
   onRestore: (agentId: string) => void;
   onPermanentlyDelete: (agent: Gateway) => void;
   onClone: (agent: Gateway) => void;
+  onTogglePin: (agent: Gateway) => void;
   /**
    * Carries `canModify` with the id: the history dialog offers a restore,
    * which is an update, so it needs the same scope check the row's own
@@ -50,6 +60,7 @@ export function McpGatewayActions({
   onRestore,
   onPermanentlyDelete,
   onClone,
+  onTogglePin,
   onHistory,
 }: McpGatewayActionsProps) {
   const admin = useIsGlobalAdmin();
@@ -116,6 +127,15 @@ export function McpGatewayActions({
   ];
 
   const dropdownActions: TableRowAction[] = [
+    {
+      icon: agent.pinnedAt ? (
+        <PinOff className="h-4 w-4" />
+      ) : (
+        <Pin className="h-4 w-4" />
+      ),
+      label: agent.pinnedAt ? "Unpin" : "Pin",
+      onClick: () => onTogglePin(agent),
+    },
     {
       icon: <Copy className="h-4 w-4" />,
       label: cloneAction.label,

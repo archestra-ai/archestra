@@ -84,6 +84,37 @@ describe("McpGatewaysPageServer", () => {
     expect(screen.getByTestId("mcp-gateways-page")).toBeInTheDocument();
   });
 
+  it.each([
+    "rejection",
+    "API error",
+  ])("keeps successful seeds and client retry available after a pinned prefetch %s", async (failure) => {
+    getAgentsMock.mockImplementation(
+      ({ query }: { query: { pinned: boolean } }) => {
+        if (!query.pinned)
+          return Promise.resolve({ data: { data: [{ id: "gateway-1" }] } });
+        return failure === "rejection"
+          ? Promise.reject(new Error("Pins unavailable"))
+          : Promise.resolve({ error: { message: "Pins unavailable" } });
+      },
+    );
+    getTeamsMock.mockResolvedValue({
+      data: { data: [{ id: "team-1", name: "Team 1" }] },
+    });
+
+    render(await McpGatewaysPageServer());
+
+    expect(screen.getByTestId("mcp-gateways-page")).toHaveTextContent(
+      JSON.stringify({
+        agents: { data: [{ id: "gateway-1" }] },
+        pinnedAgents: null,
+        teams: [{ id: "team-1", name: "Team 1" }],
+      }),
+    );
+    expect(
+      screen.queryByTestId("server-error-fallback"),
+    ).not.toBeInTheDocument();
+  });
+
   it("skips the teams fetch when the user cannot read teams", async () => {
     serverHasPermissionsMock.mockResolvedValue(false);
     getAgentsMock.mockResolvedValue({

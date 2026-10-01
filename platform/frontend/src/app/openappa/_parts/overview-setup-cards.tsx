@@ -2,7 +2,6 @@
 
 import {
   ArrowRight,
-  BookOpen,
   CircleCheck,
   CircleDashed,
   CircleX,
@@ -13,6 +12,7 @@ import {
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { OpenAppaMascot } from "@/components/openappa-mascot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,13 @@ import {
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { cn } from "@/lib/utils/tailwind";
-import { OpenAppaSourceForm } from "./appa-github-sync-panel";
+import {
+  OpenAppaCreateRepositoryDialog,
+  OpenAppaSourceForm,
+} from "./appa-github-sync-panel";
+import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 import { UnsupportedClientActionSelect } from "./guardrails-deployment-toggle";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
@@ -42,12 +47,13 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 /**
  * Where OpenAPPA setup stands. A fresh organization sees only the first step,
  * saving a policy in the policy chat (which turns enforcement on). After that,
- * three compact cards report enforcement (with its switch) and GitHub sync
- * and link to the docs, and the first unfinished one is highlighted as the next step.
+ * three compact cards report enforcement, GitHub sync, and unresolved yells.
+ * The first unfinished one is highlighted as the next step.
  */
 export function OverviewSetupCards() {
   const { enabled, isFresh } = useOpenAppaSetupState();
   const sync = useAppaGithubSync();
+  const { data: canReadYells } = useHasPermissions({ log: ["read"] });
   if (isFresh === undefined) return null;
   if (isFresh) return <PolicyStep />;
   const source = sync.data?.source;
@@ -58,10 +64,18 @@ export function OverviewSetupCards() {
       ? "github"
       : null;
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <EnforcementCard next={next === "enforcement"} />
-      <GithubSyncCard next={next === "github"} />
-      <LearnMoreCard />
+    <div className="space-y-4">
+      {source?.lastSyncError && <GithubManagedPolicyNotice />}
+      <div
+        className={cn(
+          "grid gap-4",
+          canReadYells ? "xl:grid-cols-3" : "lg:grid-cols-2",
+        )}
+      >
+        <EnforcementCard next={next === "enforcement"} />
+        <GithubSyncCard next={next === "github"} />
+        {canReadYells && <YellsCard />}
+      </div>
     </div>
   );
 }
@@ -139,7 +153,7 @@ function EnforcementCard({ next }: { next: boolean }) {
       action={null}
     >
       <div className="space-y-3 pt-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Switch
               id="openappa-overview-enforcement"
@@ -178,6 +192,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
   const { data: canManage } = useHasPermissions({ organization: ["update"] });
   const appName = useAppName();
   const [editing, setEditing] = useState(false);
+  const [creating, setCreating] = useState(false);
   const source = sync.data?.source ?? null;
   const connected = Boolean(source?.interval);
   const failed = source?.lastSyncError;
@@ -201,11 +216,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
           )
         }
         description={
-          failed ? (
-            <span title={failed} className="line-clamp-3">
-              {failed}
-            </span>
-          ) : connected && source?.repo ? (
+          connected && source?.repo ? (
             <span>
               {appName} pulls the policy from{" "}
               <span className="font-mono text-foreground">{source.repo}</span>.
@@ -218,10 +229,8 @@ function GithubSyncCard({ next }: { next: boolean }) {
           )
         }
         learnMore={{
-          href: openAppaUrl(
-            "/validation#make-policy-tests-a-required-ci-check",
-          ),
-          label: "Test changes in CI",
+          href: openAppaUrl("/validation"),
+          label: "CI checks",
         }}
         action={
           !sync.data?.enabled ? null : !canManage ? (
@@ -230,12 +239,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
                 Ask an administrator to connect a repository.
               </p>
             )
-          ) : failed ? (
-            <Button size="sm" onClick={() => setEditing(true)}>
-              <Github />
-              <span>Edit connection</span>
-            </Button>
-          ) : connected ? (
+          ) : connected || failed ? (
             <Button size="sm" variant="outline" asChild>
               <Link href="/settings/openappa">
                 <span>Sync settings</span>
@@ -246,10 +250,10 @@ function GithubSyncCard({ next }: { next: boolean }) {
             <Button
               size="sm"
               variant={next ? "default" : "outline"}
-              onClick={() => setEditing(true)}
+              onClick={() => setCreating(true)}
             >
               <Github />
-              <span>Connect GitHub</span>
+              <span>Create repository</span>
             </Button>
           )
         }
@@ -257,26 +261,51 @@ function GithubSyncCard({ next }: { next: boolean }) {
       {editing && (
         <OpenAppaSourceForm source={source} onOpenChange={setEditing} />
       )}
+      {creating && (
+        <OpenAppaCreateRepositoryDialog
+          onOpenChange={setCreating}
+          onConnectExisting={() => {
+            setCreating(false);
+            setEditing(true);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function LearnMoreCard() {
-  const appName = useAppName();
+function YellsCard() {
+  const summary = useOpenAppaYellsSummary();
   return (
     <StatusCard
-      icon={<BookOpen />}
-      title="How it works"
-      description={`${appName}'s guardrail uses OpenAPPA to check that data only goes to people allowed to see it.`}
-      action={
-        <ExternalDocsLink
-          href={openAppaUrl("/how-it-works")}
-          className="text-sm"
-        >
-          Read about OpenAPPA
-        </ExternalDocsLink>
+      icon={
+        <span className="w-6">
+          <OpenAppaAlertIcon animated className="w-full overflow-visible" />
+        </span>
       }
-    />
+      title="Yells"
+      description="Reports of confusing blocks or remedies. Investigate them with the configuration agent."
+      action={
+        <Button size="sm" variant="outline" asChild>
+          <Link href="/openappa/yells">
+            Review yells <ArrowRight />
+          </Link>
+        </Button>
+      }
+    >
+      {summary.isError ? (
+        <Button variant="ghost" size="sm" onClick={() => summary.refetch()}>
+          Could not load yells. Retry
+        </Button>
+      ) : (
+        <p className="flex items-baseline gap-2">
+          <span className="text-3xl font-semibold tabular-nums">
+            {summary.data?.unresolved ?? "—"}
+          </span>
+          <span className="text-sm text-muted-foreground">unresolved</span>
+        </p>
+      )}
+    </StatusCard>
   );
 }
 
@@ -321,7 +350,10 @@ function StatusCard({
         <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
           {action}
           {learnMore && (
-            <ExternalDocsLink href={learnMore.href} className="text-sm">
+            <ExternalDocsLink
+              href={learnMore.href}
+              className="shrink-0 text-xs text-muted-foreground"
+            >
               {learnMore.label}
             </ExternalDocsLink>
           )}

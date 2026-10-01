@@ -39,7 +39,8 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: ./.github/actions/run-claude
+        # Internal action pinned to its implementation commit; no release tag exists.
+        uses: archestra-ai/.github/actions/run-claude@3287f712b7b14c74f9c2305f3c4c0afa4615c0ff # zizmor: ignore[stale-action-refs]
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           use_sticky_comment: "true"

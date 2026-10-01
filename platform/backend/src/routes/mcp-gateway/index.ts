@@ -15,6 +15,7 @@ import {
   sessionFromHeaders,
 } from "@/openappa/service";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { CONNECTION_SETUP_CONTEXT_PARAM } from "@/services/connection-setup-context";
 import {
   AgentRunAttentionStateSchema,
   type AgentRunRecord,
@@ -97,7 +98,8 @@ function setWWWAuthenticateHeader(
   reply: FastifyReply,
 ) {
   const origin = getPublicRequestOrigin(request);
-  const resourceMetadataUrl = `${origin}/.well-known/oauth-protected-resource${request.url}`;
+  const pathname = new URL(request.url, origin).pathname;
+  const resourceMetadataUrl = `${origin}/.well-known/oauth-protected-resource${pathname}`;
   reply.header(
     "WWW-Authenticate",
     `Bearer resource_metadata="${resourceMetadataUrl}"`,
@@ -387,6 +389,10 @@ async function handleMcpPostRequest(
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
       openappaSession,
+      connectionSetupContext:
+        new URL(request.url, "http://localhost").searchParams.get(
+          CONNECTION_SETUP_CONTEXT_PARAM,
+        ) ?? undefined,
       currentToolCallId,
       agentId: profileId,
       tokenAuth: tokenAuthContext,

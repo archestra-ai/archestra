@@ -58,6 +58,7 @@ import {
   assertValuesMatchEnvironmentRegex,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { assertCanWriteMcpDeploymentYaml } from "@/services/mcp-advanced-settings";
 import {
   extractLocalConfigSecrets,
   getCatalogClientSecretValues,
@@ -464,6 +465,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (restBody.serverType === "local") {
         assertMcpServiceAccountAllowed(restBody.localConfig?.serviceAccount);
       }
+      await assertCanWriteMcpDeploymentYaml({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        requested: restBody.deploymentSpecYaml,
+      });
 
       // Secret FK columns are server-managed: clients submit secret values, never
       // ids. Trusting an inbound id would let a caller point the row at another
@@ -1017,6 +1023,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       }
+
+      // Checked before any write, the rename cascade below included.
+      await assertCanWriteMcpDeploymentYaml({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        requested: restBody.deploymentSpecYaml,
+        current: originalCatalogItem.deploymentSpecYaml,
+      });
 
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is

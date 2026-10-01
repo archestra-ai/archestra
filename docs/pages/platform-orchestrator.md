@@ -3,7 +3,7 @@ title: MCP Orchestrator
 category: MCP
 order: 3
 description: Running self-hosted MCP servers in Kubernetes
-lastUpdated: 2026-08-08
+lastUpdated: 2026-10-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -133,7 +133,7 @@ Self-hosted registry entries define how the deployment should be built.
 - **Base image with command and args**: use Archestra's MCP server base image and specify the command to run.
 - **Custom image**: provide your own Docker image when the server is packaged as a container.
 - **Environment and secrets**: define install-time fields, static environment variables, and secret values needed by the server.
-- **Advanced YAML**: override the generated Kubernetes deployment when you need custom pod configuration.
+- **Advanced YAML**: override the generated Kubernetes deployment when you need custom pod configuration. Viewing and editing it needs the `mcpAdvancedSettings` permission. Only admins hold it by default, and you can add it to a [custom role](/docs/platform-access-control#custom-roles).
 
 Registry entries define whether a server is remote or self-hosted before the orchestrator creates any Kubernetes resources. See [Private MCP Registry - Server Configuration](/docs/platform-private-registry#server-configuration) for those registry fields.
 

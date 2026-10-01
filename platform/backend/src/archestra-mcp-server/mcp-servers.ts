@@ -41,6 +41,7 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
+import { assertCanWriteMcpDeploymentYaml } from "@/services/mcp-advanced-settings";
 import {
   extractLocalConfigSecrets,
   upsertCatalogClientSecretValue,
@@ -926,6 +927,17 @@ async function handleEditMcpConfig(
       );
     }
 
+    try {
+      await assertCanWriteMcpDeploymentYaml({
+        userId: context.userId,
+        organizationId,
+        requested: args.deploymentSpecYaml,
+        current: existing.deploymentSpecYaml,
+      });
+    } catch (error) {
+      return errorResult((error as Error).message);
+    }
+
     const updateData: Record<string, unknown> = {};
     if (args.serverType !== undefined) updateData.serverType = args.serverType;
     if (args.serverUrl !== undefined) updateData.serverUrl = args.serverUrl;
@@ -1042,6 +1054,16 @@ async function handleCreateMcpServer(
 
     if (!context.userId || !organizationId) {
       return errorResult("user/organization context not available.");
+    }
+
+    try {
+      await assertCanWriteMcpDeploymentYaml({
+        userId: context.userId,
+        organizationId,
+        requested: args.deploymentSpecYaml,
+      });
+    } catch (error) {
+      return errorResult((error as Error).message);
     }
 
     // A server created by an agent lands in that agent's environment unless the

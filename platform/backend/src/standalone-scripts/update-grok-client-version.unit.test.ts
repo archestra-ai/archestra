@@ -58,6 +58,16 @@ test.each([
   expect(result.updatedSource).toBe(source);
 });
 
+test("rejects syntax errors elsewhere in the source file", () => {
+  const source =
+    'const GROK_CLI_CLIENT_VERSION = "1.0.46";\nconst broken = ;\n';
+  const result = runUpdater(source, "1.0.47");
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("malformed TypeScript source");
+  expect(result.updatedSource).toBe(source);
+});
+
 test.each([
   "1.0.47-alpha.1",
   "v1.0.47",

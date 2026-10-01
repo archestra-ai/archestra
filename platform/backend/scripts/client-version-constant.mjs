@@ -15,6 +15,17 @@ export function updateClientVersionConstant({
   label,
 }) {
   const sourceText = readFileSync(sourcePath, "utf8");
+  // The public transpile API reports syntax errors. `SourceFile.parseDiagnostics`
+  // gives the same errors, but it is internal to TypeScript.
+  const { diagnostics = [] } = ts.transpileModule(sourceText, {
+    fileName: sourcePath,
+    reportDiagnostics: true,
+  });
+  if (diagnostics.length > 0) {
+    throw new Error(
+      `Cannot update malformed TypeScript source: ${ts.flattenDiagnosticMessageText(diagnostics[0].messageText, "\n")}`,
+    );
+  }
   const sourceFile = ts.createSourceFile(
     sourcePath,
     sourceText,
@@ -22,12 +33,6 @@ export function updateClientVersionConstant({
     true,
     ts.ScriptKind.TS,
   );
-  if (sourceFile.parseDiagnostics.length > 0) {
-    const error = sourceFile.parseDiagnostics[0];
-    throw new Error(
-      `Cannot update malformed TypeScript source: ${ts.flattenDiagnosticMessageText(error.messageText, "\n")}`,
-    );
-  }
   const declarations = sourceFile.statements.flatMap((statement) =>
     ts.isVariableStatement(statement)
       ? statement.declarationList.declarations.filter(

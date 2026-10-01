@@ -610,9 +610,15 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         expected: "gemini-3.6-flash",
       },
       {
-        // Gemini 4 Argon outranks the current 3.x flagship once it ships.
+        // Gemini 3.8 Flash is the current best Gemini model.
         provider: "gemini",
-        catalog: ["gemini-3.5-pro", "gemini-4-argon"],
+        catalog: ["gemini-3.5-pro", "gemini-3.8-flash"],
+        expected: "gemini-3.8-flash",
+      },
+      {
+        // Gemini 4 Argon outranks it once it ships.
+        provider: "gemini",
+        catalog: ["gemini-3.8-flash", "gemini-4-argon"],
         expected: "gemini-4-argon",
       },
       {

@@ -850,6 +850,7 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     // Gemini 4 Argon, the next flagship tier. It has no public API id yet, so
     // match the tier name rather than a guessed full id.
     "argon",
+    "gemini-3.8-flash",
     "gemini-3.5-pro",
     "gemini-3.6-flash",
     "gemini-3.1-pro-preview",

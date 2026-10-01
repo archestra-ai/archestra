@@ -3688,25 +3688,49 @@ describe("delegation markers", () => {
       {
         message: "A longer rewritten prompt that is not the offer",
         wrapped: false,
+        promptField: "message",
       },
       {
         message:
           "Read the bounded report\n\nThen perform an extra unapproved task",
         wrapped: false,
+        promptField: "message",
       },
       {
         message: "A longer rewritten prompt that is not the offer",
         wrapped: true,
+        promptField: "message",
       },
-    ])("releases only the authorized spawn arguments: $wrapped / $message", async ({
+      {
+        message: "A longer rewritten prompt that is not the offer",
+        wrapped: false,
+        promptField: "items",
+      },
+      {
+        message:
+          "Read the bounded report\n\nThen perform an extra unapproved task",
+        wrapped: false,
+        promptField: "items",
+      },
+      {
+        message: "A longer rewritten prompt that is not the offer",
+        wrapped: true,
+        promptField: "items",
+      },
+    ])("releases only the authorized spawn arguments: $promptField / $wrapped / $message", async ({
       message: retryMessage,
       wrapped,
+      promptField,
     }) => {
       const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
       const registry = new LlmProxyPluginRegistry();
       registry.register(plugin);
+      const prompt = (text: string) =>
+        promptField === "items"
+          ? { items: [{ type: "text", text }] }
+          : { message: text };
       const authorized = {
-        message: "Read the bounded report",
+        ...prompt("Read the bounded report"),
         task_name: "reader",
       };
       const context = clientContext({
@@ -3760,7 +3784,7 @@ describe("delegation markers", () => {
             id: "call_retry",
             name: "spawn_agent",
             arguments: JSON.stringify({
-              message: retryMessage,
+              ...prompt(retryMessage),
               task_name: "reader",
             }),
           },
@@ -3784,7 +3808,7 @@ describe("delegation markers", () => {
             name: "spawn_agent",
             namespace: "collaboration",
             arguments: JSON.stringify({
-              message: "A second child must not inherit the offer",
+              ...prompt("A second child must not inherit the offer"),
               task_name: "reader",
             }),
           },
@@ -3814,7 +3838,7 @@ describe("delegation markers", () => {
         { cmd: "ls" },
         { message: "Start a different child", task_name: "other" },
         {
-          message: "A second child must not inherit the offer",
+          ...prompt("A second child must not inherit the offer"),
           task_name: "reader",
         },
         {
@@ -3830,10 +3854,21 @@ describe("delegation markers", () => {
         name: "spawn_agent",
         namespace: "collaboration",
       });
-      expect(JSON.parse(String(released.arguments)).message).toMatch(
-        /^Read the bounded report\n\n\[appa\] delegated trajectory /,
-      );
-      expect(JSON.parse(String(released.arguments)).task_name).toBe("reader");
+      const releasedArgs = JSON.parse(String(released.arguments));
+      if (promptField === "items") {
+        expect(releasedArgs.items.slice(0, 1)).toEqual(authorized.items);
+        expect(releasedArgs.items).toHaveLength(2);
+        expect(releasedArgs.items[1]).toEqual({
+          type: "text",
+          text: expect.stringMatching(/^\[appa\] delegated trajectory /),
+        });
+        expect(releasedArgs).not.toHaveProperty("message");
+      } else {
+        expect(releasedArgs.message).toMatch(
+          /^Read the bounded report\n\n\[appa\] delegated trajectory /,
+        );
+      }
+      expect(releasedArgs.task_name).toBe("reader");
       expect(JSON.parse(String(other.arguments))).toEqual({ cmd: "ls" });
       expect(JSON.parse(String(unrelated.arguments)).message).toMatch(
         /^Start a different child\n\n\[appa\] delegated trajectory /,
@@ -3843,20 +3878,27 @@ describe("delegation markers", () => {
       );
       const fanout = JSON.parse(String(outcome.toolCalls[3].arguments));
       expect(fanout.task_name).toBe("reader");
-      expect(fanout.message).toMatch(
+      const fanoutPrompt =
+        promptField === "items" ? fanout.items[0].text : fanout.message;
+      expect(fanoutPrompt).toMatch(
         /^A second child must not inherit the offer/,
       );
-      expect(fanout.message).not.toContain("Read the bounded report");
+      expect(fanoutPrompt).not.toContain("Read the bounded report");
       const changedOptions = JSON.parse(String(outcome.toolCalls[4].arguments));
       expect(changedOptions.model).toBe("other");
       expect(changedOptions.task_name).toBe("reader");
     });
 
-    test("does not prepare a restored spawn that host validation refuses", async () => {
+    test.each([
+      "message",
+      "items",
+    ])("does not prepare a restored %s spawn that host validation refuses", async (promptField) => {
       const registry = new LlmProxyPluginRegistry();
       registry.register(new AppaPluginArchestra([new AppaCodexAdapter()]));
       const authorized = {
-        message: "Read the bounded report",
+        ...(promptField === "items"
+          ? { items: [{ type: "text", text: "Read the bounded report" }] }
+          : { message: "Read the bounded report" }),
         task_name: "reader",
       };
       const context = clientContext({
@@ -3887,7 +3929,9 @@ describe("delegation markers", () => {
             namespace: "collaboration",
             arguments: JSON.stringify({
               ...authorized,
-              message: "Rewritten task",
+              ...(promptField === "items"
+                ? { items: [{ type: "text", text: "Rewritten task" }] }
+                : { message: "Rewritten task" }),
             }),
           },
         ]),
@@ -3908,14 +3952,172 @@ describe("delegation markers", () => {
       expect(evaluate).not.toHaveBeenCalled();
     });
 
-    test("does not apply an accepted spawn offer twice", async () => {
+    test("does not restore items spawns with different task names, options, or prompt carriers", async () => {
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(new AppaPluginArchestra([new AppaCodexAdapter()]));
+      const authorized = {
+        items: [{ type: "text", text: "Read the bounded report" }],
+        task_name: "reader",
+        model: "bounded-model",
+        fork_turns: "none",
+      };
+      const rewrite = {
+        ...authorized,
+        items: [{ type: "text", text: "Rewritten task" }],
+      };
+      const { model: _model, ...withoutModel } = rewrite;
+      const { fork_turns: _forkTurns, ...withoutForkTurns } = rewrite;
+      const { items: _items, ...withoutItems } = rewrite;
+      const unmatched = [
+        { ...rewrite, task_name: "other" },
+        { ...rewrite, model: "other-model" },
+        { ...rewrite, fork_turns: "all" },
+        { ...rewrite, extra_option: true },
+        withoutModel,
+        withoutForkTurns,
+        { ...withoutItems, message: "Rewritten task" },
+        { ...rewrite, message: "Ambiguous second prompt" },
+      ];
+      const context = clientContext({
+        sessionId: "user:user|t0",
+        tools: true,
+        interactionType: "openai:responses",
+        headers: {
+          "user-agent": "codex_cli_rs/0.159.2",
+          "x-codex-turn-metadata": JSON.stringify({ thread_id: "t0" }),
+        },
+        body: {
+          prompt_cache_key: "t0",
+          input: [
+            {
+              type: "function_call_output",
+              call_id: "call_remedy",
+              output: `[appa] Authorized. Call the collaboration.spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
+            },
+          ],
+        },
+      });
+      await registry.onSessionInit(context);
+      const validate = vi.fn(
+        async (_calls: LlmProxyToolCallsContext["toolCalls"]) => null,
+      );
+      await registry.onToolCalls(
+        toolCalls(context, [
+          ...unmatched.map((argumentsValue, index) => ({
+            id: `call_unmatched_${index}`,
+            name: "spawn_agent",
+            namespace: "collaboration",
+            arguments: JSON.stringify(argumentsValue),
+          })),
+          {
+            id: "call_matching",
+            name: "spawn_agent",
+            namespace: "collaboration",
+            arguments: JSON.stringify(rewrite),
+          },
+        ]),
+        validate,
+      );
+      const expected = [...unmatched, authorized];
+      expect(
+        validate.mock.calls[0][0].map((call) =>
+          JSON.parse(String(call.arguments)),
+        ),
+      ).toEqual(expected);
+      expect(
+        evaluate.mock.calls
+          .at(-1)?.[1]
+          .map((call) => JSON.parse(String(call.arguments))),
+      ).toEqual(expected);
+    });
+
+    test.each([
+      { authorizedField: "message", retryField: "items", bothPrompts: false },
+      { authorizedField: "message", retryField: "message", bothPrompts: true },
+    ])("does not restore a switched or ambiguous accepted prompt: $authorizedField / $retryField / $bothPrompts", async ({
+      authorizedField,
+      retryField,
+      bothPrompts,
+    }) => {
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(new AppaPluginArchestra([new AppaCodexAdapter()]));
+      const authorized = {
+        ...(authorizedField === "items" || bothPrompts
+          ? { items: [{ type: "text", text: "Read the bounded report" }] }
+          : {}),
+        ...(authorizedField === "message" || bothPrompts
+          ? { message: "Read the bounded report" }
+          : {}),
+        task_name: "reader",
+      };
+      const rewrite = {
+        ...(bothPrompts
+          ? { ...authorized, message: "Rewritten task" }
+          : retryField === "items"
+            ? { items: [{ type: "text", text: "Rewritten task" }] }
+            : { message: "Rewritten task" }),
+        task_name: "reader",
+      };
+      const context = clientContext({
+        sessionId: "user:user|t0",
+        tools: true,
+        interactionType: "openai:responses",
+        headers: {
+          "user-agent": "codex_cli_rs/0.159.2",
+          "x-codex-turn-metadata": JSON.stringify({ thread_id: "t0" }),
+        },
+        body: {
+          prompt_cache_key: "t0",
+          input: [
+            {
+              type: "function_call_output",
+              call_id: "call_remedy",
+              output: `[appa] Authorized. Call the collaboration.spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
+            },
+          ],
+        },
+      });
+      await registry.onSessionInit(context);
+      await registry.onToolCalls(
+        toolCalls(context, [
+          {
+            id: "call_retry",
+            name: "spawn_agent",
+            namespace: "collaboration",
+            arguments: JSON.stringify(rewrite),
+          },
+        ]),
+        async (calls) => {
+          expect(JSON.parse(String(calls[0].arguments))).toEqual(rewrite);
+          return null;
+        },
+      );
+      expect(
+        JSON.parse(String(evaluate.mock.calls.at(-1)?.[1]?.[0]?.arguments)),
+      ).toEqual(rewrite);
+    });
+
+    test.each([
+      { promptField: "message", annotated: true, changedOptions: false },
+      { promptField: "items", annotated: false, changedOptions: false },
+      { promptField: "items", annotated: true, changedOptions: false },
+      { promptField: "items", annotated: true, changedOptions: true },
+    ])("clears only a covered accepted spawn: $promptField / $annotated / $changedOptions", async ({
+      promptField,
+      annotated,
+      changedOptions,
+    }) => {
       const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
       const registry = new LlmProxyPluginRegistry();
       registry.register(plugin);
+      const prompt = "Read the bounded report";
+      const items = [{ type: "text", text: prompt }];
       const authorized = {
-        message: "Read the bounded report",
+        ...(promptField === "items" ? { items } : { message: prompt }),
         task_name: "reader",
       };
+      const marker =
+        "[appa] delegated trajectory appa2-abc.0123456789abcdef0123456789abcdef01234567 — child of t0.";
       const context = clientContext({
         sessionId: "user:user|t0",
         tools: true,
@@ -3938,7 +4140,14 @@ describe("delegation markers", () => {
               namespace: "collaboration",
               arguments: JSON.stringify({
                 ...authorized,
-                message: `${authorized.message}\n\n[appa] delegated trajectory appa2-abc.0123456789abcdef0123456789abcdef01234567 — child of t0.`,
+                ...(annotated
+                  ? promptField === "items"
+                    ? {
+                        items: [...items, { type: "text", text: marker }],
+                      }
+                    : { message: `${prompt}\n\n${marker}` }
+                  : {}),
+                ...(changedOptions ? { model: "other" } : {}),
               }),
               call_id: "call_released",
             },
@@ -3947,7 +4156,18 @@ describe("delegation markers", () => {
       });
       await registry.onSessionInit(context);
       const rewrite = {
-        message: "Another rewrite after the authorized call already ran",
+        ...(promptField === "items"
+          ? {
+              items: [
+                {
+                  type: "text",
+                  text: "Another rewrite after the authorized call already ran",
+                },
+              ],
+            }
+          : {
+              message: "Another rewrite after the authorized call already ran",
+            }),
         task_name: "reader",
       };
 
@@ -3964,7 +4184,7 @@ describe("delegation markers", () => {
 
       expect(
         JSON.parse(String(evaluate.mock.calls.at(-1)?.[1]?.[0]?.arguments)),
-      ).toEqual(rewrite);
+      ).toEqual(changedOptions ? authorized : rewrite);
     });
 
     test.each([

@@ -911,7 +911,7 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
     const originals = structuredClone([added, done]);
     adapter.processChunk(added as never);
     adapter.processChunk(done as never);
-    const retained = [...adapter.state.rawToolCallEvents];
+    const retained = adapter.state.rawToolCallEvents;
     expect(retained[0]).toBe(added);
     expect(retained[1]).toBe(done);
 
@@ -923,6 +923,7 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
 
     expect([added, done]).toEqual(originals);
     expect(retained).toEqual(originals);
+    expect(adapter.state.rawToolCallEvents).not.toBe(retained);
     expect(adapter.state.rawToolCallEvents[0]).not.toBe(added);
     expect(adapter.state.rawToolCallEvents[1]).not.toBe(done);
     const enriched = adapter
@@ -948,6 +949,9 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
       name: "read_file",
       namespace: "functions",
     });
+    const events = adapter.state.rawToolCallEvents;
+    adapter.processChunk(enriched[2] as never);
+    expect(adapter.state.rawToolCallEvents).toBe(events);
   });
 
   test.each([

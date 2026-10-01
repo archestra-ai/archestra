@@ -1738,14 +1738,30 @@ function sameAuthorizedSpawn(params: {
   if (localSpawnName(params.name) !== localSpawnName(params.pending.tool)) {
     return false;
   }
-  // The message is the only field a retry may rewrite. Any other difference,
+  // The prompt is the only field a retry may rewrite. Any other difference,
   // including a reused task_name with different options, is another call.
-  if (typeof params.pending.arguments.message !== "string") return false;
+  const promptField =
+    typeof params.pending.arguments.message === "string"
+      ? "message"
+      : Array.isArray(params.pending.arguments.items)
+        ? "items"
+        : undefined;
+  if (
+    !promptField ||
+    ("message" in params.pending.arguments &&
+      "items" in params.pending.arguments) ||
+    ("message" in params.arguments && "items" in params.arguments) ||
+    (promptField === "message"
+      ? typeof params.arguments.message !== "string"
+      : !Array.isArray(params.arguments.items))
+  ) {
+    return false;
+  }
   const authorizedKeys = Object.keys(params.pending.arguments)
-    .filter((key) => key !== "message")
+    .filter((key) => key !== promptField)
     .sort();
   const actualKeys = Object.keys(params.arguments)
-    .filter((key) => key !== "message")
+    .filter((key) => key !== promptField)
     .sort();
   if (authorizedKeys.join("\0") !== actualKeys.join("\0")) return false;
   return authorizedKeys.every(

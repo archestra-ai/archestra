@@ -1317,7 +1317,10 @@ function spawnRetrySpelling(params: {
   ) {
     return undefined;
   }
-  return `${params.call.namespace}.${params.call.name}`;
+  const prefix = `${params.call.namespace}.`;
+  return params.call.name.startsWith(prefix)
+    ? params.call.name
+    : `${prefix}${params.call.name}`;
 }
 
 function nativePresentation(

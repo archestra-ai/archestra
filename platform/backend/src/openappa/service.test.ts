@@ -191,7 +191,10 @@ describe("APPA feature boundary", () => {
     );
   });
 
-  test("names a collaboration spawn in the retry spelling without changing its tool", async () => {
+  test.each([
+    "spawn_agent",
+    "collaboration.spawn_agent",
+  ])("names a collaboration spawn in the retry spelling without changing its tool: %s", async (name) => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "allow_call", spawn_binding: "fork-1" }),
     );
@@ -201,15 +204,16 @@ describe("APPA feature boundary", () => {
       [
         {
           id: "spawn",
-          name: "spawn_agent",
+          name,
           namespace: "collaboration",
           arguments: { message: "Read the report", task_name: "reader" },
         },
       ],
       {
         canonicalize: (name) => name,
-        isSpawn: (name, namespace) =>
-          name === "spawn_agent" &&
+        isSpawn: (candidate, namespace) =>
+          (candidate === "spawn_agent" ||
+            candidate === "collaboration.spawn_agent") &&
           (namespace === undefined ||
             namespace === "functions" ||
             namespace === "collaboration"),
@@ -220,7 +224,7 @@ describe("APPA feature boundary", () => {
       JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
     ).toMatchObject({
       event: "tool_call",
-      tool: "spawn_agent",
+      tool: name,
       spelling: "collaboration.spawn_agent",
       spawn: true,
       arguments: { message: "Read the report", task_name: "reader" },

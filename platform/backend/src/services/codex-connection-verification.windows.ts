@@ -147,7 +147,7 @@ try {
   $start.Arguments = ($nativeArgs | ForEach-Object { Native-Argument $_ }) -join ' '
   $start.UseShellExecute = $false
   # Codex's env override wins over clientInfo.name. Set only the verifier child.
-  $start.EnvironmentVariables['CODEX_INTERNAL_ORIGINATOR_OVERRIDE'] = '${ARCHESTRA_CODEX_CONNECTION_ORIGINATOR}'
+  $start.EnvironmentVariables['CODEX_INTERNAL_ORIGINATOR_OVERRIDE'] = '${ARCHESTRA_CODEX_CONNECTION_ORIGINATOR.replaceAll("'", "''")}'
   $start.CreateNoWindow = $true
   $start.RedirectStandardInput = $true
   $start.RedirectStandardOutput = $true
@@ -165,7 +165,7 @@ try {
   $state.Writer.AutoFlush = $true
   $state.ErrBuffer = New-Object char[] 1024
   $state.ErrRead = $state.Process.StandardError.ReadAsync($state.ErrBuffer, 0, $state.ErrBuffer.Length)
-  $null = Invoke-Rpc 'initialize' @{ clientInfo = @{ name = '${ARCHESTRA_CODEX_CONNECTION_ORIGINATOR}'; version = '1.0.0' } }
+  $null = Invoke-Rpc 'initialize' @{ clientInfo = @{ name = '${ARCHESTRA_CODEX_CONNECTION_ORIGINATOR.replaceAll("'", "''")}'; version = '1.0.0' } }
   Send-Frame @{ method = 'initialized' }
   $config = Invoke-Rpc 'config/read' @{ includeLayers = $false; cwd = $start.WorkingDirectory }
   if ($options.provider -and $config.config.model_provider -cne $options.provider) { throw 'The configured Codex provider is not the selected LLM proxy.' }

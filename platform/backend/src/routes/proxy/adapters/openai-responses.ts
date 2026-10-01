@@ -1625,6 +1625,7 @@ class OpenAiResponsesStreamAdapter
     namespace: string | undefined,
   ): void {
     if (!namespace) return;
+    let events: unknown[] | undefined;
     for (const [index, event] of this.state.rawToolCallEvents.entries()) {
       if (
         !isRecord(event) ||
@@ -1642,7 +1643,8 @@ class OpenAiResponsesStreamAdapter
       };
       if (item.id !== key && item.call_id !== key) continue;
       if (item.namespace && (item.name || !name)) continue;
-      this.state.rawToolCallEvents[index] = {
+      events ??= [...this.state.rawToolCallEvents];
+      events[index] = {
         ...event,
         item: {
           ...item,
@@ -1651,6 +1653,7 @@ class OpenAiResponsesStreamAdapter
         },
       };
     }
+    if (events) this.state.rawToolCallEvents = events;
   }
 }
 

@@ -1329,6 +1329,308 @@ describe("OpenAI Responses proxy", () => {
     });
   });
 
+  test("routes the native verifier ChatGPT bearer to the subscription client and keeps API keys metered", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Codex verifier subscription" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const { value: passthroughToken } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "codex-verifier-subscription",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+    let capturedApiKey: string | undefined;
+    let capturedOptions:
+      | Parameters<typeof openAiResponsesAdapterFactory.createClient>[1]
+      | undefined;
+    vi.mocked(openAiResponsesAdapterFactory.createClient).mockImplementation(
+      (apiKey, options) => {
+        capturedApiKey = apiKey;
+        capturedOptions = options;
+        return createOpenAiResponsesTestClient() as never;
+      },
+    );
+    const accessToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature";
+    const verifierHeaders = {
+      "content-type": "application/json",
+      originator: "archestra_codex_connection",
+    };
+
+    const denied = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        ...verifierHeaders,
+        authorization: `Bearer ${accessToken}`,
+        "chatgpt-account-id": "account_123",
+      },
+      payload: { model: "gpt-5.6-sol", input: "Hello!" },
+    });
+    expect(denied.statusCode).toBe(401);
+    expect(denied.json().error.message).toMatch(/passthrough virtual key/i);
+
+    const missingAccount = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        ...verifierHeaders,
+        authorization: `Bearer ${accessToken}`,
+        "x-archestra-virtual-key": passthroughToken,
+      },
+      payload: { model: "gpt-5.6-sol", input: "Hello!" },
+    });
+    expect(missingAccount.statusCode).toBe(400);
+    expect(missingAccount.json().error.message).toMatch(/account ID/i);
+    expect(openAiResponsesAdapterFactory.createClient).not.toHaveBeenCalled();
+
+    const subscription = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        ...verifierHeaders,
+        authorization: `Bearer ${accessToken}`,
+        "x-archestra-virtual-key": passthroughToken,
+        "chatgpt-account-id": "account_123",
+      },
+      payload: { model: "gpt-5.6-sol", input: "Hello!", tool_choice: "auto" },
+    });
+    expect(subscription.statusCode, subscription.body).toBe(200);
+    expect(capturedOptions?.openAiCodexPassthrough).toMatchObject({
+      accessToken,
+      accountId: "account_123",
+      originator: "archestra_codex_connection",
+    });
+    expect(capturedOptions?.openAiCodexPassthrough?.originator).not.toBe(
+      "codex_cli_rs",
+    );
+    const subscriptionInteractions =
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
+    expect(subscriptionInteractions.at(-1)).toMatchObject({
+      authMethod: "passthrough_virtual_key",
+      billingMode: "subscription",
+      request: { tool_choice: "auto" },
+      processedRequest: { tool_choice: "none" },
+    });
+    expect(JSON.stringify(subscriptionInteractions)).not.toContain(accessToken);
+
+    capturedApiKey = undefined;
+    const metered = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        ...verifierHeaders,
+        authorization: "Bearer sk-own-test-key",
+        "x-archestra-virtual-key": passthroughToken,
+        "chatgpt-account-id": "account_123",
+      },
+      payload: { model: "gpt-4o", input: "Hello!" },
+    });
+    expect(metered.statusCode, metered.body).toBe(200);
+    expect(capturedApiKey).toBe("sk-own-test-key");
+    expect(
+      vi.mocked(openAiResponsesAdapterFactory.createClient).mock.lastCall?.[1]
+        ?.openAiCodexPassthrough,
+    ).toBeUndefined();
+    const meteredInteractions =
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
+    expect(meteredInteractions.at(-1)).toMatchObject({
+      authMethod: "passthrough_virtual_key",
+      billingMode: "metered",
+    });
+
+    capturedApiKey = undefined;
+    const unrelated = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+        "x-archestra-virtual-key": passthroughToken,
+        "chatgpt-account-id": "account_123",
+        originator: "codex_app_server",
+      },
+      payload: { model: "gpt-4o", input: "Hello!" },
+    });
+    expect(unrelated.statusCode, unrelated.body).toBe(200);
+    expect(capturedApiKey).toBe(accessToken);
+    expect(
+      vi.mocked(openAiResponsesAdapterFactory.createClient).mock.lastCall?.[1]
+        ?.openAiCodexPassthrough,
+    ).toBeUndefined();
+    const unrelatedInteractions =
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
+    expect(unrelatedInteractions.at(-1)).toMatchObject({
+      billingMode: "metered",
+    });
+  });
+
+  test.for(
+    [false, true].flatMap((stream) =>
+      [
+        "function_call",
+        "custom_tool_call",
+        "local_shell_call",
+        ...(stream ? ["generated_frame", "malformed_frame"] : []),
+      ].map((kind) => ({
+        stream,
+        kind,
+      })),
+    ),
+  )("blocks model actions before verifier delivery (stream=$stream, kind=$kind)", async ({
+    stream,
+    kind,
+  }, { makeAgent, makeMember, makeUser }) => {
+    const llmProxy = await makeAgent({ name: "Inference-only verifier" });
+    const owner = await makeUser();
+    await makeMember(owner.id, llmProxy.organizationId);
+    const key = await VirtualApiKeyModel.create({
+      organizationId: llmProxy.organizationId,
+      name: "Verifier passthrough",
+      scope: "personal",
+      authorId: owner.id,
+      keyType: "passthrough",
+    });
+    const calls: Record<string, unknown>[] = [];
+    const item = {
+      type: kind.endsWith("_frame") ? "message" : kind,
+      id: "verification-item",
+      call_id: "verification-call",
+      name: "exec_command",
+      arguments: '{"cmd":"do-not-execute"}',
+      input: "do-not-execute",
+      status: "completed",
+      action: { type: "exec", command: ["do-not-execute"] },
+    };
+    const completed = {
+      id: "verification-response",
+      object: "response",
+      created_at: 1,
+      status: "completed",
+      model: "gpt-4o",
+      output: [item],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    };
+    if (kind.endsWith("_frame")) {
+      const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+      // A safe provider event must not allow a synthesized executable frame.
+      vi.spyOn(adapter, "processChunk").mockReturnValue({
+        sseData:
+          kind === "malformed_frame"
+            ? 'data: {"type":\n\n'
+            : `event: response.output_item.added\ndata: ${JSON.stringify({
+                type: "response.output_item.added",
+                output_index: 0,
+                item: { ...item, type: "function_call" },
+              })}\n\n`,
+        isToolCallChunk: false,
+        isFinal: false,
+      });
+      vi.spyOn(
+        openAiResponsesAdapterFactory,
+        "createStreamAdapter",
+      ).mockReturnValue(adapter);
+    }
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async (params: Record<string, unknown>) => {
+              calls.push(params);
+              return stream
+                ? {
+                    async *[Symbol.asyncIterator]() {
+                      yield {
+                        type: "response.created",
+                        response: {
+                          ...completed,
+                          status: "in_progress",
+                          output: [],
+                        },
+                      };
+                      yield {
+                        type: "response.output_item.added",
+                        sequence_number: 1,
+                        output_index: 0,
+                        item,
+                      };
+                      yield {
+                        type: "response.output_item.done",
+                        sequence_number: 2,
+                        output_index: 0,
+                        item,
+                      };
+                      yield {
+                        type: "response.completed",
+                        sequence_number: 3,
+                        response: completed,
+                      };
+                    },
+                  }
+                : completed;
+            },
+          },
+        }) as never,
+    );
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const payload = {
+      model: "gpt-4o",
+      input: "Reply OK without using tools",
+      stream,
+      tool_choice: "auto",
+      tools: [
+        {
+          type: "function",
+          name: "exec_command",
+          parameters: {
+            type: "object",
+            properties: { cmd: { type: "string" } },
+          },
+        },
+      ],
+    };
+    const headers = {
+      authorization: "Bearer sk-fixture",
+      "X-Archestra-Passthrough": key.value,
+    };
+    const result = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${llmProxy.id}/responses`,
+      headers: { ...headers, originator: "archestra_codex_connection" },
+      payload,
+    });
+    const streamStarted = stream && !kind.endsWith("_frame");
+    expect(result.statusCode, result.body).toBe(streamStarted ? 200 : 409);
+    if (streamStarted) expect(result.body).toContain('"type":"error"');
+    expect(result.body).toContain(
+      kind === "malformed_frame"
+        ? "Malformed response during Codex connection verification"
+        : "does not permit model tool calls",
+    );
+    expect(result.body).not.toContain("do-not-execute");
+    expect(result.body).not.toContain('"type":"function_call"');
+    expect(calls[0].tool_choice).toBe("none");
+    if (stream && kind === "function_call") {
+      const normal = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${llmProxy.id}/responses`,
+        headers: { ...headers, originator: "codex_cli_rs" },
+        payload,
+      });
+      expect(normal.statusCode, normal.body).toBe(200);
+      expect(normal.body).toContain('"name":"exec_command"');
+      expect(calls.at(-1)?.tool_choice).toBe("auto");
+    }
+    await app.close();
+  });
+
   test("does not forward a Codex ChatGPT bearer without proxy access", async ({
     makeAgent,
   }) => {

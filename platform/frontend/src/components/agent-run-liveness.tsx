@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, Clock3, MessageCircleQuestion } from "lucide-react";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { NO_MODEL_ACTIVITY_WARNING_MS } from "@/lib/agent-run-activity";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 import {
@@ -32,44 +33,30 @@ export function AgentRunLiveness({
   const deadline = new Date(run.hardDeadlineAt);
 
   return (
-    <output
-      className={cn(
-        "flex shrink-0 flex-col gap-2 rounded-md border px-3 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between",
-        presentation.needsAttention
-          ? "border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-100"
-          : "bg-muted/20 text-muted-foreground",
-        className,
-      )}
+    <InlineNotice
+      role="status"
+      variant={presentation.needsAttention ? "warning" : "neutral"}
+      className={cn("shrink-0", className)}
     >
-      <div className="flex min-w-0 items-start gap-2 sm:items-center">
-        <Icon
-          aria-hidden
-          className={cn(
-            "mt-0.5 size-3.5 shrink-0 sm:mt-0",
-            presentation.needsAttention
-              ? "text-amber-600 dark:text-amber-400"
-              : "text-muted-foreground",
-          )}
-        />
-        <span className="font-medium text-foreground">
-          {presentation.title}
-        </span>
-        <span className="hidden text-muted-foreground md:inline">
-          {presentation.detail}
-        </span>
-      </div>
-      {Number.isNaN(deadline.getTime()) ? (
-        <span>{presentation.deadlineLabel}</span>
-      ) : (
-        <time
-          dateTime={deadline.toISOString()}
-          title={`Hard deadline: ${deadline.toLocaleString()}`}
-          className="shrink-0 tabular-nums"
-        >
-          {presentation.deadlineLabel}
-        </time>
-      )}
-    </output>
+      <Icon aria-hidden />
+      <span className="font-medium">{presentation.title}</span>
+      <InlineNoticeText className="hidden @3xl:inline">
+        {presentation.detail}
+      </InlineNoticeText>
+      <span className="ml-auto tabular-nums">
+        {Number.isNaN(deadline.getTime()) ? (
+          <span>{presentation.deadlineLabel}</span>
+        ) : (
+          <time
+            dateTime={deadline.toISOString()}
+            title={`Hard deadline: ${deadline.toLocaleString()}`}
+            className="shrink-0 tabular-nums"
+          >
+            {presentation.deadlineLabel}
+          </time>
+        )}
+      </span>
+    </InlineNotice>
   );
 }
 

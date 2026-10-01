@@ -124,7 +124,7 @@ export function isDelegationMarkerItem(value: unknown): boolean {
 }
 
 /**
- * Collects markers from opening user messages in wire order.
+ * Collects markers from opening user/agent task messages in wire order.
  * Ignores system messages, tool results, and client notifications.
  * Only accepts a marker line at the end of the text.
  */
@@ -163,6 +163,21 @@ export function stripDelegationMarkers(params: {
         stripTextContent(item, "output", "input_text", false);
       } else if (item.type === undefined || item.type === "message") {
         stripTextContent(item, "content", "input_text", item.role === "user");
+      } else if (isCodexTaskMessage(item)) {
+        stripTextContent(item, "content", "input_text", false);
+        // Codex carries an encrypted spawn.message verbatim into this part.
+        // Remove only our transport suffix; never decode or re-encode the blob.
+        for (const part of asArray(item.content) ?? []) {
+          const record = asRecord(part);
+          if (
+            record?.type === "encrypted_content" &&
+            typeof record.encrypted_content === "string"
+          ) {
+            record.encrypted_content = stripMarkerLines(
+              record.encrypted_content,
+            );
+          }
+        }
       }
     }
     return;
@@ -290,6 +305,16 @@ function parseMarkerToken(
   };
 }
 
+function isCodexTaskMessage(item: Record<string, unknown>): boolean {
+  const header = asRecord(asArray(item.content)?.[0]);
+  return (
+    item.type === "agent_message" &&
+    header?.type === "input_text" &&
+    typeof header.text === "string" &&
+    /^Message Type: NEW_TASK\r?\n/.test(header.text)
+  );
+}
+
 function userTexts(params: {
   family: AppaWireFamily;
   body: unknown;
@@ -297,12 +322,27 @@ function userTexts(params: {
   if (params.family === "openai:responses") {
     const input = asRecord(params.body)?.input;
     if (typeof input === "string") return [input];
-    return responsesItems(params.body).flatMap((item) =>
-      item.role === "user" &&
-      (item.type === undefined || item.type === "message")
+    return responsesItems(params.body).flatMap((item) => {
+      if (isCodexTaskMessage(item)) {
+        const parts = asArray(item.content) ?? [];
+        return parts.flatMap((part) => {
+          const record = asRecord(part);
+          if (
+            record?.type === "encrypted_content" &&
+            typeof record.encrypted_content === "string"
+          )
+            return [record.encrypted_content];
+          return record?.type === "input_text" &&
+            typeof record.text === "string"
+            ? [record.text]
+            : [];
+        });
+      }
+      return item.role === "user" &&
+        (item.type === undefined || item.type === "message")
         ? contentTexts(item.content, "input_text")
-        : [],
-    );
+        : [];
+    });
   }
   return chatMessages(params.body).flatMap((message) => {
     if (message.role !== "user") return [];

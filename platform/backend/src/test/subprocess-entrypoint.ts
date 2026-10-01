@@ -39,7 +39,8 @@ export async function makeFastImageEntrypoint(
       `#!/usr/bin/env python3
 import os
 import sys
-os.execvp(sys.argv[1], sys.argv[1:] + [os.environ["ARCHESTRA_AGENT_RUNTIME_TASK"]])
+task = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TASK", "")
+os.execvp(sys.argv[1], sys.argv[1:] + ([task] if task else []))
 `,
     );
   }

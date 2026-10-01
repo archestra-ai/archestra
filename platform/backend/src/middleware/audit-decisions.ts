@@ -258,6 +258,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "per-user pin on a project; personal preference, not an access change",
   },
+  projectAppsTable: {
+    audited: false,
+    reason:
+      "join: project × app; audited as project.updated via the project's appIds snapshot",
+  },
   userOnboardingSeenItemsTable: {
     audited: false,
     reason:

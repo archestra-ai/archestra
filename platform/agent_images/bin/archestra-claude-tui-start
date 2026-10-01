@@ -64,8 +64,12 @@ def main() -> int:
                 time.sleep(0.05)
             else:
                 raise RuntimeError("Claude Code did not return to its prompt")
+            task = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TASK", "")
+            if not task:
+                # An interactive restore opens the saved session for input.
+                return child.wait()
             # Bracketed paste preserves multiline tasks as one submitted prompt.
-            subprocess.run(["tmux", "send-keys", "-t", pane, "-l", "\x1b[200~" + os.environ["ARCHESTRA_AGENT_RUNTIME_TASK"] + "\x1b[201~"], check=True)
+            subprocess.run(["tmux", "send-keys", "-t", pane, "-l", "\x1b[200~" + task + "\x1b[201~"], check=True)
             subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], check=True)
             return child.wait()
     except (OSError, subprocess.SubprocessError, RuntimeError):

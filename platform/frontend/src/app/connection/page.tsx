@@ -83,7 +83,6 @@ export default function ConnectionPage() {
       }
       documentTitle={isApproval ? approvalDocumentTitle : "Connection"}
       maxWidth="wizard"
-      actionInlineOnMobile={Boolean(canReadConnectionSettings && !isApproval)}
       actionButton={
         canReadConnectionSettings &&
         !isApproval && (

@@ -28,7 +28,8 @@ WORKDIR /home/node/workspace
 
 RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/workspace-files.py
+    python3 /tmp/agent-image-tests/workspace-files.py \
+ && python3 /tmp/agent-image-tests/interactive-resume.py
 
 FROM agent-base AS agent-claude-code
 USER root

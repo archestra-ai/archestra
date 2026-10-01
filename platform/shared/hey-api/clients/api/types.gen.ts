@@ -22057,7 +22057,7 @@ export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRu
 
 export type ContinueAgentRunData = {
     body: {
-        message: string;
+        message?: string;
         attachments?: Array<{
             name: string;
             contentType: string;
@@ -96430,6 +96430,267 @@ export type PinProjectResponses = {
 };
 
 export type PinProjectResponse = PinProjectResponses[keyof PinProjectResponses];
+
+export type GetProjectAppsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/apps';
+};
+
+export type GetProjectAppsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetProjectAppsError = GetProjectAppsErrors[keyof GetProjectAppsErrors];
+
+export type GetProjectAppsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        slug: string | null;
+        description: string | null;
+        linkedAt: string;
+    }>;
+};
+
+export type GetProjectAppsResponse = GetProjectAppsResponses[keyof GetProjectAppsResponses];
+
+export type UnlinkProjectAppData = {
+    body?: never;
+    path: {
+        id: string;
+        appId: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/apps/{appId}';
+};
+
+export type UnlinkProjectAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnlinkProjectAppError = UnlinkProjectAppErrors[keyof UnlinkProjectAppErrors];
+
+export type UnlinkProjectAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type UnlinkProjectAppResponse = UnlinkProjectAppResponses[keyof UnlinkProjectAppResponses];
+
+export type LinkProjectAppData = {
+    body?: never;
+    path: {
+        id: string;
+        appId: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/apps/{appId}';
+};
+
+export type LinkProjectAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LinkProjectAppError = LinkProjectAppErrors[keyof LinkProjectAppErrors];
+
+export type LinkProjectAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type LinkProjectAppResponse = LinkProjectAppResponses[keyof LinkProjectAppResponses];
 
 export type StartGitHubUserConnectionData = {
     body?: never;

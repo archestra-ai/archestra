@@ -52,6 +52,7 @@ import {
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
+import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { CommonToolResult } from "@/types";
@@ -100,6 +101,48 @@ describe("app tool execution", () => {
       ctx,
     );
   }
+
+  test("scaffold_app with project_id creates the app linked into the project", async () => {
+    const project = await projectService.create({
+      organizationId,
+      userId: context.userId as string,
+      name: "Ops board",
+      description: null,
+    });
+
+    const created = await scaffold({
+      name: "Board",
+      project_id: project.id,
+    });
+
+    expect(created.isError).toBe(false);
+    expect((created.content[0] as any).text).toContain(
+      `Linked to project ${project.id}`,
+    );
+    const linked = await projectService.listApps({
+      id: project.id,
+      organizationId,
+      userId: context.userId as string,
+    });
+    expect(linked.map((a) => a.id)).toEqual([structured(created).id]);
+  });
+
+  test("scaffold_app refuses an unreachable project before creating anything", async () => {
+    const created = await scaffold({
+      name: "Orphan",
+      project_id: crypto.randomUUID(),
+    });
+
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as any).text).toContain("Project not found");
+    expect(
+      await AppModel.findIdByOrgAuthorName({
+        organizationId,
+        authorId: context.userId as string,
+        name: "Orphan",
+      }),
+    ).toBeNull();
+  });
 
   test("scaffold → list → render → edit (forks version) → delete", async () => {
     const created = await scaffold({ name: "Dashboard" });

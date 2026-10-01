@@ -186,6 +186,9 @@ class StartupTest(unittest.TestCase):
     def test_resumed_delegation(self):
         self.run_client("one_shot", resume=True)
 
+    def test_idle_interactive_resume(self):
+        self.run_client("one_shot", resume=True, idle_resume=True)
+
     def test_slow_discovery(self):
         self.run_client("one_shot", hold=8 if CLIENT == "codex" else 12)
 
@@ -201,7 +204,7 @@ class StartupTest(unittest.TestCase):
         def test_plain_cli(self):
             self.run_client("one_shot", plain=True)
 
-    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False):
+    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False, idle_resume=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             runtime = root / "runtime"
@@ -224,7 +227,11 @@ class StartupTest(unittest.TestCase):
                         server.discovery_failed.clear()
                         server.release.clear()
                     env["ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX"] = str(runtime / f"turn-{turn}")
-                    self.run_turn(root, home, runtime, env, server, mode, plain, failure, hold)
+                    turn_mode = "interactive" if turn and idle_resume else mode
+                    if turn and idle_resume:
+                        env["ARCHESTRA_AGENT_RUNTIME_MODE"] = turn_mode
+                        env["ARCHESTRA_AGENT_RUNTIME_TASK"] = ""
+                    self.run_turn(root, home, runtime, env, server, turn_mode, plain, failure, hold, idle=bool(turn and idle_resume))
             finally:
                 server.release.set()
                 server.shutdown()
@@ -233,7 +240,7 @@ class StartupTest(unittest.TestCase):
                     if folder.exists():
                         folder.chmod(0o755)
 
-    def run_turn(self, root, home, runtime, env, server, mode, plain, failure, hold):
+    def run_turn(self, root, home, runtime, env, server, mode, plain, failure, hold, idle=False):
         turn_prefix = env["ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX"]
         pid, fd = pty.fork()
         if pid == 0:
@@ -256,6 +263,8 @@ class StartupTest(unittest.TestCase):
                         os.write(fd, b"\x1b[1;1R")
                     if b"\x1b[c" in chunk:
                         os.write(fd, b"\x1b[?1;2c")
+                if idle and server.requests:
+                    self.fail("Idle resume submitted inference without a prompt")
                 if failure and server.requests:
                     self.fail("Inference ran after required gateway discovery failed: " + repr(server.requests[:1]))
                 if failure and server.discovery_failed.is_set() and time.monotonic() - started > (40 if failure == "timeout" else 12):
@@ -266,6 +275,8 @@ class StartupTest(unittest.TestCase):
                     if not failure and time.monotonic() - held_since >= hold:
                         print(f"{CLIENT}: releasing discovery barrier", flush=True)
                         server.release.set()
+                if idle and time.monotonic() - started > hold + 5 and (not server.list_started.is_set() or server.catalog_sent):
+                    break
                 exited, child_status = os.waitpid(pid, os.WNOHANG)
                 if exited:
                     status = os.waitstatus_to_exitcode(child_status)
@@ -284,6 +295,16 @@ class StartupTest(unittest.TestCase):
                 self.assertTrue((runtime / "turn-complete.failed").exists(), details)
                 self.assertFalse(Path(turn_prefix + ".result").exists(), "Failed startup was marked successful")
                 print(f"{CLIENT}: {failure} failure sends no tool-using inference", flush=True)
+                return
+            if idle:
+                # Some clients connect lazily when the next prompt arrives.
+                # Claude's terminal gate must finish even for an idle restore.
+                if CLIENT == "claude-code" or server.list_started.is_set():
+                    self.assertTrue(server.catalog_sent, details)
+                self.assertFalse(server.requests, details)
+                self.assertFalse(server.calls, details)
+                self.assertIsNone(status, "Idle resumed client exited")
+                print(f"{CLIENT}: saved session restored with no automatic inference", flush=True)
                 return
             self.assertTrue(server.list_started.is_set(), details)
             self.assertEqual(server.calls, TOOLS, details + "\nRequests: " + repr(server.requests[:2]))

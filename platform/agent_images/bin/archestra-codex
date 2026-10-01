@@ -10,6 +10,10 @@ fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
+# Restoring an interactive session does not submit another model turn.
+if [[ "${runtime_mode}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
 export CODEX_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/codex"
 mkdir -p "${runtime_dir}" "${CODEX_HOME}"
 attention_hook="${runtime_dir}/codex-attention-hook.sh"
@@ -269,7 +273,7 @@ EOF
 chmod 0600 "${CODEX_HOME}/config.toml"
 
 task_file="${runtime_dir}/task.md"
-printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" > "${task_file}"
 
 common_args=(
   --dangerously-bypass-approvals-and-sandbox
@@ -293,7 +297,11 @@ case "${runtime_mode}" in
     # No subcommand means Codex's native full-screen TUI. The positional prompt
     # starts the first turn; subsequent terminal input stays in the same Codex
     # conversation until the person exits or stops the execution.
-    exec "${failure_watch[@]}" codex "${common_args[@]}" -- "$(cat "${task_file}")"
+    prompt_args=()
+    if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" ]]; then
+      prompt_args+=(-- "$(cat "${task_file}")")
+    fi
+    exec "${failure_watch[@]}" codex "${common_args[@]}" "${prompt_args[@]}"
     ;;
   one_shot)
     if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then

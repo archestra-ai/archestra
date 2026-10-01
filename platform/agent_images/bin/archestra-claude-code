@@ -6,6 +6,10 @@ if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "anthropic" ]]; then
   exit 78
 fi
 
+if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
+
 # Claude Code treats ANTHROPIC_API_KEY as a user-supplied custom key and asks
 # for first-run confirmation. The same short-lived platform credential is also
 # provided in ANTHROPIC_AUTH_TOKEN, which is its non-interactive gateway path.
@@ -277,8 +281,8 @@ tui_start=(python3 "${script_dir}/archestra-claude-tui-start")
 
 case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
   interactive)
-    # The same native TUI discovers tools before receiving its first task.
-    # It then stays available for the person's follow-up turns.
+    # The same native TUI discovers tools before receiving a task. An empty
+    # prompt restores the session for input without submitting a model turn.
     exec "${tui_start[@]}" claude "${args[@]}"
     ;;
   one_shot)

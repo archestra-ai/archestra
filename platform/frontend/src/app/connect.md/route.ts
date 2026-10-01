@@ -83,8 +83,7 @@ under Settings > Plugins. Send a message to make sure that inference works.
    Override OpenAI Base URL.
    A Cursor subscription cannot authenticate the proxy. Send a test prompt in
    Cursor and confirm the request appears in this deployment before reporting success.
-   Codex: use codex mcp login SERVER_NAME. Open a new terminal and run codex.
-   Codex: the setup script selects the proxy as the default provider.
+   Codex: ${CODEX_FINISH_INSTRUCTIONS.replaceAll("\n", "\n   ")}
    OpenCode: run opencode mcp list first. If SERVER_NAME is connected (OAuth),
    skip authentication; do not re-authenticate a working connection. Otherwise
    run opencode mcp auth list. If SERVER_NAME is authenticated but not connected,
@@ -117,14 +116,10 @@ under Settings > Plugins. Send a message to make sure that inference works.
    now with opencode mcp list. The user-started session loads newly configured tools.
    Configuration applied alone does not prove MCP authentication succeeded.
    For clients requiring a new session, verification is that session's job.
-   Codex: make sure that config.toml selects the proxy provider at the top level.
-   Then send a short prompt in a new Codex session. Gateway OAuth alone does
-   not show that inference uses the proxy. If OpenAPPA is enabled, the first text
-   reply in a new protected session also shows a protected-session mark.
-   If the provider is not selected or the prompt fails, report that the connection
-   is incomplete. Do not report that setup succeeded. After verifying the gateway
-   and inference, report the connection status briefly without listing tool names
-   or quoting the test response.
+   Codex: perform the fresh-process verification above from this conversation's
+   terminal; do not defer it to a future user session. Gateway OAuth alone does
+   not prove proxy inference or tool execution. A protected-session mark alone
+   is not a complete verification either.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.
 
@@ -216,8 +211,7 @@ function focusedClientDetails(client: string): {
     case "codex":
       return {
         label: "Codex",
-        finish:
-          "Run codex mcp login SERVER_NAME, then open a new terminal and start Codex. Confirm config.toml selects the proxy provider at the top level. Verify gateway tools and send a short test prompt through the proxy. Report the connection status briefly without listing tool names or quoting the test response. If either check fails, report the connection as incomplete.",
+        finish: CODEX_FINISH_INSTRUCTIONS,
       };
     case "copilot-cli":
       return {
@@ -234,3 +228,12 @@ function focusedClientDetails(client: string): {
       return null;
   }
 }
+
+const CODEX_FINISH_INSTRUCTIONS = [
+  "If the installer printed 'Successfully logged in.', gateway OAuth is already cached. Do not run codex mcp login again. Otherwise run codex mcp list --json and inspect auth_status for the configured server. If auth_status is oauth, skip login.",
+  "Only if auth_status is not_logged_in, run codex mcp login SERVER_NAME once. Wait for its browser callback. For unknown or unsupported auth status, use verification to check cached authorization instead of repeating login. Do not start another login while one is pending.",
+  "If a gateway or proxy was selected, run the exact Verification command printed by the installer yourself. Do not ask the user to run verification commands. On Windows use the printed native PowerShell verifier, not the Node --verify command. The helper starts a fresh native Codex app-server and calls a read-only gateway tool directly. It checks proxy inference with the configured model, approval mode and sandbox unchanged.",
+  "Do not substitute codex exec or a model-driven shell probe. Do not force --sandbox read-only, edit config, or change the configured model, sandbox or approval settings. If the OS blocks process launch or access to Codex state files, request ordinary native per-command approval. Request approval only for this exact verification command, then retry once.",
+  "If approval is unavailable, report the blocker instead of weakening the sandbox. Do not request elevated execution for API authentication or gateway authorization errors. The verifier must never auto-approve app-server permission requests.",
+  "Empty MCP resource lists and tools/list are not gateway execution checks. Report success only when the helper returns verified for each selected gateway/proxy. A failed or interrupted verifier is incomplete, even when installation or OAuth succeeded. If skills were selected, verify the marketplace/plugins are registered. Report the connection status briefly without listing tool names or quoting the test response.",
+].join("\n\n");

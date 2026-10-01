@@ -3501,6 +3501,13 @@
       "when": 1790802786569,
       "tag": "0499_fantastic_blur",
       "breakpoints": true
+    },
+    {
+      "idx": 500,
+      "version": "7",
+      "when": 1790846106675,
+      "tag": "0500_careless_miracleman",
+      "breakpoints": true
     }
   ]
 }

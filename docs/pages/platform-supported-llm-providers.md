@@ -845,7 +845,7 @@ Bedrock supports explicit caching on selected Claude and Nova models. Some model
 
 Chat conversations and headless agent runs apply Archestra's automatic breakpoint policy. Model Router Responses requests use the markers you supply. The router does not add automatic checkpoints.
 
-For Bedrock Responses, add `cache_control` to an input content part or message. Function tools can also carry markers on supported Claude models. Archestra translates each marker into a standalone Converse `cachePoint` after the marked content.
+For Bedrock Responses, add `cache_control` with `type: "ephemeral"` to an input content part or message. Archestra translates it into a standalone Converse `cachePoint` after the marked content and forwards an optional `ttl` string. Tool-definition markers are not forwarded.
 
 ```json
 {
@@ -860,15 +860,11 @@ For Bedrock Responses, add `cache_control` to an input content part or message. 
 }
 ```
 
-Claude supports four checkpoints across tools, system content, and messages combined. Longer TTLs must precede shorter TTLs in that order. Nova Pro, Nova Lite, and Nova 2 Lite support five-minute checkpoints in system content and messages. Their cacheable prefixes have a 20K-token ceiling. AWS enforces token thresholds and regional availability.
-
-The router rejects unsupported marker types, TTLs, locations, and excess checkpoints. Unknown model IDs with explicit markers also return an error. Use documented foundation model IDs or geographic/global system inference profile IDs. Opaque application inference profiles require native Converse, where AWS validates their capabilities.
-
-Supported models and TTLs can change. See [AWS prompt caching](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html) and the model card. Internal chat's automatic policy uses a separate model allowlist.
+AWS validates model support, TTLs, checkpoint limits and ordering, token thresholds, regional availability, and multimodal support. The router does not maintain a model allowlist or add automatic checkpoints. See [AWS prompt caching](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html) for current requirements.
 
 Bedrock Responses preserves ordered text, image, and file parts. Images require supported base64 data URLs. Files accept base64 data URLs or base64 bytes with a supported filename extension. PDF files remain document blocks; JSON files become text-format document blocks. Document-only user messages receive companion text. Unresolved file IDs, external file/image URLs, and unsupported file formats return `400 Bad Request` before forwarding. External images that were previously dropped now return this error so requested attachments cannot disappear silently; the router does not fetch remote content. Unmarked reasoning items, built-in tools, and other unsupported parts retain their previous handling and are omitted. A cache marker on omitted content returns an error. AWS validates each model's multimodal support.
 
-Native Converse usage retains `cacheReadInputTokens`, `cacheWriteInputTokens`, and `cacheDetails`. Translated input totals include fresh input, cache reads, and cache writes. Chat Completions reports reads in `prompt_tokens_details.cached_tokens`; Responses uses `input_tokens_details.cached_tokens`. Both details objects expose cache writes through the Archestra extensions `cache_write_tokens` and `cache_write_1h_tokens`.
+Bedrock Responses input totals include fresh input, cache reads, and cache writes. `input_tokens_details.cached_tokens` reports reads. The Archestra extensions `cache_write_tokens` and `cache_write_1h_tokens` report total writes and one-hour writes when provided by AWS.
 
 For example, send the same long reference twice within its TTL. Check the returned usage to see whether AWS reports cache writes or reads. Marker forwarding alone does not prove caching occurred. See [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for cache prices and recorded spend.
 

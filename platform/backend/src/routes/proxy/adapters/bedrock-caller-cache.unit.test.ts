@@ -32,56 +32,6 @@ function translate(
 }
 
 describe("explicit Bedrock caller caching", () => {
-  test("preserves mixed Responses parts and marker boundaries across both translations", () => {
-    const input = [
-      {
-        role: "user",
-        content: [
-          { type: "input_text", text: "start", cache_control: marker },
-          { type: "input_image", image_url: "data:image/png;base64,aGVsbG8=" },
-          {
-            type: "input_file",
-            file_data: "data:application/pdf;base64,cGRm",
-            filename: "ignored.pdf",
-          },
-          {
-            type: "input_file",
-            file_data: "data:application/json;base64,e30=",
-            cache_control: marker,
-          },
-          { type: "input_text", text: "end" },
-        ],
-      },
-    ];
-    const { chatBody } = responsesToOpenaiChat(
-      { model, input } as unknown as OpenAi.Types.ResponsesRequest,
-      { preserveContentParts: true },
-    );
-    expect(
-      openaiToConverse(chatBody).converseBody.messages?.[0].content,
-    ).toEqual([
-      { text: "start" },
-      checkpoint,
-      { image: { format: "png", source: { bytes: "aGVsbG8=" } } },
-      {
-        document: {
-          format: "pdf",
-          name: "document",
-          source: { bytes: "cGRm" },
-        },
-      },
-      {
-        document: {
-          format: "txt",
-          name: "document",
-          source: { bytes: "e30=" },
-        },
-      },
-      checkpoint,
-      { text: "end" },
-    ]);
-  });
-
   test.each([
     { input: [{ type: "reasoning", summary: [] }] },
     { input: [{ role: "user", content: [null, { type: "input_audio" }] }] },
@@ -107,10 +57,6 @@ describe("explicit Bedrock caller caching", () => {
         },
       ],
     },
-    {
-      input: "question",
-      tools: [{ type: "web_search", cache_control: marker }],
-    },
   ])("rejects markers on unsupported Responses fields: %j", (body) => {
     expect(() =>
       openaiToConverse(
@@ -123,9 +69,11 @@ describe("explicit Bedrock caller caching", () => {
   });
 
   test.each([
-    "",
-    [{ type: "text", text: "" }],
-  ])("unmarked empty assistant content %j produces only toolUse", (content) => {
+    { content: "" },
+    { content: [{ type: "text", text: "" }] },
+  ])("unmarked empty assistant content $content produces only toolUse", ({
+    content,
+  }) => {
     const body = translate([
       { role: "user", content: "question" },
       {
@@ -309,168 +257,15 @@ describe("explicit Bedrock caller caching", () => {
     ]);
   });
 
-  test.each([
-    0, 4, 5,
-  ])("enforces request-wide checkpoint budget at %i", (count) => {
-    const run = () =>
-      translate(
-        Array.from({ length: count }, (_, i) => ({
-          role: "user",
-          content: `part ${i}`,
-          cache_control: marker,
-        })),
-      );
-    if (count > 4) expect(run).toThrow(/four/);
-    else
-      expect(JSON.stringify(run()).match(/cachePoint/g)?.length ?? 0).toBe(
-        count,
-      );
-  });
-
-  test("counts tool-definition markers and validates tools → system → messages TTL order", () => {
-    const tools = [
-      {
-        type: "function",
-        function: { name: "read", parameters: {} },
-        cache_control: marker,
-      },
-    ];
-    expect(() =>
-      translate(
-        [
-          {
-            role: "system",
-            content: "system",
-            cache_control: { ...marker, ttl: "1h" },
-          },
-        ],
-        { tools },
-      ),
-    ).toThrow(/precede/);
-    expect(
-      translate([{ role: "user", content: "question" }], { tools }).toolConfig
-        ?.tools[1],
-    ).toEqual(checkpoint);
-    expect(() =>
-      translate(
-        Array.from({ length: 4 }, () => ({
-          role: "user",
-          content: "x",
-          cache_control: marker,
-        })),
-        { tools },
-      ),
-    ).toThrow(/four/);
-  });
-
-  test.each([
-    "amazon.nova-pro-v1:0",
-    "eu.amazon.nova-lite-v1:0",
-    "jp.amazon.nova-2-lite-v1:0",
-    model,
-    "global.anthropic.claude-opus-4-6-v1",
-  ])("accepts documented model/profile %s", (modelId) => {
-    expect(
-      translate([{ role: "user", content: "x", cache_control: marker }], {
-        model: modelId,
-      }).messages?.[0].content[1],
-    ).toEqual(checkpoint);
-  });
-
-  test.each([
-    "zai.glm-4.7",
-    "amazon.nova-micro-v1:0",
-    "anthropic.claude-unknown",
-    "anthropic.claude-sonnet-5-99",
-    "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opaque",
-  ])("rejects unknown or unsupported marker capability %s", (modelId) => {
-    expect(() =>
-      translate([{ role: "user", content: "x", cache_control: marker }], {
-        model: modelId,
-      }),
-    ).toThrow(/model ID/);
-    expect(() =>
-      translate([{ role: "user", content: "x" }], { model: modelId }),
-    ).not.toThrow();
-  });
-
-  test.each([
-    "anthropic.claude-3-7-sonnet-20250219-v1:0",
-    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-  ])("legacy Claude %s only accepts five-minute markers", (modelId) => {
-    expect(
-      translate([{ role: "user", content: "x", cache_control: marker }], {
-        model: modelId,
-      }).messages?.[0].content[1],
-    ).toEqual(checkpoint);
-    expect(
-      translate(
-        [
-          {
-            role: "user",
-            content: "x",
-            cache_control: { ...marker, ttl: "5m" },
-          },
-        ],
-        { model: modelId },
-      ).messages?.[0].content[1],
-    ).toEqual({ cachePoint: { type: "default", ttl: "5m" } });
-    expect(() =>
-      translate(
-        [
-          {
-            role: "user",
-            content: "x",
-            cache_control: { ...marker, ttl: "1h" },
-          },
-        ],
-        { model: modelId },
-      ),
-    ).toThrow(/1h/);
-  });
-
-  test("Nova restricts TTL and tool placement", () => {
-    expect(() =>
-      translate(
-        [
-          {
-            role: "user",
-            content: "x",
-            cache_control: { ...marker, ttl: "1h" },
-          },
-        ],
-        { model: "amazon.nova-pro-v1:0" },
-      ),
-    ).toThrow(/1h/);
-    expect(() =>
-      translate([{ role: "user", content: "x" }], {
-        model: "amazon.nova-pro-v1:0",
-        tools: [
-          {
-            type: "function",
-            function: { name: "read" },
-            cache_control: marker,
-          },
-        ],
-      }),
-    ).toThrow(/not tools/);
-  });
-
-  test("rejects malformed markers and shorter-before-longer TTL", () => {
+  test("rejects malformed marker shapes", () => {
     for (const cache_control of [
       null,
       { type: "default" },
-      { ...marker, ttl: "30m" },
+      { ...marker, ttl: 60 },
     ])
       expect(() =>
         translate([{ role: "user", content: "x", cache_control }]),
       ).toThrow(/cache_control/);
-    expect(() =>
-      translate([
-        { role: "user", content: "x", cache_control: marker },
-        { role: "user", content: "y", cache_control: { ...marker, ttl: "1h" } },
-      ]),
-    ).toThrow(/precede/);
   });
 });
 

@@ -57,19 +57,11 @@ export function responsesToOpenaiChat(
   if (req.tools) {
     chatBody.tools = req.tools.flatMap((tool) => {
       if (tool.type !== "function" || !("name" in tool)) {
-        if (options?.preserveContentParts && "cache_control" in tool)
-          throw new ApiError(
-            400,
-            "Bedrock Responses only supports function tools",
-          );
         return [];
       }
       return [
         {
           type: "function" as const,
-          ...(options?.preserveContentParts && "cache_control" in tool
-            ? { cache_control: tool.cache_control }
-            : {}),
           function: {
             name: tool.name as string,
             description:

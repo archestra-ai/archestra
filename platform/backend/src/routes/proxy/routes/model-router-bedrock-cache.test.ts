@@ -14,7 +14,6 @@ import {
 } from "@/models";
 import { accessGrants, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
-import bedrockRoutes from "./bedrock";
 import modelRouterRoutes from "./model-router";
 
 // The real route, credentials selection, adapter, client and logging execute.
@@ -22,7 +21,7 @@ import modelRouterRoutes from "./model-router";
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();
 const codec = new EventStreamCodec(toUtf8, fromUtf8);
-const modelId = "us.anthropic.claude-sonnet-4-6";
+const modelId = "application-profile-placeholder";
 const cache_control = { type: "ephemeral" };
 const checkpoint = { cachePoint: { type: "default" } };
 const upstreamOrigin = "https://bedrock.example.test";
@@ -66,7 +65,6 @@ const bedrockTest = test.extend<{
     });
     const app = createFastifyInstance();
     await app.register(modelRouterRoutes);
-    await app.register(bedrockRoutes);
     try {
       await use({ app, agentId: agent.id, token: virtual.value });
     } finally {
@@ -102,133 +100,112 @@ function sseEvents(body: string): Array<Record<string, unknown>> {
     .map((line) => JSON.parse(line.slice(6)));
 }
 
-for (const surface of ["responses", "converse"] as const) {
-  for (const stream of [false, true]) {
-    bedrockTest(
-      `${surface}, stream=${stream}: preserves checkpoints, cache usage and logged native usage`,
-      async ({ router }) => {
-        const reads = 8000;
-        const writes = 1000;
-        const usage = {
-          inputTokens: 12,
-          outputTokens: 3,
-          totalTokens: 15 + reads + writes,
-          cacheReadInputTokens: reads,
-          cacheWriteInputTokens: writes,
-          cacheDetails: [{ ttl: "1h", inputTokens: writes }],
-        };
-        let upstream: Record<string, unknown> | undefined;
-        server.use(
-          http.post(
-            `${upstreamOrigin}/model/:model/${stream ? "converse-stream" : "converse"}`,
-            async ({ request }) => {
-              upstream = (await request.json()) as Record<string, unknown>;
-              if (!stream)
-                return HttpResponse.json({
-                  output: {
-                    message: {
-                      role: "assistant",
-                      content: [{ text: "answer" }],
-                    },
-                  },
-                  stopReason: "end_turn",
-                  usage,
-                });
-              return new HttpResponse(
-                binaryEvents([
-                  ["messageStart", { role: "assistant" }],
-                  [
-                    "contentBlockDelta",
-                    { contentBlockIndex: 0, delta: { text: "answer" } },
-                  ],
-                  ["contentBlockStop", { contentBlockIndex: 0 }],
-                  ["messageStop", { stopReason: "end_turn" }],
-                  ["metadata", { usage }],
-                ]),
-                {
-                  headers: {
-                    "content-type": "application/vnd.amazon.eventstream",
+for (const stream of [false, true]) {
+  bedrockTest(
+    `Responses, stream=${stream}: preserves checkpoints, returned cache usage and logging`,
+    async ({ router }) => {
+      const reads = 8000;
+      const writes = 1000;
+      const usage = {
+        inputTokens: 12,
+        outputTokens: 3,
+        totalTokens: 15 + reads + writes,
+        cacheReadInputTokens: reads,
+        cacheWriteInputTokens: writes,
+        cacheDetails: [{ ttl: "1h", inputTokens: writes }],
+      };
+      let upstream: Record<string, unknown> | undefined;
+      server.use(
+        http.post(
+          `${upstreamOrigin}/model/:model/${stream ? "converse-stream" : "converse"}`,
+          async ({ request }) => {
+            upstream = (await request.json()) as Record<string, unknown>;
+            if (!stream)
+              return HttpResponse.json({
+                output: {
+                  message: {
+                    role: "assistant",
+                    content: [{ text: "answer" }],
                   },
                 },
-              );
-            },
-          ),
-        );
-        const payload =
-          surface === "responses"
-            ? {
-                model: `bedrock:${modelId}`,
-                stream,
-                input: [
-                  {
-                    role: "user",
-                    content: [
-                      { type: "input_text", text: "prefix", cache_control },
-                    ],
-                  },
+                stopReason: "end_turn",
+                usage,
+              });
+            return new HttpResponse(
+              binaryEvents([
+                ["messageStart", { role: "assistant" }],
+                [
+                  "contentBlockDelta",
+                  { contentBlockIndex: 0, delta: { text: "answer" } },
                 ],
-              }
-            : {
-                modelId,
-                messages: [
-                  {
-                    role: "user",
-                    content: [{ text: "prefix" }, checkpoint],
-                  },
-                ],
-              };
-        const url =
-          surface === "converse"
-            ? `/v1/bedrock/${router.agentId}/${stream ? "converse-stream" : "converse"}`
-            : `/v1/model-router/${router.agentId}/responses`;
-        const response = await router.app.inject({
-          method: "POST",
-          url,
-          headers: {
-            authorization: `Bearer ${router.token}`,
-            "user-agent": "test-client",
+                ["contentBlockStop", { contentBlockIndex: 0 }],
+                ["messageStop", { stopReason: "end_turn" }],
+                ["metadata", { usage }],
+              ]),
+              {
+                headers: {
+                  "content-type": "application/vnd.amazon.eventstream",
+                },
+              },
+            );
           },
-          payload,
-        });
-        expect(response.statusCode, response.body).toBe(200);
-        expect(upstream?.messages).toEqual([
-          { role: "user", content: [{ text: "prefix" }, checkpoint] },
-        ]);
-        if (!stream && surface === "converse")
-          expect(response.json().usage).toEqual(usage);
-        if (surface === "responses") {
-          const wire = !stream
-            ? response.json().usage
-            : (
-                sseEvents(response.body).find(
-                  (e) => e.type === "response.completed",
-                )?.response as { usage: unknown }
-              ).usage;
-          expect(wire).toMatchObject({
-            input_tokens: 12 + reads + writes,
-            total_tokens: 15 + reads + writes,
-            input_tokens_details: {
-              cached_tokens: reads,
-              cache_write_tokens: writes,
-              cache_write_1h_tokens: writes,
-            },
-          });
-        }
-        const logged = await InteractionModel.findAllPaginated({
-          limit: 1,
-          offset: 0,
-        });
-        expect(logged.data[0]).toMatchObject({
-          type: "bedrock:converse",
-          inputTokens: 12,
-          outputTokens: 3,
-          cacheReadTokens: reads,
-          cacheWriteTokens: writes,
-        });
-        expect(logged.data[0].response).toMatchObject({ usage });
-      },
-    );
-  }
+        ),
+      );
+      const payload = {
+        model: `bedrock:${modelId}`,
+        stream,
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_text", text: "prefix", cache_control }],
+          },
+        ],
+      };
+      const url = `/v1/model-router/${router.agentId}/responses`;
+      const response = await router.app.inject({
+        method: "POST",
+        url,
+        headers: {
+          authorization: `Bearer ${router.token}`,
+          "user-agent": "test-client",
+        },
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstream?.messages).toEqual([
+        { role: "user", content: [{ text: "prefix" }, checkpoint] },
+      ]);
+      const wire = !stream
+        ? response.json().usage
+        : (
+            sseEvents(response.body).find(
+              (e) => e.type === "response.completed",
+            )?.response as { usage: unknown }
+          ).usage;
+      expect(wire).toMatchObject({
+        input_tokens: 12 + reads + writes,
+        total_tokens: 15 + reads + writes,
+        input_tokens_details: {
+          cached_tokens: reads,
+          cache_write_tokens: writes,
+          cache_write_1h_tokens: writes,
+        },
+      });
+      const logged = await InteractionModel.findAllPaginated({
+        limit: 1,
+        offset: 0,
+      });
+      expect(logged.data[0]).toMatchObject({
+        type: "bedrock:converse",
+        inputTokens: 12,
+        outputTokens: 3,
+        cacheReadTokens: reads,
+        cacheWriteTokens: writes,
+      });
+      const { totalTokens: _totalTokens, ...loggedUsage } = usage;
+      expect(logged.data[0].response).toMatchObject({ usage: loggedUsage });
+    },
+  );
 }
 
 bedrockTest(
@@ -256,7 +233,11 @@ bedrockTest(
         { type: "input_text", text: "prefix", cache_control },
         { type: "input_image", image_url: "data:image/png;base64,aGVsbG8=" },
         { type: "input_file", file_data: "data:application/pdf;base64,cGRm" },
-        { type: "input_file", file_data: "data:application/json;base64,e30=" },
+        {
+          type: "input_file",
+          file_data: "data:application/json;base64,e30=",
+          cache_control,
+        },
         { type: "input_text", text: "question" },
       ],
     };
@@ -306,6 +287,7 @@ bedrockTest(
                 source: { bytes: "e30=" },
               },
             },
+            checkpoint,
             { text: "question" },
           ],
         },
@@ -470,8 +452,9 @@ for (const stream of [false, true]) {
         limit: 1,
         offset: 0,
       });
+      const { totalTokens: _totalTokens, ...loggedUsage } = usage;
       expect(logged.data[0].response).toMatchObject({
-        usage,
+        usage: loggedUsage,
         stopReason: "end_turn",
       });
       expect(JSON.stringify(logged.data[0].response)).toContain(
@@ -483,54 +466,3 @@ for (const stream of [false, true]) {
     },
   );
 }
-
-bedrockTest(
-  "tool-definition checkpoints survive native tool-name mapping at the HTTP boundary",
-  async ({ router }) => {
-    let upstream: Record<string, unknown> | undefined;
-    server.use(
-      http.post(
-        `${upstreamOrigin}/model/:model/converse`,
-        async ({ request }) => {
-          upstream = (await request.json()) as Record<string, unknown>;
-          return HttpResponse.json({
-            output: {
-              message: { role: "assistant", content: [{ text: "ok" }] },
-            },
-            stopReason: "end_turn",
-            usage: { inputTokens: 10, outputTokens: 1 },
-          });
-        },
-      ),
-    );
-    const response = await router.app.inject({
-      method: "POST",
-      url: `/v1/model-router/${router.agentId}/responses`,
-      headers: { authorization: `Bearer ${router.token}` },
-      payload: {
-        model: `bedrock:${modelId}`,
-        input: "question",
-        tools: [
-          {
-            type: "function",
-            name: "read_file",
-            parameters: { type: "object", properties: {} },
-            cache_control,
-          },
-        ],
-      },
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(upstream?.toolConfig).toEqual({
-      tools: [
-        {
-          toolSpec: {
-            name: "read_file",
-            inputSchema: { json: { type: "object", properties: {} } },
-          },
-        },
-        checkpoint,
-      ],
-    });
-  },
-);

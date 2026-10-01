@@ -117,8 +117,6 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
   if (inferenceConfig) converseBody.inferenceConfig = inferenceConfig;
   if (toolConfig) converseBody.toolConfig = toolConfig;
 
-  validateTranslatedConverseRequest(converseBody);
-
   const openaiContext: OpenaiContext = {
     chatcmplId: newChatcmplId(),
     createdUnix: Math.floor(Date.now() / 1000),
@@ -127,14 +125,6 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
   };
 
   return { converseBody, openaiContext };
-}
-
-/** Revalidate after model routing and policy rewrites, before sending upstream. */
-export function validateTranslatedConverseRequest(
-  request: BedrockRequest,
-): void {
-  validateCallerCachePoints(request);
-  validateMultimodalContent(request);
 }
 
 /**
@@ -549,124 +539,23 @@ function textContentToBedrock(content: unknown): BedrockContentBlock[] {
 }
 
 function appendCacheMarker(blocks: BedrockContentBlock[], marker: Loose): void {
-  const point = cachePointFromMarker(marker);
-  if (point) blocks.push(point);
-}
-
-function cachePointFromMarker(
-  marker: Loose,
-): { cachePoint: { type: "default"; ttl?: "5m" | "1h" } } | undefined {
   if (marker === undefined) return;
   if (
     !marker ||
     marker.type !== "ephemeral" ||
-    (marker.ttl !== undefined && marker.ttl !== "5m" && marker.ttl !== "1h")
+    (marker.ttl !== undefined && typeof marker.ttl !== "string")
   )
     throw new ApiError(
       400,
-      "Bedrock cache_control requires type ephemeral and ttl 5m or 1h",
+      "Bedrock cache_control requires type ephemeral and an optional string ttl",
     );
-  return {
-    cachePoint: { type: "default", ...(marker.ttl ? { ttl: marker.ttl } : {}) },
-  };
-}
-
-const BEDROCK_CLAUDE_ONE_HOUR_CACHE_MODELS = new Set([
-  "anthropic.claude-sonnet-5-5",
-  "anthropic.claude-opus-5-5",
-  "anthropic.claude-fable-5-1",
-  "anthropic.claude-mythos-5-1",
-  "anthropic.claude-fable-5",
-  "anthropic.claude-mythos-5",
-  "anthropic.claude-opus-5",
-  "anthropic.claude-sonnet-5",
-  "anthropic.claude-opus-4-8",
-  "anthropic.claude-opus-4-7",
-  "anthropic.claude-opus-4-6-v1",
-  "anthropic.claude-opus-4-6-v1:0",
-  "anthropic.claude-sonnet-4-6",
-  "anthropic.claude-opus-4-5-20251101-v1:0",
-  "anthropic.claude-sonnet-4-5-20250929-v1:0",
-  "anthropic.claude-haiku-4-5-20251001-v1:0",
-]);
-const BEDROCK_CLAUDE_FIVE_MINUTE_CACHE_MODELS = new Set([
-  "anthropic.claude-3-7-sonnet-20250219-v1:0",
-  "anthropic.claude-3-5-sonnet-20241022-v2:0",
-]);
-const BEDROCK_NOVA_CACHE_MODELS = new Set([
-  "amazon.nova-pro-v1:0",
-  "amazon.nova-lite-v1:0",
-  "amazon.nova-2-lite-v1:0",
-]);
-
-// Explicit router markers are validated independently of internal chat's
-// automatic placement policy. Sources verified September 2026:
-// https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
-// https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-pro.html
-function validateCallerCachePoints(request: BedrockRequest): void {
-  const toolPoints =
-    request.toolConfig?.tools.filter((b) => b.cachePoint) ?? [];
-  const points = [
-    ...toolPoints.map((b) => b.cachePoint),
-    ...(request.system ?? []).flatMap((b) =>
-      "cachePoint" in b ? [b.cachePoint] : [],
-    ),
-    ...(request.messages ?? []).flatMap((m) =>
-      m.content.flatMap((b) => ("cachePoint" in b ? [b.cachePoint] : [])),
-    ),
-  ] as Array<{ ttl?: string }>;
-  if (points.length === 0) return;
-  const model =
-    request.modelId
-      .split("/")
-      .at(-1)
-      ?.replace(/^(?:us|eu|apac|global|jp)\./, "") ?? "";
-  const claude1h = BEDROCK_CLAUDE_ONE_HOUR_CACHE_MODELS.has(model);
-  const claude5m =
-    claude1h || BEDROCK_CLAUDE_FIVE_MINUTE_CACHE_MODELS.has(model);
-  const nova = BEDROCK_NOVA_CACHE_MODELS.has(model);
-  if (!claude5m && !nova)
-    throw new ApiError(
-      400,
-      "Explicit Bedrock caching is not supported for this model ID; use a documented foundation model or system inference profile ID",
-    );
-  if (points.length > 4)
-    throw new ApiError(
-      400,
-      "Bedrock supports at most four cache checkpoints per request",
-    );
-  if (nova && toolPoints.length)
-    throw new ApiError(
-      400,
-      "Nova cache checkpoints are supported in system and messages, not tools",
-    );
-  let sawShort = false;
-  for (const point of points) {
-    if (point.ttl === "1h") {
-      if (!claude1h)
-        throw new ApiError(
-          400,
-          "This Bedrock model does not support a 1h cache TTL",
-        );
-      if (sawShort)
-        throw new ApiError(
-          400,
-          "Bedrock 1h cache checkpoints must precede 5m checkpoints (tools, system, messages)",
-        );
-    } else sawShort = true;
-  }
-}
-
-function validateMultimodalContent(request: BedrockRequest): void {
-  const blocks = (request.messages ?? []).flatMap((m) => m.content);
-  if (!blocks.some((b) => "image" in b || "document" in b)) return;
-  // Known text-only models must fail here instead of losing input. For other
-  // models AWS remains the authoritative modality validator.
-  if (/amazon\.nova-micro/.test(request.modelId))
-    throw new ApiError(
-      400,
-      "This Bedrock model does not support the requested image or document content",
-    );
+  // Model support, TTLs, checkpoint limits and ordering are validated by AWS.
+  blocks.push({
+    cachePoint: {
+      type: "default",
+      ...(marker.ttl !== undefined ? { ttl: marker.ttl } : {}),
+    },
+  });
 }
 
 // MIMEs whose text content Bedrock's document block can represent as txt.
@@ -854,23 +743,22 @@ function buildToolConfig(
   const tools = Array.isArray(loose.tools) ? loose.tools : [];
   if (tools.length === 0 && toolChoice == null) return undefined;
 
-  const mapped: NonNullable<BedrockRequest["toolConfig"]>["tools"] = [];
-  for (const t of tools) {
-    if (t?.type !== "function" || !t.function?.name) continue;
-    mapped.push({
+  const mapped = tools
+    .filter((t: Loose) => t?.type === "function" && t.function?.name)
+    .map((t: Loose) => ({
       toolSpec: {
         name: String(t.function.name),
         ...(t.function.description
           ? { description: String(t.function.description) }
           : {}),
         inputSchema: {
-          json: t.function.parameters ?? { type: "object", properties: {} },
+          json: (t.function.parameters ?? {
+            type: "object",
+            properties: {},
+          }) as Record<string, unknown>,
         },
       },
-    });
-    const point = cachePointFromMarker(t.cache_control);
-    if (point) mapped.push(point);
-  }
+    }));
 
   const cfg: NonNullable<BedrockRequest["toolConfig"]> = { tools: mapped };
 

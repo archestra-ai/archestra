@@ -301,9 +301,6 @@
                                       "file_id": {
                                         "type": "string"
                                       },
-                                      "file_url": {
-                                        "type": "string"
-                                      },
                                       "filename": {
                                         "type": "string"
                                       }
@@ -4758,9 +4755,6 @@
                                       "file_id": {
                                         "type": "string"
                                       },
-                                      "file_url": {
-                                        "type": "string"
-                                      },
                                       "filename": {
                                         "type": "string"
                                       }
@@ -6608,9 +6602,6 @@
                                       "file_id": {
                                         "type": "string"
                                       },
-                                      "file_url": {
-                                        "type": "string"
-                                      },
                                       "filename": {
                                         "type": "string"
                                       }
@@ -7876,9 +7867,6 @@
                                         "type": "string"
                                       },
                                       "file_id": {
-                                        "type": "string"
-                                      },
-                                      "file_url": {
                                         "type": "string"
                                       },
                                       "filename": {
@@ -9155,9 +9143,6 @@
                                       "file_id": {
                                         "type": "string"
                                       },
-                                      "file_url": {
-                                        "type": "string"
-                                      },
                                       "filename": {
                                         "type": "string"
                                       }
@@ -10423,9 +10408,6 @@
                                         "type": "string"
                                       },
                                       "file_id": {
-                                        "type": "string"
-                                      },
-                                      "file_url": {
                                         "type": "string"
                                       },
                                       "filename": {
@@ -15264,9 +15246,6 @@
                                       "file_id": {
                                         "type": "string"
                                       },
-                                      "file_url": {
-                                        "type": "string"
-                                      },
                                       "filename": {
                                         "type": "string"
                                       }
@@ -16533,9 +16512,6 @@
                                         "type": "string"
                                       },
                                       "file_id": {
-                                        "type": "string"
-                                      },
-                                      "file_url": {
                                         "type": "string"
                                       },
                                       "filename": {
@@ -18008,9 +17984,6 @@
                                           "file_id": {
                                             "type": "string"
                                           },
-                                          "file_url": {
-                                            "type": "string"
-                                          },
                                           "filename": {
                                             "type": "string"
                                           }
@@ -19298,9 +19271,6 @@
                                         "type": "string"
                                       },
                                       "file_id": {
-                                        "type": "string"
-                                      },
-                                      "file_url": {
                                         "type": "string"
                                       },
                                       "filename": {
@@ -20793,9 +20763,6 @@
                                         "type": "string"
                                       },
                                       "file_id": {
-                                        "type": "string"
-                                      },
-                                      "file_url": {
                                         "type": "string"
                                       },
                                       "filename": {
@@ -25442,9 +25409,6 @@
                                       "file_id": {
                                         "type": "string"
                                       },
-                                      "file_url": {
-                                        "type": "string"
-                                      },
                                       "filename": {
                                         "type": "string"
                                       }
@@ -27377,9 +27341,6 @@
                                       "file_id": {
                                         "type": "string"
                                       },
-                                      "file_url": {
-                                        "type": "string"
-                                      },
                                       "filename": {
                                         "type": "string"
                                       }
@@ -28702,9 +28663,6 @@
                                         "type": "string"
                                       },
                                       "file_id": {
-                                        "type": "string"
-                                      },
-                                      "file_url": {
                                         "type": "string"
                                       },
                                       "filename": {
@@ -30038,9 +29996,6 @@
                                       "file_id": {
                                         "type": "string"
                                       },
-                                      "file_url": {
-                                        "type": "string"
-                                      },
                                       "filename": {
                                         "type": "string"
                                       }
@@ -31363,9 +31318,6 @@
                                         "type": "string"
                                       },
                                       "file_id": {
-                                        "type": "string"
-                                      },
-                                      "file_url": {
                                         "type": "string"
                                       },
                                       "filename": {
@@ -36395,9 +36347,6 @@
                                       "file_id": {
                                         "type": "string"
                                       },
-                                      "file_url": {
-                                        "type": "string"
-                                      },
                                       "filename": {
                                         "type": "string"
                                       }
@@ -37720,9 +37669,6 @@
                                         "type": "string"
                                       },
                                       "file_id": {
-                                        "type": "string"
-                                      },
-                                      "file_url": {
                                         "type": "string"
                                       },
                                       "filename": {
@@ -39261,9 +39207,6 @@
                                           "file_id": {
                                             "type": "string"
                                           },
-                                          "file_url": {
-                                            "type": "string"
-                                          },
                                           "filename": {
                                             "type": "string"
                                           }
@@ -40612,9 +40555,6 @@
                                         "type": "string"
                                       },
                                       "file_id": {
-                                        "type": "string"
-                                      },
-                                      "file_url": {
                                         "type": "string"
                                       },
                                       "filename": {
@@ -112415,22 +112355,11 @@
                                 "name",
                                 "inputSchema"
                               ]
-                            },
-                            "cachePoint": {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string"
-                                },
-                                "ttl": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "type"
-                              ]
                             }
-                          }
+                          },
+                          "required": [
+                            "toolSpec"
+                          ]
                         }
                       },
                       "toolChoice": {
@@ -113845,22 +113774,11 @@
                                 "name",
                                 "inputSchema"
                               ]
-                            },
-                            "cachePoint": {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string"
-                                },
-                                "ttl": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "type"
-                              ]
                             }
-                          }
+                          },
+                          "required": [
+                            "toolSpec"
+                          ]
                         }
                       },
                       "toolChoice": {
@@ -115285,22 +115203,11 @@
                                 "name",
                                 "inputSchema"
                               ]
-                            },
-                            "cachePoint": {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string"
-                                },
-                                "ttl": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "type"
-                              ]
                             }
-                          }
+                          },
+                          "required": [
+                            "toolSpec"
+                          ]
                         }
                       },
                       "toolChoice": {
@@ -116176,22 +116083,11 @@
                                 "name",
                                 "inputSchema"
                               ]
-                            },
-                            "cachePoint": {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string"
-                                },
-                                "ttl": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "type"
-                              ]
                             }
-                          }
+                          },
+                          "required": [
+                            "toolSpec"
+                          ]
                         }
                       },
                       "toolChoice": {
@@ -117077,22 +116973,11 @@
                                 "name",
                                 "inputSchema"
                               ]
-                            },
-                            "cachePoint": {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string"
-                                },
-                                "ttl": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "type"
-                              ]
                             }
-                          }
+                          },
+                          "required": [
+                            "toolSpec"
+                          ]
                         }
                       },
                       "toolChoice": {
@@ -118522,22 +118407,11 @@
                                 "name",
                                 "inputSchema"
                               ]
-                            },
-                            "cachePoint": {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string"
-                                },
-                                "ttl": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "type"
-                              ]
                             }
-                          }
+                          },
+                          "required": [
+                            "toolSpec"
+                          ]
                         }
                       },
                       "toolChoice": {
@@ -158720,9 +158594,6 @@
                                               "file_id": {
                                                 "type": "string"
                                               },
-                                              "file_url": {
-                                                "type": "string"
-                                              },
                                               "filename": {
                                                 "type": "string"
                                               }
@@ -160265,9 +160136,6 @@
                                                 "type": "string"
                                               },
                                               "file_id": {
-                                                "type": "string"
-                                              },
-                                              "file_url": {
                                                 "type": "string"
                                               },
                                               "filename": {
@@ -177051,23 +176919,11 @@
                                                     "inputSchema"
                                                   ],
                                                   "additionalProperties": false
-                                                },
-                                                "cachePoint": {
-                                                  "type": "object",
-                                                  "properties": {
-                                                    "type": {
-                                                      "type": "string"
-                                                    },
-                                                    "ttl": {
-                                                      "type": "string"
-                                                    }
-                                                  },
-                                                  "required": [
-                                                    "type"
-                                                  ],
-                                                  "additionalProperties": false
                                                 }
                                               },
+                                              "required": [
+                                                "toolSpec"
+                                              ],
                                               "additionalProperties": false
                                             }
                                           },
@@ -177950,23 +177806,11 @@
                                                     "inputSchema"
                                                   ],
                                                   "additionalProperties": false
-                                                },
-                                                "cachePoint": {
-                                                  "type": "object",
-                                                  "properties": {
-                                                    "type": {
-                                                      "type": "string"
-                                                    },
-                                                    "ttl": {
-                                                      "type": "string"
-                                                    }
-                                                  },
-                                                  "required": [
-                                                    "type"
-                                                  ],
-                                                  "additionalProperties": false
                                                 }
                                               },
+                                              "required": [
+                                                "toolSpec"
+                                              ],
                                               "additionalProperties": false
                                             }
                                           },
@@ -190211,9 +190055,6 @@
                                                                   "file_id": {
                                                                     "type": "string"
                                                                   },
-                                                                  "file_url": {
-                                                                    "type": "string"
-                                                                  },
                                                                   "filename": {
                                                                     "type": "string"
                                                                   }
@@ -191306,9 +191147,6 @@
                                                                     "type": "string"
                                                                   },
                                                                   "file_id": {
-                                                                    "type": "string"
-                                                                  },
-                                                                  "file_url": {
                                                                     "type": "string"
                                                                   },
                                                                   "filename": {
@@ -193248,9 +193086,6 @@
                                                                   "file_id": {
                                                                     "type": "string"
                                                                   },
-                                                                  "file_url": {
-                                                                    "type": "string"
-                                                                  },
                                                                   "filename": {
                                                                     "type": "string"
                                                                   }
@@ -194343,9 +194178,6 @@
                                                                     "type": "string"
                                                                   },
                                                                   "file_id": {
-                                                                    "type": "string"
-                                                                  },
-                                                                  "file_url": {
                                                                     "type": "string"
                                                                   },
                                                                   "filename": {
@@ -196280,9 +196112,6 @@
                                                                   "file_id": {
                                                                     "type": "string"
                                                                   },
-                                                                  "file_url": {
-                                                                    "type": "string"
-                                                                  },
                                                                   "filename": {
                                                                     "type": "string"
                                                                   }
@@ -197375,9 +197204,6 @@
                                                                     "type": "string"
                                                                   },
                                                                   "file_id": {
-                                                                    "type": "string"
-                                                                  },
-                                                                  "file_url": {
                                                                     "type": "string"
                                                                   },
                                                                   "filename": {
@@ -212990,23 +212816,11 @@
                                               "inputSchema"
                                             ],
                                             "additionalProperties": false
-                                          },
-                                          "cachePoint": {
-                                            "type": "object",
-                                            "properties": {
-                                              "type": {
-                                                "type": "string"
-                                              },
-                                              "ttl": {
-                                                "type": "string"
-                                              }
-                                            },
-                                            "required": [
-                                              "type"
-                                            ],
-                                            "additionalProperties": false
                                           }
                                         },
+                                        "required": [
+                                          "toolSpec"
+                                        ],
                                         "additionalProperties": false
                                       }
                                     },
@@ -213889,23 +213703,11 @@
                                               "inputSchema"
                                             ],
                                             "additionalProperties": false
-                                          },
-                                          "cachePoint": {
-                                            "type": "object",
-                                            "properties": {
-                                              "type": {
-                                                "type": "string"
-                                              },
-                                              "ttl": {
-                                                "type": "string"
-                                              }
-                                            },
-                                            "required": [
-                                              "type"
-                                            ],
-                                            "additionalProperties": false
                                           }
                                         },
+                                        "required": [
+                                          "toolSpec"
+                                        ],
                                         "additionalProperties": false
                                       }
                                     },
@@ -226150,9 +225952,6 @@
                                                             "file_id": {
                                                               "type": "string"
                                                             },
-                                                            "file_url": {
-                                                              "type": "string"
-                                                            },
                                                             "filename": {
                                                               "type": "string"
                                                             }
@@ -227245,9 +227044,6 @@
                                                               "type": "string"
                                                             },
                                                             "file_id": {
-                                                              "type": "string"
-                                                            },
-                                                            "file_url": {
                                                               "type": "string"
                                                             },
                                                             "filename": {
@@ -229187,9 +228983,6 @@
                                                             "file_id": {
                                                               "type": "string"
                                                             },
-                                                            "file_url": {
-                                                              "type": "string"
-                                                            },
                                                             "filename": {
                                                               "type": "string"
                                                             }
@@ -230282,9 +230075,6 @@
                                                               "type": "string"
                                                             },
                                                             "file_id": {
-                                                              "type": "string"
-                                                            },
-                                                            "file_url": {
                                                               "type": "string"
                                                             },
                                                             "filename": {
@@ -232219,9 +232009,6 @@
                                                             "file_id": {
                                                               "type": "string"
                                                             },
-                                                            "file_url": {
-                                                              "type": "string"
-                                                            },
                                                             "filename": {
                                                               "type": "string"
                                                             }
@@ -233314,9 +233101,6 @@
                                                               "type": "string"
                                                             },
                                                             "file_id": {
-                                                              "type": "string"
-                                                            },
-                                                            "file_url": {
                                                               "type": "string"
                                                             },
                                                             "filename": {
@@ -252396,9 +252180,6 @@
                                               "file_id": {
                                                 "type": "string"
                                               },
-                                              "file_url": {
-                                                "type": "string"
-                                              },
                                               "filename": {
                                                 "type": "string"
                                               }
@@ -253946,9 +253727,6 @@
                                                 "type": "string"
                                               },
                                               "file_id": {
-                                                "type": "string"
-                                              },
-                                              "file_url": {
                                                 "type": "string"
                                               },
                                               "filename": {
@@ -309761,9 +309539,6 @@
                                               "file_id": {
                                                 "type": "string"
                                               },
-                                              "file_url": {
-                                                "type": "string"
-                                              },
                                               "filename": {
                                                 "type": "string"
                                               }
@@ -311311,9 +311086,6 @@
                                                 "type": "string"
                                               },
                                               "file_id": {
-                                                "type": "string"
-                                              },
-                                              "file_url": {
                                                 "type": "string"
                                               },
                                               "filename": {

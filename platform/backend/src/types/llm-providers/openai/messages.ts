@@ -97,7 +97,6 @@ const ContentPartFileSchema = z
       .object({
         file_data: z.string().optional(),
         file_id: z.string().optional(),
-        file_url: z.string().optional(),
         filename: z.string().optional(),
       })
       .describe(

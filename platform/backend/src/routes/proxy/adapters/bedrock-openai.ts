@@ -29,7 +29,6 @@ import {
   converseResponseToOpenai,
   createConverseToOpenaiSseEncoder,
   type OpenaiContext,
-  validateTranslatedConverseRequest,
 } from "./bedrock-openai-translator";
 
 type BedrockRequest = Bedrock.Types.ConverseRequest;
@@ -144,6 +143,7 @@ class BedrockOpenaiStreamAdapter
   readonly provider = "bedrock" as const;
   private inner: LLMStreamAdapter<BedrockStreamEvent, BedrockResponse>;
   private encoder: ConverseToOpenaiSseEncoder;
+  private upstreamUsage: BedrockResponse["usage"];
   /**
    * Tool-call events translated at arrival (once) and cached here. The handler
    * retrieves them via `getRawToolCallEvents()` after the per-tool policy
@@ -179,6 +179,7 @@ class BedrockOpenaiStreamAdapter
     const innerResult = this.inner.processChunk(event);
 
     const e = event as Loose;
+    if (e.metadata?.usage) this.upstreamUsage = e.metadata.usage;
     const isToolEvent = isToolCallEvent(e);
 
     if (isToolEvent) {
@@ -244,7 +245,10 @@ class BedrockOpenaiStreamAdapter
    * not through this method.
    */
   toProviderResponse(): BedrockResponse {
-    return this.inner.toProviderResponse();
+    return {
+      ...this.inner.toProviderResponse(),
+      ...(this.upstreamUsage ? { usage: this.upstreamUsage } : {}),
+    };
   }
 }
 
@@ -274,14 +278,6 @@ export function makeBedrockOpenaiAdapterFactory(
 > {
   return {
     ...bedrockAdapterFactory,
-    async execute(client, request) {
-      validateTranslatedConverseRequest(request);
-      return bedrockAdapterFactory.execute(client, request);
-    },
-    async executeStream(client, request) {
-      validateTranslatedConverseRequest(request);
-      return bedrockAdapterFactory.executeStream(client, request);
-    },
     createResponseAdapter(response) {
       return new BedrockOpenaiResponseAdapter(response, ctx);
     },

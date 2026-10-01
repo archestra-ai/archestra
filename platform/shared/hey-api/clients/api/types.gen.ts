@@ -61,7 +61,6 @@ export type OpenAiChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -1624,7 +1623,6 @@ export type CerebrasChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -2139,7 +2137,6 @@ export type MistralChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -2534,7 +2531,6 @@ export type PerplexityChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -2930,7 +2926,6 @@ export type GroqChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -3325,7 +3320,6 @@ export type OpenrouterChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -4712,7 +4706,6 @@ export type DeepSeekChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -5108,7 +5101,6 @@ export type ArchestraChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -5550,7 +5542,6 @@ export type MinimaxChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -5942,7 +5933,6 @@ export type XaiChatCompletionRequestInput = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -6377,7 +6367,6 @@ export type OpenAiChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -7940,7 +7929,6 @@ export type CerebrasChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -8455,7 +8443,6 @@ export type MistralChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -8850,7 +8837,6 @@ export type PerplexityChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -9246,7 +9232,6 @@ export type GroqChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -9641,7 +9626,6 @@ export type OpenrouterChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -11028,7 +11012,6 @@ export type DeepSeekChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -11424,7 +11407,6 @@ export type ArchestraChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -11866,7 +11848,6 @@ export type MinimaxChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -12258,7 +12239,6 @@ export type XaiChatCompletionRequest = {
             file: {
                 file_data?: string;
                 file_id?: string;
-                file_url?: string;
                 filename?: string;
             };
         }>;
@@ -31701,7 +31681,7 @@ export type BedrockConverseWithDefaultAgentData = {
         };
         toolConfig?: {
             tools: Array<{
-                toolSpec?: {
+                toolSpec: {
                     name: string;
                     description?: string;
                     inputSchema: {
@@ -31709,10 +31689,6 @@ export type BedrockConverseWithDefaultAgentData = {
                             [key: string]: unknown;
                         };
                     };
-                };
-                cachePoint?: {
-                    type: string;
-                    ttl?: string;
                 };
             }>;
             toolChoice?: {
@@ -32057,7 +32033,7 @@ export type BedrockConverseWithAgentData = {
         };
         toolConfig?: {
             tools: Array<{
-                toolSpec?: {
+                toolSpec: {
                     name: string;
                     description?: string;
                     inputSchema: {
@@ -32065,10 +32041,6 @@ export type BedrockConverseWithAgentData = {
                             [key: string]: unknown;
                         };
                     };
-                };
-                cachePoint?: {
-                    type: string;
-                    ttl?: string;
                 };
             }>;
             toolChoice?: {
@@ -32415,7 +32387,7 @@ export type BedrockConverseStreamWithDefaultAgentData = {
         };
         toolConfig?: {
             tools: Array<{
-                toolSpec?: {
+                toolSpec: {
                     name: string;
                     description?: string;
                     inputSchema: {
@@ -32423,10 +32395,6 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                             [key: string]: unknown;
                         };
                     };
-                };
-                cachePoint?: {
-                    type: string;
-                    ttl?: string;
                 };
             }>;
             toolChoice?: {
@@ -32629,7 +32597,7 @@ export type BedrockConverseStreamWithAgentData = {
         };
         toolConfig?: {
             tools: Array<{
-                toolSpec?: {
+                toolSpec: {
                     name: string;
                     description?: string;
                     inputSchema: {
@@ -32637,10 +32605,6 @@ export type BedrockConverseStreamWithAgentData = {
                             [key: string]: unknown;
                         };
                     };
-                };
-                cachePoint?: {
-                    type: string;
-                    ttl?: string;
                 };
             }>;
             toolChoice?: {
@@ -32845,7 +32809,7 @@ export type BedrockConverseWithAgentAndModelData = {
         };
         toolConfig?: {
             tools: Array<{
-                toolSpec?: {
+                toolSpec: {
                     name: string;
                     description?: string;
                     inputSchema: {
@@ -32853,10 +32817,6 @@ export type BedrockConverseWithAgentAndModelData = {
                             [key: string]: unknown;
                         };
                     };
-                };
-                cachePoint?: {
-                    type: string;
-                    ttl?: string;
                 };
             }>;
             toolChoice?: {
@@ -33204,7 +33164,7 @@ export type BedrockConverseStreamWithAgentAndModelData = {
         };
         toolConfig?: {
             tools: Array<{
-                toolSpec?: {
+                toolSpec: {
                     name: string;
                     description?: string;
                     inputSchema: {
@@ -33212,10 +33172,6 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                             [key: string]: unknown;
                         };
                     };
-                };
-                cachePoint?: {
-                    type: string;
-                    ttl?: string;
                 };
             }>;
             toolChoice?: {
@@ -43778,7 +43734,6 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 file: {
                     file_data?: string;
                     file_id?: string;
-                    file_url?: string;
                     filename?: string;
                 };
             }>;
@@ -44261,7 +44216,6 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 file: {
                     file_data?: string;
                     file_id?: string;
-                    file_url?: string;
                     filename?: string;
                 };
             }>;
@@ -48478,7 +48432,7 @@ export type GetInteractionsResponses = {
                 };
                 toolConfig?: {
                     tools: Array<{
-                        toolSpec?: {
+                        toolSpec: {
                             name: string;
                             description?: string;
                             inputSchema: {
@@ -48486,10 +48440,6 @@ export type GetInteractionsResponses = {
                                     [key: string]: unknown;
                                 };
                             };
-                        };
-                        cachePoint?: {
-                            type: string;
-                            ttl?: string;
                         };
                     }>;
                     toolChoice?: {
@@ -48668,7 +48618,7 @@ export type GetInteractionsResponses = {
                 };
                 toolConfig?: {
                     tools: Array<{
-                        toolSpec?: {
+                        toolSpec: {
                             name: string;
                             description?: string;
                             inputSchema: {
@@ -48676,10 +48626,6 @@ export type GetInteractionsResponses = {
                                     [key: string]: unknown;
                                 };
                             };
-                        };
-                        cachePoint?: {
-                            type: string;
-                            ttl?: string;
                         };
                     }>;
                     toolChoice?: {
@@ -50698,7 +50644,6 @@ export type GetInteractionsResponses = {
                         file: {
                             file_data?: string;
                             file_id?: string;
-                            file_url?: string;
                             filename?: string;
                         };
                     }>;
@@ -51025,7 +50970,6 @@ export type GetInteractionsResponses = {
                         file: {
                             file_data?: string;
                             file_id?: string;
-                            file_url?: string;
                             filename?: string;
                         };
                     }>;
@@ -51511,7 +51455,6 @@ export type GetInteractionsResponses = {
                         file: {
                             file_data?: string;
                             file_id?: string;
-                            file_url?: string;
                             filename?: string;
                         };
                     }>;
@@ -51838,7 +51781,6 @@ export type GetInteractionsResponses = {
                         file: {
                             file_data?: string;
                             file_id?: string;
-                            file_url?: string;
                             filename?: string;
                         };
                     }>;
@@ -52324,7 +52266,6 @@ export type GetInteractionsResponses = {
                         file: {
                             file_data?: string;
                             file_id?: string;
-                            file_url?: string;
                             filename?: string;
                         };
                     }>;
@@ -52651,7 +52592,6 @@ export type GetInteractionsResponses = {
                         file: {
                             file_data?: string;
                             file_id?: string;
-                            file_url?: string;
                             filename?: string;
                         };
                     }>;
@@ -55725,7 +55665,7 @@ export type GetInteractionResponses = {
             };
             toolConfig?: {
                 tools: Array<{
-                    toolSpec?: {
+                    toolSpec: {
                         name: string;
                         description?: string;
                         inputSchema: {
@@ -55733,10 +55673,6 @@ export type GetInteractionResponses = {
                                 [key: string]: unknown;
                             };
                         };
-                    };
-                    cachePoint?: {
-                        type: string;
-                        ttl?: string;
                     };
                 }>;
                 toolChoice?: {
@@ -55915,7 +55851,7 @@ export type GetInteractionResponses = {
             };
             toolConfig?: {
                 tools: Array<{
-                    toolSpec?: {
+                    toolSpec: {
                         name: string;
                         description?: string;
                         inputSchema: {
@@ -55923,10 +55859,6 @@ export type GetInteractionResponses = {
                                 [key: string]: unknown;
                             };
                         };
-                    };
-                    cachePoint?: {
-                        type: string;
-                        ttl?: string;
                     };
                 }>;
                 toolChoice?: {
@@ -57945,7 +57877,6 @@ export type GetInteractionResponses = {
                     file: {
                         file_data?: string;
                         file_id?: string;
-                        file_url?: string;
                         filename?: string;
                     };
                 }>;
@@ -58272,7 +58203,6 @@ export type GetInteractionResponses = {
                     file: {
                         file_data?: string;
                         file_id?: string;
-                        file_url?: string;
                         filename?: string;
                     };
                 }>;
@@ -58758,7 +58688,6 @@ export type GetInteractionResponses = {
                     file: {
                         file_data?: string;
                         file_id?: string;
-                        file_url?: string;
                         filename?: string;
                     };
                 }>;
@@ -59085,7 +59014,6 @@ export type GetInteractionResponses = {
                     file: {
                         file_data?: string;
                         file_id?: string;
-                        file_url?: string;
                         filename?: string;
                     };
                 }>;
@@ -59571,7 +59499,6 @@ export type GetInteractionResponses = {
                     file: {
                         file_data?: string;
                         file_id?: string;
-                        file_url?: string;
                         filename?: string;
                     };
                 }>;
@@ -59898,7 +59825,6 @@ export type GetInteractionResponses = {
                     file: {
                         file_data?: string;
                         file_id?: string;
-                        file_url?: string;
                         filename?: string;
                     };
                 }>;
@@ -64457,7 +64383,6 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 file: {
                     file_data?: string;
                     file_id?: string;
-                    file_url?: string;
                     filename?: string;
                 };
             }>;
@@ -64940,7 +64865,6 @@ export type KimiChatCompletionsWithAgentData = {
                 file: {
                     file_data?: string;
                     file_id?: string;
-                    file_url?: string;
                     filename?: string;
                 };
             }>;
@@ -79481,7 +79405,6 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 file: {
                     file_data?: string;
                     file_id?: string;
-                    file_url?: string;
                     filename?: string;
                 };
             }>;
@@ -79964,7 +79887,6 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 file: {
                     file_data?: string;
                     file_id?: string;
-                    file_url?: string;
                     filename?: string;
                 };
             }>;

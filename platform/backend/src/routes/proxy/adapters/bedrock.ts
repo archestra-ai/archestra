@@ -68,7 +68,6 @@ type BedrockCommandContext = {
       | {
           tools:
             | Array<{
-                cachePoint?: { type: string; ttl?: string };
                 toolSpec:
                   | {
                       name?: string;
@@ -673,20 +672,18 @@ class BedrockRequestAdapter
   getTools(): CommonMcpToolDefinition[] {
     if (!this.request.toolConfig?.tools) return [];
 
-    return this.request.toolConfig.tools
-      .filter((tool) => tool.toolSpec)
-      .map((tool) => ({
-        name: tool.toolSpec?.name ?? "",
-        description: tool.toolSpec?.description,
-        inputSchema: (tool.toolSpec?.inputSchema?.json ?? {}) as Record<
-          string,
-          unknown
-        >,
-      }));
+    return this.request.toolConfig.tools.map((tool) => ({
+      name: tool.toolSpec?.name ?? "",
+      description: tool.toolSpec?.description,
+      inputSchema: (tool.toolSpec?.inputSchema?.json ?? {}) as Record<
+        string,
+        unknown
+      >,
+    }));
   }
 
   hasTools(): boolean {
-    return this.getTools().length > 0;
+    return (this.request.toolConfig?.tools?.length ?? 0) > 0;
   }
 
   getProviderMessages(): BedrockMessages {
@@ -1003,9 +1000,7 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
     if (this.response.usage && this.response.usage.totalTokens == null) {
       this.response.usage.totalTokens =
         (this.response.usage.inputTokens ?? 0) +
-        (this.response.usage.outputTokens ?? 0) +
-        (this.response.usage.cacheReadInputTokens ?? 0) +
-        (this.response.usage.cacheWriteInputTokens ?? 0);
+        (this.response.usage.outputTokens ?? 0);
     }
     return this.response;
   }
@@ -1131,7 +1126,6 @@ class BedrockStreamAdapter
   private bedrockState: {
     latencyMs: number | null;
     trace: unknown | null;
-    usage: BedrockResponse["usage"] | null;
     // Buffer for messageStop and metadata events when tool calls are pending
     // These must be sent AFTER tool call events in the correct stream order
     pendingFinalEvents: BedrockStreamEventWithRaw[];
@@ -1154,7 +1148,6 @@ class BedrockStreamAdapter
     this.bedrockState = {
       latencyMs: null,
       trace: null,
-      usage: null,
       pendingFinalEvents: [],
     };
   }
@@ -1302,16 +1295,6 @@ class BedrockStreamAdapter
         trace?: unknown;
       };
       if (metadata.usage) {
-        this.bedrockState.usage = {
-          ...metadata.usage,
-          cacheDetails: metadata.usage.cacheDetails?.filter(
-            (detail) => detail !== null,
-          ),
-          inputTokens: metadata.usage.inputTokens ?? 0,
-          outputTokens: metadata.usage.outputTokens ?? 0,
-        };
-        if (!metadata.usage.cacheDetails)
-          delete this.bedrockState.usage.cacheDetails;
         this.state.usage = {
           inputTokens: metadata.usage.inputTokens ?? 0,
           outputTokens: metadata.usage.outputTokens ?? 0,
@@ -1581,7 +1564,7 @@ class BedrockStreamAdapter
         stopReason: "end_turn",
       });
       const metadata = encodeEventStreamMessage("metadata", {
-        usage: this.bedrockState.usage ?? {
+        usage: {
           inputTokens: this.state.usage?.inputTokens ?? 0,
           outputTokens: this.state.usage?.outputTokens ?? 0,
         },
@@ -1678,7 +1661,7 @@ class BedrockStreamAdapter
           ? "end_turn"
           : ((this.state.stopReason as BedrockResponse["stopReason"]) ??
             "end_turn"),
-      usage: this.bedrockState.usage ?? {
+      usage: {
         inputTokens: this.state.usage?.inputTokens ?? 0,
         outputTokens: this.state.usage?.outputTokens ?? 0,
       },
@@ -1747,7 +1730,6 @@ function buildBedrockCommandContext(
       toolConfig: request.toolConfig
         ? {
             tools: request.toolConfig.tools?.map((t) => ({
-              ...(t.cachePoint ? { cachePoint: t.cachePoint } : {}),
               toolSpec: t.toolSpec
                 ? {
                     name: t.toolSpec.name
@@ -1964,7 +1946,6 @@ export const bedrockAdapterFactory: LLMProvider<
       usage: {
         inputTokens: response.usage?.inputTokens ?? 0,
         outputTokens: response.usage?.outputTokens ?? 0,
-        totalTokens: response.usage?.totalTokens,
         // Preserve cache usage so getUsage() can report it on the non-streaming
         // path; cacheDetails carries the per-TTL write split for 1h cost.
         cacheReadInputTokens: response.usage?.cacheReadInputTokens,

@@ -137,9 +137,14 @@ test("a fresh instance shows only the policy step", async () => {
 });
 
 test("members who cannot edit the policy are told who can", async () => {
-  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: Object.values(permissions).every((actions) =>
+          actions.every((action) => action === "read"),
+        ),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   show();
   expect(
     await screen.findByText("Ask an administrator to turn on the guardrail."),
@@ -200,9 +205,14 @@ test("the enforcement switch turns enforcement on and off", async () => {
 
 test("members who cannot manage enforcement see the switch disabled", async () => {
   revision = 3;
-  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: Object.values(permissions).every((actions) =>
+          actions.every((action) => action === "read"),
+        ),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   show();
   expect(
     await screen.findByRole("switch", { name: "Enforce the policy" }),
@@ -244,9 +254,14 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
 test("members who cannot manage sync are told who can connect it", async () => {
   revision = 1;
   enabled = true;
-  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: Object.values(permissions).every((actions) =>
+          actions.every((action) => action === "read"),
+        ),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   show();
   expect(
     await screen.findByText("Ask an administrator to connect a repository."),

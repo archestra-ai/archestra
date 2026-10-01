@@ -1,6 +1,5 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { userHasPermission } from "@/auth";
 import {
   acceptHeldAppaGithubPull,
   configureAppaGithubSync,
@@ -8,7 +7,7 @@ import {
   getAppaGithubSync,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
-import { ApiError, constructResponseSchema } from "@/types";
+import { constructResponseSchema } from "@/types";
 import {
   AcceptedHeldPullSchema,
   AppaGithubSourceSchema,
@@ -18,22 +17,6 @@ import {
 } from "@/types/openappa-github-sync";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
-  // This changes organization policy, so require organization management as well as the endpoint permission.
-  app.addHook("preHandler", async (request) => {
-    if (
-      request.method !== "GET" &&
-      !(await userHasPermission(
-        request.user.id,
-        request.organizationId,
-        "organization",
-        "update",
-      ))
-    )
-      throw new ApiError(
-        403,
-        "Organization update permission is required to manage APPA sync",
-      );
-  });
   app.get(
     "/api/openappa/github-sync",
     {

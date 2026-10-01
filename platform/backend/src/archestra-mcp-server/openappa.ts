@@ -235,7 +235,12 @@ const registry = defineArchestraTools([
         );
       }
       if (
-        !(await userHasPermission(userId, organizationId, "toolPolicy", "read"))
+        !(await userHasPermission(
+          userId,
+          organizationId,
+          "openappaPolicy",
+          "read",
+        ))
       )
         throw new ApiError(403, "You do not have permission to read policy");
       const catalog = await InternalMcpCatalogModel.findById(args.mcpServerId, {

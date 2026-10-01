@@ -176,14 +176,14 @@ describe("OpenAPPA yells", () => {
     ).toEqual({ unresolved: 1 });
   });
 
-  test("a log reader can read all organization reports but cannot resolve them", async ({
+  test("a diagnostics reader can read all organization reports but cannot resolve them", async ({
     makeUser,
     makeMember,
     makeCustomRole,
     makeAgent,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { log: ["read"] },
+      permission: { openappaDiagnostics: ["read"] },
     });
     const reporter = user;
     const other = await record("Shared report");
@@ -314,14 +314,14 @@ describe("OpenAPPA yells", () => {
     });
   });
 
-  test("denies readers without log permission", async ({
+  test("denies readers without diagnostics permission", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const yell = await record("Shared report");
     const role = await makeCustomRole(organizationId, {
-      permission: { agent: ["read"] },
+      permission: { log: ["read"], toolPolicy: ["read", "update"] },
     });
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });
@@ -333,6 +333,31 @@ describe("OpenAPPA yells", () => {
     ]) {
       expect((await app.inject({ url })).statusCode).toBe(403);
     }
+  });
+
+  test("composed diagnostics roles can resolve a yell without policy or log permissions", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const yell = await record("Shared report");
+    const read = await makeCustomRole(organizationId, {
+      permission: { openappaDiagnostics: ["read"] },
+    });
+    const update = await makeCustomRole(organizationId, {
+      permission: { openappaDiagnostics: ["update"] },
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, {
+      role: `${read.role},${update.role}`,
+    });
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/yells/${yell.id}`,
+      payload: { resolved: true },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().resolvedBy).toBe(user.id);
   });
 
   test("does not disclose or mutate another organization's report", async ({

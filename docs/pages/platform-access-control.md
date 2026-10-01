@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-27
+lastUpdated: 2026-10-01
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -63,6 +63,9 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
 | Credentials | `read`, `create`, `update`, `delete` |
+| Policy | `read`, `update` |
+| Settings | `read` |
+| Diagnostics | `read`, `update` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -108,6 +111,8 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
 | Credentials | `read` |
+| Policy | `read` |
+| Settings | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -258,6 +263,13 @@ The following table lists all available permissions that can be assigned to cust
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
 | `member:impersonate` | Temporarily sign in as another member to see the app with their access (role debugging) |
+| `openappaDiagnostics:read` | Read all organization yells and your own consult logs |
+| `openappaDiagnostics:update` | Resolve and reopen organization yells |
+| `openappaDiagnostics:admin` | Read consult logs across the organization |
+| `openappaPolicy:read` | View OpenAPPA policy, batteries, and coverage |
+| `openappaPolicy:update` | Validate and edit OpenAPPA policy and manage batteries |
+| `openappaSettings:read` | View OpenAPPA enforcement settings and GitHub sync |
+| `openappaSettings:update` | Manage OpenAPPA enforcement settings and GitHub sync |
 | `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
 | `plugin:read` | View plugins and their file metadata |

@@ -56,16 +56,16 @@ This tool takes no arguments.
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `get_openappa_yell` | Read a saved OpenAPPA report from the current organization, including its originating user or service account. | `log:read` |
-| `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | `toolPolicy:update` |
+| `get_openappa_yell` | Read a saved OpenAPPA report from the current organization, including its originating user or service account. | `openappaDiagnostics:read` |
+| `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | `openappaSettings:update` |
 | `yell` | Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
-| `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `toolPolicy:read` |
-| `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | `toolPolicy:read` |
-| `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | `toolPolicy:read` |
-| `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | `toolPolicy:update` |
-| `preview_guardrails_policy_change` | Validate and show a reviewable diff for a proposed organization.appa.toml. | `toolPolicy:read` |
-| `update_guardrails_policy` | Publish a validated change to organization.appa.toml. | `toolPolicy:update` |
-| `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. | `toolPolicy:read` |
+| `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `openappaPolicy:read` |
+| `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | `openappaPolicy:read` |
+| `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | `openappaPolicy:read` |
+| `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | `openappaPolicy:update` |
+| `preview_guardrails_policy_change` | Validate and show a reviewable diff for a proposed organization.appa.toml. | `openappaPolicy:read` |
+| `update_guardrails_policy` | Publish a validated change to organization.appa.toml. | `openappaPolicy:update` |
+| `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. | `openappaPolicy:read` |
 | `get_remedy_plans` | Read why the guardrails policy blocked a tool call and which remedy plans it offers. | None (no additional RBAC permission required) |
 | `execute_remedy_plan` | Execute a remedy plan offered by the guardrails policy for a blocked call. | None (no additional RBAC permission required) |
 | `list_runtime_credentials` | List reusable credential definitions visible to the caller, including whether a personal or organization connection is configured. | `credential:read` |
@@ -77,7 +77,7 @@ This tool takes no arguments.
 
 #### get_openappa_yell
 
-Required RBAC permission: `log:read`
+Required RBAC permission: `openappaDiagnostics:read`
 
 ##### Input
 
@@ -88,7 +88,7 @@ Required RBAC permission: `log:read`
 
 #### create_guardrails_repository
 
-Required RBAC permission: `toolPolicy:update`
+Required RBAC permission: `openappaSettings:update`
 
 ##### Input
 
@@ -114,14 +114,14 @@ Required RBAC permission: None (no additional RBAC permission required)
 
 #### get_guardrails_policy
 
-Required RBAC permission: `toolPolicy:read`
+Required RBAC permission: `openappaPolicy:read`
 
 This tool takes no arguments.
 
 
 #### inspect_guardrails_server
 
-Required RBAC permission: `toolPolicy:read`
+Required RBAC permission: `openappaPolicy:read`
 
 ##### Input
 
@@ -132,7 +132,7 @@ Required RBAC permission: `toolPolicy:read`
 
 #### list_guardrails_battery_fits
 
-Required RBAC permission: `toolPolicy:read`
+Required RBAC permission: `openappaPolicy:read`
 
 ##### Input
 
@@ -143,7 +143,7 @@ Required RBAC permission: `toolPolicy:read`
 
 #### validate_guardrails_policy
 
-Required RBAC permission: `toolPolicy:update`
+Required RBAC permission: `openappaPolicy:update`
 
 ##### Input
 
@@ -154,7 +154,7 @@ Required RBAC permission: `toolPolicy:update`
 
 #### preview_guardrails_policy_change
 
-Required RBAC permission: `toolPolicy:read`
+Required RBAC permission: `openappaPolicy:read`
 
 ##### Input
 
@@ -166,7 +166,7 @@ Required RBAC permission: `toolPolicy:read`
 
 #### update_guardrails_policy
 
-Required RBAC permission: `toolPolicy:update`
+Required RBAC permission: `openappaPolicy:update`
 
 ##### Input
 
@@ -180,7 +180,7 @@ Required RBAC permission: `toolPolicy:update`
 
 #### get_guardrails_policy_change_status
 
-Required RBAC permission: `toolPolicy:read`
+Required RBAC permission: `openappaPolicy:read`
 
 ##### Input
 

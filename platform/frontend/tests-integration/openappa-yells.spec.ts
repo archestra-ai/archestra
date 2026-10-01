@@ -68,8 +68,9 @@ for (const width of [1280, 390]) {
             url: "/api/user/permissions",
             body: {
               ...permissions,
-              log: ["read"],
-              toolPolicy: ["read", "update"],
+              openappaDiagnostics: ["read", "update"],
+              openappaPolicy: ["read", "update"],
+              openappaSettings: ["read", "update"],
             },
           },
           {
@@ -271,3 +272,80 @@ for (const width of [1280, 390]) {
     });
   }
 }
+
+test("a diagnostics-only reader reaches Yells without fetching policy or settings", async ({
+  page,
+  request,
+  mswControl,
+}) => {
+  const config = await (
+    await request.get("/internal-test/api/api/config")
+  ).json();
+  const permissions = await (
+    await request.get("/internal-test/api/api/user/permissions")
+  ).json();
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: "/api/config",
+      body: {
+        ...config,
+        features: { ...config.features, openappaEnabled: true },
+      },
+    },
+    {
+      method: "get",
+      url: "/api/user/permissions",
+      body: {
+        ...permissions,
+        openappaPolicy: [],
+        openappaSettings: [],
+        openappaDiagnostics: ["read"],
+      },
+    },
+    {
+      method: "get",
+      url: "/api/openappa/yells",
+      body: {
+        data: [],
+        pagination: { limit: 20, hasNext: false, nextCursor: null },
+      },
+    },
+    ...[
+      "/api/guardrails-policy",
+      "/api/guardrails-deployment",
+      "/api/openappa/github-sync",
+    ].map((url) => ({
+      method: "get" as const,
+      url,
+      status: 403,
+      body: { error: { message: "Forbidden" } },
+    })),
+  ]);
+  const forbiddenRequests: string[] = [];
+  page.on("request", (req) => {
+    const path = new URL(req.url()).pathname;
+    if (
+      [
+        "/api/guardrails-policy",
+        "/api/guardrails-deployment",
+        "/api/openappa/github-sync",
+      ].includes(path)
+    )
+      forbiddenRequests.push(path);
+  });
+  await page.goto("/openappa/yells");
+  await expect(
+    page.getByRole("heading", { name: "Yells Alpha" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Policy", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Batteries", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: /Guardrails/, exact: false }).first(),
+  ).toHaveAttribute("href", "/openappa/yells");
+  expect(forbiddenRequests).toEqual([]);
+});

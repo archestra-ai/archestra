@@ -21,6 +21,7 @@ export const actions = [
   "manage",
   "manage-deleted",
   "impersonate",
+  "admin",
 ] as const;
 
 export const resources = [
@@ -33,6 +34,9 @@ export const resources = [
   "mcpOauthClient",
   "llmProxy",
   "toolPolicy",
+  "openappaPolicy",
+  "openappaSettings",
+  "openappaDiagnostics",
   "log",
   "identityProvider",
   "mcpRegistry",
@@ -98,6 +102,9 @@ export const resourceLabels: Record<Resource, string> = {
   llmProxy: "LLM Proxy",
   toolPolicy: "Tools & Policies",
   log: "LLM & MCP Logs",
+  openappaPolicy: "Policy",
+  openappaSettings: "Settings",
+  openappaDiagnostics: "Diagnostics",
   organization: "Organization",
   identityProvider: "Identity Providers",
   member: "Users",
@@ -149,6 +156,9 @@ export const resourceDescriptions: Record<Resource, string> = {
     "OAuth clients (service accounts) authorized to call MCP gateways",
   llmProxy: "The LLM Proxy endpoint with security policies and observability",
   toolPolicy: "Tools, tool invocation policies, and trusted data policies",
+  openappaPolicy: "OpenAPPA policy, batteries, and coverage",
+  openappaSettings: "OpenAPPA enforcement settings and GitHub synchronization",
+  openappaDiagnostics: "Agent yells and OpenAPPA consult logs",
   log: "LLM proxy and MCP tool-call logs, with separate own and organization-wide visibility",
   chat: "Chat conversations",
   project:
@@ -239,6 +249,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmSettings",
     "llmCost",
   ],
+  OpenAPPA: ["openappaPolicy", "openappaSettings", "openappaDiagnostics"],
   Knowledge: ["knowledgeSource", "knowledgeSettings"],
   Logs: ["log", "auditLog"],
   Other: [

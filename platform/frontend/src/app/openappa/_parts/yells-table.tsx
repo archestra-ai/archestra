@@ -43,11 +43,10 @@ export function YellsTable() {
   const pagination = useCursorPagination();
   const isMobile = useIsMobile();
   const { data: canRead, isPending: permissionsLoading } = useHasPermissions({
-    log: ["read"],
+    openappaDiagnostics: ["read"],
   });
   const { data: canResolve } = useHasPermissions({
-    log: ["read"],
-    toolPolicy: ["update"],
+    openappaDiagnostics: ["read", "update"],
   });
   const yells = useOpenAppaYells(
     {

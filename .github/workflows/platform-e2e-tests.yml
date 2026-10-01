@@ -267,6 +267,12 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
+          # Exact input-hash tags handle whole-image reuse; publisher mode=max caches
+          # supply intermediate layers, so E2E only needs to export final layers.
+          # Exported from this first build on the fresh builder: exporting from
+          # the second build on the reused builder dropped the BuildKit
+          # connection (rpc EOF) after both images were already pushed.
+          cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=min
 
       # Full image for the quickstart job: `unified` is `unified-slim` plus one
       # COPY of the Dagger engine tar, so on the slim build's live builder only
@@ -298,11 +304,6 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
-          # Exact input-hash tags handle whole-image reuse; publisher mode=max caches
-          # supply intermediate layers, so E2E only needs to export final layers.
-          # Exported here rather than from the slim build: the full image's
-          # final layers are a superset of the slim image's.
-          cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=min
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}

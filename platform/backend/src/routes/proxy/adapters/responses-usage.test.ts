@@ -171,3 +171,73 @@ describe("Responses usage splits cache reads out of the gross input", () => {
     });
   }
 });
+
+describe("translated Responses complete after the policy verdict", () => {
+  test.each([
+    "allow",
+    "refuse",
+    "rewrite",
+  ] as const)("tool verdict %s emits one completion", (verdict) => {
+    const adapter = FACTORIES["responses-from-chat"]();
+    const toolCall = { id: "call_original", name: "read", arguments: "{}" };
+    adapter.state.toolCalls = [toolCall];
+    adapter.state.usage = {
+      inputTokens: 12,
+      outputTokens: 3,
+      cacheReadTokens: 8000,
+      cacheWriteTokens: 1000,
+    };
+    const upstreamFinal = adapter.processChunk({
+      id: "chatcmpl_test",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "test",
+      choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+    });
+    expect(upstreamFinal.isFinal).toBe(true);
+    expect(upstreamFinal.sseData ?? "").not.toContain("response.completed");
+    expect(upstreamFinal.sseData ?? "").not.toContain("call_original");
+    const frames =
+      verdict === "refuse"
+        ? adapter.formatCompleteTextSSE("refused")
+        : verdict === "rewrite"
+          ? (adapter.formatToolCallsSSE?.([
+              { ...toolCall, id: "call_rewritten", name: "safe_read" },
+            ]) ?? [])
+          : adapter.getRawToolCallEvents();
+    const wire = [...frames, adapter.formatEndSSE()].join("");
+    expect(wire.match(/"type":"response.completed"/g)).toHaveLength(1);
+    expect(completedUsage(wire)).toMatchObject({
+      input_tokens: 9012,
+      output_tokens: 3,
+      total_tokens: 9015,
+    });
+    expect(wire).toContain(
+      verdict === "refuse"
+        ? "refused"
+        : verdict === "rewrite"
+          ? "call_rewritten"
+          : "call_original",
+    );
+    if (verdict !== "allow") expect(wire).not.toContain("call_original");
+  });
+
+  test("plain text completes at stream end without a suffix callback", () => {
+    const adapter = FACTORIES["responses-from-chat"]();
+    const chunk: Parameters<typeof adapter.processChunk>[0] = {
+      id: "chatcmpl_test",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "test",
+      choices: [
+        { index: 0, delta: { content: "answer" }, finish_reason: "stop" },
+      ],
+    };
+    const upstream = adapter.processChunk(chunk);
+    expect(upstream.sseData).toContain("answer");
+    expect(upstream.sseData).not.toContain("response.completed");
+    const wire = `${upstream.sseData ?? ""}${adapter.formatEndSSE()}`;
+    expect(wire.match(/"type":"response.completed"/g)).toHaveLength(1);
+    expect(adapter.formatEndSSE()).toBe("data: [DONE]\n\n");
+  });
+});

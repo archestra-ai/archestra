@@ -362,7 +362,11 @@ describe("BedrockOpenai stream adapter — wire output", () => {
     expect(resp.output.message.role).toBe("assistant");
     expect(resp.output.message.content).toEqual([{ text: "Hello" }]);
     expect(resp.stopReason).toBe("end_turn");
-    expect(resp.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
+    expect(resp.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+    });
   });
 });
 

@@ -2338,7 +2338,10 @@ async function handleNonStreaming<
         providerType: provider.interactionType,
         request: originalRequest,
         processedRequest: request,
-        response: refusalResponse,
+        response:
+          provider.interactionType === "bedrock:converse"
+            ? (responseAdapter.getLoggedResponse?.() ?? refusalResponse)
+            : refusalResponse,
         actualModel,
         usage,
         costs,

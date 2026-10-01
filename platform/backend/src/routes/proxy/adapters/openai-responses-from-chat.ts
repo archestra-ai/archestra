@@ -166,10 +166,6 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       });
     }
 
-    if (result.isFinal) {
-      sseData += this.completeOutput();
-    }
-
     return {
       ...result,
       sseData: sseData || null,
@@ -238,6 +234,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
   formatCompleteTextSSE(text: string): string[] {
     this.replacedText = text;
+    this.inner.formatCompleteTextSSE(text);
     return [
       this.ensureOutputStarted(),
       this.toSse({
@@ -254,12 +251,6 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   }
 
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
-    // completeOutput() has already written a `response.completed` naming the
-    // calls the model made directly (it fires on the inner stream's final
-    // chunk, before the gate decides). The client keeps the LAST completed
-    // envelope, so the repair ends by re-issuing one that names the rewritten
-    // calls. Text keeps output index 0 (the message item), so the calls start
-    // at 1 — the same layout getRawToolCallEvents produces.
     this.inner.formatToolCallsSSE?.(toolCalls);
     const frames = formatResponsesFunctionCallFrames({
       toolCalls,
@@ -276,15 +267,20 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         },
       }),
     );
+    this.outputCompleted = true;
     return frames;
   }
 
+  // The handler calls this after the policy verdict, so blocked calls never
+  // appear in a terminal envelope and each response completes exactly once.
   formatEndSSE(): string {
-    return "data: [DONE]\n\n";
+    return `${this.completeOutput()}data: [DONE]\n\n`;
   }
 
   toProviderResponse(): TResponse {
-    return this.buildResponsesResponse() as unknown as TResponse;
+    // Logging and policy hooks consume the provider-native response. The
+    // client-facing Responses envelope is built by the SSE methods above.
+    return this.inner.toProviderResponse();
   }
 
   private ensureOutputStarted(): string {
@@ -432,8 +428,6 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       );
     }
 
-    const inputTokens = this.state.usage?.inputTokens ?? 0;
-    const outputTokens = this.state.usage?.outputTokens ?? 0;
     return {
       id: this.ctx.responseId,
       object: "response",
@@ -441,13 +435,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       model: this.ctx.requestedModel,
       status: "completed",
       output,
-      usage: this.state.usage
-        ? {
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            total_tokens: inputTokens + outputTokens,
-          }
-        : undefined,
+      usage: this.state.usage ? toResponsesUsage(this.state.usage) : undefined,
     };
   }
 

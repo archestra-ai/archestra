@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { ApiError } from "@archestra/shared";
 import type { Azure, OpenAi } from "@/types";
+import { toResponsesUsage } from "./responses-usage";
 
 type ResponsesRequest = Azure.Types.ResponsesRequest;
 type ResponsesResponse = Azure.Types.ResponsesResponse;
@@ -14,7 +16,10 @@ export interface OpenaiResponsesContext {
   requestedModel: string;
 }
 
-export function responsesToOpenaiChat(req: ResponsesRequest): {
+export function responsesToOpenaiChat(
+  req: ResponsesRequest,
+  options?: { preserveContentParts: boolean },
+): {
   chatBody: OpenAiRequest;
   responsesContext: OpenaiResponsesContext;
 } {
@@ -30,6 +35,7 @@ export function responsesToOpenaiChat(req: ResponsesRequest): {
     messages.push(
       ...responseInputToChatMessages(
         req.input as unknown as LooseResponseItem[],
+        options?.preserveContentParts,
       ),
     );
   }
@@ -90,6 +96,13 @@ export function chatCompletionToResponses(
   response: OpenAiResponse,
   ctx: OpenaiResponsesContext,
 ): ResponsesResponse {
+  const wireUsage = response.usage as typeof response.usage & {
+    prompt_tokens_details?: {
+      cached_tokens?: number;
+      cache_write_tokens?: number;
+      cache_write_1h_tokens?: number;
+    };
+  };
   const choice = response.choices[0];
   const output: ResponsesResponse["output"] = [];
 
@@ -138,19 +151,28 @@ export function chatCompletionToResponses(
     status: "completed",
     output,
     usage: response.usage
-      ? {
-          input_tokens: response.usage.prompt_tokens,
-          output_tokens: response.usage.completion_tokens,
-          total_tokens: response.usage.total_tokens,
-        }
+      ? toResponsesUsage({
+          inputTokens:
+            response.usage.prompt_tokens -
+            (wireUsage?.prompt_tokens_details?.cached_tokens ?? 0) -
+            (wireUsage?.prompt_tokens_details?.cache_write_tokens ?? 0),
+          outputTokens: response.usage.completion_tokens,
+          cacheReadTokens: wireUsage?.prompt_tokens_details?.cached_tokens ?? 0,
+          cacheWriteTokens:
+            wireUsage?.prompt_tokens_details?.cache_write_tokens ?? 0,
+          cacheWrite1hTokens:
+            wireUsage?.prompt_tokens_details?.cache_write_1h_tokens,
+        })
       : undefined,
   } as ResponsesResponse;
 }
 
 function responseInputToChatMessages(
   input: LooseResponseItem[],
+  preserveContentParts = false,
 ): OpenAiRequest["messages"] {
-  return input.flatMap((item) => {
+  return input.flatMap((item): OpenAiRequest["messages"] => {
+    if (!item || typeof item !== "object") return [];
     if (
       item.type === "message" ||
       item.role === "user" ||
@@ -167,7 +189,12 @@ function responseInputToChatMessages(
       return [
         {
           role,
-          content: stringifyResponseContent(item.content),
+          content: preserveContentParts
+            ? responseContentToChat(item.content)
+            : stringifyResponseContent(item.content),
+          ...(preserveContentParts && item.cache_control !== undefined
+            ? { cache_control: item.cache_control }
+            : {}),
         } as OpenAiRequest["messages"][number],
       ];
     }
@@ -176,6 +203,9 @@ function responseInputToChatMessages(
       return [
         {
           role: "assistant",
+          ...(preserveContentParts && item.cache_control !== undefined
+            ? { cache_control: item.cache_control }
+            : {}),
           content: null,
           tool_calls: [
             {
@@ -201,12 +231,55 @@ function responseInputToChatMessages(
           role: "tool",
           tool_call_id:
             typeof item.call_id === "string" ? item.call_id : "unknown",
-          content: typeof item.output === "string" ? item.output : "",
-        },
+          content: preserveContentParts
+            ? responseContentToChat(item.output)
+            : typeof item.output === "string"
+              ? item.output
+              : "",
+          ...(preserveContentParts && item.cache_control !== undefined
+            ? { cache_control: item.cache_control }
+            : {}),
+        } as OpenAiRequest["messages"][number],
       ];
     }
 
+    if (preserveContentParts && item.cache_control !== undefined)
+      throw new ApiError(
+        400,
+        "Unsupported Bedrock Responses input item with cache_control",
+      );
     return [];
+  });
+}
+
+function responseContentToChat(content: unknown): unknown {
+  if (!Array.isArray(content)) return content;
+  return content.map((part: LooseResponseItem) => {
+    if (!part || typeof part !== "object") return part;
+    const marker =
+      part.cache_control === undefined
+        ? {}
+        : { cache_control: part.cache_control };
+    if (part.type === "input_text" || part.type === "output_text")
+      return { type: "text", text: part.text, ...marker };
+    if (part.type === "input_image")
+      return {
+        type: "image_url",
+        image_url: { url: part.image_url, detail: part.detail },
+        ...marker,
+      };
+    if (part.type === "input_file")
+      return {
+        type: "file",
+        file: {
+          file_data: part.file_data,
+          file_id: part.file_id,
+          file_url: part.file_url,
+          filename: part.filename,
+        },
+        ...marker,
+      };
+    return part;
   });
 }
 

@@ -28,6 +28,77 @@ function firstToolParams(tools: unknown): SanitizedToolParams {
   return (tools as EmittedTools)[0].functionDeclarations[0].parameters;
 }
 
+describe("openaiToGemini — reasoning and output limits", () => {
+  test.each([
+    ["gemini-2.5-flash", "minimal", { thinkingBudget: 1024 }],
+    ["gemini-2.5-pro", "low", { thinkingBudget: 1024 }],
+    ["gemini-2.5-flash", "medium", { thinkingBudget: 8192 }],
+    ["gemini-2.5-flash-lite", "high", { thinkingBudget: 24576 }],
+    ["gemini-2.5-flash-lite-preview-09-2025", "low", { thinkingBudget: 1024 }],
+    ["gemini-2.5-flash", "none", { thinkingBudget: 0 }],
+    ["gemini-2.5-flash-lite", "none", { thinkingBudget: 0 }],
+    ["gemini-3-flash-preview", "minimal", { thinkingLevel: "minimal" }],
+    ["gemini-3.1-flash-lite-preview", "minimal", { thinkingLevel: "minimal" }],
+    ["gemini-3.5-flash-lite", "low", { thinkingLevel: "low" }],
+    ["gemini-3.5-flash", "minimal", { thinkingLevel: "minimal" }],
+    ["gemini-3.6-flash", "low", { thinkingLevel: "low" }],
+    ["gemini-3.6-flash-latest", "low", { thinkingLevel: "low" }],
+    ["gemini-3.7-flash", "medium", { thinkingLevel: "medium" }],
+    ["gemini-3.8-flash", "high", { thinkingLevel: "high" }],
+    ["gemini-3.1-pro-preview", "minimal", { thinkingLevel: "low" }],
+    [
+      "gemini-3.1-pro-preview-customtools",
+      "medium",
+      { thinkingLevel: "medium" },
+    ],
+    ["gemini-3-pro-preview", "high", { thinkingLevel: "high" }],
+  ] as const)("maps %s effort %s", (model, reasoning_effort, expected) => {
+    const { geminiBody } = openaiToGemini(req({ model, reasoning_effort }));
+    expect(geminiBody.generationConfig?.thinkingConfig).toEqual(expected);
+  });
+
+  test.each([
+    ["gemini-2.5-pro", "none"],
+    ["gemini-3.6-flash", "none"],
+    ["gemini-3.7-flash", "minimal"],
+    ["gemini-3.8-flash", "minimal"],
+    ["gemini-3-pro-preview", "medium"],
+    ["gemini-3.6-flash", "xhigh"],
+    ["gemini-3.6-flash", "max"],
+    ["gemini-2.0-flash", "low"],
+    ["gemini-3.1-flash-lite-image", "low"],
+    ["gemini-3.99-flash", "low"],
+  ] as const)("rejects unsupported %s effort %s", (model, reasoning_effort) => {
+    expect(() => openaiToGemini(req({ model, reasoning_effort }))).toThrowError(
+      expect.objectContaining({ statusCode: 400 }),
+    );
+  });
+
+  test.each([
+    undefined,
+    null,
+  ])("preserves model defaults for effort %s", (reasoning_effort) => {
+    const { geminiBody } = openaiToGemini(
+      req({ model: "gemini-3.99-flash", reasoning_effort }),
+    );
+    expect(geminiBody.generationConfig?.thinkingConfig).toBeUndefined();
+    expect(geminiBody.generationConfig?.maxOutputTokens).toBeUndefined();
+  });
+
+  test.each([
+    [undefined, 32, 32],
+    [64, 32, 32],
+    [64, null, 64],
+    [64, undefined, 64],
+  ])("maps output caps %s / %s to %s", (max_tokens, max_completion_tokens, expected) => {
+    const { geminiBody } = openaiToGemini(
+      req({ max_tokens, max_completion_tokens, stream: true }),
+    );
+    expect(geminiBody.generationConfig?.maxOutputTokens).toBe(expected);
+    expect(geminiBody._isStreaming).toBe(true);
+  });
+});
+
 describe("openaiToGemini — tool schema sanitization", () => {
   // the OpenAI-compatible Gemini path must run tool parameters through the same
   // sanitizer as the native adapter, or a non-string enum 400s at Gemini.

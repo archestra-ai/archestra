@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-09-30
+lastUpdated: 2026-10-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -87,6 +87,16 @@ The prefix before `:` is the provider. The value after `:` is the provider's nat
 The `/models` response includes model-router-compatible text models for the providers mapped on the virtual key. Providers that use native request formats, including Anthropic, Bedrock, Gemini, and Cohere, are translated between OpenAI request/response formats and provider-native formats before forwarding.
 
 Model Router translation forwards inline non-text content where the provider's native format supports it: Gemini (base64 data URL images, audio, and files), Anthropic (base64 data URL images and PDF files, plus http(s) image URLs), Cohere (images via base64 data URI or web URL in user messages), and Bedrock (inline base64 images and supported documents). Anthropic also forwards images returned inside tool results. Content the provider format cannot represent is dropped — for example http(s) image URLs to Gemini (its `fileData` accepts only Files API or `gs://` URIs), audio to Anthropic, and non-text content in Gemini and Cohere tool results.
+
+### Gemini Reasoning And Output Limits
+
+For Gemini text models, `reasoning_effort` follows [Google's OpenAI compatibility mapping](https://ai.google.dev/gemini-api/docs/openai#thinking). Omitted or null effort preserves the model's default thinking configuration.
+
+Gemini 2.5 uses thinking budgets. `minimal` and `low` map to 1,024 tokens, `medium` to 8,192, and `high` to 24,576. `none` disables thinking only for Gemini 2.5 Flash and Flash-Lite.
+
+Gemini 3 uses thinking levels. `low` stays `low`; `minimal` maps to `low` on Pro. `minimal` does not guarantee that thinking is disabled. Gemini 3.7 and 3.8 Flash reject `minimal`; Gemini 3 Pro rejects `medium`. Unsupported efforts or model variants return HTTP 400 when effort is explicitly requested.
+
+`max_completion_tokens` sets Gemini's output cap, including thinking tokens. It takes precedence over `max_tokens`; a null or omitted value falls back to `max_tokens`. Small caps can leave empty or truncated answers.
 
 ## OpenAI
 

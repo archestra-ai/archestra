@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ApiError } from "@archestra/shared/types";
 import type { Gemini, OpenAi, UsageView } from "@/types";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import {
@@ -150,9 +151,16 @@ export function openaiToGemini(req: OpenAiRequest): {
     geminiBody.systemInstruction = { parts: systemParts };
   }
 
+  const thinkingConfig = openaiEffortToGeminiThinkingConfig(
+    req.model,
+    req.reasoning_effort,
+  );
+  const maxOutputTokens = req.max_completion_tokens ?? req.max_tokens;
   if (
     req.temperature !== undefined ||
     req.max_tokens !== undefined ||
+    req.max_completion_tokens !== undefined ||
+    thinkingConfig !== undefined ||
     loose.top_p !== undefined ||
     loose.stop !== undefined
   ) {
@@ -160,8 +168,11 @@ export function openaiToGemini(req: OpenAiRequest): {
     if (req.temperature !== undefined && req.temperature !== null) {
       geminiBody.generationConfig.temperature = req.temperature;
     }
-    if (req.max_tokens !== undefined && req.max_tokens !== null) {
-      geminiBody.generationConfig.maxOutputTokens = req.max_tokens;
+    if (maxOutputTokens !== undefined && maxOutputTokens !== null) {
+      geminiBody.generationConfig.maxOutputTokens = maxOutputTokens;
+    }
+    if (thinkingConfig !== undefined) {
+      geminiBody.generationConfig.thinkingConfig = thinkingConfig;
     }
     if (loose.top_p !== undefined && loose.top_p !== null) {
       geminiBody.generationConfig.topP = loose.top_p;
@@ -207,6 +218,73 @@ export function openaiToGemini(req: OpenAiRequest): {
       requestedModel: req.model,
     },
   };
+}
+
+type ThinkingLevel = "minimal" | "low" | "medium" | "high";
+const ALL_THINKING_LEVELS: readonly ThinkingLevel[] = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+];
+const THINKING_LEVELS_BY_FAMILY: Record<string, readonly ThinkingLevel[]> = {
+  "gemini-3-pro": ["low", "high"],
+  "gemini-3-flash": ALL_THINKING_LEVELS,
+  "gemini-3.1-pro": ["low", "medium", "high"],
+  "gemini-3.1-flash-lite": ALL_THINKING_LEVELS,
+  "gemini-3.5-flash-lite": ALL_THINKING_LEVELS,
+  "gemini-3.5-flash": ALL_THINKING_LEVELS,
+  "gemini-3.6-flash": ALL_THINKING_LEVELS,
+  "gemini-3.7-flash": ["low", "medium", "high"],
+  "gemini-3.8-flash": ["low", "medium", "high"],
+};
+
+// OpenAI compatibility uses different effort semantics from internal Chat's
+// depth selector: low stays low on Gemini 3, and 2.5 uses token budgets.
+// https://ai.google.dev/gemini-api/docs/openai#thinking
+function openaiEffortToGeminiThinkingConfig(
+  modelId: string,
+  effort: OpenAiRequest["reasoning_effort"],
+): { thinkingBudget: number } | { thinkingLevel: ThinkingLevel } | undefined {
+  if (effort === undefined || effort === null) return undefined;
+
+  // Recognize text model variants without treating image/audio variants or
+  // unknown future generations as having the same thinking capabilities.
+  const family = modelId
+    .toLowerCase()
+    .match(
+      /^(gemini-\d+(?:\.\d+)?-(?:flash-lite|flash|pro))(?:-(?:preview(?:-(?:customtools|\d[\d-]*))?|latest|\d[\d-]*))?$/,
+    )?.[1];
+  const unsupported = () =>
+    new ApiError(
+      400,
+      `reasoning_effort "${effort}" is not supported for model "${modelId}".`,
+    );
+  if (!family) throw unsupported();
+  if (effort === "xhigh" || effort === "max") throw unsupported();
+  if (effort === "none") {
+    if (family === "gemini-2.5-flash" || family === "gemini-2.5-flash-lite") {
+      return { thinkingBudget: 0 };
+    }
+    throw new ApiError(
+      400,
+      `Thinking cannot be disabled for model "${modelId}".`,
+    );
+  }
+  if (family.startsWith("gemini-2.5-")) {
+    return {
+      thinkingBudget: { minimal: 1024, low: 1024, medium: 8192, high: 24576 }[
+        effort
+      ],
+    };
+  }
+
+  const thinkingLevel =
+    effort === "minimal" && family.endsWith("-pro") ? "low" : effort;
+  if (!THINKING_LEVELS_BY_FAMILY[family]?.includes(thinkingLevel)) {
+    throw unsupported();
+  }
+  return { thinkingLevel };
 }
 
 /**

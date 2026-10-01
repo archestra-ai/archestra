@@ -1517,9 +1517,10 @@ async function admitRelayArrivals(params: {
     );
     return crossedOrAddressed;
   };
-  // A teammate's envelope names it by its child id, so its message counts
-  // only against what that teammate crossed. A sibling's or the parent's
-  // message reaches a teammate as an address from its parent.
+  // A teammate's envelope names it by its name, and its child id is
+  // `<name>@<team>`; a session starts one teammate per name. So its message
+  // counts only against what that teammate crossed. A sibling's or the
+  // parent's message reaches a teammate as an address from its parent.
   const fromTeammate = new Map<string, Promise<string[]>>();
   const teammateRecords = (from: string) => {
     let records = fromTeammate.get(from);
@@ -1527,7 +1528,11 @@ async function admitRelayArrivals(params: {
       records = Promise.all([crossings(), addresses()]).then(
         ([returns, addressedValues]) => [
           ...returns
-            .filter((record) => record.childNativeId === from)
+            .filter(
+              ({ childNativeId }) =>
+                childNativeId === from ||
+                childNativeId?.startsWith(`${from}@`) === true,
+            )
             .map((record) => record.value),
           ...addressedValues,
         ],

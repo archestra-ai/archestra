@@ -1737,6 +1737,13 @@ async function governRelays(params: {
       });
       continue;
     }
+    if (recipient === "ambiguous") {
+      outcomes.set(call.id, {
+        kind: "deny",
+        feedback: RELAY_AMBIGUOUS_RECIPIENT,
+      });
+      continue;
+    }
     if (recipient.unchecked) {
       outcomes.set(call.id, { kind: "deny", feedback: RELAY_UNCHECKED });
       continue;
@@ -1810,25 +1817,27 @@ async function crossRelay(params: {
 
 /**
  * The client-native id of the child a message names: a child the parent
- * started (by its id, or by the name a teammate id begins with), else a
- * teammate the parent's history launched but that has not started yet. Such
- * a teammate is `unchecked` when the runtime never allowed the call that
- * launched it, as when it started while enforcement was off: it can never
- * open, so no message reaches it.
+ * started (by its id, or by its teammate name), else a teammate the parent's
+ * history launched but that has not started yet. Such a teammate is
+ * `unchecked` when the runtime never allowed the call that launched it, as
+ * when it started while enforcement was off: it can never open, so no message
+ * reaches it. A name that fits several started children is `ambiguous`.
  */
 async function resolveRelayChild(params: {
   binding: AppaPluginBinding;
   parent: OpenAppaSession;
   name: string;
-}): Promise<{ childNativeId: string; unchecked?: true } | undefined> {
+}): Promise<
+  { childNativeId: string; unchecked?: true } | "ambiguous" | undefined
+> {
   const started = await OpenAppaSessionModel.childNativeIds({
     organizationId: params.parent.organization_id,
     parentSessionId: params.parent.session_id,
   });
   if (started.includes(params.name)) return { childNativeId: params.name };
-  const named = started.filter((id) => id.startsWith(`${params.name}@`));
+  const named = started.filter((id) => namesTeammate(params.name, id));
   if (named.length === 1) return { childNativeId: named[0] };
-  if (named.length > 1) return undefined;
+  if (named.length > 1) return "ambiguous";
   const launch = params.binding.adapter
     ?.teammateLaunches?.(params.binding.requestBody)
     .get(params.name);
@@ -1848,6 +1857,8 @@ const RELAY_BROADCAST =
   "OpenAPPA checks each message against the agent that receives it. Send the message to each teammate by name.";
 const RELAY_UNKNOWN_RECIPIENT =
   "OpenAPPA cannot identify the agent this message is for, so it did not send the message. Send it to a teammate by the name the teammate started with.";
+const RELAY_AMBIGUOUS_RECIPIENT =
+  "More than one teammate in this session has that name, so OpenAPPA cannot tell which one this message is for. The message was not sent.";
 const RELAY_UNCHECKED =
   "OpenAPPA cannot check this teammate: it started while Guardrails enforcement was off, so OpenAPPA refuses its requests and did not send the message. To continue its work, start a new teammate under a new name with the Agent tool and give it the task. OpenAPPA checks that spawn.";
 const RELAY_UNGOVERNED =

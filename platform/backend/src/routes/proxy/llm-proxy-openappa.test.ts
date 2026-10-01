@@ -4442,6 +4442,35 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(noticeFrom(response.body, true).name).toBe("Agent");
     });
 
+    test("a lead's message to a name two started teammates share is not sent, and says why", async () => {
+      for (const child of ["scout@team-a", "scout@team-b"]) {
+        await db.insert(database.schema.openappaSessionsTable).values({
+          actor: openappaActor(scoped(`${lead}:${child}`)),
+          root: openappaActor(scoped(lead)),
+          organizationId: agent.organizationId,
+          callerId: `user:${userId}`,
+          sessionId: scoped(`${lead}:${child}`),
+          parentId: scoped(lead),
+          startDecision: { decision: "ack" },
+        });
+      }
+      reply("SendMessage", { to: "scout", message: "Report back" });
+      events.length = 0;
+      const response = await send(undefined, [
+        { role: "user", content: "Ask the scout for a report" },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      const notice = noticeFrom(response.body, true);
+      expect(notice.name).toBe("archestra__get_remedy_plans");
+      expect(JSON.stringify(notice.input)).toContain(
+        "More than one teammate in this session has that name",
+      );
+      expect(
+        events.filter((event) => event.event === "child_address"),
+      ).toHaveLength(0);
+    });
+
     test("a spawn under the name of a teammate that already started is refused, and asks for a new name", async () => {
       await db.insert(database.schema.openappaSessionsTable).values({
         actor: openappaActor(scoped(`${lead}:${auditor}`)),

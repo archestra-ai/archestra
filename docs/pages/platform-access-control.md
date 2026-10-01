@@ -63,9 +63,9 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
 | Credentials | `read`, `create`, `update`, `delete` |
-| Policy | `read`, `update` |
-| Settings | `read` |
-| Diagnostics | `read`, `update` |
+| OpenAPPA Policy | `read`, `update` |
+| OpenAPPA Settings | `read` |
+| OpenAPPA Diagnostics | `read`, `update` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -111,8 +111,8 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
 | Credentials | `read` |
-| Policy | `read` |
-| Settings | `read` |
+| OpenAPPA Policy | `read` |
+| OpenAPPA Settings | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -311,8 +311,8 @@ The following table lists all available permissions that can be assigned to cust
 | `toolPolicy:update` | Modify tools, tool configuration, and security policies |
 | `toolPolicy:delete` | Remove tools and security policies |
 
-OpenAPPA chat actions also require Chat read/create, Agent read, and Skill read permissions. Investigation requires Policy read alongside Diagnostics read. Reading attached diagnostic archives requires Files manage and Code Sandbox execute permissions. Target-specific questions also require access to the target agent, MCP gateway, or MCP server.
 
+OpenAPPA chat actions also require Chat read/create, Agent read, and Skill read permissions. Investigation requires Policy read alongside Diagnostics read. Reading attached diagnostic archives requires Files manage and Code Sandbox execute permissions. Target-specific questions also require access to the target agent, MCP gateway, or MCP server.
 
 ## LLM API Permissions
 

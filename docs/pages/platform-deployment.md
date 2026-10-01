@@ -1358,7 +1358,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.x.ai/v1`
   - Use this to point to your own proxy or other custom endpoints
 
-- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the SuperSuperGrok sign-in. Its OIDC discovery document supplies the device and token endpoints.
+- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the SuperGrok sign-in. Its OIDC discovery document supplies the device and token endpoints.
   - Default: `https://auth.x.ai`
 - **`ARCHESTRA_XAI_SUBSCRIPTION_VERIFICATION_ORIGIN`** - Allowed browser origin for the device-flow verification page. Responses pointing elsewhere are rejected.
   - Default: `https://accounts.x.ai`

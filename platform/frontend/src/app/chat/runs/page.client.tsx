@@ -119,25 +119,27 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     : null;
 
   return (
-    <main className="flex h-full min-h-0 flex-col bg-background">
+    <main className="@container flex h-full min-h-0 flex-col bg-background">
       {/* Keep this slot mounted while metadata loads so inserting the header
           cannot remount the terminal and restart its attach progress. */}
       <header
         className={
           run
-            ? "flex shrink-0 items-center justify-between gap-4 border-b px-5 py-3"
+            ? "flex shrink-0 flex-col gap-3 border-b px-4 py-3 @2xl:flex-row @2xl:items-center @2xl:justify-between @2xl:px-5"
             : "hidden"
         }
       >
         {run ? (
           <>
-            <div className="flex min-w-0 items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40">
                 <AgentIcon icon={run.agent.icon} size={20} />
               </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="truncate text-sm font-medium">{run.title}</h1>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h1 className="min-w-0 basis-full truncate text-sm font-medium @2xl:basis-auto">
+                    {run.title}
+                  </h1>
                   <AgentRunState
                     state={run.state}
                     attentionState={run.attentionState}
@@ -156,7 +158,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                 </p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               {isOwner && (live || (reattached && canReattach)) && (
                 <Button
                   size="sm"

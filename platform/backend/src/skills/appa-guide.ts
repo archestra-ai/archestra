@@ -95,7 +95,7 @@ An explicit \`init\` authorizes read-only inspection and a proposal, not publica
 - If a saved policy already provides the complete proposed behavior, report that no change is needed. An unsaved local revision-0 starter still needs preview, approval, and publication even when its text is unchanged.
 - Make the smallest change that meets the request. Keep unrelated entries, comments, reader names, and batteries.
 - Use short sentences. Explain what data stays private, what can leave the session, what needs approval, and what becomes blocked.
-- When you ask for human approval, write exactly ONE clean, concise sentence. State the action and ask for approval. When review is required, native client question dialogs prompt the operator. Run background calls silently.
+- Ask for approval only before an action you can perform. State the action in one concise sentence. Use the host's native review dialog when required; run background calls silently. If the operator must act elsewhere, give the steps or link instead of an approval form.
 - Use plain language without jargon. Never say an agent is "gated" or "ungated". Say it is "protected with OpenAPPA" or "currently unprotected". Avoid bureaucratic phrases like "battery reconciliation" or "suggested includes".
 - Talk about outcomes, not config machinery. Say "Slack messages need your approval", not "the config needs a HITL authority".
 - Name technical primitives only when the operator asks for technical detail.

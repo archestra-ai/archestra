@@ -96,7 +96,7 @@ export function ClientConnectionApproval({
     <div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">
         Confirm the code matches your terminal. Approval lets your AI apply the
-        setup above to your client.
+        selected setup to your client.
       </p>
       <p className="font-mono text-2xl font-semibold tracking-wider">
         {request.data.userCode}

@@ -99,7 +99,9 @@ describe("mention reply delivery", () => {
           ts: "100.000003",
         }),
       );
-      expect(posts).toHaveLength(2);
+      // The :mute: reaction is the only acknowledgement; muting via the
+      // text command posts no confirmation message either.
+      expect(posts).toHaveLength(1);
       await manager.handleIncomingMessage(
         provider,
         payload({
@@ -108,7 +110,7 @@ describe("mention reply delivery", () => {
           ts: "100.000004",
         }),
       );
-      expect(posts).toHaveLength(2);
+      expect(posts).toHaveLength(1);
 
       // The ingress cache keeps only the first twin. Exercise the actual
       // parser, manager, database claim, and HTTP reply for either order.
@@ -122,10 +124,10 @@ describe("mention reply delivery", () => {
           await manager.handleIncomingMessage(provider, body);
         }
       }
-      expect(posts).toHaveLength(3);
-      expect(posts[2].get("text")).toBe("How can I help you?");
-      expect(posts[2].get("channel")).toBe("C_TEST");
-      expect(posts[2].get("thread_ts")).toBe("100.000001");
+      expect(posts).toHaveLength(2);
+      expect(posts[1].get("text")).toBe("How can I help you?");
+      expect(posts[1].get("channel")).toBe("C_TEST");
+      expect(posts[1].get("thread_ts")).toBe("100.000001");
 
       // A retry on another process bypasses the in-memory cache but still
       // must not post again: the database claim owns reply deduplication.
@@ -137,7 +139,7 @@ describe("mention reply delivery", () => {
           ts: "100.000005",
         }),
       );
-      expect(posts).toHaveLength(3);
+      expect(posts).toHaveLength(2);
     } finally {
       await provider.cleanup();
       await manager.cleanup();

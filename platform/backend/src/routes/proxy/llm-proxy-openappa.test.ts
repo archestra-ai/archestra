@@ -4720,6 +4720,31 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(forwarded()).toContain("Another Claude session sent a message:");
     });
 
+    test("a lead reads a teammate's message only against what that teammate crossed", async () => {
+      native.loadChildReturns.mockImplementation(async () => [
+        {
+          childSessionId: scoped(`${lead}:${auditor}`),
+          childNativeId: auditor,
+          value: "Three triggers are stuck",
+        },
+      ]);
+      answerText();
+      const response = await send(undefined, [
+        { role: "user", content: "Audit the triggers with a teammate" },
+        { role: "assistant", content: "The auditor is on it." },
+        {
+          role: "user",
+          content: toLead(
+            teammateMessage(`mimic@${team}`, "Three triggers are stuck"),
+          ),
+        },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(forwarded()).not.toContain("Three triggers are stuck");
+      expect(forwarded()).toContain("[appa] Message withheld");
+    });
+
     test("a teammate reads its lead's message only when the lead addressed it", async () => {
       const { prompt } = await spawnTeammate();
       native.loadChildAddresses.mockImplementation(async () => [
@@ -5033,6 +5058,80 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(replied.statusCode, replied.body).toBe(200);
         expect(forwarded()).not.toContain("release token");
         expect(forwarded()).toContain(withheldMessage);
+      });
+
+      test("a fork withholds the messages no record covers", async () => {
+        const fork = "7c1d9e2b-4a3f-4b6e-8d5c-1e2f3a4b5c6d";
+        await db.insert(database.schema.openappaSessionsTable).values({
+          actor: openappaActor(scoped(fork)),
+          root: openappaActor(scoped(fork)),
+          organizationId: agent.organizationId,
+          callerId: `user:${userId}`,
+          sessionId: scoped(fork),
+          forkedFrom: scoped(lead),
+          startDecision: { decision: "ack" },
+        });
+        answerText();
+        const arrived = [
+          ...history(),
+          { role: "assistant", content: "It opened the PR." },
+          { role: "user", content: toLead(later) },
+        ];
+        const source = await send(undefined, arrived);
+        expect(source.statusCode, source.body).toBe(200);
+
+        const body = payload(true, [
+          ...arrived,
+          { role: "assistant", content: "Its next message was withheld." },
+          { role: "user", content: "Anything else from it?" },
+        ]);
+        body.tools.push({
+          name: "SendMessage",
+          description: "Send a message to another agent",
+          input_schema: { type: "object", properties: {} },
+        });
+        const forked = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...claudeCodeHeaders(undefined),
+            "x-claude-code-session-id": fork,
+          },
+          payload: body,
+        });
+        expect(forked.statusCode, forked.body).toBe(200);
+        expect(forwarded()).not.toContain("release token");
+        expect(forwarded()).toContain("[appa] Message withheld");
+      });
+
+      test("a worker fork withholds the messages no record covers", async () => {
+        answerText();
+        const arrived = [
+          ...history(),
+          { role: "assistant", content: "It opened the PR." },
+          { role: "user", content: toLead(later) },
+        ];
+        const parent = await send(undefined, arrived);
+        expect(parent.statusCode, parent.body).toBe(200);
+        expect(forwarded()).not.toContain("release token");
+
+        // A worker fork starts from its parent's transcript, replies included.
+        const before = providerRequests.length;
+        const fork = await send("a0123456789abcdef", [
+          ...arrived,
+          { role: "assistant", content: "Its next message was withheld." },
+          {
+            role: "user",
+            content:
+              "You are a worker fork. The transcript above is the parent's history. Check the release.",
+          },
+        ]);
+        expect(fork.statusCode, fork.body).toBe(200);
+        // The fork's own request reached the model.
+        expect(providerRequests).toHaveLength(before + 1);
+        expect(forwarded()).not.toContain("release token");
+        expect(forwarded()).toContain("[appa] Message withheld");
       });
 
       test("a spawn under that teammate's name is refused, and asks for a new name", async () => {

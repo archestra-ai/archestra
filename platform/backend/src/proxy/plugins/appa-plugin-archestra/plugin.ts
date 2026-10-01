@@ -1487,14 +1487,14 @@ async function admitRelayArrivals(params: {
   if (!arrivals?.length) return;
   const { session } = params;
   const openingPrompt = params.binding.child?.lineage?.spawnPromptDigest;
-  let crossed: Promise<string[]> | undefined;
+  let crossed: Promise<AppaChildReturnRecord[]> | undefined;
   let addressed: Promise<string[]> | undefined;
   let crossedOrAddressed: Promise<string[]> | undefined;
   const crossings = () => {
     crossed ??= loadChildReturns({
       organizationId: session.organization_id,
       parentSessionId: session.session_id,
-    }).then((records) => records.map((record) => record.value));
+    });
     return crossed;
   };
   const addresses = () => {
@@ -1506,13 +1506,35 @@ async function admitRelayArrivals(params: {
       : Promise.resolve([]);
     return addressed;
   };
-  // One list for each kind of sender, so the lookups built over it serve
-  // every message of that kind.
+  // One list for each sender, so the lookups built over it serve every
+  // message from that sender.
   const crossingsAndAddresses = () => {
     crossedOrAddressed ??= Promise.all([crossings(), addresses()]).then(
-      ([returns, addressedValues]) => [...returns, ...addressedValues],
+      ([returns, addressedValues]) => [
+        ...returns.map((record) => record.value),
+        ...addressedValues,
+      ],
     );
     return crossedOrAddressed;
+  };
+  // A teammate's envelope names it by its child id, so its message counts
+  // only against what that teammate crossed. A sibling's or the parent's
+  // message reaches a teammate as an address from its parent.
+  const fromTeammate = new Map<string, Promise<string[]>>();
+  const teammateRecords = (from: string) => {
+    let records = fromTeammate.get(from);
+    if (!records) {
+      records = Promise.all([crossings(), addresses()]).then(
+        ([returns, addressedValues]) => [
+          ...returns
+            .filter((record) => record.childNativeId === from)
+            .map((record) => record.value),
+          ...addressedValues,
+        ],
+      );
+      fromTeammate.set(from, records);
+    }
+    return records;
   };
   for (const arrival of arrivals) {
     if (
@@ -1521,12 +1543,16 @@ async function admitRelayArrivals(params: {
       isDelegatedPrompt(arrival.body, openingPrompt)
     )
       continue;
+    // A subagent's envelope names it by its display name, which no record
+    // carries, so its message counts against every child's crossings.
     const records =
       arrival.kind === "session"
         ? NO_RECORDS
         : arrival.kind === "coordinator"
           ? await addresses()
-          : await crossingsAndAddresses();
+          : arrival.kind === "teammate"
+            ? await teammateRecords(arrival.from)
+            : await crossingsAndAddresses();
     const { withheld } = arrival.admit(records);
     if (withheld) {
       logger.info(

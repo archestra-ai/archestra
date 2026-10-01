@@ -99,7 +99,11 @@ import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
-import { usePinProject, useProjects } from "@/lib/projects/projects.query";
+import {
+  useCreateProject,
+  usePinProject,
+  useProjects,
+} from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils/tailwind";
 
 const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
@@ -160,6 +164,7 @@ export function ChatSidebarSection({
   const cancelRunMutation = useCancelAgentRun();
   const deleteRunMutation = useDeleteAgentRun();
   const updateConversationMutation = useUpdateConversation();
+  const createProjectMutation = useCreateProject();
   const deleteConversationMutation = useDeleteConversation();
   const generateTitleMutation = useGenerateConversationTitle();
   const pinConversationMutation = usePinConversation();
@@ -717,7 +722,25 @@ export function ChatSidebarSection({
                         <ConversationProjectActions
                           projectId={conv.projectId}
                           projects={projectsData ?? []}
-                          isPending={updateConversationMutation.isPending}
+                          isPending={
+                            updateConversationMutation.isPending ||
+                            createProjectMutation.isPending
+                          }
+                          onCreateProject={
+                            canCreateProject === true
+                              ? async (name) => {
+                                  const project =
+                                    await createProjectMutation.mutateAsync({
+                                      name,
+                                    });
+                                  if (project)
+                                    await handleChangeProject(
+                                      conv.id,
+                                      project.id,
+                                    );
+                                }
+                              : undefined
+                          }
                           onProjectChange={(projectId) =>
                             handleChangeProject(conv.id, projectId)
                           }
@@ -876,7 +899,23 @@ export function ChatSidebarSection({
                   <ConversationProjectActions
                     projectId={run.projectId}
                     projects={projectsData ?? []}
-                    isPending={updateRunMutation.isPending}
+                    isPending={
+                      updateRunMutation.isPending ||
+                      createProjectMutation.isPending
+                    }
+                    onCreateProject={
+                      canCreateProject === true
+                        ? async (name) => {
+                            const project =
+                              await createProjectMutation.mutateAsync({ name });
+                            if (project)
+                              await handleChangeRunProject(
+                                run.taskId,
+                                project.id,
+                              );
+                          }
+                        : undefined
+                    }
                     onProjectChange={(projectId) =>
                       handleChangeRunProject(run.taskId, projectId)
                     }

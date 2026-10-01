@@ -138,6 +138,7 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects }),
   usePinProject: () => ({ mutate: vi.fn() }),
+  useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateProjectFromConversation: () => ({
     mutateAsync: vi.fn(),
     isPending: false,

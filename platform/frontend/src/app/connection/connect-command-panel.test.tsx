@@ -1020,7 +1020,9 @@ describe("ConnectCommandPanel", () => {
     });
     const { rerender } = renderPanel();
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // The debounce runs at 0 ms here (see beforeEach), so a short wait is
+    // already past the point where a premature generation would have fired.
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(createSetupMock).not.toHaveBeenCalled();
 
     vi.mocked(useHasPermissions).mockReturnValue({

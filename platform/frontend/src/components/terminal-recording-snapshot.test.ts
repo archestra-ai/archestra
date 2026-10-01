@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { Terminal } from "@xterm/xterm";
 import { expect, test } from "vitest";
 import { inferTerminalRecordingLinks } from "./terminal-recording-links";

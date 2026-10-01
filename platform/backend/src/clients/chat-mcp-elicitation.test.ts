@@ -18,14 +18,14 @@ import {
 } from "@/clients/chat-mcp-elicitation";
 import { normalizeChatMessagesForPersistence } from "@/routes/chat/normalization/normalize-chat-messages";
 import { afterEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { ChatMessage } from "@/types";
 import { buildMcpGatewayTool, type ChatToolContext } from "./chat-tool-builder";
 import mcpClient from "./mcp-client";
 import { ToolCallRepeatTracker } from "./tool-call-repeat-tracker";
 
-// The canonical Map-backed fake from src/__mocks__/cache-manager.ts: the
-// shared cache every replica reads, with real get/set/getAndDelete semantics.
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 const CONVERSATION_ID = "00000000-0000-4000-8000-000000000001";
 const OTHER_CONVERSATION_ID = "00000000-0000-4000-8000-000000000002";

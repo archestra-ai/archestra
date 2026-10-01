@@ -21,7 +21,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {

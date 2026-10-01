@@ -1,35 +1,19 @@
 import { RouteId } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
-
-// @/auth is the external auth boundary: better-auth resolves the session
-// cookie (a process boundary) and hasPermission is the access-control seam.
-// Everything under test — the Authnz middleware, OrganizationModel,
+// better-auth's session-cookie lookup is the boundary stubbed here. Everything
+// else — the Authnz middleware, permission checks, OrganizationModel,
 // SessionModel — runs for real against PGlite.
-vi.mock("@/auth");
-
-import { betterAuth, hasPermission } from "@/auth";
+import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { OrganizationModel } from "@/models";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  type MockedFunction,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { AUTH_STATE_PATH } from "../../routes/route-paths";
 import { authPlugin } from "./plugin";
-
-const mockBetterAuth = betterAuth as unknown as {
-  api: { getSession: MockedFunction<typeof betterAuth.api.getSession> };
-};
-const mockHasPermission = hasPermission as MockedFunction<typeof hasPermission>;
 
 type Session = Awaited<ReturnType<typeof betterAuth.api.getSession>>;
 
@@ -60,7 +44,6 @@ describe("two-factor / session-policy enforcement (route level)", () => {
     vi.restoreAllMocks();
     // Licensed by default: both policies are enterprise features.
     enterpriseTier.setUserCountForTesting(0);
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
 
     app = createFastifyInstance();
     await app.register(authPlugin);
@@ -81,6 +64,7 @@ describe("two-factor / session-policy enforcement (route level)", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     enterpriseTier.setUserCountForTesting(0);
     await app.close();
   });
@@ -90,7 +74,7 @@ describe("two-factor / session-policy enforcement (route level)", () => {
     user: { id: string },
     session: { id: string; createdAt: Date | string },
   ) {
-    mockBetterAuth.api.getSession.mockResolvedValue(
+    vi.spyOn(betterAuth.api, "getSession").mockResolvedValue(
       sessionResult({ user: { id: user.id }, session }),
     );
   }
@@ -382,7 +366,9 @@ describe("two-factor / session-policy enforcement (route level)", () => {
 
   describe("GET /api/auth-state", () => {
     test("is reachable with no session at all", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue(sessionResult(null));
+      vi.spyOn(betterAuth.api, "getSession").mockResolvedValue(
+        sessionResult(null),
+      );
 
       const response = await app.inject({
         method: "GET",
@@ -394,7 +380,9 @@ describe("two-factor / session-policy enforcement (route level)", () => {
     });
 
     test("reports a pending challenge when the two-factor cookie is present", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue(sessionResult(null));
+      vi.spyOn(betterAuth.api, "getSession").mockResolvedValue(
+        sessionResult(null),
+      );
 
       const response = await app.inject({
         method: "GET",
@@ -408,7 +396,9 @@ describe("two-factor / session-policy enforcement (route level)", () => {
     });
 
     test("also recognises the __Secure- prefixed cookie used on https", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue(sessionResult(null));
+      vi.spyOn(betterAuth.api, "getSession").mockResolvedValue(
+        sessionResult(null),
+      );
 
       const response = await app.inject({
         method: "GET",
@@ -422,7 +412,9 @@ describe("two-factor / session-policy enforcement (route level)", () => {
     });
 
     test("ignores unrelated cookies and valueless segments", async () => {
-      mockBetterAuth.api.getSession.mockResolvedValue(sessionResult(null));
+      vi.spyOn(betterAuth.api, "getSession").mockResolvedValue(
+        sessionResult(null),
+      );
 
       const response = await app.inject({
         method: "GET",

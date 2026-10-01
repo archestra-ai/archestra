@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import { isGlobalAdmin } from "@/auth";
-import { isServiceAccountUserId } from "@/auth/utils";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {

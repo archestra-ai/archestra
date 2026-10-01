@@ -5,7 +5,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { isServiceAccountUserId } from "@/auth/utils";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { AuditLogModel } from "@/models";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {

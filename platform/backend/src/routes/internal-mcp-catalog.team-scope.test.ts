@@ -5,19 +5,14 @@ import {
   MEMBER_ROLE_NAME,
   type ResourcePermissionGrant,
 } from "@archestra/shared";
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
 
 const USE: ResourcePermissionGrant["actions"] = ["read", "use"];
 
@@ -35,7 +30,9 @@ describe("internal MCP catalog — team-scope RBAC", () => {
 
   beforeEach(async ({ makeOrganization }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: currentUser.id } }) as never,
+    );
 
     organizationId = (await makeOrganization()).id;
 

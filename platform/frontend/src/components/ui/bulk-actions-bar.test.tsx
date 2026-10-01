@@ -83,14 +83,15 @@ describe("BulkActionsBar", () => {
   });
 
   it("reserves a compact in-flow slot by default for collection actions", () => {
+    // Layout (height, spacing, mobile scroll) is measured in a real browser by
+    // tests-integration/bulk-actions-bar.spec.ts.
     const { container, rerender } = render(
       <BulkActions count={0} noun="skill" countTestId="count" />,
     );
 
-    const emptySlot = container.querySelector('[data-slot="bulk-actions-bar"]');
-    expect(emptySlot?.className).toContain("h-[42px]");
-    expect(emptySlot?.className).toContain("!mb-3");
-    expect(emptySlot?.className).toContain("[&+*]:!mt-0");
+    expect(
+      container.querySelector('[data-slot="bulk-actions-bar"]'),
+    ).not.toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(
       "",
@@ -98,19 +99,6 @@ describe("BulkActionsBar", () => {
 
     rerender(<BulkActions count={2} noun="skill" countTestId="count" />);
 
-    const selectedSlot = container.querySelector(
-      '[data-slot="bulk-actions-bar"]',
-    );
-    expect(selectedSlot?.className).toContain("w-full");
-    expect(selectedSlot?.className).toContain("h-[42px]");
-    expect(selectedSlot?.className).toContain("!mb-3");
-    expect(selectedSlot?.className).toContain("[&+*]:!mt-0");
-    expect(selectedSlot?.querySelector("div")?.className).toContain(
-      "flex-nowrap",
-    );
-    expect(selectedSlot?.querySelector("div")?.className).toContain(
-      "overflow-x-auto",
-    );
     expect(screen.getByTestId("count").textContent).toBe("2 skills selected");
   });
 

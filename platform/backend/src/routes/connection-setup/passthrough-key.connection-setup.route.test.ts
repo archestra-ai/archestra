@@ -1,14 +1,8 @@
-import { vi } from "vitest";
+import { adminPermissions } from "@archestra/shared/access-control";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { userHasPermission } from "@/auth";
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
 
 describe("POST /api/connection-setups/passthrough-key", () => {
   let app: FastifyInstanceWithZod;
@@ -19,9 +13,7 @@ describe("POST /api/connection-setups/passthrough-key", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
-    await makeMember(user.id, organizationId);
-    mockUserHasPermission.mockReset();
-    mockUserHasPermission.mockResolvedValue(true);
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -60,11 +52,15 @@ describe("POST /api/connection-setups/passthrough-key", () => {
 
   test("403s without llmVirtualKey:create permission", async ({
     makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeUser,
   }) => {
-    mockUserHasPermission.mockImplementation(
-      async (_userId, _orgId, resource, action) =>
-        !(resource === "llmVirtualKey" && action === "create"),
-    );
+    const role = await makeCustomRole(organizationId, {
+      permission: adminPermissionsWithout({ llmVirtualKey: ["create"] }),
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: role.role });
     const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
 
     const response = await app.inject({
@@ -77,10 +73,18 @@ describe("POST /api/connection-setups/passthrough-key", () => {
     expect(response.json().error.message).toContain("llmVirtualKey:create");
   });
 
-  test("403s without llmProxy read access", async () => {
-    mockUserHasPermission.mockImplementation(
-      async (_userId, _orgId, resource) => resource !== "llmProxy",
-    );
+  test("403s without llmProxy read access", async ({
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: adminPermissionsWithout({
+        llmProxy: adminPermissions.llmProxy,
+      }),
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: role.role });
 
     const response = await app.inject({
       method: "POST",
@@ -108,3 +112,13 @@ describe("POST /api/connection-setups/passthrough-key", () => {
     expect(response.json().error.message).toContain("LLM Proxy");
   });
 });
+
+/** Every admin permission except the `denied` actions. */
+function adminPermissionsWithout(denied: Record<string, readonly string[]>) {
+  return Object.fromEntries(
+    Object.entries(adminPermissions).map(([resource, actions]) => [
+      resource,
+      actions.filter((action) => !denied[resource]?.includes(action)),
+    ]),
+  );
+}

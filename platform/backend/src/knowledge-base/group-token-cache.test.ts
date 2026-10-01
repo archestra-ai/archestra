@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import { vi } from "vitest";
-
-vi.mock("@/cache-manager");
-
 import { KbExternalUserGroupModel, KbMemberOverrideModel } from "@/models";
 import { describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   findAccessTokensForUserCached,
   invalidateGroupTokenCache,
 } from "./group-token-cache";
+
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 async function grantGroup(params: {
   organizationId: string;

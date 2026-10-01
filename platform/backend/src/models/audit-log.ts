@@ -17,7 +17,7 @@ import { alias } from "drizzle-orm/pg-core";
 import {
   isServiceAccountUserId,
   SERVICE_ACCOUNT_USER_ID_PREFIX,
-} from "@/auth/utils";
+} from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import {
   type CursorPaginatedResult,

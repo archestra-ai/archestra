@@ -6,15 +6,14 @@ import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import AccountModel from "./account";
 import IdentityProviderModel, {
   type IdpGetRoleData,
 } from "./identity-provider.ee";
 
-// The canonical Map-backed fake from src/__mocks__/cache-manager.ts backs the
-// SSO groups caching tests (preserves LRUCacheManager, CacheKey exports); the
-// store resets before every test.
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 const mockProvider = {
   id: "test-provider-id",

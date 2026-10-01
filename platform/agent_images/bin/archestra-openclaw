@@ -397,6 +397,7 @@ jq -n \
         archestra:{
           url:$mcp_url,
           transport:"streamable-http",
+          requestTimeoutMs:30000,
           headers:{
             Authorization:"Bearer ${ARCHESTRA_MCP_GATEWAY_TOKEN}",
             "X-Archestra-Run-Id":$task_id,

@@ -119,6 +119,10 @@ while :; do sleep 0.1; done
   ])("isolates %s authentication at CLI startup", async (authentication) => {
     const root = await mkdtemp(path.join(tmpdir(), "claude-auth-env-"));
     try {
+      const entrypoint = await makeFastImageEntrypoint(
+        root,
+        "archestra-claude-code",
+      );
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
       await mkdir(bin);
@@ -131,7 +135,7 @@ from pathlib import Path
 Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"], "captured-env").write_text(json.dumps(dict(os.environ)))
 `,
       );
-      await execFileAsync("bash", [ENTRYPOINT], {
+      await execFileAsync("bash", [entrypoint], {
         cwd: root,
         env: {
           PATH: `${bin}:${process.env.PATH}`,

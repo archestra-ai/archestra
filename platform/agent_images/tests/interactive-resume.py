@@ -49,7 +49,19 @@ class InteractiveResumeTest(unittest.TestCase):
                 "OPENAI_BASE_URL": "http://localhost:1/v1",
                 "OPENAI_API_KEY": "fixture",
             }
-            result = subprocess.run(["bash", str(BIN / f"archestra-{client}")], env=env, cwd=root, text=True, capture_output=True, timeout=10)
+            entrypoint = BIN / f"archestra-{client}"
+            if client == "claude-code":
+                # This suite stubs native CLIs. The real terminal discovery gate
+                # is exercised by mcp-startup.py, not this argument-capture stub.
+                image_bin = root / "image-bin"
+                image_bin.mkdir()
+                entrypoint = image_bin / "archestra-claude-code"
+                entrypoint.write_text((BIN / "archestra-claude-code").read_text())
+                (image_bin / "archestra-claude-tui-start").write_text(
+                    'import os, sys\ntask = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TASK", "")\n'
+                    'os.execvp(sys.argv[1], sys.argv[1:] + ([task] if task else []))\n'
+                )
+            result = subprocess.run(["bash", str(entrypoint)], env=env, cwd=root, text=True, capture_output=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
             return json.loads(result.stdout.strip().splitlines()[-1])
 

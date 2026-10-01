@@ -48,6 +48,10 @@ RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/claude-auth.py
 
+RUN --network=none \
+    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py claude-code
+
 FROM agent-base AS agent-codex
 USER root
 RUN pnpm add --global @openai/codex@0.153.0 \
@@ -57,6 +61,10 @@ USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/codex-failure.py
+
+RUN --network=none \
+    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py codex
 
 FROM agent-base AS agent-opencode
 USER root
@@ -68,6 +76,10 @@ RUN pnpm add --global opencode-ai@1.18.23 \
 ENV OPENCODE_DISABLE_AUTOUPDATE=1
 ENV OPENCODE_DISABLE_PROJECT_CONFIG=1
 USER 1000:1000
+
+RUN --network=none \
+    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py opencode
 
 FROM agent-base AS agent-hermes
 USER root
@@ -86,9 +98,19 @@ RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/hermes-startup.py
 
+RUN --network=none \
+    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py hermes
+
 FROM agent-base AS agent-openclaw
 USER root
 RUN pnpm add --global openclaw@2026.7.1-2 \
  && openclaw --version \
  && chown -R 1000:1000 /home/node
+RUN --network=none \
+    --mount=type=bind,source=agent_images/patches,target=/tmp/agent-image-patches \
+    python3 /tmp/agent-image-patches/openclaw-mcp-required.py
 USER 1000:1000
+RUN --network=none \
+    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py openclaw

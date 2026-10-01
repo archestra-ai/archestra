@@ -182,6 +182,7 @@ const fs = require("node:fs");
       ).resolves.toBeDefined();
     }
   } finally {
+    await exec("chmod", ["-R", "u+w", root]);
     await rm(root, { recursive: true, force: true });
   }
 });

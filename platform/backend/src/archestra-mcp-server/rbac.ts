@@ -185,6 +185,10 @@ export const TOOL_PERMISSIONS: Record<
   // shared-with), so `project:read` never widens visibility past their own set.
   list_projects: { resource: "project", action: "read" },
   get_project: { resource: "project", action: "read" },
+  // Mirror the LinkProjectApp/UnlinkProjectApp routes: project membership is
+  // the floor, and the handler re-checks the caller's read access to the app.
+  link_app_to_project: { resource: "project", action: "read" },
+  unlink_app_from_project: { resource: "project", action: "read" },
 
   // Scheduled tasks — mirror the /api/schedule-triggers routes. As with the
   // project reads the permission is only the floor: every handler runs the

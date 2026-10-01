@@ -11,7 +11,11 @@ import {
   collectDelegationMarkers,
   mintDelegationMarker,
 } from "@/openappa/delegation";
-import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
+import {
+  consumeHitlRuling,
+  getHitlReview,
+  stageHitlReview,
+} from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { prepareAppaRequest } from "@/openappa/request";
 import * as appaService from "@/openappa/service";
@@ -591,7 +595,112 @@ describe("asking through the client's own question tool", () => {
     await plugin.onCleanup(context);
   });
 
-  test("binds an OpenCode native approval to the staged offer", async () => {
+  test.each([
+    { family: "zhipuai:chatCompletions" as const, thinking: undefined },
+    { family: "anthropic:messages" as const, thinking: undefined },
+    { family: "anthropic:messages" as const, thinking: { type: "adaptive" } },
+  ])("requires the pending native review ($family, thinking=$thinking)", async ({
+    family,
+    thinking,
+  }) => {
+    const previous = config.openappa;
+    config.openappa = {
+      ...previous,
+      opencodeShellRemedy: true,
+      shellExecutionEndpoint:
+        "http://127.0.0.1:9000/v1/openai/openappa/execute-remedy",
+    };
+    const claude = family === "anthropic:messages";
+    const plugin = new AppaPluginArchestra([
+      claude ? new AppaClaudeCodeAdapter() : new AppaOpenCodeAdapter(),
+    ]);
+    const context = requestContext({
+      sessionId: "user:user|glm-native-review",
+      toolIdentity: identityStub({ gatewayConnected: false }),
+    });
+    context.interactionType = family;
+    context.headers = claude
+      ? { "user-agent": "claude-cli/2.1.285" }
+      : { "x-opencode-session": "glm-native-review" };
+    context.requestBody = {
+      messages: [],
+      tools: [],
+      ...(thinking ? { thinking } : {}),
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.declaredTools = claude
+      ? [{ name: "Bash" }, { name: "AskUserQuestion" }]
+      : [{ name: "bash" }, { name: "question" }];
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {},
+        contextIsTrusted: true,
+        dualLlmAnalyses: [],
+        unsafeContextBoundary: undefined,
+      });
+    try {
+      await stageHitlReview({
+        session: trusted.session,
+        review: { offerId: "glm-offer", text: "Approve the exact call?" },
+      });
+      await plugin.onSessionInit(context);
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: "call_execution",
+            name: "archestra__execute_remedy_plan",
+            content: JSON.stringify({
+              outcome: "review_required",
+              offer_id: "glm-offer",
+            }),
+            isError: false,
+          },
+        ],
+      });
+      await plugin.onBeforeModel({ ...context, request: context.requestBody });
+      expect(context.requestBody).toMatchObject(
+        claude
+          ? {
+              tool_choice: thinking
+                ? { type: "auto", disable_parallel_tool_use: true }
+                : {
+                    type: "tool",
+                    name: "archestra__ask_user",
+                    disable_parallel_tool_use: true,
+                  },
+            }
+          : {
+              tool_choice: {
+                type: "function",
+                function: { name: "archestra__ask_user" },
+              },
+              parallel_tool_calls: false,
+            },
+      );
+      if (thinking)
+        expect(
+          (context.requestBody as { tools: Array<{ name: string }> }).tools.map(
+            (tool) => tool.name,
+          ),
+        ).toEqual(["archestra__ask_user"]);
+      expect(JSON.stringify(context.requestBody)).toContain(
+        "requires human review",
+      );
+    } finally {
+      await plugin.onCleanup(context);
+      processResults.mockRestore();
+      config.openappa = previous;
+    }
+  });
+
+  test.each([
+    "anthropic:messages",
+    "zhipuai:chatCompletions",
+  ])("binds an OpenCode native approval to the staged offer (%s)", async (interactionType) => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({
       sessionId: "user:user|opencode-hitl-session",
@@ -635,6 +744,7 @@ describe("asking through the client's own question tool", () => {
       session: {},
     };
     context.headers = { "x-opencode-session": "s" };
+    context.interactionType = interactionType as typeof context.interactionType;
     await stageHitlReview({
       session: trusted.session,
       review: {
@@ -764,20 +874,31 @@ describe("asking through the client's own question tool", () => {
             // trajectory stamp before the native HITL claim sees this ID.
             id: outerStamp?.callId ?? question.id,
             name: "question",
-            content: 'approval="Approve"',
+            content:
+              'User has answered your questions: "Canonical HITL review."="Approve". You can now continue with the user\'s answers in mind.',
             isError: false,
           },
         ],
       });
+      const processed = processResults.mock.calls.at(-1)?.[0];
+      expect(processed).toBeDefined();
+      const verifiedAnswer = processed?.results.find(
+        (result) => result.name === "question",
+      );
+      expect(
+        verifiedAnswer && processed?.isUserQuestion?.(verifiedAnswer),
+      ).toBe(true);
       const continuationRequest = { system: "Base", messages: [] };
       await plugin.onBeforeModel({ ...context, request: continuationRequest });
-      expect(continuationRequest.system).toContain(
-        'approved OpenAPPA offer IDs ["offer-hitl"]',
-      );
-      expect(continuationRequest.system).toContain(
+      const guidance =
+        interactionType === "anthropic:messages"
+          ? continuationRequest.system
+          : JSON.stringify(continuationRequest.messages);
+      expect(guidance).toContain("approved OpenAPPA offer IDs");
+      expect(guidance).toContain(
         "next and only tool calls must be execute_remedy_plan",
       );
-      expect(continuationRequest.system).toContain(
+      expect(guidance).toContain(
         "Do not call or retry the blocked tool in the same response",
       );
       const resumed = await plugin.onPrepareToolCalls({
@@ -850,6 +971,17 @@ describe("asking through the client's own question tool", () => {
       provider: "anthropic" as const,
     },
     {
+      client: "Claude Code",
+      ruling: "none" as const,
+      adapter: () => new AppaClaudeCodeAdapter(),
+      headers: { "user-agent": "claude-code/1" },
+      nativeName: "AskUserQuestion",
+      answer: "The user cancelled this question",
+      isError: true,
+      interactionType: "anthropic:messages" as const,
+      provider: "anthropic" as const,
+    },
+    {
       client: "Codex",
       ruling: "approve" as const,
       adapter: () => new AppaCodexAdapter(),
@@ -899,6 +1031,17 @@ describe("asking through the client's own question tool", () => {
       interactionType: "openai:chatCompletions" as const,
       provider: "openai" as const,
     },
+    {
+      client: "OpenCode",
+      ruling: "none" as const,
+      adapter: () => new AppaOpenCodeAdapter(),
+      headers: { "x-opencode-session": "s" },
+      nativeName: "question",
+      answer:
+        'The question tool was called with invalid arguments: SchemaError(Missing key at ["questions"]).',
+      interactionType: "openai:chatCompletions" as const,
+      provider: "openai" as const,
+    },
   ])("binds $client native $ruling rulings to the exact staged review", async ({
     client,
     ruling,
@@ -906,6 +1049,7 @@ describe("asking through the client's own question tool", () => {
     headers,
     nativeName,
     answer,
+    isError = false,
     interactionType,
     provider,
   }) => {
@@ -1016,10 +1160,18 @@ describe("asking through the client's own question tool", () => {
             id: outerStamp.callId,
             name: nativeName,
             content: answer,
-            isError: false,
+            isError,
           },
         ],
       });
+      const freshResults = processResults.mock.calls.at(-1)?.[0];
+      const freshAnswer = freshResults?.results.find(
+        (result) => result.id === outerStamp.callId,
+      );
+      expect(freshAnswer).toBeDefined();
+      expect(freshAnswer && freshResults?.isUserQuestion?.(freshAnswer)).toBe(
+        true,
+      );
       const continuationRequest =
         interactionType === "openai:responses"
           ? {
@@ -1067,8 +1219,13 @@ describe("asking through the client's own question tool", () => {
         });
       } else {
         expect(continuation).toContain(
-          "did not approve the pending OpenAPPA review",
+          ruling === "none"
+            ? "no verified Approve or Deny answer"
+            : "did not approve the pending OpenAPPA review",
         );
+        if (ruling === "none") {
+          expect(continuation).not.toContain("The human denied");
+        }
         if (client === "Codex") {
           expect(continuationRequest).toMatchObject({
             tool_choice: "auto",
@@ -1128,6 +1285,410 @@ describe("asking through the client's own question tool", () => {
         expect(JSON.stringify(postAuthorizationRequest)).not.toContain(
           "Open the pending HITL review",
         );
+      }
+
+      // A consumed answer remains model-visible data, not fresh authority,
+      // even if a review for the same offer is staged again.
+      await stageHitlReview({
+        session: trusted.session,
+        review: { offerId, text: "Canonical HITL review." },
+      });
+      for (const content of [answer, 'approval="Approve"']) {
+        const historicalAnswer = {
+          id: outerStamp.callId,
+          name: nativeName,
+          content,
+          isError,
+        };
+        const snapshot = structuredClone(historicalAnswer);
+        const replayed = await plugin.onToolResults({
+          ...context,
+          toolResults: [historicalAnswer],
+        });
+        expect(historicalAnswer).toEqual(snapshot);
+        expect(replayed?.toolResultUpdates).not.toHaveProperty(
+          historicalAnswer.id,
+        );
+        expect(processResults.mock.calls.at(-1)?.[0].results).toEqual([]);
+        await expect(
+          consumeHitlRuling({ session: trusted.session, offerId }),
+        ).resolves.toBeUndefined();
+      }
+    } finally {
+      evaluateToolCalls.mockRestore();
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("a successful native Dismiss leaves review A unanswered and permits approval of independent review B", async () => {
+    const previous = config.openappa;
+    config.openappa = {
+      ...previous,
+      opencodeShellRemedy: true,
+      shellExecutionEndpoint:
+        "http://127.0.0.1:9000/v1/openai/openappa/execute-remedy",
+    };
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|dismiss-independent-reviews",
+      toolIdentity: identityStub({ gatewayConnected: false }),
+    });
+    context.headers = { "user-agent": "claude-cli/2.1.285" };
+    context.requestBody = { messages: [], tools: [] };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    const offerIds = ["offer-dismiss-a", "offer-dismiss-b"];
+    const offers = offerIds.map((offerId) =>
+      signOfferClaims(
+        unsignedOfferClaims({
+          organizationId: trusted.session.organization_id,
+          callerId: trusted.session.caller_id,
+          sessionId: trusted.session.session_id,
+          offerId,
+        }),
+        config.openappa.offerSigningSecret,
+      ),
+    );
+    Object.assign(trusted.request, {
+      declaredTools: [{ name: "Bash" }, { name: "AskUserQuestion" }],
+      offerClaims: offers,
+      askUserOfferClaims: offers,
+    });
+    const reviews = offerIds.map((offerId) => ({
+      id: `execution-${offerId}`,
+      name: "archestra__execute_remedy_plan",
+      content: JSON.stringify({
+        outcome: "review_required",
+        offer_id: offerId,
+      }),
+      isError: false,
+    }));
+    for (const offerId of offerIds) {
+      await stageHitlReview({
+        session: trusted.session,
+        review: {
+          offerId,
+          text: `Review ${offerId}`,
+          remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
+        },
+      });
+    }
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {},
+        contextIsTrusted: true,
+        dualLlmAnalyses: [],
+        unsafeContextBoundary: undefined,
+      });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const issueAnswer = async (
+      offerId: string,
+      label: "Dismiss" | "Approve",
+    ) => {
+      const prepared = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          { id: `toolu-${offerId}`, name: "AskUserQuestion", arguments: "{}" },
+        ],
+      });
+      if (prepared?.decision !== "allow")
+        throw new Error("expected native review to remain available");
+      const released = await plugin.onToolCalls({
+        ...context,
+        toolCalls: prepared.toolCalls,
+      });
+      if (released?.decision !== "allow")
+        throw new Error("expected signed native review");
+      expect(released.toolCalls).toHaveLength(1);
+      const question = released.toolCalls[0];
+      const stamp = parseTrajectoryStamp(question.wireId ?? "");
+      if (!stamp) throw new Error("expected signed native question ID");
+      expect(question.name).toBe("AskUserQuestion");
+      const displayed = JSON.parse(question.arguments as string).questions[0];
+      expect(displayed.question).toBe(`Review ${offerId}`);
+      expect(
+        displayed.options.map((option: { label: string }) => option.label),
+      ).toEqual(["Approve", "Deny", "Dismiss"]);
+      return {
+        id: stamp.callId,
+        name: question.name,
+        content: `Your questions have been answered: "${displayed.question}"="${label}". You can now continue with the user's answers in mind.`,
+        isError: false,
+      };
+    };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolResults({ ...context, toolResults: reviews });
+      await plugin.onBeforeModel({ ...context, request: context.requestBody });
+      const dismissed = await issueAnswer(offerIds[0], "Dismiss");
+      const dismissedSnapshot = structuredClone(dismissed);
+      const afterDismiss = await plugin.onToolResults({
+        ...context,
+        toolResults: [...reviews, dismissed],
+      });
+      expect(afterDismiss?.toolResultUpdates).not.toHaveProperty(dismissed.id);
+      expect(dismissed).toEqual(dismissedSnapshot);
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId: offerIds[0] }),
+      ).resolves.toBe("none");
+      await expect(
+        getHitlReview({ session: trusted.session, offerId: offerIds[0] }),
+      ).resolves.toBeUndefined();
+      await expect(
+        getHitlReview({ session: trusted.session, offerId: offerIds[1] }),
+      ).resolves.toMatchObject({ offerId: offerIds[1] });
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId: offerIds[1] }),
+      ).resolves.toBeUndefined();
+      const nextRequest = {
+        system: "Base",
+        messages: [],
+        tools: (context.requestBody as { tools: unknown[] }).tools,
+      };
+      await plugin.onBeforeModel({ ...context, request: nextRequest });
+      expect(nextRequest).toMatchObject({
+        tool_choice: { type: "tool", name: "archestra__ask_user" },
+      });
+      expect(nextRequest.system).toContain('Offer IDs: ["offer-dismiss-b"]');
+      expect(nextRequest.system).toContain(
+        "Selecting Dismiss leaves this offer unanswered",
+      );
+      expect(nextRequest.system).toContain(
+        "Continue other independent pending reviews",
+      );
+      expect(nextRequest.system).not.toContain("The human denied");
+      await expect(
+        plugin.onPrepareToolCalls({
+          ...context,
+          toolCalls: [
+            {
+              id: "retry-dismissed-a",
+              name: "archestra__execute_remedy_plan",
+              arguments: JSON.stringify({
+                offer_id: offerIds[0],
+                plan: "Submit for approval",
+              }),
+            },
+          ],
+        }),
+      ).resolves.toMatchObject({
+        decision: "refuse",
+        refusal: { reason: "openappa_hitl_not_approved" },
+      });
+      const approved = await issueAnswer(offerIds[1], "Approve");
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [...reviews, dismissed, approved],
+      });
+      const fresh = processResults.mock.calls.at(-1)?.[0];
+      expect(fresh?.results.some((result) => result.id === dismissed.id)).toBe(
+        false,
+      );
+      const freshApproval = fresh?.results.find(
+        (result) => result.id === approved.id,
+      );
+      expect(freshApproval && fresh?.isUserQuestion?.(freshApproval)).toBe(
+        true,
+      );
+      const approvedRequest = {
+        system: "Base",
+        messages: [],
+        tools: (context.requestBody as { tools: unknown[] }).tools,
+      };
+      await plugin.onBeforeModel({ ...context, request: approvedRequest });
+      expect(approvedRequest.system).toContain(
+        'approved OpenAPPA offer IDs ["offer-dismiss-b"]',
+      );
+      const resumed = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "blocked-retry",
+            name: "Read",
+            arguments: '{"file_path":"a.txt"}',
+          },
+        ],
+      });
+      expect(resumed).toMatchObject({
+        decision: "allow",
+        toolCalls: [{ name: "archestra__execute_remedy_plan" }],
+      });
+      if (resumed?.decision !== "allow")
+        throw new Error("expected B remedy continuation");
+      expect(
+        JSON.parse(resumed.toolCalls[0].arguments as string),
+      ).toMatchObject({ offer_id: offerIds[1] });
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId: offerIds[1] }),
+      ).resolves.toBe("approve");
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId: offerIds[0] }),
+      ).resolves.toBeUndefined();
+      const history = [dismissed, approved];
+      const snapshot = structuredClone(history);
+      const replayed = await plugin.onToolResults({
+        ...context,
+        toolResults: history,
+      });
+      expect(history).toEqual(snapshot);
+      expect(dismissed).toEqual(dismissedSnapshot);
+      expect(replayed?.toolResultUpdates).toEqual({});
+      expect(processResults.mock.calls.at(-1)?.[0].results).toEqual([]);
+      for (const offerId of offerIds) {
+        await expect(
+          consumeHitlRuling({ session: trusted.session, offerId }),
+        ).resolves.toBeUndefined();
+      }
+    } finally {
+      evaluateToolCalls.mockRestore();
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+      config.openappa = previous;
+    }
+  });
+
+  test.each([
+    "approve",
+    "deny",
+    "none",
+  ] as const)("preserves parallel native review answers without replaying either signed claim (%s)", async (secondRuling) => {
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|parallel-native-history",
+    });
+    context.headers = { "user-agent": "claude-code/1" };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    const offerIds = ["offer-parallel-approve", "offer-parallel-deny"];
+    const offers = offerIds.map((offerId) =>
+      signOfferClaims(
+        unsignedOfferClaims({
+          organizationId: trusted.session.organization_id,
+          callerId: trusted.session.caller_id,
+          sessionId: trusted.session.session_id,
+          offerId,
+        }),
+        config.openappa.offerSigningSecret,
+      ),
+    );
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "AskUserQuestion" }],
+      offerClaims: offers,
+      askUserOfferClaims: offers,
+      session: {},
+    };
+    for (const offerId of offerIds) {
+      await stageHitlReview({
+        session: trusted.session,
+        review: { offerId, text: `Review ${offerId}` },
+      });
+    }
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {},
+        contextIsTrusted: true,
+        dualLlmAnalyses: [],
+        unsafeContextBoundary: undefined,
+      });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }, { kind: "allow" }]);
+    try {
+      await plugin.onSessionInit(context);
+      const prepared = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: offerIds.map((offerId, index) => ({
+          id: `toolu_parallel_${index}`,
+          name: "archestra__ask_user",
+          arguments: JSON.stringify({ remedy_offer_ids: [offerId] }),
+        })),
+      });
+      if (prepared?.decision !== "allow")
+        throw new Error("expected two native questions");
+      const released = await plugin.onToolCalls({
+        ...context,
+        toolCalls: prepared.toolCalls,
+      });
+      if (released?.decision !== "allow")
+        throw new Error("expected two released native questions");
+      expect(released.toolCalls).toHaveLength(2);
+      const answers = released.toolCalls.map((question, index) => {
+        const stamp = parseTrajectoryStamp(question.wireId ?? "");
+        if (!stamp) throw new Error("expected signed native question ID");
+        expect(question.name).toBe("AskUserQuestion");
+        return {
+          id: stamp.callId,
+          name: question.name,
+          content:
+            index === 1 && secondRuling === "none"
+              ? "The user cancelled this question"
+              : JSON.stringify({
+                  answers: {
+                    [`Review ${offerIds[index]}`]:
+                      index === 0 || secondRuling === "approve"
+                        ? "Approve"
+                        : "Deny",
+                  },
+                }),
+          isError: index === 1 && secondRuling === "none",
+        };
+      });
+      await plugin.onToolResults({ ...context, toolResults: answers });
+      const fresh = processResults.mock.calls.at(-1)?.[0];
+      expect(fresh?.results).toHaveLength(2);
+      expect(
+        fresh?.results.every((result) => fresh.isUserQuestion?.(result)),
+      ).toBe(true);
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId: offerIds[0] }),
+      ).resolves.toBe("approve");
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId: offerIds[1] }),
+      ).resolves.toBe(secondRuling);
+      for (const offerId of offerIds) {
+        await stageHitlReview({
+          session: trusted.session,
+          review: { offerId, text: `Review ${offerId}` },
+        });
+      }
+      for (const history of [
+        answers,
+        answers.map((answer, index) => ({
+          ...answer,
+          content: JSON.stringify({
+            answers: { [`Review ${offerIds[index]}`]: "Approve" },
+          }),
+          isError: false,
+        })),
+      ]) {
+        const snapshot = structuredClone(history);
+        const replay = await plugin.onToolResults({
+          ...context,
+          toolResults: history,
+        });
+        expect(history).toEqual(snapshot);
+        expect(replay?.toolResultUpdates).toEqual({});
+        expect(processResults.mock.calls.at(-1)?.[0].results).toEqual([]);
+        for (const offerId of offerIds) {
+          await expect(
+            consumeHitlRuling({ session: trusted.session, offerId }),
+          ).resolves.toBeUndefined();
+        }
       }
     } finally {
       evaluateToolCalls.mockRestore();

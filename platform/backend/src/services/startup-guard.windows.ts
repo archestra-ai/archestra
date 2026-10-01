@@ -427,6 +427,13 @@ ${client.windows.mcpDisconnectVerify}
 ${client.windows.skillsDisconnectVerify}
   }`
       : ""
+  }${
+    ctx.proxy && client.windows.renderProxyDisconnectVerify
+      ? `
+  if ($Kind -eq 'proxy') {
+${client.windows.renderProxyDisconnectVerify(ctx)}
+  }`
+      : ""
   }
   return $true
 }

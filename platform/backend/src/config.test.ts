@@ -3576,6 +3576,7 @@ describe("OpenAPPA feature configuration", () => {
       yellEnabled: false,
       offerSigningSecret: "",
       postgresMaxConnections: 4,
+      opencodeShellRemedy: false,
     });
   });
   test("enables database policies without a container path", () => {
@@ -3584,6 +3585,7 @@ describe("OpenAPPA feature configuration", () => {
       yellEnabled: true,
       offerSigningSecret: "",
       postgresMaxConnections: 4,
+      opencodeShellRemedy: false,
     });
     expect(
       parseOpenAppaConfig("true", "true", "offer-signing-secret-at-least-32ch")
@@ -3660,6 +3662,26 @@ describe("OpenAPPA feature configuration", () => {
     expect(
       parseOpenAppaConfig("true", undefined, undefined, value)
         .postgresMaxConnections,
+    ).toBe(expected);
+  });
+
+  test.each([
+    ["true", "true", true],
+    ["true", "false", false],
+    ["true", undefined, false],
+    // The experiment cannot outlive the feature flag it rides on.
+    ["false", "true", false],
+    [undefined, "true", false],
+  ])("gates the experimental OpenCode shell remedy on APPA and an explicit true (appa=%s, flag=%s)", (enabled, experiment, expected) => {
+    expect(
+      parseOpenAppaConfig(
+        enabled,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        experiment,
+      ).opencodeShellRemedy,
     ).toBe(expected);
   });
 });

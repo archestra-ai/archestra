@@ -494,6 +494,10 @@ name = "host/archestra/read(filePath:/tmp/appa-root-flow/lab/report.txt)"
 delta = { trust = "untrusted" }
 
 [[policy.tool]]
+name = "host/archestra/Read(file_path:/tmp/appa-root-flow/lab/report.txt)"
+delta = { trust = "untrusted" }
+
+[[policy.tool]]
 name = "host/archestra/read"
 delta = {}
 

@@ -26,7 +26,11 @@ import {
   getHitlReview,
   recordHitlRuling,
 } from "@/openappa/hitl-review";
-import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
+import {
+  buildNoticeArguments,
+  type RemedyExecution,
+  readRemedyExecution,
+} from "@/openappa/notice";
 import type { OfferJws } from "@/openappa/offer-claims";
 import {
   offerIdFromJws,
@@ -50,10 +54,31 @@ import {
   sharedPolicy,
 } from "@/openappa/service";
 import {
+  codexExecClientDeclined,
+  issueShellExecutionTicket,
+  readCodexExecOutput,
+  SHELL_EXECUTION_HISTORY_TTL_MS,
+  SHELL_EXECUTION_TTL_MS,
+  shellExecutionCacheKey,
+  shellExecutionCallCacheKey,
+  shellExecutionCommand,
+  ticketFromShellExecutionCommand,
+  verifyShellExecutionResponse,
+} from "@/openappa/shell-execution";
+import {
+  buildShellRemedyCommand,
+  readShellRemedyCommand,
+  SHELL_REMEDY_TOOL_NAME,
+} from "@/openappa/shell-remedy";
+import {
   parseTrajectoryStamp,
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
-import { appaWireFamily } from "@/openappa/wire";
+import {
+  appaWireFamily,
+  restoreAppaShellExecutions,
+  restoreAppaShellRemedies,
+} from "@/openappa/wire";
 import { rememberYellSession } from "@/openappa/yell-session";
 import type {
   LlmProxyBeforeModelContext,
@@ -121,6 +146,26 @@ type AppaPluginBinding = {
    * overlay so stamps never encode a minted parent:child id.
    */
   stampSessionId: string | undefined;
+  /**
+   * EXPERIMENTAL shell remedy: call IDs whose shell-carried ruling was
+   * verified and restored in this request's history.
+   */
+  restoredShellRemedyCallIds: ReadonlySet<string>;
+  /**
+   * Signature-verified issued notices the client declined. Omitted from
+   * runtime result processing so the native stdout is not replaced.
+   */
+  declinedShellNoticeCallIds: Set<string>;
+  /**
+   * EXPERIMENTAL shell remedy: count of freshly returned shell rulings whose
+   * single-use claim this request consumed; drives the one-time guidance.
+   */
+  freshShellRemedyRulings: number;
+  /** Proxy-only coding clients use native shell/review tools instead of an MCP gateway. */
+  proxyOnlyShell: boolean;
+  /** Exact staged offer whose native review must be shown in this turn. */
+  requiredHitlOfferId?: string;
+  reviewUnavailable: boolean;
 };
 
 type NativeQuestionClaim = {
@@ -162,6 +207,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
       nativeHitlRulings: [],
+      restoredShellRemedyCallIds: new Set(),
+      declinedShellNoticeCallIds: new Set(),
+      freshShellRemedyRulings: 0,
+      proxyOnlyShell: false,
+      reviewUnavailable: false,
       spawnerNativeId: undefined,
       stampSessionId: tracesLineage(trustedContext.session, chat)
         ? clientSessionId(trustedContext.session.session_id)
@@ -192,6 +242,314 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       issueChildTrajectoryReceipt(context, binding.session, child);
     }
     this.bindings.set(context.resources, binding);
+    binding.restoredShellRemedyCallIds = this.restoreShellRemedies(
+      binding,
+      context,
+    );
+    await this.restoreShellExecutions(binding, context);
+    this.prepareProxyOnlyShellTools(binding, context);
+  }
+
+  /**
+   * EXPERIMENTAL (ARCHESTRA_OPENAPPA_OPENCODE_SHELL_REMEDY, dev only): swaps
+   * verified proxy-issued shell remedy calls in history back to the denied
+   * call and its bound ruling before the provider request and the tool
+   * results are built from the body. Runs on every request so replays restore
+   * identically; unverified scripts stay ordinary shell calls.
+   */
+  private restoreShellRemedies(
+    binding: AppaPluginBinding,
+    context: LlmProxyRequestContext,
+  ): ReadonlySet<string> {
+    const adapter = binding.adapter;
+    const secret = config.openappa.offerSigningSecret;
+    const family = appaWireFamily(context.interactionType);
+    if (
+      !config.openappa.opencodeShellRemedy ||
+      !shellRemedyAdapter(adapter) ||
+      !family ||
+      secret.length === 0
+    ) {
+      return new Set();
+    }
+    return restoreAppaShellRemedies({
+      family,
+      body: context.requestBody,
+      isShellTool: (name, namespace) =>
+        matchesNativeShell(binding, name, namespace),
+      readShellRemedy: ({ callId, arguments: args }) =>
+        readShellRemedyCommand({
+          session: binding.session,
+          callId,
+          arguments: args,
+          secret,
+          argument: shellArgumentName(adapter),
+        }),
+      clientDeclined:
+        adapter.id === "codex"
+          ? ({ output }) => codexExecClientDeclined(output)
+          : undefined,
+      onDeclinedIssuedNotice: (callId) => {
+        binding.declinedShellNoticeCallIds.add(callId);
+        const inner = parseTrajectoryStamp(callId)?.callId;
+        if (inner) binding.declinedShellNoticeCallIds.add(inner);
+      },
+      onRestoredOffers: (offers) => {
+        binding.request.offerClaims = [
+          ...(binding.request.offerClaims ?? []),
+          ...offers,
+        ];
+        binding.request.askUserOfferClaims = [
+          ...(binding.request.askUserOfferClaims ?? []),
+          ...offers,
+        ];
+      },
+    });
+  }
+
+  private async restoreShellExecutions(
+    binding: AppaPluginBinding,
+    context: LlmProxyRequestContext,
+  ): Promise<void> {
+    const endpoint = config.openappa.shellExecutionEndpoint;
+    const secret = config.openappa.offerSigningSecret;
+    const family = appaWireFamily(context.interactionType);
+    if (
+      !config.openappa.opencodeShellRemedy ||
+      !endpoint ||
+      !secret ||
+      (family !== "openai:chatCompletions" &&
+        family !== "anthropic:messages" &&
+        family !== "openai:responses") ||
+      !shellRemedyAdapter(binding.adapter)
+    )
+      return;
+    const adapter = binding.adapter;
+    await restoreAppaShellExecutions({
+      family,
+      body: context.requestBody,
+      isShellTool: (name, namespace) =>
+        matchesNativeShell(binding, name, namespace),
+      readExecution: async ({ callId, arguments: args, output, isError }) => {
+        const issued = await cacheManager.get<{ token: string }>(
+          shellExecutionCallCacheKey({
+            organizationId: binding.session.organization_id,
+            sessionId: binding.session.session_id,
+            callId,
+          }),
+          { throwOnError: true },
+        );
+        let input: unknown = args;
+        if (typeof args === "string") {
+          try {
+            input = JSON.parse(args);
+          } catch {
+            if (issued)
+              throw new ApiError(
+                409,
+                "OpenAPPA shell execution command changed",
+              );
+            return;
+          }
+        }
+        const command = isRecord(input)
+          ? input[shellArgumentName(adapter)]
+          : undefined;
+        if (typeof command !== "string") {
+          if (issued)
+            throw new ApiError(409, "OpenAPPA shell execution command changed");
+          return;
+        }
+        const ticket = ticketFromShellExecutionCommand({
+          command,
+          endpoint,
+          secret,
+        });
+        if (
+          issued &&
+          shellExecutionCommand({ token: issued.token, endpoint }) !== command
+        ) {
+          throw new ApiError(409, "OpenAPPA shell execution command changed");
+        }
+        if (!ticket) return;
+        if (
+          ticket.callId !== callId ||
+          ticket.organizationId !== binding.session.organization_id ||
+          ticket.callerId !== binding.session.caller_id ||
+          ticket.sessionId !== binding.session.session_id ||
+          ticket.parentId !== binding.session.parent_id ||
+          ticket.agentId !== context.profileId
+        ) {
+          throw new ApiError(
+            409,
+            "OpenAPPA shell execution ticket belongs to another call or session",
+          );
+        }
+        const wrapped =
+          adapter.id === "codex" ? readCodexExecOutput(output) : undefined;
+        const declined =
+          isError ||
+          (adapter.id === "codex" &&
+            (!wrapped || wrapped.running || wrapped.exitCode !== 0));
+        if (declined) {
+          return {
+            toolName: ticket.execution.tool_name,
+            originalArguments: ticket.execution.original_arguments,
+            isError: true,
+            result: JSON.stringify({
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: "[appa] The client declined or failed to execute the local remedy request. No verified execution result is available; the dependent call remains blocked. Do not retry the same shell request.",
+                },
+              ],
+            }),
+          };
+        }
+        const result = verifyShellExecutionResponse({
+          ticket,
+          content: wrapped ? wrapped.stdout : output,
+          secret,
+        });
+        if (!result) {
+          throw new ApiError(
+            409,
+            "OpenAPPA did not verify the shell execution response; the remedy remains blocked",
+          );
+        }
+        return {
+          toolName: ticket.execution.tool_name,
+          originalArguments: ticket.execution.original_arguments,
+          result: JSON.stringify(result),
+          isError: result.isError === true,
+        };
+      },
+    });
+  }
+
+  private prepareProxyOnlyShellTools(
+    binding: AppaPluginBinding,
+    context: LlmProxyRequestContext,
+  ): void {
+    if (
+      !config.openappa.opencodeShellRemedy ||
+      !config.openappa.shellExecutionEndpoint ||
+      binding.chat ||
+      binding.identity.gatewayConnected !== false ||
+      !shellRemedyAdapter(binding.adapter) ||
+      !binding.session.caller_id ||
+      !config.openappa.offerSigningSecret
+    )
+      return;
+    const body = isRecord(context.requestBody)
+      ? context.requestBody
+      : undefined;
+    const tools = shellToolContainer(body);
+    if (
+      !tools ||
+      !binding.request.declaredTools.some((tool) =>
+        matchesNativeShell(binding, tool.name, tool.namespace),
+      )
+    )
+      return;
+    const control = "archestra__execute_remedy_plan";
+    const askUser = "archestra__ask_user";
+    const family = appaWireFamily(context.interactionType);
+    if (
+      family !== "openai:chatCompletions" &&
+      family !== "anthropic:messages" &&
+      family !== "openai:responses"
+    )
+      return;
+    const appendTool = (definition: {
+      name: string;
+      description: string;
+      parameters: Record<string, unknown>;
+    }) => {
+      tools.push(
+        family === "anthropic:messages"
+          ? {
+              name: definition.name,
+              description: definition.description,
+              input_schema: definition.parameters,
+            }
+          : family === "openai:responses"
+            ? {
+                type: "function",
+                name: definition.name,
+                description: definition.description,
+                parameters: definition.parameters,
+              }
+            : { type: "function", function: definition },
+      );
+    };
+    const nativeQuestion = binding.adapter.nativeQuestion;
+    const hasNativeQuestion =
+      !!nativeQuestion &&
+      nativeQuestion.isAvailable?.(binding.requestHeaders) !== false &&
+      declaresNativeQuestion(binding, nativeQuestion.toolName);
+    if (
+      binding.request.declaredTools.some(
+        (tool) => tool.name === control || tool.name === askUser,
+      )
+    )
+      return;
+    appendTool({
+      name: control,
+      description:
+        "Execute a signed OpenAPPA remedy offer through the proxy. Pass the exact offer_id and plan. A subagent return-contract plan also requires label: the lowest trust and audience this session accepts from the return; omit a dimension to retain its current value. Schema-attested return plans also use return_schema. Follow review_required with ask_user before executing again.",
+      parameters: {
+        type: "object",
+        properties: {
+          offer_id: { type: "string" },
+          plan: { type: "string" },
+          label: {
+            type: "object",
+            description:
+              "Required for subagent return-contract plans. State the lowest accepted trust and audience; omit a dimension to keep its current value.",
+            properties: {
+              trust: { type: "string" },
+              audience: { type: "array", items: { type: "string" } },
+            },
+          },
+          return_schema: {
+            type: "object",
+            description:
+              "JSON schema required only for schema-attested subagent returns.",
+            additionalProperties: true,
+          },
+        },
+        required: ["offer_id", "plan"],
+      },
+    });
+    if (hasNativeQuestion) {
+      appendTool({
+        name: askUser,
+        description:
+          "Ask the user to approve or deny a staged OpenAPPA review. The proxy displays it using the client's native question tool.",
+        parameters: {
+          type: "object",
+          properties: {
+            question: { type: "string" },
+            header: { type: "string" },
+            options: { type: "array", items: { type: "object" } },
+            remedy_offer_ids: { type: "array", items: { type: "string" } },
+          },
+          required: ["question", "header", "options", "remedy_offer_ids"],
+        },
+      });
+    }
+    binding.request.tools = {
+      control: { name: control },
+      notice: { name: "archestra__get_remedy_plans" },
+      askUser: hasNativeQuestion ? { name: askUser } : undefined,
+      platformToolNames: new Set(
+        hasNativeQuestion ? [control, askUser] : [control],
+      ),
+      namespaces: new Map(),
+    };
+    binding.proxyOnlyShell = true;
   }
 
   async onToolResults(
@@ -231,6 +589,23 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding,
       results: context.toolResults,
     });
+    // Consume review authority once, but keep the client's answer in history.
+    // Historical answers must not be submitted to APPA as fresh rulings.
+    const historicalQuestionIds = new Set<string>();
+    for (const answer of results) {
+      const name = nativeQuestionName(binding, answer.name);
+      if (
+        name &&
+        verifyNativeQuestionId({
+          session: binding.session,
+          name,
+          id: answer.id,
+        }) &&
+        !verifiedNativeQuestionResults.has(answer)
+      ) {
+        historicalQuestionIds.add(answer.id);
+      }
+    }
     binding.nativeHitlRulings = await recordNativeHitlRulings({
       binding,
       verifiedNativeQuestionResults,
@@ -242,17 +617,35 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.nativeHitlRulings.map((entry) => entry.offerId),
       ),
     });
+    if (
+      binding.proxyOnlyShell &&
+      !binding.request.tools?.askUser &&
+      binding.pendingHitlReviewOfferIds.length > 0
+    ) {
+      binding.reviewUnavailable = true;
+      binding.pendingHitlReviewOfferIds = [];
+    }
+    binding.freshShellRemedyRulings = await claimShellRemedyResults({
+      binding,
+      results: context.toolResults,
+    });
     binding.requiresRemedyContinuation = hasRemedyOfferResult({
       binding,
       results: context.toolResults,
       verifiedNativeQuestionResults,
     });
     const nonHandbackResults = results
-      .filter((result) => !binding.adapter?.isChildHandbackTool?.(result.name))
-      .map((result) => ({
-        ...result,
-        content: childResultUpdates[result.id] ?? result.content,
-      }));
+      .filter(
+        (result) =>
+          !binding.adapter?.isChildHandbackTool?.(result.name) &&
+          !historicalQuestionIds.has(result.id) &&
+          !binding.declinedShellNoticeCallIds.has(result.id),
+      )
+      .map((result) =>
+        Object.hasOwn(childResultUpdates, result.id)
+          ? { ...result, content: childResultUpdates[result.id] }
+          : result,
+      );
     const result = await processProxyResults({
       session: this.governedSession(binding),
       results: nonHandbackResults,
@@ -321,12 +714,39 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (binding?.adapter?.id === "codex") {
       appendNativeDelegationGuidance(context);
     }
+    const approvedReview =
+      binding?.nativeHitlRulings.some((entry) => entry.ruling === "approve") ??
+      false;
+    if (binding?.proxyOnlyShell) {
+      binding.requiredHitlOfferId =
+        !approvedReview && binding.pendingHitlReviewOfferIds.length > 0
+          ? binding.pendingHitlReviewOfferIds[0]
+          : undefined;
+      // Do not advertise a synthetic review tool without a staged offer.
+      // The client's own native question tool remains available.
+      if (!binding.requiredHitlOfferId && isRecord(context.request)) {
+        const declared = context.request.tools;
+        if (Array.isArray(declared)) {
+          context.request.tools = declared.filter(
+            (tool) =>
+              !isRecord(tool) ||
+              (isRecord(tool.function) ? tool.function.name : tool.name) !==
+                binding.request.tools?.askUser?.name,
+          );
+        }
+      }
+    }
     if (binding && binding.adapter?.id !== "archestra-chat") {
       if (binding.request.tools?.control) {
         appendQuestionContinuation({
           request: context.request,
           interactionType: context.interactionType,
-          guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+          guidance:
+            binding.proxyOnlyShell && binding.adapter?.id === "codex"
+              ? CODEX_PROXY_ONLY_REMEDY_WORKFLOW_GUIDANCE
+              : binding.proxyOnlyShell
+                ? PROXY_ONLY_REMEDY_WORKFLOW_GUIDANCE
+                : EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
         });
       }
       const askUser = binding.request.tools?.askUser;
@@ -347,7 +767,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
       }
     }
-    if (binding && binding.pendingHitlReviewOfferIds.length > 0) {
+    // Complete an already-approved offer before opening another review.
+    if (
+      binding &&
+      binding.pendingHitlReviewOfferIds.length > 0 &&
+      !approvedReview
+    ) {
       const offerIds = binding.pendingHitlReviewOfferIds;
       binding.pendingHitlReviewOfferIds = [];
       appendQuestionContinuation({
@@ -355,7 +780,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         interactionType: context.interactionType,
         guidance: hitlQuestionGuidance(offerIds),
       });
+      requireProxyOnlyWorkflowTool({ binding, context, tool: "askUser" });
       requireCodexToolCall({ binding, context });
+    }
+    if (binding?.reviewUnavailable) {
+      binding.reviewUnavailable = false;
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance:
+          "The OpenAPPA remedy requires human approval, but this client did not declare a native question tool. Keep the blocked call denied; do not retry or claim approval. Tell the user this client cannot complete the review.",
+      });
     }
     if (binding?.requiresRemedyContinuation) {
       binding.requiresRemedyContinuation = false;
@@ -366,15 +801,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       });
       requireCodexToolCall({ binding, context });
     }
+    if (binding && binding.freshShellRemedyRulings > 0) {
+      binding.freshShellRemedyRulings = 0;
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: shellRemedyResultGuidance(
+          binding.adapter?.id,
+          binding.proxyOnlyShell,
+        ),
+      });
+    }
     if (binding && binding.nativeHitlRulings.length > 0) {
       const rulings = binding.nativeHitlRulings;
       binding.requiresQuestionContinuation = false;
       appendQuestionContinuation({
         request: context.request,
         interactionType: context.interactionType,
-        guidance: hitlDecisionGuidance(rulings),
+        guidance: hitlDecisionGuidance(rulings, binding.proxyOnlyShell),
       });
       if (rulings.some((entry) => entry.ruling === "approve")) {
+        requireProxyOnlyWorkflowTool({ binding, context, tool: "control" });
         requireCodexToolCall({ binding, context });
       }
     }
@@ -419,69 +866,87 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (
         binding.nativeHitlRulings.some((entry) => entry.ruling !== "approve")
       ) {
-        const message =
-          "The human did not approve this OpenAPPA review. Keep the dependent tool call blocked.";
-        return {
-          decision: "refuse",
-          refusal: {
-            refusalMessage: message,
-            contentMessage: message,
-            reason: "openappa_hitl_not_approved",
-            blockedToolName: blocked.name,
-            blockedToolId: blocked.id,
-            toolInput: toolInputOf(blocked.arguments),
-            allToolCallNames: context.toolCalls.map((call) => call.name),
+        const deniedOffers = new Set(
+          binding.nativeHitlRulings
+            .filter((entry) => entry.ruling !== "approve")
+            .map((entry) => entry.offerId),
+        );
+        const deniedControl = context.toolCalls.find(
+          (call) =>
+            call.name === tools.control.name &&
+            call.namespace === tools.control.namespace &&
+            deniedOffers.has(String(toolInputOf(call.arguments).offer_id)),
+        );
+        if (!binding.proxyOnlyShell || deniedControl) {
+          const refused = deniedControl ?? blocked;
+          const message = binding.nativeHitlRulings.some(
+            (entry) => entry.ruling === "none",
+          )
+            ? "The native review returned no verified human decision. The dependent call remains blocked."
+            : "The human did not approve this OpenAPPA review. Keep the dependent tool call blocked.";
+          return {
+            decision: "refuse",
+            refusal: {
+              refusalMessage: message,
+              contentMessage: message,
+              reason: "openappa_hitl_not_approved",
+              blockedToolName: refused.name,
+              blockedToolId: refused.id,
+              toolInput: toolInputOf(refused.arguments),
+              allToolCallNames: context.toolCalls.map((call) => call.name),
+            },
+          };
+        }
+      } else {
+        if (binding.nativeHitlRulings.length !== 1) {
+          const message = "Complete one approved OpenAPPA offer at a time.";
+          return {
+            decision: "refuse",
+            refusal: {
+              refusalMessage: message,
+              contentMessage: message,
+              reason: "openappa_hitl_offer_count",
+              blockedToolName: blocked.name,
+              blockedToolId: blocked.id,
+              toolInput: toolInputOf(blocked.arguments),
+              allToolCallNames: context.toolCalls.map((call) => call.name),
+            },
+          };
+        }
+        const approved = binding.nativeHitlRulings[0];
+        const pending = await getHitlReview({
+          session: binding.session,
+          offerId: approved.offerId,
+        });
+        if (!pending?.remedyArguments) {
+          const message =
+            "The approved OpenAPPA review is no longer available. Keep the tool call blocked.";
+          return {
+            decision: "refuse",
+            refusal: {
+              refusalMessage: message,
+              contentMessage: message,
+              reason: "openappa_hitl_review_missing",
+              blockedToolName: blocked.name,
+              blockedToolId: blocked.id,
+              toolInput: toolInputOf(blocked.arguments),
+              allToolCallNames: context.toolCalls.map((call) => call.name),
+            },
+          };
+        }
+        incomingToolCalls = [
+          {
+            id: blocked.id,
+            name: tools.control.name,
+            ...(tools.control.namespace
+              ? { namespace: tools.control.namespace }
+              : {}),
+            arguments: JSON.stringify(pending.remedyArguments),
           },
-        };
+        ];
+        binding.nativeHitlRulings = [];
+        changed = true;
       }
-      if (binding.nativeHitlRulings.length !== 1) {
-        const message = "Complete one approved OpenAPPA offer at a time.";
-        return {
-          decision: "refuse",
-          refusal: {
-            refusalMessage: message,
-            contentMessage: message,
-            reason: "openappa_hitl_offer_count",
-            blockedToolName: blocked.name,
-            blockedToolId: blocked.id,
-            toolInput: toolInputOf(blocked.arguments),
-            allToolCallNames: context.toolCalls.map((call) => call.name),
-          },
-        };
-      }
-      const approved = binding.nativeHitlRulings[0];
-      const pending = await getHitlReview({
-        session: binding.session,
-        offerId: approved.offerId,
-      });
-      if (!pending?.remedyArguments) {
-        const message =
-          "The approved OpenAPPA review is no longer available. Keep the tool call blocked.";
-        return {
-          decision: "refuse",
-          refusal: {
-            refusalMessage: message,
-            contentMessage: message,
-            reason: "openappa_hitl_review_missing",
-            blockedToolName: blocked.name,
-            blockedToolId: blocked.id,
-            toolInput: toolInputOf(blocked.arguments),
-            allToolCallNames: context.toolCalls.map((call) => call.name),
-          },
-        };
-      }
-      incomingToolCalls = [
-        {
-          id: blocked.id,
-          name: tools.control.name,
-          ...(tools.control.namespace
-            ? { namespace: tools.control.namespace }
-            : {}),
-          arguments: JSON.stringify(pending.remedyArguments),
-        },
-      ];
-      binding.nativeHitlRulings = [];
-      changed = true;
     }
     const claimedOfferIds = new Set<string>();
     const issuedNativeQuestions: Array<{
@@ -491,6 +956,32 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }> = [];
     const toolCalls: Array<(typeof context.toolCalls)[number]> = [];
     for (const call of incomingToolCalls) {
+      const nativeReview =
+        binding.proxyOnlyShell &&
+        binding.requiredHitlOfferId &&
+        tools.askUser &&
+        call.name === binding.adapter?.nativeQuestion?.toolName &&
+        nativeQuestionNamespaceMatches(binding, call.namespace) &&
+        declaresNativeQuestion(binding, call.name)
+          ? {
+              ...call,
+              name: tools.askUser.name,
+              namespace: tools.askUser.namespace,
+              arguments: JSON.stringify({
+                remedy_offer_ids: [binding.requiredHitlOfferId],
+              }),
+            }
+          : call;
+      if (
+        binding.proxyOnlyShell &&
+        nativeReview.name === tools.askUser?.name &&
+        issuedNativeQuestions.some((question) => question.offerIds.length > 0)
+      ) {
+        // Providers can ignore parallel_tool_calls=false. Never release a
+        // second synthetic review call under its undeclared platform name.
+        changed = true;
+        continue;
+      }
       // The declared control tool itself, in its own namespace: a same-named
       // tool of another server gets no receipt. Only offers the client's own
       // session minted may ride it.
@@ -509,22 +1000,64 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         toolCalls.push(stamped);
         continue;
       }
-      let prepared = call;
+      let prepared = nativeReview;
+      changed ||= prepared !== call;
       let offerIds: string[] = [];
       if (
-        call.name === tools.askUser?.name &&
-        call.namespace === tools.askUser.namespace &&
+        prepared.name === tools.askUser?.name &&
+        prepared.namespace === tools.askUser.namespace &&
         archestraMcpBranding.getToolShortName(
-          this.canonicalize(binding, call),
+          this.canonicalize(binding, prepared),
         ) === TOOL_ASK_USER_SHORT_NAME
       ) {
+        let reviewCall = prepared;
+        if (binding.proxyOnlyShell) {
+          const offerId = binding.requiredHitlOfferId;
+          if (!offerId) {
+            return {
+              decision: "refuse",
+              refusal: {
+                refusalMessage: "No staged OpenAPPA review is pending.",
+                contentMessage: "No staged OpenAPPA review is pending.",
+                reason: "openappa_hitl_review_missing",
+                blockedToolName: call.name,
+                blockedToolId: call.id,
+                toolInput: toolInputOf(call.arguments),
+                allToolCallNames: context.toolCalls.map((item) => item.name),
+              },
+            };
+          }
+          reviewCall = {
+            ...prepared,
+            arguments: JSON.stringify({ remedy_offer_ids: [offerId] }),
+          };
+        }
         const stamped = stampAskUserOffers(
-          call,
+          reviewCall,
           binding.request.askUserOfferClaims,
           claimedOfferIds,
         );
         prepared = stamped.call;
         offerIds = stamped.offerIds;
+        if (
+          binding.proxyOnlyShell &&
+          offerIds[0] !== binding.requiredHitlOfferId
+        ) {
+          const message =
+            "The staged OpenAPPA review offer is unavailable; no question was issued.";
+          return {
+            decision: "refuse",
+            refusal: {
+              refusalMessage: message,
+              contentMessage: message,
+              reason: "openappa_hitl_review_missing",
+              blockedToolName: call.name,
+              blockedToolId: call.id,
+              toolInput: toolInputOf(call.arguments),
+              allToolCallNames: context.toolCalls.map((item) => item.name),
+            },
+          };
+        }
         const canonical = await canonicalizeHitlAskUserCall({
           binding,
           call: prepared,
@@ -555,6 +1088,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issuedQuestionName = nativeQuestionName(binding, prepared.name);
+      if (
+        binding.proxyOnlyShell &&
+        offerIds.length > 0 &&
+        issuedNativeQuestions.some((question) => question.offerIds.length > 0)
+      ) {
+        // Some providers ignore parallel_tool_calls=false. Keep the other
+        // staged offer pending rather than asking two questions at once.
+        changed = true;
+        continue;
+      }
       if (issuedQuestionName) {
         const issuedId = issueNativeQuestionId({
           session: binding.session,
@@ -771,6 +1314,89 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const decision = decisionById.get(call.id);
       if (!decision) continue;
       if (decision.kind === "control") {
+        if (binding.proxyOnlyShell) {
+          const args = toolInputOf(call.arguments);
+          const receipt = readRemedyExecution({
+            callId: call.id,
+            toolName: call.name,
+            namespace: call.namespace,
+            arguments: args,
+          });
+          const issued =
+            receipt &&
+            binding.session.caller_id &&
+            issueShellExecutionTicket({
+              session: {
+                organizationId: binding.session.organization_id,
+                callerId: binding.session.caller_id,
+                sessionId: binding.session.session_id,
+                parentId: binding.session.parent_id,
+                agentId: context.profileId,
+              },
+              callId: call.id,
+              arguments: args,
+              secret: config.openappa.offerSigningSecret,
+            });
+          const command =
+            issued &&
+            config.openappa.shellExecutionEndpoint &&
+            shellExecutionCommand({
+              token: issued.token,
+              endpoint: config.openappa.shellExecutionEndpoint,
+            });
+          const shell = declaredShellTool(binding);
+          if (!issued || !command || !shell) {
+            const message =
+              "OpenAPPA refused an unverified remedy request. Only a signed offer from this session can be executed; no tool ran.";
+            return {
+              decision: "refuse",
+              refusal: {
+                refusalMessage: message,
+                contentMessage: message,
+                reason: "openappa_invalid_proxy_only_offer",
+                blockedToolName: call.name,
+                blockedToolId: call.id,
+                toolInput: toolInputOf(call.arguments),
+                allToolCallNames: context.toolCalls.map((item) => item.name),
+              },
+            };
+          }
+          await cacheManager.set(
+            shellExecutionCacheKey(issued.token),
+            { nonce: issued.ticket.nonce },
+            SHELL_EXECUTION_TTL_MS,
+          );
+          await cacheManager.set(
+            shellExecutionCallCacheKey({
+              organizationId: issued.ticket.organizationId,
+              sessionId: issued.ticket.sessionId,
+              callId: issued.ticket.callId,
+            }),
+            { token: issued.token },
+            SHELL_EXECUTION_HISTORY_TTL_MS,
+          );
+          blocked.push({
+            id: call.id,
+            name: call.name,
+            reason: "OpenAPPA routed the control call to a native shell",
+          });
+          released.push({
+            id: call.id,
+            name: shell.name,
+            namespace: shell.namespace,
+            arguments: JSON.stringify(
+              nativeShellArguments(
+                binding.adapter?.id,
+                command,
+                "Execute the signed OpenAPPA remedy request (proxy-generated)",
+                binding.adapter?.id === "codex"
+                  ? { yieldTimeMs: 30_000 }
+                  : undefined,
+              ),
+            ),
+          });
+          continue;
+        }
         released.push(call);
         continue;
       }
@@ -815,7 +1441,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // call as given. The identity the runtime ruled on — the dispatch's
       // target — is what the notice and the refusal describe.
       const identity = this.policyIdentity(binding, call);
-      if (!notice) {
+      if (!notice || binding.proxyOnlyShell) {
+        // EXPERIMENTAL shell remedy: an OpenCode client with a native shell
+        // but no gateway receives the bound ruling as a proxy-generated bash
+        // script under the denied call's own ID instead of a refusal.
+        const shellRemedy = await this.asShellRemedyNotice({
+          binding,
+          call,
+          identity,
+          feedback: decision.feedback,
+          offers: decision.offers ?? [],
+          session,
+        });
+        if (shellRemedy) {
+          blocked.push({
+            id: call.id,
+            name: call.name,
+            reason: decision.feedback,
+          });
+          released.push(shellRemedy);
+          continue;
+        }
         // Refuses the call and cancels admitted calls when the client declares no notice tool.
         await cancelCalls(
           session,
@@ -1067,13 +1713,88 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const args = parseAskUserArguments(call.arguments);
     if (!args) return call;
     if (args.allowMultiple && native.supportsMultiple === false) return call;
+    const declared = declaredLocalTool(binding, native.toolName);
     return {
       id: call.id,
       name: native.toolName,
-      // An explicit empty namespace tells Responses rewrites not to inherit
-      // the gateway namespace from the ask_user call this local tool replaces.
-      namespace: "",
+      // An explicit namespace, including "", is this rewrite's own. Empty
+      // keeps a local question from inheriting a gateway namespace. Codex
+      // declares request_user_input in `functions`, and that namespace must
+      // survive or the client cannot route the question.
+      namespace: declared?.namespace ?? "",
       arguments: JSON.stringify(native.fromAskUser(args)),
+    };
+  }
+
+  /**
+   * EXPERIMENTAL (ARCHESTRA_OPENAPPA_OPENCODE_SHELL_REMEDY, dev only, not
+   * production-ready): rewrites a denied call into the coding client's
+   * native shell call running a proxy-generated script that prints the bound
+   * ruling, keeping the denied call's ID. The script's payload is signed
+   * against the session, call ID, and ruling bytes, and a single-use claim is
+   * cached, so a later request can verify and restore the ruling instead of
+   * trusting client shell output. Returns undefined — the caller then refuses
+   * the turn as before — unless the flag, the adapter, a declared native
+   * shell tool, and the signing secret all hold. Execution uses a separate,
+   * single-use signed request and the existing runtime approval gates.
+   */
+  private async asShellRemedyNotice(params: {
+    binding: AppaPluginBinding;
+    call: ToolCall;
+    identity: ReturnType<AppaPluginArchestra["policyIdentity"]>;
+    feedback: string;
+    offers: string[];
+    session: OpenAppaSession;
+  }): Promise<ToolCall | undefined> {
+    const { binding, call, identity, session } = params;
+    const adapter = binding.adapter;
+    const secret = config.openappa.offerSigningSecret;
+    if (
+      !config.openappa.opencodeShellRemedy ||
+      !shellRemedyAdapter(adapter) ||
+      binding.chat ||
+      secret.length === 0
+    ) {
+      return undefined;
+    }
+    const shell = declaredShellTool(binding);
+    if (!shell) return undefined;
+    const script = buildShellRemedyCommand({
+      session,
+      callId: call.id,
+      notice: buildNoticeArguments({
+        id: call.id,
+        tool: identity.name,
+        arguments: identity.arguments,
+        result: params.feedback,
+        custom: identity.custom,
+        namespace: identity.namespace,
+        offers: signedOffersForDenial(session, {
+          offerIds: params.offers,
+          tool: identity.name,
+          spelling: identity.name,
+          ...(identity.dispatch ? { dispatch: identity.dispatch } : {}),
+        }),
+      }),
+      secret,
+    });
+    if (!script) return undefined;
+    await cacheManager.set(
+      shellRemedyCacheKey({ session, id: call.id }),
+      { nonce: script.nonce },
+      TimeInMs.Minute * 10,
+    );
+    return {
+      id: call.id,
+      name: shell.name,
+      namespace: shell.namespace,
+      arguments: JSON.stringify(
+        nativeShellArguments(
+          adapter.id,
+          script.command,
+          "Print the OpenAPPA ruling for the blocked call (proxy-generated)",
+        ),
+      ),
     };
   }
 
@@ -1165,6 +1886,7 @@ async function approveChildReturnCarriers(params: {
   const completionResults = params.results.filter(
     (result) =>
       params.binding.request.restoredNoticeCallIds?.has(result.id) !== true &&
+      !params.binding.restoredShellRemedyCallIds.has(result.id) &&
       adapter?.isChildCompletionResult?.(result) === true,
   );
   if (completions.length === 0 && completionResults.length === 0) {
@@ -2210,6 +2932,23 @@ function appendNativeDelegationGuidance(
     guidance: nativeDelegationGuidance(waitDeclared),
   });
 }
+const SHELL_REMEDY_RESULT_GUIDANCE =
+  "The bash result immediately above is an OpenAPPA ruling delivered through the client's native shell because this session has no MCP gateway; the blocked call did not run. Do not retry the blocked call and do not call get_remedy_plans or execute_remedy_plan — no gateway is connected to run them. Explain the denial and its ruling to the user, then stop that action.";
+
+const CODEX_SHELL_REMEDY_RESULT_GUIDANCE =
+  "The exec_command result immediately above is an OpenAPPA ruling delivered through the client's native shell because this session has no MCP gateway; the blocked call did not run. Do not retry the blocked call and do not call get_remedy_plans or execute_remedy_plan — no gateway is connected to run them. Explain the denial and its ruling to the user, then stop that action.";
+
+const PROXY_ONLY_SHELL_REMEDY_RESULT_GUIDANCE =
+  "The bash result above carries a verified OpenAPPA ruling for a blocked call; the blocked call did not run. The ruling already includes remedy offers, so do not call get_remedy_plans. If it offers a plan, call the declared archestra__execute_remedy_plan with the exact offer_id and plan; the proxy converts that call into your native bash tool and enforces the runtime's authorization and review gates. Never invent an offer or treat a pending review as approval.";
+
+const CODEX_PROXY_ONLY_SHELL_REMEDY_RESULT_GUIDANCE =
+  "The exec_command result above carries a verified OpenAPPA ruling for a blocked call; the blocked call did not run. The ruling already includes remedy offers, so do not call get_remedy_plans. If it offers a plan, call the declared archestra__execute_remedy_plan with the exact offer_id and plan; the proxy converts that call into the declared functions.exec_command and enforces the runtime's authorization and review gates. Never invent an offer or treat a pending review as approval.";
+
+const CODEX_PROXY_ONLY_REMEDY_WORKFLOW_GUIDANCE =
+  "When a signed OpenAPPA ruling offers a remedy, call the declared archestra__execute_remedy_plan with its exact offer_id and plan. The proxy executes it using a single-use request through the declared functions.exec_command. If it returns review_required, use the declared archestra__ask_user only if that tool is available; otherwise tell the user review is unavailable in this client and stop. Do not retry a blocked tool until the remedy reports successful authorization or sanitization. A declined or unavailable review leaves the call blocked.";
+
+const PROXY_ONLY_REMEDY_WORKFLOW_GUIDANCE =
+  "When a signed OpenAPPA ruling offers a remedy, call the declared archestra__execute_remedy_plan with its exact offer_id and plan. The proxy executes it using a single-use request through the client's native bash tool. If it returns review_required, use the declared archestra__ask_user only if that tool is available; otherwise tell the user review is unavailable in this client and stop. Do not retry a blocked tool until the remedy reports successful authorization or sanitization. A declined or unavailable review leaves the call blocked.";
 
 const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE =
   "When get_remedy_plans offers a remedy for a blocked call, do not ask the user whether to submit it. Immediately call execute_remedy_plan with the exact offer_id and plan from that ruling. If execute_remedy_plan returns outcome review_required, do not reply that review is pending. Immediately call the declared ask_user tool with that offer ID in remedy_offer_ids, header Approval, and options Approve and Deny. The platform supplies the exact review text. Wait for successful authorization before retrying the blocked tool.";
@@ -2548,6 +3287,175 @@ async function pendingNativeHitlOfferIds(params: {
     .map((entry) => entry.offerId);
 }
 
+/**
+ * EXPERIMENTAL shell remedy: claims the single-use cached markers of the
+ * shell-carried rulings restored in this request. Only a fresh return (first
+ * request carrying the result) consumes its marker and earns the guidance;
+ * replayed history restores silently.
+ */
+async function claimShellRemedyResults(params: {
+  binding: AppaPluginBinding;
+  results: ReadonlyArray<{ id: string }>;
+}): Promise<number> {
+  const { binding } = params;
+  if (binding.restoredShellRemedyCallIds.size === 0) return 0;
+  const keys = params.results
+    .filter((result) => binding.restoredShellRemedyCallIds.has(result.id))
+    .map((result) =>
+      shellRemedyCacheKey({ session: binding.session, id: result.id }),
+    );
+  if (keys.length === 0) return 0;
+  const claimed = await cacheManager.getAndDeleteMany<{ nonce?: unknown }>(
+    keys,
+  );
+  if (claimed.length > 0) {
+    logger.debug(
+      { count: claimed.length },
+      "Recorded shell remedy ruling return",
+    );
+  }
+  return claimed.length;
+}
+
+function shellRemedyCacheKey(params: {
+  session: OpenAppaSession;
+  id: string;
+}): AllowedCacheKey {
+  const scope = nativeQuestionTag({
+    session: params.session,
+    name: "shell-remedy",
+    nonce: params.id,
+  }).toString("base64url");
+  return `${CacheKey.OpenAppaShellRemedy}-${scope}`;
+}
+
+function shellRemedyAdapter(
+  adapter: AppaPluginBinding["adapter"],
+): adapter is NonNullable<AppaPluginBinding["adapter"]> {
+  return (
+    adapter?.id === "opencode" ||
+    adapter?.id === "claude-code" ||
+    adapter?.id === "codex"
+  );
+}
+
+function matchesNativeShell(
+  binding: AppaPluginBinding,
+  name: string,
+  namespace?: string,
+): boolean {
+  const adapter = binding.adapter;
+  if (!adapter) return false;
+  if (binding.identity.attestationOf(name, namespace)) return false;
+  if (adapter.classifyToolName(name, namespace) !== "local") return false;
+  const normalized = adapter.normalizeLocalToolName(name).toLowerCase();
+  return adapter.id === "codex"
+    ? normalized === "exec_command"
+    : normalized === SHELL_REMEDY_TOOL_NAME;
+}
+
+function shellArgumentName(
+  adapter: NonNullable<AppaPluginBinding["adapter"]>,
+): "command" | "cmd" {
+  return adapter.id === "codex" ? "cmd" : "command";
+}
+
+function nativeShellArguments(
+  adapterId: string | undefined,
+  script: string,
+  description: string,
+  options?: { yieldTimeMs?: number },
+): Record<string, string | number> {
+  if (adapterId !== "codex") return { command: script, description };
+  return {
+    cmd: script,
+    // Codex stops a still-running exec_command at its 10s default and reports
+    // "Process running". The remedy curl must finish in this same client turn.
+    ...(options?.yieldTimeMs ? { yield_time_ms: options.yieldTimeMs } : {}),
+  };
+}
+
+function shellRemedyResultGuidance(
+  adapterId: string | undefined,
+  proxyOnly: boolean,
+): string {
+  if (adapterId === "codex") {
+    return proxyOnly
+      ? CODEX_PROXY_ONLY_SHELL_REMEDY_RESULT_GUIDANCE
+      : CODEX_SHELL_REMEDY_RESULT_GUIDANCE;
+  }
+  return proxyOnly
+    ? PROXY_ONLY_SHELL_REMEDY_RESULT_GUIDANCE
+    : SHELL_REMEDY_RESULT_GUIDANCE;
+}
+
+function declaredLocalTool(
+  binding: AppaPluginBinding,
+  toolName: string,
+): { name: string; namespace?: string } | undefined {
+  const adapter = binding.adapter;
+  if (!adapter) return undefined;
+  const tool = (binding.request.declaredTools ?? []).find((item) => {
+    if (binding.identity.attestationOf(item.name, item.namespace)) return false;
+    if (adapter.classifyToolName(item.name, item.namespace) !== "local")
+      return false;
+    return adapter.normalizeLocalToolName(item.name) === toolName;
+  });
+  if (!tool) return undefined;
+  return {
+    name: adapter.normalizeLocalToolName(tool.name),
+    ...(tool.namespace ? { namespace: tool.namespace } : {}),
+  };
+}
+
+function nativeQuestionNamespaceMatches(
+  binding: AppaPluginBinding,
+  namespace: string | undefined,
+): boolean {
+  const declared = binding.adapter?.nativeQuestion
+    ? declaredLocalTool(binding, binding.adapter.nativeQuestion.toolName)
+    : undefined;
+  if (!declared?.namespace) return !namespace;
+  return !namespace || namespace === declared.namespace;
+}
+
+function shellToolContainer(
+  body: Record<string, unknown> | undefined,
+): unknown[] | undefined {
+  if (!body) return undefined;
+  if (Array.isArray(body.tools)) return body.tools;
+  const input = body.input;
+  if (!Array.isArray(input)) return undefined;
+  const additional = input.find(
+    (item) => isRecord(item) && item.type === "additional_tools",
+  );
+  return isRecord(additional) && Array.isArray(additional.tools)
+    ? additional.tools
+    : undefined;
+}
+
+/**
+ * The declared spelling of the client's native shell tool, if any. An
+ * attested or gateway-classified name is never the client's own shell.
+ */
+function declaredShellTool(
+  binding: AppaPluginBinding,
+): { name: string; namespace: string } | undefined {
+  const adapter = binding.adapter;
+  if (!adapter) return undefined;
+  const tool = (binding.request.declaredTools ?? []).find((item) =>
+    matchesNativeShell(binding, item.name, item.namespace),
+  );
+  if (!tool) return undefined;
+  const dottedFunctions = tool.name.startsWith("functions.");
+  return {
+    name: dottedFunctions
+      ? adapter.normalizeLocalToolName(tool.name)
+      : tool.name,
+    namespace: tool.namespace ?? (dottedFunctions ? "functions" : ""),
+  };
+}
+
 function hasRemedyOfferResult(params: {
   binding: AppaPluginBinding;
   results: LlmProxyToolResultsContext["toolResults"];
@@ -2556,6 +3464,14 @@ function hasRemedyOfferResult(params: {
   let latestBlockedResult = -1;
   for (const [index, result] of params.results.entries()) {
     if (result.isError) continue;
+    // A shell-carried ruling has no execute path to continue with.
+    // A declined issued notice keeps its native stdout and must not open a
+    // fresh remedy continuation.
+    if (
+      params.binding.restoredShellRemedyCallIds.has(result.id) ||
+      params.binding.declinedShellNoticeCallIds.has(result.id)
+    )
+      continue;
     const content =
       typeof result.content === "string"
         ? result.content
@@ -2657,6 +3573,7 @@ function hitlQuestionGuidance(offerIds: readonly string[]): string {
 
 function hitlDecisionGuidance(
   rulings: readonly RecordedNativeHitlRuling[],
+  proxyOnlyShell = false,
 ): string {
   const approved = rulings
     .filter((entry) => entry.ruling === "approve")
@@ -2670,10 +3587,21 @@ function hitlDecisionGuidance(
       "Do not ask another question and do not describe this step in prose.",
     ].join(" ");
   }
+  if (rulings.some((entry) => entry.ruling === "none")) {
+    return [
+      "The native question returned no verified Approve or Deny answer. Selecting Dismiss leaves this offer unanswered; failure or cancellation also grants no authority.",
+      "Do not claim that the human denied or approved it. The dependent call remains blocked.",
+      "Continue other independent pending reviews and authorized work. Do not retry this offer or its dependent action without a new user request and review.",
+    ].join(" ");
+  }
   return [
     "The verified human answer did not approve the pending OpenAPPA review.",
-    "Do not call execute_remedy_plan and do not retry the blocked tool.",
-    "State briefly that the action remains blocked, then stop that action.",
+    proxyOnlyShell
+      ? "Only the denied offer and its exact blocked call remain blocked. Other calls authorized by independent offers may proceed, but must still pass OpenAPPA policy."
+      : "Do not call execute_remedy_plan and do not retry the blocked tool.",
+    proxyOnlyShell
+      ? "Do not execute the denied offer again. Finish only independent authorized work."
+      : "State briefly that the action remains blocked, then stop that action.",
   ].join(" ");
 }
 
@@ -2723,7 +3651,7 @@ function appendQuestionContinuation(params: {
     }
     return;
   }
-  if (params.interactionType === "openai:chatCompletions") {
+  if (appaWireFamily(params.interactionType) === "openai:chatCompletions") {
     const messages = params.request.messages;
     if (!Array.isArray(messages)) return;
     if (
@@ -2774,9 +3702,73 @@ function requireCodexToolCall(params: {
     return;
   }
   // Namespace members cannot be selected individually through Responses API
-  // tool_choice, so require one call and let the adjacent developer instruction
-  // select the exact OpenAPPA workflow tool.
-  params.context.request.tool_choice = "required";
+  // tool_choice. A flat synthetic control can, and that choice must survive.
+  const choice = params.context.request.tool_choice;
+  if (
+    !(
+      isRecord(choice) &&
+      choice.type === "function" &&
+      typeof choice.name === "string"
+    )
+  ) {
+    params.context.request.tool_choice = "required";
+  }
+  params.context.request.parallel_tool_calls = false;
+}
+
+/** A required native review/continuation must not become a prose-only turn. */
+function requireProxyOnlyWorkflowTool(params: {
+  binding: AppaPluginBinding;
+  context: LlmProxyBeforeModelContext;
+  tool: "askUser" | "control";
+}): void {
+  if (!params.binding.proxyOnlyShell || !isRecord(params.context.request)) {
+    return;
+  }
+  const name = params.binding.request.tools?.[params.tool]?.name;
+  if (
+    !name ||
+    !Array.isArray(params.context.request.tools) ||
+    !params.context.request.tools.some(
+      (tool) =>
+        isRecord(tool) &&
+        (isRecord(tool.function) ? tool.function.name : tool.name) === name,
+    )
+  ) {
+    return;
+  }
+  const family = appaWireFamily(params.context.interactionType);
+  if (family === "anthropic:messages") {
+    // Anthropic disallows a forced named tool while extended thinking is on.
+    // Restrict the available tools to the verified continuation in that mode.
+    const thinking = params.context.request.thinking;
+    if (isRecord(thinking) && thinking.type !== "disabled") {
+      params.context.request.tools = params.context.request.tools.filter(
+        (tool) => isRecord(tool) && tool.name === name,
+      );
+      params.context.request.tool_choice = {
+        type: "auto",
+        disable_parallel_tool_use: true,
+      };
+    } else {
+      params.context.request.tool_choice = {
+        type: "tool",
+        name,
+        disable_parallel_tool_use: true,
+      };
+    }
+    return;
+  }
+  if (family === "openai:responses") {
+    params.context.request.tool_choice = { type: "function", name };
+    params.context.request.parallel_tool_calls = false;
+    return;
+  }
+  if (family !== "openai:chatCompletions") return;
+  params.context.request.tool_choice = {
+    type: "function",
+    function: { name },
+  };
   params.context.request.parallel_tool_calls = false;
 }
 

@@ -26,7 +26,7 @@ export type AppaTrustedContext = {
   toolIdentity: Pick<
     GatewayToolIdentity,
     "canonicalize" | "attestationOf" | "looseRunToolDispatch"
-  >;
+  > & { gatewayConnected?: boolean };
   /** What the proxy prepared for this request before any adapter saw it. */
   request: AppaPreparedRequest;
   /** Server-recognized client maintenance, not a child completion. */

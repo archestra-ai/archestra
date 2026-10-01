@@ -51,6 +51,14 @@ export const CacheKey = {
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** EXPERIMENTAL: shell-remedy rulings issued through a client's native shell, not yet returned (consume-once) */
+  OpenAppaShellRemedy: "openappa-shell-remedy",
+  /** EXPERIMENTAL: unspent one-use proxy-only execution tickets */
+  OpenAppaShellExecution: "openappa-shell-execution",
+  /** EXPERIMENTAL: identifies issued control calls across client-history turns */
+  OpenAppaShellExecutionCall: "openappa-shell-execution-call",
+  /** EXPERIMENTAL: bounds signed remedy requests before ticket verification */
+  OpenAppaShellExecutionRateLimit: "openappa-shell-execution-rate-limit",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */

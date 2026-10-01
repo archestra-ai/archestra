@@ -13,6 +13,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import logger from "@/logging";
+import { renderClaudePermissionSettingsScript } from "./claude-permission-settings";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 
 /**
@@ -102,6 +103,13 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
     manualCommand: "claude plugin marketplace remove",
   }),
   renderProxyDisconnect: claudeProxyDisconnect,
+  renderProxyDisconnectVerify: (
+    ctx,
+  ) => `      command -v node >/dev/null 2>&1 || { printf '%s\\n' 'Node.js is required to verify Claude proxy removal'; return 1; }
+      node --input-type=commonjs <<'ARCHESTRA_CLAUDE_MODE_VERIFY_JS'
+${renderClaudePermissionSettingsScript("verify-disconnect", ctx.proxy?.url)}
+ARCHESTRA_CLAUDE_MODE_VERIFY_JS
+      return $?`,
   windows: {
     mcpDisconnect: `      if ($archRealExe) {
         try { & $archRealExe.Source mcp remove --scope user $McpServerName 2>$null | Out-Null } catch { }
@@ -134,6 +142,22 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
       manualCommand: "claude plugin marketplace remove",
     }),
     renderProxyDisconnect: claudeWindowsProxyDisconnect,
+    renderProxyDisconnectVerify: (
+      ctx,
+    ) => `    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+      $Script:ArchDisconnectReason = 'Node.js is required to verify Claude proxy removal'
+      return $false
+    }
+    $archVerifyModeScript = ${powerShellLiteral(renderClaudePermissionSettingsScript("verify-disconnect", ctx.proxy?.url))}
+    try { $archVerifyModeScript | & node --input-type=commonjs 2>$null } catch {
+      $Script:ArchDisconnectReason = 'Could not verify Claude proxy and permission-mode removal'
+      return $false
+    }
+    if ($LASTEXITCODE -ne 0) {
+      $Script:ArchDisconnectReason = 'Claude proxy or owned permission-mode settings remain configured'
+      return $false
+    }
+    return $true`,
     proxyDisconnectNote: (ctx) =>
       ctx.proxy?.provider === "bedrock"
         ? "If you set AWS_BEARER_TOKEN_BEDROCK in your environment, remove it there too."
@@ -158,7 +182,14 @@ function claudeWindowsProxyDisconnect(ctx: StartupGuardContext): string {
     .join(", ");
 
   return `function Disconnect-ArchProxy {
-  $path = Join-Path $env:USERPROFILE '.claude/settings.json'
+  $configDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
+  $path = Join-Path $configDir 'settings.json'
+  if (Test-Path (Join-Path $configDir '.archestra-permission-mode.json')) {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js is required to restore the owned Claude permission settings' }
+    $archClaudeModeScript = ${powerShellLiteral(renderClaudePermissionSettingsScript("disconnect", ctx.proxy?.url))}
+    $archClaudeModeScript | & node --input-type=commonjs | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not restore the owned Claude permission settings' }
+  }
   if (-not (Test-Path $path)) { return }
   $raw = Get-Content -Raw -Path $path
   if (-not ($raw -and $raw.Trim())) { return }
@@ -210,13 +241,20 @@ function claudeProxyDisconnect(ctx: StartupGuardContext): string {
   const strippedKeysList = envKeys.map((key) => `"${key}"`).join(", ");
 
   return `disconnect_proxy() {
+  if [ -e "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.archestra-permission-mode.json" ]; then
+    command -v node >/dev/null 2>&1 || return 1
+    node --input-type=commonjs <<'ARCHESTRA_CLAUDE_MODE_JS'
+${renderClaudePermissionSettingsScript("disconnect", ctx.proxy?.url)}
+ARCHESTRA_CLAUDE_MODE_JS
+    [ "$?" -eq 0 ] || return 1
+  fi
   command -v python3 >/dev/null 2>&1 || return 0
   python3 - <<'ARCHESTRA_GUARD_PY'
 import json, os, pathlib
-path = pathlib.Path(os.path.expanduser("~/.claude/settings.json"))
+path = pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR") or pathlib.Path.home() / ".claude") / "settings.json"
 if not path.exists():
     raise SystemExit(0)
-raw = path.read_text().strip()
+raw = path.read_text(encoding='utf-8-sig').strip()
 if not raw:
     raise SystemExit(0)
 settings = json.loads(raw)
@@ -1270,4 +1308,9 @@ function opencodeManagedHeaders(
     headers[VIRTUAL_KEY_HEADER] = ctx.proxy.passthroughVirtualKey;
   }
   return headers;
+}
+
+/** Keep embedded scripts on one line so they cannot nest the guard's here-string. */
+function powerShellLiteral(value: string): string {
+  return `(@(${value.split("\n").map(psq).join(", ")}) -join "\`n")`;
 }

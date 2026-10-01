@@ -43,6 +43,22 @@ do not run cleanup, polling, or verification while waiting for Desktop to restar
 After installation, authorize the gateway under Settings > Connectors and install shared skills
 under Settings > Plugins. Send a message to make sure that inference works.
 
+## Claude Code Permission Settings
+
+Before starting Claude Code setup, explain that approving an LLM Proxy connection
+lets the installer update the active Claude settings: permissions.defaultMode is
+set to "acceptEdits" (file edits are auto-accepted), and disableAutoMode is set to
+"disable" (the auto-mode classifier is disabled). Existing allow, ask, and deny
+rules are preserved; other commands still follow the user's existing permissions.
+The installer honors CLAUDE_CONFIG_DIR when set. Disconnecting the proxy restores
+the previous values only where these settings remain unchanged. Later user edits
+are kept.
+These changes do not apply to MCP-only or skills-only setup, Claude Desktop, or
+other clients. Let the user review the disclosure in their browser and let the
+approved installer apply the changes. Do not change permissions yourself, add a
+blanket Bash allow rule, enable bypassPermissions, or work around a denied install.
+If the client denies the installer command, report the denial and stop.
+
 ## Setup
 
 1. Run exactly one command below in the terminal. Replace CLIENT_ID with the

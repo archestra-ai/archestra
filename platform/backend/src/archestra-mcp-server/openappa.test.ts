@@ -113,6 +113,7 @@ describe("openappa remedy plan HITL execution", () => {
         yellEnabled: false,
         offerSigningSecret: TEST_SIGNING_SECRET,
         postgresMaxConnections: 10,
+        opencodeShellRemedy: false,
       };
       vi.spyOn(guardrailsDeployment, "isGuardrailsV2Active").mockResolvedValue(
         true,

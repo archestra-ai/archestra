@@ -369,17 +369,30 @@ describe("Codex-specific disconnect", () => {
 
 /**
  * Pull one shell function out of the rendered guard so it can be run on its
- * own. The generator emits every function at column 0 and closes it with a
- * bare `}`, so the slice is unambiguous.
+ * own. Ignore heredoc bodies, whose embedded programs can also close a block
+ * with a bare `}` at column zero.
  */
 function extractShellFunction(script: string, name: string): string {
   const lines = script.split("\n");
   // The opening line may carry a trailing `# $1 kind` comment.
   const start = lines.findIndex((line) => line.startsWith(`${name}() {`));
   if (start === -1) throw new Error(`no ${name}() in the rendered guard`);
-  const end = lines.indexOf("}", start);
-  if (end === -1) throw new Error(`${name}() is never closed`);
-  return lines.slice(start, end + 1).join("\n");
+  let heredoc: string | undefined;
+  for (let end = start + 1; end < lines.length; end++) {
+    if (heredoc) {
+      if (lines[end].trim() === heredoc) heredoc = undefined;
+      continue;
+    }
+    const marker = /(?<!<)<<(?!<)-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?/.exec(
+      lines[end],
+    );
+    if (marker) {
+      heredoc = marker[1];
+      continue;
+    }
+    if (lines[end] === "}") return lines.slice(start, end + 1).join("\n");
+  }
+  throw new Error(`${name}() is never closed`);
 }
 
 /**
@@ -858,6 +871,38 @@ describe("Copilot-specific disconnect", () => {
 });
 
 describe("Claude Code disconnect reports what it could not remove", () => {
+  test.each([
+    {
+      name: "owned mode state remains",
+      state: true,
+      proxy: false,
+      expected: 7,
+    },
+    { name: "proxy URL remains", state: false, proxy: true, expected: 7 },
+    {
+      name: "owned settings are gone",
+      state: false,
+      proxy: false,
+      expected: 0,
+    },
+  ])("proxy verification: $name", async ({ state, proxy, expected }) => {
+    const { code } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify proxy || exit 7\n",
+      files: {
+        "custom/settings.json": JSON.stringify({
+          env: proxy
+            ? { ANTHROPIC_BASE_URL: CTX.proxy?.url }
+            : { KEEP: "unrelated" },
+        }),
+        ...(state ? { "custom/.archestra-permission-mode.json": "{}" } : {}),
+      },
+      env: { CLAUDE_CONFIG_DIR: "{HOME}/custom" },
+    });
+    expect(code).toBe(expected);
+  });
+
   const GATEWAY_JSON = JSON.stringify({
     mcpServers: {
       prod_gateway: { type: "http", url: "https://archestra.example.com" },

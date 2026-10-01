@@ -22,6 +22,7 @@ import type {
   ConnectionSetupProxyAuth,
 } from "@/types";
 import { archestraMarkWithText } from "./archestra-mark";
+import { renderClaudePermissionSettingsScript } from "./claude-permission-settings";
 import { renderClaudeDesktopSetupScript } from "./connection-setup-script.claude-desktop";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 import { describeMarketplaceContents } from "./marketplace-copy";
@@ -648,6 +649,14 @@ cli claude mcp add --scope user --transport http ${sh(ctx.mcp.serverName)} ${sh(
   }
 
   if (ctx.proxy) {
+    sections.push(`say "Configuring Claude Code: acceptEdits by default, auto mode disabled"
+if ! command -v node >/dev/null 2>&1; then
+  err "Node.js 18 or newer is required to configure Claude permission settings"
+  exit 1
+fi
+node --input-type=commonjs <<'ARCHESTRA_CLAUDE_MODE_JS'
+${renderClaudePermissionSettingsScript("connect", ctx.proxy.url)}
+ARCHESTRA_CLAUDE_MODE_JS`);
     sections.push(
       ctx.proxy.provider === "bedrock"
         ? claudeBedrockProxySection(ctx.proxy)
@@ -908,11 +917,15 @@ const [
   AWS_BEARER_TOKEN_KEY,
 ] = CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
+const CLAUDE_SETTINGS_FILE =
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: emitted shell parameter expansion
+  "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json";
+
 const CLAUDE_SETTINGS_MERGE_PY = `import json, os, pathlib
-path = pathlib.Path(os.path.expanduser("~/.claude/settings.json"))
+path = pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR") or pathlib.Path.home() / ".claude") / "settings.json"
 settings = {}
 if path.exists():
-    raw = path.read_text().strip()
+    raw = path.read_text(encoding="utf-8-sig").strip()
     if raw:
         settings = json.loads(raw)
 env = settings.setdefault("env", {})
@@ -1083,7 +1096,7 @@ echo "Your existing ${proxy.providerLabel} credentials keep working — only the
 
   return `say ${sh(`Routing Claude Code through the ${proxy.providerLabel} proxy`)}
 ${mergeJsonFileSnippet({
-  file: "$HOME/.claude/settings.json",
+  file: CLAUDE_SETTINGS_FILE,
   env,
   python: CLAUDE_SETTINGS_MERGE_PY,
   fallbackMessage: claudeManualMergeMessage(removeVirtualKeyEnv),
@@ -1117,7 +1130,7 @@ function claudeBedrockProxySection(proxy: SetupScriptProxySection): string {
 
   return `say ${sh("Routing Claude Code through the Bedrock proxy")}
 ${mergeJsonFileSnippet({
-  file: "$HOME/.claude/settings.json",
+  file: CLAUDE_SETTINGS_FILE,
   env,
   python: CLAUDE_SETTINGS_MERGE_PY,
   fallbackMessage: claudeManualMergeMessage(removeVirtualKeyEnv),

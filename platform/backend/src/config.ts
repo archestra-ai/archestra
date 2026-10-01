@@ -39,6 +39,7 @@ import {
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import { SHELL_EXECUTION_PATH } from "@/openappa/shell-execution";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -2034,6 +2035,11 @@ export function parseOpenAppaConfig(
   offerSigningSecret?: string,
   postgresMaxConnections?: string,
   authSecret?: string,
+  /**
+   * EXPERIMENTAL, never production: the caller passes undefined in production
+   * so the OpenCode shell remedy channel cannot be enabled there.
+   */
+  opencodeShellRemedyExperiment?: string,
 ) {
   const dedicated = offerSigningSecret ?? "";
   if (
@@ -2060,6 +2066,7 @@ export function parseOpenAppaConfig(
     postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
       postgresMaxConnections,
     ),
+    opencodeShellRemedy: isEnabled && opencodeShellRemedyExperiment === "true",
   };
 }
 
@@ -2273,13 +2280,29 @@ const authSessionSecret =
   process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
   process.env.ARCHESTRA_AUTH_SECRET;
 
-const openappa = parseOpenAppaConfig(
+const openappaSettings = parseOpenAppaConfig(
   process.env.ARCHESTRA_BETA,
   process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
   process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
   authSessionSecret,
+  // Strictly experimental and developer-only: hard-disabled in production.
+  isProduction
+    ? undefined
+    : process.env.ARCHESTRA_OPENAPPA_OPENCODE_SHELL_REMEDY,
 );
+const openappa: ReturnType<typeof parseOpenAppaConfig> & {
+  shellExecutionEndpoint?: string;
+} = {
+  ...openappaSettings,
+  shellExecutionEndpoint: openappaSettings.opencodeShellRemedy
+    ? new URL(
+        SHELL_EXECUTION_PATH,
+        process.env.ARCHESTRA_OPENAPPA_SHELL_REMEDY_BASE_URL ||
+          "http://127.0.0.1:9000",
+      ).toString()
+    : undefined,
+};
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
   openappa.enabled,

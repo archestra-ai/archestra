@@ -32,6 +32,7 @@ import {
   readNotice,
   readRemedyExecution,
 } from "./notice";
+import { taskNotificationEnvelope } from "./notification-framing";
 import type { OfferJws } from "./offer-claims";
 import { appendSessionReceipt, stripSessionReceipts } from "./session-token";
 import { parseTrajectoryStamp, type TrajectoryStamp } from "./trajectory-stamp";
@@ -135,6 +136,181 @@ export function restoreAppaNotices(params: {
       result: notice.result,
       custom,
     });
+  }
+  return restoredCallIds;
+}
+
+/**
+ * EXPERIMENTAL (dev-only shell remedy channel): restores proxy-issued shell
+ * remedy calls in request history back to the original denied call and its
+ * ruling. A shell call is claimed only when `readShellRemedy` verifies the
+ * embedded tag — an unverified script stays an ordinary shell call, ruled on
+ * like any other, and its raw output never stands in for a ruling.
+ */
+export function restoreAppaShellRemedies(params: {
+  family: AppaWireFamily;
+  body: unknown;
+  /** Matches the client's declared shell tool spellings, nothing else. */
+  isShellTool: (name: string, namespace?: string) => boolean;
+  /** Verifies the embedded signature and returns the notice payload bytes. */
+  readShellRemedy: (call: {
+    callId: string;
+    arguments: unknown;
+  }) => unknown | undefined;
+  onRestoredOffers?: (offers: OfferJws[]) => void;
+  /**
+   * Codex reports a declined `exec_command` as a non-zero native stdout
+   * wrapper, not as Anthropic `is_error`. A declined notice must not become
+   * a ruling. Missing output is not a decline.
+   */
+  clientDeclined?: (call: { callId: string; output: unknown }) => boolean;
+  /**
+   * A signature-verified issued notice the client declined. The caller omits
+   * that id from runtime result processing so the native stdout is not
+   * replaced. Unverified shell output is not reported.
+   */
+  onDeclinedIssuedNotice?: (callId: string) => void;
+}): ReadonlySet<string> {
+  const restoredCallIds = new Set<string>();
+  const calls = toolCallSites({
+    family: params.family,
+    body: params.body,
+    match: (name, namespace) => params.isShellTool(name, namespace),
+  });
+  for (const call of calls) {
+    if (params.family === "openai:responses" && call.kind !== "function")
+      continue;
+    const payload = params.readShellRemedy({
+      callId: call.id,
+      arguments: call.arguments,
+    });
+    if (!payload) continue;
+    const notice = readNotice({ callId: call.id, arguments: payload });
+    if (!notice) continue;
+    if (!PROVIDER_TOOL_NAME.test(notice.tool)) continue;
+    if (
+      params.clientDeclined?.({
+        callId: call.id,
+        output: pairedShellOutput({
+          family: params.family,
+          body: params.body,
+          callId: call.id,
+        }),
+      })
+    ) {
+      params.onDeclinedIssuedNotice?.(call.id);
+      continue;
+    }
+    if (!call.restore(notice.tool, notice.original, notice.namespace)) continue;
+    if (notice.offers?.length) params.onRestoredOffers?.(notice.offers);
+    restoredCallIds.add(parseTrajectoryStamp(call.id)?.callId ?? call.id);
+    restoreResult({
+      family: params.family,
+      body: params.body,
+      callId: call.id,
+      result: notice.result,
+      custom: notice.original.kind === "custom",
+    });
+  }
+  return restoredCallIds;
+}
+
+/** Restore only endpoint-signed execution results; client-supplied shell output is never trusted. */
+export async function restoreAppaShellExecutions(params: {
+  family: AppaWireFamily;
+  body: unknown;
+  isShellTool: (name: string, namespace?: string) => boolean;
+  readExecution: (call: {
+    callId: string;
+    arguments: unknown;
+    output: unknown;
+    isError: boolean;
+  }) => Promise<
+    | {
+        toolName: string;
+        originalArguments: string;
+        result: string;
+        isError?: boolean;
+      }
+    | undefined
+  >;
+}): Promise<ReadonlySet<string>> {
+  const restoredCallIds = new Set<string>();
+  if (
+    params.family !== "openai:chatCompletions" &&
+    params.family !== "anthropic:messages" &&
+    params.family !== "openai:responses"
+  )
+    return restoredCallIds;
+  const calls = toolCallSites({
+    family: params.family,
+    body: params.body,
+    match: params.isShellTool,
+  });
+  for (const call of calls) {
+    if (params.family === "openai:responses" && call.kind !== "function")
+      continue;
+    const output =
+      params.family === "anthropic:messages"
+        ? anthropicBlocks(params.body).find(
+            (block) =>
+              block.type === "tool_result" && block.tool_use_id === call.id,
+          )?.content
+        : params.family === "openai:responses"
+          ? pairedShellOutput({
+              family: params.family,
+              body: params.body,
+              callId: call.id,
+            })
+          : chatMessages(params.body).find(
+              (message) =>
+                message.role === "tool" && message.tool_call_id === call.id,
+            )?.content;
+    if (output === undefined) continue;
+    const resultBlock =
+      params.family === "anthropic:messages"
+        ? anthropicBlocks(params.body).find(
+            (block) =>
+              block.type === "tool_result" && block.tool_use_id === call.id,
+          )
+        : undefined;
+    const execution = await params.readExecution({
+      callId: call.id,
+      arguments: call.arguments,
+      output,
+      isError: resultBlock?.is_error === true,
+    });
+    if (!execution || !PROVIDER_TOOL_NAME.test(execution.toolName)) continue;
+    let original: unknown;
+    try {
+      original = JSON.parse(execution.originalArguments);
+    } catch {
+      continue;
+    }
+    const argumentsValue = asRecord(original);
+    if (!argumentsValue) continue;
+    if (
+      !call.restore(execution.toolName, {
+        kind: "function",
+        arguments: argumentsValue,
+        rawArguments: execution.originalArguments,
+      })
+    )
+      continue;
+    restoredCallIds.add(parseTrajectoryStamp(call.id)?.callId ?? call.id);
+    restoreResult({
+      family: params.family,
+      body: params.body,
+      callId: call.id,
+      result: execution.result,
+    });
+    if (params.family === "anthropic:messages") {
+      const result = anthropicBlocks(params.body).find(
+        (block) =>
+          block.type === "tool_result" && block.tool_use_id === call.id,
+      );
+      if (result) result.is_error = execution.isError === true;
+    }
   }
   return restoredCallIds;
 }
@@ -940,6 +1116,20 @@ function isUserAuthored(family: AppaWireFamily, entry: unknown): boolean {
 /** The tool names every APPA wire's provider accepts in a request. */
 const PROVIDER_TOOL_NAME = /^[A-Za-z0-9_-]+$/;
 
+function pairedShellOutput(params: {
+  family: AppaWireFamily;
+  body: unknown;
+  callId: string;
+}): unknown {
+  if (params.family !== "openai:responses") return undefined;
+  return responsesItems(params.body).find(
+    (item) =>
+      (item.type === "function_call_output" ||
+        item.type === "custom_tool_call_output") &&
+      item.call_id === params.callId,
+  )?.output;
+}
+
 type ToolCallSite = {
   id: string;
   name: string;
@@ -1344,8 +1534,7 @@ function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
 function isChildReturnEnvelopeSite(text: string): boolean {
   const trimmed = text.trim();
   return (
-    (trimmed.startsWith("<task-notification>") &&
-      trimmed.endsWith("</task-notification>")) ||
+    taskNotificationEnvelope(text) !== undefined ||
     (trimmed.startsWith("<subagent_notification>") &&
       trimmed.endsWith("</subagent_notification>"))
   );

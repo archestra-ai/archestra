@@ -1518,24 +1518,29 @@ async function admitRelayArrivals(params: {
     return crossedOrAddressed;
   };
   // A teammate's envelope names it by its name, and its child id is
-  // `<name>@<team>`; a session starts one teammate per name. So its message
-  // counts only against what that teammate crossed. A sibling's or the
-  // parent's message reaches a teammate as an address from its parent.
+  // `<name>@<team>`. So its message counts only against what the one child
+  // that name fits crossed; a name that fits several children fits none. A
+  // sibling's or the parent's message reaches a teammate as an address from
+  // its parent.
   const fromTeammate = new Map<string, Promise<string[]>>();
   const teammateRecords = (from: string) => {
     let records = fromTeammate.get(from);
     if (!records) {
       records = Promise.all([crossings(), addresses()]).then(
-        ([returns, addressedValues]) => [
-          ...returns
-            .filter(
-              ({ childNativeId }) =>
-                childNativeId === from ||
-                childNativeId?.startsWith(`${from}@`) === true,
-            )
-            .map((record) => record.value),
-          ...addressedValues,
-        ],
+        ([returns, addressedValues]) => {
+          const named = new Set(
+            returns.flatMap(({ childNativeId: id }) =>
+              id !== undefined && namesTeammate(from, id) ? [id] : [],
+            ),
+          );
+          const [child] = named.size === 1 ? named : [];
+          return [
+            ...returns
+              .filter((record) => child && record.childNativeId === child)
+              .map((record) => record.value),
+            ...addressedValues,
+          ];
+        },
       );
       fromTeammate.set(from, records);
     }
@@ -1570,6 +1575,12 @@ async function admitRelayArrivals(params: {
 
 /** No record covers a message from another session. */
 const NO_RECORDS: readonly string[] = [];
+
+/** Whether a teammate envelope's sender is the child `id`: `<name>` or `<name>@<team>`. */
+function namesTeammate(name: string, id: string): boolean {
+  if (id === name) return true;
+  return id.startsWith(`${name}@`) && !id.slice(name.length + 1).includes("@");
+}
 
 /**
  * A message call returns the client's receipt, or the report of an agent the

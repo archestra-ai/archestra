@@ -4744,6 +4744,35 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(forwarded()).toContain("[appa] Message withheld");
     });
 
+    test.for([
+      ["two children share", ["scout@team-a", "scout@team-b"]],
+      ["only a longer name starts with", ["scout@red@team"]],
+    ] as const)("a lead withholds a message from a name %s", async ([
+      _case,
+      children,
+    ]) => {
+      native.loadChildReturns.mockImplementation(async () =>
+        children.map((child) => ({
+          childSessionId: scoped(`${lead}:${child}`),
+          childNativeId: child,
+          value: "Three triggers are stuck",
+        })),
+      );
+      answerText();
+      const response = await send(undefined, [
+        { role: "user", content: "Audit the triggers with teammates" },
+        { role: "assistant", content: "The scouts are on it." },
+        {
+          role: "user",
+          content: toLead(teammateMessage("scout", "Three triggers are stuck")),
+        },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(forwarded()).not.toContain("Three triggers are stuck");
+      expect(forwarded()).toContain("[appa] Message withheld");
+    });
+
     test("a teammate reads its lead's message only when the lead addressed it", async () => {
       const { prompt } = await spawnTeammate();
       native.loadChildAddresses.mockImplementation(async () => [

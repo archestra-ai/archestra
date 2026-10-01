@@ -131,14 +131,6 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     await agentRuntimeManager.deleteWorkspace(session);
   }
 
-  async writeRuntimeFile(params: {
-    session: AgentRunRecord;
-    path: string;
-    data: Buffer;
-  }): Promise<void> {
-    await agentRuntimeManager.writeRuntimeFile(params);
-  }
-
   async stageInputs(params: {
     session: AgentRunRecord;
     inputs: AgentRunInput[];

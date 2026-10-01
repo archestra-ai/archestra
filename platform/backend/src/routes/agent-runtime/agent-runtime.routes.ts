@@ -11,7 +11,6 @@ import {
   requireAgentModifyPermission,
   userHasPermission,
 } from "@/auth";
-import config from "@/config";
 import logger from "@/logging";
 import {
   A2ATaskModel,
@@ -40,12 +39,10 @@ import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
-import {
-  accessAgentWorkspaceFile,
-  stageAgentRunTerminalFile,
-} from "@/services/agent-runtime/workspace-files";
+import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
 import {
+  ticketPath,
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
@@ -65,10 +62,7 @@ import {
   StartAgentRunResponseSchema,
   UpdateAgentRunSchema,
 } from "@/types";
-import {
-  agentRunAttachmentSchema,
-  agentRunAttachmentsSchema,
-} from "@/types/agent-run-attachments";
+import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
   AgentWorkspaceFileRequestSchema,
   AgentWorkspaceFileResultSchema,
@@ -1009,37 +1003,6 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.post(
-    "/api/agent-runs/:taskId/terminal-files",
-    {
-      bodyLimit:
-        Math.ceil(config.chat.attachmentStorageBytesLimit / 3) * 4 + 64 * 1024,
-      schema: {
-        operationId: RouteId.UploadAgentRunTerminalFile,
-        tags: ["Agents"],
-        description:
-          "Place a file dropped on the caller's live run terminal outside the Agent's workspace and return its absolute path",
-        params: z.object({ taskId: z.string().uuid() }),
-        body: agentRunAttachmentSchema(),
-        response: constructResponseSchema(z.object({ path: z.string() })),
-      },
-    },
-    async (request, reply) => {
-      const staged = await stageAgentRunTerminalFile({
-        actor: {
-          kind: "user",
-          id: request.user.id,
-          organizationId: request.organizationId,
-        },
-        taskId: request.params.taskId,
-        name: request.body.name,
-        data: Buffer.from(request.body.contentBase64, "base64"),
-      });
-      request.auditAfter = { terminalFile: staged };
-      return reply.send(staged);
-    },
-  );
-
   // Transfer bodies are raw bytes bound for a Pod, so they must never be
   // parsed or buffered into a value.
   fastify.addContentTypeParser(
@@ -1079,10 +1042,11 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
               path: request.body.path,
               size: request.body.size,
               sha256: request.body.sha256,
+              location: request.body.location,
             });
       request.auditAfter = {
         workspaceTransfer: {
-          path: minted.ticket.path,
+          path: ticketPath(minted.ticket),
           direction: minted.ticket.direction,
         },
       };
@@ -1090,7 +1054,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         transferId: minted.ticket.id,
         token: minted.token,
         contentUrl: `${AGENT_WORKSPACE_TRANSFER_PREFIX}/${minted.ticket.id}/content`,
-        path: minted.ticket.path,
+        path: ticketPath(minted.ticket),
         size: minted.ticket.size,
         sha256: minted.ticket.sha256,
         expiresInSeconds: WORKSPACE_TRANSFER_TICKET_SECONDS,

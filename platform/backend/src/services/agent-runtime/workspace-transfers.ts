@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import path from "node:path";
 import type { Readable } from "node:stream";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { LRUCacheManager } from "@/cache-manager";
@@ -10,7 +11,9 @@ import {
   type WorkspaceTransferDirection,
   WorkspaceUploadReceiptSchema,
 } from "@/types/agent-workspace-transfer";
+import { sanitizeUploadFilename } from "@/utils/upload-filename";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
+import { AGENT_RUNTIME_ATTACHMENTS_DIR } from "./runtime-contract";
 import { authorizeAgentWorkspaceAccess } from "./workspace-files";
 
 /** Long enough for a person to notice a failure and retry, short enough that a
@@ -21,6 +24,8 @@ type WorkspaceTransferTicket = {
   id: string;
   direction: WorkspaceTransferDirection;
   path: string;
+  /** Directory `path` is relative to, when it is not the workspace. */
+  root?: string;
   /** Pinned copy in the Pod for a download, staging entry for an upload. */
   entryId: string;
   size: number;
@@ -79,22 +84,33 @@ class WorkspaceTransferTickets {
     path: string;
     size: number;
     sha256: string;
+    location?: "workspace" | "attachments";
   }): Promise<{ ticket: WorkspaceTransferTicket; token: string }> {
     const session = await authorizeAgentWorkspaceAccess(params);
+    // Attachments sit beside the run's start-up inputs, outside the tree the
+    // Agent works in. The prefix keeps a repeated name from replacing a file
+    // the Agent was already pointed at.
+    const placement =
+      params.location === "attachments"
+        ? {
+            root: `${AGENT_RUNTIME_ATTACHMENTS_DIR}/${params.taskId}`,
+            path: `${randomBytes(4).toString("hex")}-${sanitizeUploadFilename(params.path)}`,
+          }
+        : { path: params.path };
     const destination = WorkspaceFileStatSchema.parse(
       camelize(
         await resolveAgentRuntimeBackendDriver(
           session.backend,
         ).runWorkspaceTransferCommand({
           session,
-          args: ["stat", params.path],
+          args: helperArgs(placement.root, "stat", placement.path),
           timeoutMs: CONTROL_TIMEOUT_MS,
         }),
       ),
     );
     return this.store({
       direction: "upload",
-      path: params.path,
+      ...placement,
       entryId: randomBytes(16).toString("hex"),
       size: params.size,
       sha256: params.sha256,
@@ -145,7 +161,11 @@ class WorkspaceTransferTickets {
       camelize(
         await driver.runWorkspaceTransferCommand({
           session,
-          args: ["write-stream", params.ticket.entryId],
+          args: helperArgs(
+            params.ticket.root,
+            "write-stream",
+            params.ticket.entryId,
+          ),
           stdin: params.body,
           timeoutMs: TRANSFER_TIMEOUT_MS,
         }),
@@ -162,14 +182,15 @@ class WorkspaceTransferTickets {
     const result = await driver
       .runWorkspaceTransferCommand({
         session,
-        args: [
+        args: helperArgs(
+          params.ticket.root,
           "finalize",
           params.ticket.entryId,
           params.ticket.path,
           params.ticket.sha256,
           destination.present ? destination.ino : "-",
           destination.present ? destination.mtimeNs : "0",
-        ],
+        ),
         timeoutMs: CONTROL_TIMEOUT_MS,
       })
       .catch((error: unknown) => {
@@ -184,7 +205,7 @@ class WorkspaceTransferTickets {
         throw error;
       });
     this.tickets.delete(params.ticket.id);
-    return camelize(result);
+    return { ...(camelize(result) as object), path: ticketPath(params.ticket) };
   }
 
   /** Remove a staging entry so an abandoned transfer leaves nothing behind. */
@@ -195,7 +216,7 @@ class WorkspaceTransferTickets {
       session.backend,
     ).runWorkspaceTransferCommand({
       session,
-      args: ["discard", ticket.entryId],
+      args: helperArgs(ticket.root, "discard", ticket.entryId),
       timeoutMs: CONTROL_TIMEOUT_MS,
     });
   }
@@ -221,6 +242,7 @@ class WorkspaceTransferTickets {
         id,
         direction: stored.direction,
         path: stored.path,
+        root: stored.root,
         entryId: stored.entryId,
         size: stored.size,
         sha256: stored.sha256,
@@ -240,6 +262,18 @@ type StoredTicket = WorkspaceTransferTicket & {
   actor: A2AActor;
   taskId: string;
 };
+
+/** The path a person or Agent should use: absolute outside the workspace. */
+export function ticketPath(
+  ticket: Pick<WorkspaceTransferTicket, "root" | "path">,
+): string {
+  return ticket.root ? path.posix.join(ticket.root, ticket.path) : ticket.path;
+}
+
+/** The in-Pod helper works in the workspace unless told otherwise. */
+function helperArgs(root: string | undefined, ...args: string[]): string[] {
+  return root ? ["--root", root, ...args] : args;
+}
 
 function hashToken(token: string): Buffer {
   return createHash("sha256").update(token).digest();

@@ -22240,95 +22240,6 @@ export type CancelAgentRunResponses = {
 
 export type CancelAgentRunResponse = CancelAgentRunResponses[keyof CancelAgentRunResponses];
 
-export type UploadAgentRunTerminalFileData = {
-    body: {
-        name: string;
-        contentType: string;
-        contentBase64: string;
-    };
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/terminal-files';
-};
-
-export type UploadAgentRunTerminalFileErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UploadAgentRunTerminalFileError = UploadAgentRunTerminalFileErrors[keyof UploadAgentRunTerminalFileErrors];
-
-export type UploadAgentRunTerminalFileResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        path: string;
-    };
-};
-
-export type UploadAgentRunTerminalFileResponse = UploadAgentRunTerminalFileResponses[keyof UploadAgentRunTerminalFileResponses];
-
 export type StartAgentWorkspaceTransferData = {
     body: {
         direction: 'download';
@@ -22338,6 +22249,7 @@ export type StartAgentWorkspaceTransferData = {
         path: string;
         size: number;
         sha256: string;
+        location?: 'workspace' | 'attachments';
     };
     path: {
         taskId: string;

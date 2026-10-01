@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { assert, vi } from "vitest";
@@ -1837,9 +1838,7 @@ describe("Agent Runtime routes", () => {
     expect(fileAccess).toHaveBeenCalledTimes(1);
   });
 
-  test("terminal files land outside the workspace for the owner only", async ({
-    makeAdmin,
-  }) => {
+  test("an attachments transfer lands beside the run's inputs, not in its workspace", async () => {
     const task = await createTask(agent.id);
     const run = await createRun({ taskId: task.id, actorUserId: user.id });
     await AgentWorkspaceModel.create({
@@ -1854,42 +1853,52 @@ describe("Agent Runtime routes", () => {
       lastTaskId: task.id,
       expiresAt: new Date(Date.now() + 3600_000),
     });
-    const write = vi
-      .spyOn(agentRuntimeManager, "writeRuntimeFile")
-      .mockResolvedValue();
-    const payload = {
-      name: "screen shot.png",
-      contentType: "image/png",
-      contentBase64: Buffer.from("png").toString("base64"),
-    };
+    const bytes = Buffer.from("png");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const helper = vi
+      .spyOn(agentRuntimeManager, "runWorkspaceTransferCommand")
+      .mockImplementation(async ({ args }) => {
+        const [, , command, ...rest] = args;
+        if (command === "stat")
+          return { ok: true, path: rest[0], present: false };
+        if (command === "write-stream") {
+          return { ok: true, upload_id: rest[0], size: bytes.length, sha256 };
+        }
+        return { ok: true, path: rest[1], size: bytes.length, sha256 };
+      });
 
-    const response = await app.inject({
+    const started = await app.inject({
       method: "POST",
-      url: `/api/agent-runs/${task.id}/terminal-files`,
-      payload,
+      url: `/api/agent-runs/${task.id}/workspace/transfers`,
+      payload: {
+        direction: "upload",
+        location: "attachments",
+        path: "screen shot.png",
+        size: bytes.length,
+        sha256,
+      },
     });
-    expect(response.statusCode, response.body).toBe(200);
-    const { path } = response.json();
-    expect(path).toMatch(
-      new RegExp(
-        `^/var/run/archestra/attachments/${task.id}/terminal/[0-9a-f]{8}/screen shot\\.png$`,
-      ),
-    );
-    expect(write).toHaveBeenCalledWith(
-      expect.objectContaining({ path, data: Buffer.from("png") }),
-    );
+    expect(started.statusCode, started.body).toBe(200);
+    const { path, token, contentUrl } = started.json();
+    const root = `/var/run/archestra/attachments/${task.id}`;
+    expect(path).toMatch(new RegExp(`^${root}/[0-9a-f]{8}-screen shot\\.png$`));
 
-    user = await makeAdmin();
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: `/api/agent-runs/${task.id}/terminal-files`,
-          payload,
-        })
-      ).statusCode,
-    ).toBe(404);
-    expect(write).toHaveBeenCalledTimes(1);
+    const uploaded = await app.inject({
+      method: "PUT",
+      url: contentUrl,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/octet-stream",
+      },
+      payload: bytes,
+    });
+    expect(uploaded.statusCode, uploaded.body).toBe(200);
+    expect(uploaded.json()).toMatchObject({ path });
+    // Every helper call is confined to the attachments root.
+    expect(helper).toHaveBeenCalledTimes(3);
+    for (const [{ args }] of helper.mock.calls) {
+      expect(args.slice(0, 2)).toEqual(["--root", root]);
+    }
   });
 
   test("reports a retained terminal from the reconciler's probe until the CLI exits", async () => {

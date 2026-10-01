@@ -7,7 +7,7 @@ import {
   hasRetainedSessionActivity,
 } from "@/lib/agent-run-activity";
 import { useFeature } from "@/lib/config/config.query";
-import { readFileAsBase64, validateUploadFile } from "@/lib/files/file-upload";
+import { validateUploadFile } from "@/lib/files/file-upload";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
@@ -21,8 +21,9 @@ const {
   getMyAgentRuns,
   setAgentRuntimeCredential,
   startAgentRun,
+  startAgentWorkspaceTransfer,
   updateAgentRun,
-  uploadAgentRunTerminalFile,
+  uploadAgentWorkspaceTransfer,
 } = archestraApiSdk;
 
 export type AgentRunListItem =
@@ -231,23 +232,51 @@ export function useUploadAgentRunTerminalFiles(taskId: string) {
           );
           continue;
         }
-        const { data, error } = await uploadAgentRunTerminalFile({
+        // The same ticketed transfer the transfer_workspace_file tool uses,
+        // aimed at the run's attachments instead of its workspace.
+        const ticket = await startAgentWorkspaceTransfer({
           path: { taskId },
           body: {
-            name: file.name,
-            contentType: file.type || "application/octet-stream",
-            contentBase64: await readFileAsBase64(file),
+            direction: "upload",
+            location: "attachments",
+            path: file.name,
+            size: file.size,
+            sha256: await sha256Hex(file),
           },
+        });
+        if (ticket.error) {
+          reportApiError(ticket.error);
+          continue;
+        }
+        const { error } = await uploadAgentWorkspaceTransfer({
+          path: { transferId: ticket.data.transferId },
+          headers: {
+            Authorization: `Bearer ${ticket.data.token}`,
+            "Content-Type": "application/octet-stream",
+          },
+          // The route takes raw bytes, which the generated types cannot express.
+          body: file as never,
+          bodySerializer: null,
         });
         if (error) {
           reportApiError(error);
           continue;
         }
-        paths.push(data.path);
+        paths.push(ticket.data.path);
       }
       return paths;
     },
   });
+}
+
+async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    await file.arrayBuffer(),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 export function useUpdateAgentRun() {

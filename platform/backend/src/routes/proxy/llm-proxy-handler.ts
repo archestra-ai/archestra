@@ -1619,7 +1619,7 @@ export async function handleLLMProxy<
       if (unsupportedClient && unsupportedClientAction === "block") {
         throw new ApiError(
           400,
-          "This client cannot use Guardrails. Send X-Appa-Session-ID to use guardrails, or ask an administrator to choose Bypass on the Guardrails Overview tab.",
+          "Guardrails do not recognize this client, so the proxy blocked the request. Add an X-Appa-Session-ID header to each request, or ask an administrator to allow unrecognized clients.",
         );
       }
       if (appaActive && !delegatedRun && !unsupportedClient) {

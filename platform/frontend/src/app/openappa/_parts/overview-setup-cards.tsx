@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import {
   ArrowRight,
   CircleCheck,
@@ -14,6 +15,7 @@ import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { OpenAppaMascot } from "@/components/openappa-mascot";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,11 +27,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
   useGuardrailsDeployment,
   useUpdateGuardrailsDeployment,
+  useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
@@ -40,7 +51,6 @@ import {
   OpenAppaSourceForm,
 } from "./appa-github-sync-panel";
 import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
-import { UnsupportedClientActionSelect } from "./guardrails-deployment-toggle";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
@@ -181,7 +191,6 @@ function EnforcementCard({ next }: { next: boolean }) {
             <span>Ask about the policy</span>
           </OpenAppaChatButton>
         </div>
-        <UnsupportedClientActionSelect />
       </div>
     </StatusCard>
   );
@@ -306,6 +315,115 @@ function YellsCard() {
         </p>
       )}
     </StatusCard>
+  );
+}
+
+/**
+ * What the proxy does with a request that Guardrails cannot follow: one from
+ * a client with no built-in support that sends no OpenAPPA session headers.
+ * The inside is a settings block, so it reads like the settings pages; the
+ * card around it matches the other tiles on this page.
+ */
+export function UnrecognizedClientsCard() {
+  const query = useGuardrailsDeployment();
+  const update = useUpdateUnsupportedClientAction();
+  const { data: canManage } = useHasPermissions({ organization: ["update"] });
+  const appName = useAppName();
+  if (!query.data || query.isError) return null;
+  return (
+    <Card className="py-5">
+      <CardContent className="px-5">
+        <SettingsBlock
+          title="Client coverage"
+          description={
+            <>
+              <span>
+                Guardrails work with natively supported clients like {appName}{" "}
+                chat, Claude Code, Codex,{" "}
+              </span>
+              <GuardrailsDocsLink anchor="clients">and more</GuardrailsDocsLink>
+              <span>, and with any client that correctly sends </span>
+              <GuardrailsDocsLink anchor="session-headers">
+                OpenAPPA session headers
+              </GuardrailsDocsLink>
+              <span>.</span>
+            </>
+          }
+        >
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+            <Label
+              htmlFor="openappa-unrecognized-clients"
+              className="text-sm text-muted-foreground"
+            >
+              Requests from clients without native support or recognized
+              OpenAPPA session headers should be:
+            </Label>
+            <Select
+              value={query.data.unsupportedClientAction}
+              disabled={
+                !canManage || !query.data.featureEnabled || update.isPending
+              }
+              onValueChange={(value) => {
+                if (value === "bypass" || value === "block")
+                  update.mutate(value);
+              }}
+            >
+              <SelectTrigger
+                id="openappa-unrecognized-clients"
+                className="w-48"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem
+                  value="bypass"
+                  description="Requests run without checks."
+                >
+                  Allowed
+                </SelectItem>
+                <SelectItem
+                  value="block"
+                  description="The proxy rejects requests."
+                >
+                  Blocked
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {!canManage && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Only administrators can change this setting.
+            </p>
+          )}
+        </SettingsBlock>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * A docs link that is part of a sentence. A white-labeled deployment hides
+ * links to the public docs; the words then stay as plain text, so the
+ * sentence still reads whole.
+ */
+function GuardrailsDocsLink({
+  anchor,
+  children,
+}: {
+  anchor: string;
+  children: string;
+}) {
+  const href = getVisibleDocsUrl(
+    getDocsUrl(DocsPage.PlatformAiToolGuardrails, anchor),
+  );
+  if (!href) return <span>{children}</span>;
+  return (
+    <ExternalDocsLink
+      href={href}
+      className="text-primary underline-offset-2 hover:underline"
+    >
+      {children}
+    </ExternalDocsLink>
   );
 }
 

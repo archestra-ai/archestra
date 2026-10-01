@@ -2,7 +2,10 @@
 
 import { CoverageCharts } from "./coverage-charts";
 import { EntitiesTable } from "./entities-table";
-import { OverviewSetupCards } from "./overview-setup-cards";
+import {
+  OverviewSetupCards,
+  UnrecognizedClientsCard,
+} from "./overview-setup-cards";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 /** The visible policy targets whose tool calls can enter the OpenAPPA path. */
@@ -32,6 +35,7 @@ export function OverviewTab() {
             </div>
             <CoverageCharts />
           </section>
+          <UnrecognizedClientsCard />
           <section
             aria-labelledby="overview-servers-and-gateways"
             className="space-y-3"

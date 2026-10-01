@@ -82,6 +82,8 @@ interface ExecTerminalProps {
    */
   sessionKey: string;
   transport: ExecSessionTransport;
+  /** Claude-specific mouse workaround; other terminal apps keep their protocol. */
+  claudeMouseWorkaround?: boolean;
   /** False while the terminal is hidden, so a background tab holds no session. */
   isActive: boolean;
   title?: string;
@@ -105,6 +107,7 @@ interface ExecTerminalProps {
 export function ExecTerminal({
   sessionKey,
   transport,
+  claudeMouseWorkaround = false,
   isActive,
   title = "Interactive Shell",
   manualCommandTitle = "Manual Command",
@@ -121,6 +124,8 @@ export function ExecTerminal({
   // retrigger the effect; `sessionKey` is the reconnect signal.
   const transportRef = useRef(transport);
   transportRef.current = transport;
+  const claudeMouseWorkaroundRef = useRef(claudeMouseWorkaround);
+  claudeMouseWorkaroundRef.current = claudeMouseWorkaround;
   const initialProgressRef = useRef(initialProgress);
   initialProgressRef.current = initialProgress;
   const hasTransportProgressRef = useRef(false);
@@ -210,9 +215,9 @@ export function ExecTerminal({
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
         theme: {
-          background: "#020617", // slate-950 — matches logs container
-          foreground: "#34d399", // emerald-400 — matches logs
-          cursor: "#34d399",
+          background: "#0a0a0a",
+          foreground: "#e5e5e5",
+          cursor: "#e5e5e5",
         },
         scrollback: 5000,
         scrollSensitivity: TERMINAL_SCROLL_SENSITIVITY,
@@ -224,7 +229,48 @@ export function ExecTerminal({
       if (terminal.textarea) {
         terminal.textarea.disabled = !focusTerminalRef.current;
       }
-      terminal.attachCustomKeyEventHandler(() => focusTerminalRef.current);
+      const copyTerminalText = (text: string) => {
+        void copyToClipboard(text).catch(() => {
+          toast.error("Could not copy terminal text to clipboard");
+        });
+      };
+      terminal.attachCustomKeyEventHandler((event) => {
+        if (!focusTerminalRef.current) return false;
+        if (
+          event.type === "keydown" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.altKey &&
+          event.key.toLowerCase() === "c" &&
+          terminal.hasSelection()
+        ) {
+          event.preventDefault();
+          copyTerminalText(terminal.getSelection());
+          return false;
+        }
+        return true;
+      });
+      // Native TUIs (including OpenCode's copy-on-select) send OSC 52 rather
+      // than a browser copy event. Bridge writes to the host clipboard while
+      // the user is in terminal mode; never answer clipboard-read queries.
+      terminal.parser.registerOscHandler(52, (data) => {
+        if (disposed || !focusTerminalRef.current || !document.hasFocus()) {
+          return true;
+        }
+        const separator = data.indexOf(";");
+        if (separator === -1) return true;
+        const encoded = data.slice(separator + 1);
+        if (encoded === "?") return true;
+        try {
+          const bytes = Uint8Array.from(atob(encoded), (char) =>
+            char.charCodeAt(0),
+          );
+          const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+          copyTerminalText(text);
+        } catch {
+          // Ignore malformed terminal reports without breaking its output.
+        }
+        return true;
+      });
 
       // FitAddon can resize xterm for reasons other than an element resize
       // (font metrics settling is the common one). Drive the remote PTY from
@@ -304,7 +350,9 @@ export function ExecTerminal({
 
       terminal.onData((data) => {
         if (disposed || !focusTerminalRef.current) return;
-        const input = normalizeTerminalInput(data);
+        const input = claudeMouseWorkaroundRef.current
+          ? normalizeTerminalInput(data)
+          : data;
         if (input) transportRef.current.sendInput(input);
       });
 
@@ -510,7 +558,8 @@ export function ExecTerminal({
 // A TUI can ask the outer terminal for all mouse motion (DECSET 1003). tmux
 // forwards those SGR reports to the pane, but some Claude Code render states
 // stop consuming no-button hover events and insert them into the prompt as
-// visible `^[[<35;...M` text. Hover has no useful terminal action, so drop only
+// visible `^[[<35;...M` text. Only opt Claude into this workaround; other TUIs
+// use hover for hit testing and selection. Drop only
 // motion reports whose low button bits mean "no button". Clicks, button drags,
 // wheel events, and ordinary keyboard input continue to the remote PTY.
 function normalizeTerminalInput(data: string): string {

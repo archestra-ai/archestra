@@ -7,12 +7,14 @@ import type {
   AgentRunAttachProgressMessage,
   AgentRunAttachStartedMessage,
 } from "@archestra/shared";
+import { resolveAgentCatalogId } from "@archestra/shared";
 import { useMemo } from "react";
 import {
   type ExecSessionTransport,
   ExecTerminal,
 } from "@/components/exec/exec-terminal";
 import type { ExecSessionProgress } from "@/components/exec/exec-terminal-progress";
+import { useProfile } from "@/lib/agent.query";
 import { useMyAgentRun } from "@/lib/agent-runtime.query";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -38,6 +40,7 @@ export function AgentRunTerminal({
 }) {
   const runQuery = useMyAgentRun(taskId, active);
   const run = runQuery.data?.taskId === taskId ? runQuery.data : null;
+  const agentQuery = useProfile(run?.agentId, { enabled: active });
   const transport = useMemo<ExecSessionTransport>(
     () => createAgentRunTransport(taskId),
     [taskId],
@@ -47,6 +50,9 @@ export function AgentRunTerminal({
     <ExecTerminal
       sessionKey={taskId}
       transport={transport}
+      claudeMouseWorkaround={
+        resolveAgentCatalogId(agentQuery.data?.runtime) === "claude-code"
+      }
       // The metadata snapshot supplies both the original start time and the
       // current runtime phase. Opening the WebSocket first would briefly show
       // a fresh 0:00 counter on every reload before correcting itself.

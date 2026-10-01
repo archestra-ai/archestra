@@ -1393,8 +1393,8 @@ async function approveChildReturnCarriers(params: {
   // Records every verified crossing with the runtime. The runtime re-checks
   // each value against the return its fork bound, so a client-named spawn
   // call cannot stand for a child it never opened. One at a time: the runtime
-  // runs one session's dispatches in order anyway, each would hold a pooled
-  // connection while it waits, and a failed approval must stop the rest.
+  // runs one session's dispatches in order anyway, each first leases a pooled
+  // connection to find its session, and a failed approval must stop the rest.
   for (const record of arrived) {
     await approveSpawnReturn({
       session: params.binding.session,

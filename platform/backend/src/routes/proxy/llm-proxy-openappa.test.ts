@@ -15,6 +15,7 @@ import * as trustedData from "@/guardrails/trusted-data";
 import { InteractionModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { openappaActor } from "@/openappa/actor";
+import { mintChildReturnMarker } from "@/openappa/child-return";
 import { mintDelegationMarker } from "@/openappa/delegation";
 import { stageHitlReview } from "@/openappa/hitl-review";
 import { buildNoticeArguments } from "@/openappa/notice";
@@ -3881,6 +3882,64 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events).toEqual([]);
     });
 
+    test(`deployment toggle off reads no records for a Claude Code session's messages and subagent results (stream=${stream})`, async () => {
+      await GuardrailsDeploymentModel.setEnabled(false);
+      native.loadChildReturns.mockClear();
+      native.loadChildAddresses.mockClear();
+      const envelope =
+        '<teammate-message teammate_id="scout" color="blue">\nThree triggers are stuck\n</teammate-message>';
+      const body = payload(stream, [
+        { role: "user", content: "Check the triggers" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_off_agent",
+              name: "Agent",
+              input: { description: "Read the logs", prompt: "Read them." },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_off_agent",
+              content: [{ type: "text", text: "The logs are clean." }],
+            },
+            { type: "text", text: envelope },
+          ],
+        },
+      ]);
+      body.tools.push({
+        name: "Agent",
+        description: "Launch a subagent",
+        input_schema: { type: "object", properties: {} },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.285 (external, cli)",
+          "x-claude-code-session-id": "4b8e2f1a-7c3d-4e5f-9a0b-1c2d3e4f5a6b",
+        },
+        payload: body,
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(native.loadChildReturns).not.toHaveBeenCalled();
+      expect(native.loadChildAddresses).not.toHaveBeenCalled();
+      expect(events).toEqual([]);
+      expect(JSON.stringify(providerRequests)).toContain("The logs are clean.");
+      expect(JSON.stringify(providerRequests)).toContain(
+        "Three triggers are stuck",
+      );
+    });
+
     test(`legacy policies check plugin rewrites before APPA reserves a call (stream=${stream})`, async ({
       makeTool,
       makeToolPolicy,
@@ -6704,6 +6763,101 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(message).toContain("continues another session");
       expect(message).toContain("resume the original session");
       expect(message).not.toContain("Guardrails enforcement was off");
+    });
+
+    test("approves every subagent return the session crossed, in one request", async () => {
+      config.openappa.offerSigningSecret = secret;
+      const session = "6a2f1e9c-3b4d-4c5e-8f7a-9b0c1d2e3f4a";
+      const reports = {
+        toolu_lint: "Lint is clean.",
+        toolu_test: "Tests pass.",
+      };
+      native.loadChildReturns.mockImplementation(
+        async (_orgId: string, parentSessionId: string) =>
+          parentSessionId === `user:${userId}|${session}`
+            ? Object.entries(reports).map(([spawnCallId, value], index) => ({
+                childSessionId: `user:${userId}|${session}:c${index}`,
+                spawnCallId,
+                childNativeId: `c${index}`,
+                value,
+              }))
+            : [],
+      );
+      const defaultDispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event === "tool_result" && event.spawned_id) {
+          events.push(event);
+          return JSON.stringify({ decision: "ack" });
+        }
+        if (!defaultDispatch) throw new Error("missing native mock");
+        return defaultDispatch(raw);
+      });
+      const body = payload(false, [
+        { role: "user", content: "Lint and test in parallel" },
+        {
+          role: "assistant",
+          content: Object.keys(reports).map((id) => ({
+            type: "tool_use",
+            id,
+            name: "Agent",
+            input: { description: id, prompt: spawnPrompt },
+          })),
+        },
+        {
+          role: "user",
+          // Each child's turn ended with the marker the proxy appends to a
+          // crossed return.
+          content: Object.entries(reports).map(([id, value], index) => ({
+            type: "tool_result",
+            tool_use_id: id,
+            content: [
+              {
+                type: "text",
+                text: `${value}\n\n${mintChildReturnMarker({
+                  organizationId: agent.organizationId,
+                  callerId: `user:${userId}`,
+                  parentId: `user:${userId}|${session}`,
+                  childId: `user:${userId}|${session}:c${index}`,
+                  childNativeId: `c${index}`,
+                  spawnCallId: id,
+                  value,
+                })}`,
+              },
+            ],
+          })),
+        },
+      ]);
+      body.tools.push({
+        name: "Agent",
+        description: "Launch a subagent",
+        input_schema: { type: "object", properties: {} },
+      });
+      events.length = 0;
+      providerRequests.length = 0;
+
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.285 (external, cli)",
+          "x-claude-code-session-id": session,
+        },
+        payload: body,
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        events
+          .filter((event) => event.spawned_id)
+          .map((event) => event.tool_call_id)
+          .sort(),
+      ).toEqual(["toolu_lint", "toolu_test"]);
+      for (const report of Object.values(reports)) {
+        expect(JSON.stringify(providerRequests)).toContain(report);
+      }
     });
 
     test("a Codex spawn_agent keeps its namespace on the re-emitted stream, and its grandchild binds under the root", async ({

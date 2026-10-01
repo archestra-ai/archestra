@@ -55,8 +55,8 @@ overrides:
   # CVE-2026-54466 (GHSA-xv26-6w52-cph6, message corruption via protocol
   # length-header abuse) fixed in 0.7.5, the package's latest release.
   websocket-driver: '>=0.7.5'
-  # CVE-2026-75604 / GHSA-2xp9-vwfh-vxw4 (CRITICAL) fixed in 16.3.3.
-  next: 16.3.3
+  # GHSA-vcvr-r3jv-pc5j (CRITICAL) fixed in 16.3.6.
+  next: 16.3.6
   # form-data 3.0.5 / 4.0.6 fix CVE-2026-12143 (HIGH). Floors rather than exact
   # pins, and bounded per major so a <4 consumer is not jumped onto 4.x.
   form-data@>=4: '>=4.0.6'
@@ -96,8 +96,9 @@ overrides:
   # transitive consumer on the patched 3.x line.
   fast-uri: '>=3.1.8 <4'
   ajv: 8.18.0
-  # GHSA-gcfj-64vw-6mp9 (HIGH, prototype pollution) affects >=1.15.2, fixed in 1.18.0.
-  axios: '>=1.18.0'
+  # CVE-2026-101898, CVE-2026-101901, CVE-2026-101903, CVE-2026-101905,
+  # CVE-2026-101906, CVE-2026-101907, CVE-2026-101909 (HIGH) fixed in 1.20.0.
+  axios: '>=1.20.0 <2'
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
   # CVE-2026-9697 (HIGH, improper certificate validation) fixed in 7.28.0, then
@@ -116,7 +117,9 @@ overrides:
   path-to-regexp: '>=8.4.0'
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
-  fastify: '>=5.8.5'
+  # CVE-2026-76169, CVE-2026-84428, CVE-2026-84469, CVE-2026-84504
+  # (HIGH, request validation/authentication bypass) fixed in 5.12.2.
+  fastify: '>=5.12.2 <6'
   # CVE-2026-47219 (HIGH, prototype pollution) fixed in 9.7.0.
   find-my-way: '>=9.7.0'
   # CVE-2026-45623 (HIGH, sensitive information exposure) fixed in 8.5.12, and
@@ -147,8 +150,8 @@ overrides:
   '@opentelemetry/core': '>=2.8.0'
   # CVE-2026-59892 (HIGH, uncaught exception) fixed in 2.9.0.
   '@opentelemetry/propagator-jaeger': '>=2.9.0'
-  # CVE-2026-48068 / CVE-2026-48069 (uncaught exception) fixed in 1.14.4
-  '@grpc/grpc-js': '>=1.14.4'
+  # CVE-2026-101916 (HIGH, certificate validation) fixed in 1.14.5.
+  '@grpc/grpc-js': '>=1.14.5 <2'
   # GHSA-f88m-g3jw-g9cj (HIGH, dependency on vulnerable third-party component)
   # fixed in 0.35.0. Transitive-only (optional dep of next's image optimizer).
   # GHSA-rgj7-g3m4-5g8c: heap buffer overflow fixed in 0.35.4.

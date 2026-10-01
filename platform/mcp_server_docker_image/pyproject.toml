@@ -15,7 +15,8 @@ dependencies = [
   "requests>=2.31.0",
   "python-dotenv>=1.0.0",
   # urllib3 < 2.7.0: CVE-2026-44432 (data amplification), CVE-2026-44431 (info disclosure)
-  "urllib3>=2.7.0",
+  # urllib3 < 2.8.0: CVE-2026-97689 (resource allocation), CVE-2026-97687 (certificate validation)
+  "urllib3>=2.8.0",
   # python-multipart < 0.0.27: CVE-2026-42561 (unthrottled resource allocation)
   # python-multipart < 0.0.30: CVE-2026-53539 (uncontrolled resource consumption)
   "python-multipart>=0.0.30",

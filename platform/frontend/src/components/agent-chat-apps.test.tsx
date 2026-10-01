@@ -13,6 +13,7 @@ const applyBindingPlan = vi.fn(
   ) => options?.onSuccess?.([]),
 );
 const isChannelHidden = vi.fn().mockReturnValue(false);
+const refreshDiscovery = vi.fn();
 const refetchAgentNames = vi.fn();
 const refetchBindings = vi.fn();
 const refetchProviders = vi.fn();
@@ -43,6 +44,7 @@ vi.mock("@/lib/chatops/chatops.query", () => ({
     mutate: applyBindingPlan,
     isPending: false,
   }),
+  useRefreshChatOpsChannelDiscovery: () => ({ mutate: refreshDiscovery }),
 }));
 
 vi.mock("@/lib/chatops/incoming-email.query", () => ({
@@ -383,6 +385,20 @@ describe("AgentChatAppsEditor", () => {
         name: /^OperationsAnswered by another agent/,
       }),
     ).toBeVisible();
+  });
+
+  it("re-lists the bot's channels when its picker opens", async () => {
+    const user = userEvent.setup();
+    render(<AgentChatApps agent={agent} />);
+
+    await openPicker(user);
+
+    // A channel the bot joined after the last listing only shows up once asked.
+    expect(refreshDiscovery).toHaveBeenCalledTimes(1);
+    expect(refreshDiscovery).toHaveBeenCalledWith({
+      provider: "slack",
+      botId: "bot-slack",
+    });
   });
 
   it("lists the channels this agent holds, and offers a way to add more", () => {
@@ -1176,10 +1192,9 @@ describe("AgentChatAppsEditor", () => {
     );
 
     await openPicker(user, SLACK_BOT);
-    // The refusal names the field that lifts it, and where that field is on
-    // this surface — the record's page calls its first tab General.
+    // The refusal names where sharing is changed, which is what lifts it.
     const reason =
-      "A personal agent answers only in its owner's direct messages. Change Visibility from Personal on the General tab to use shared channels.";
+      "A personal agent answers only in its owner's direct messages. Share the agent on its Permissions tab (Add access, Everyone in the organization) to use shared channels.";
     // One sentence for the whole group, not one per row.
     expect(screen.getAllByText(reason)).toHaveLength(1);
     const group = screen.getByRole("button", {

@@ -45,6 +45,7 @@ import {
   useAllChatOpsBindings,
   useApplyChatOpsBindingPlan,
   useChatOpsStatus,
+  useRefreshChatOpsChannelDiscovery,
 } from "@/lib/chatops/chatops.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import { useConfig } from "@/lib/config/config.query";
@@ -302,11 +303,6 @@ export function AgentChatAppsEditor({
   );
   const assignmentOptions = buildAssignmentOptions({
     subject,
-    // Same field, two hosts: the record's page calls its first tab General,
-    // the create wizard calls its first step Configuration.
-    visibilityLocation: emailAgent
-      ? "the General tab"
-      : "the Configuration step",
     agentNames,
     bindings,
     configuredDmBots,
@@ -1020,6 +1016,7 @@ function BotCard({
   onRemoveBot: () => void;
 }) {
   const label = botLabel(bot);
+  const refreshDiscovery = useRefreshChatOpsChannelDiscovery();
   const assigned = options.filter((option) => selectedIds.includes(option.id));
   return (
     <section
@@ -1077,6 +1074,9 @@ function BotCard({
           options={options}
           selectedIds={selectedIds}
           botName={label}
+          onOpen={() =>
+            refreshDiscovery.mutate({ provider: bot.provider, botId: bot.id })
+          }
           agentId={agentId}
           agentReferences={agentReferences}
           disabled={isSaving}
@@ -1096,6 +1096,7 @@ function AddChannelPicker({
   options,
   selectedIds,
   botName,
+  onOpen,
   agentId,
   agentReferences,
   disabled,
@@ -1104,6 +1105,8 @@ function AddChannelPicker({
   options: AssignmentOption[];
   selectedIds: string[];
   botName: string;
+  /** Called when the picker opens, to re-list the bot's channels. */
+  onOpen: () => void;
   agentId: string;
   agentReferences: Map<string, { id: string; name: string }>;
   disabled: boolean;
@@ -1140,7 +1143,10 @@ function AddChannelPicker({
         size="sm"
         disabled={disabled}
         aria-label={`Add channel to ${botName}`}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          onOpen();
+        }}
       >
         <Plus className="size-4" />
         <span>Add channel</span>
@@ -1703,7 +1709,6 @@ function buildAssignmentOptions({
   configuredDmBots,
   currentUserId,
   canCreateDm,
-  visibilityLocation,
 }: {
   subject: ChannelSubject;
   agentNames: Map<string, string>;
@@ -1711,8 +1716,6 @@ function buildAssignmentOptions({
   configuredDmBots: BotInfo[];
   currentUserId: string | undefined;
   canCreateDm: boolean;
-  /** Where this agent's Visibility field is, named as its host names it. */
-  visibilityLocation: string;
 }): AssignmentOption[] {
   const virtualDmOptions = configuredDmBots.map((bot) => ({
     id: `${VIRTUAL_DM_PREFIX}${bot.id}`,
@@ -1748,10 +1751,9 @@ function buildAssignmentOptions({
           ? (agentNames.get(binding.agentId) ?? "another agent")
           : null,
       disabledReason: personalAssignmentRefused
-        ? // Says what to do about it, not just that it is so: the refusal is
-          // the agent's visibility, which is one field away and the reader's
-          // to change.
-          `A personal agent answers only in its owner's direct messages. Change Visibility from Personal on ${visibilityLocation} to use shared channels.`
+        ? // Says what to do about it, not just that it is so: an agent is shared
+          // from its Permissions tab, which is the reader's to change.
+          "A personal agent answers only in its owner's direct messages. Share the agent on its Permissions tab (Add access, Everyone in the organization) to use shared channels."
         : null,
       virtualDm: false,
       isDm: binding.isDm,

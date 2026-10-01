@@ -106,6 +106,34 @@ export function useApplyChatOpsBindingPlan() {
   });
 }
 
+/**
+ * Ask the backend to re-list one bot's channels. Slack only reports the
+ * channels a bot is in when asked, so a channel the bot joined after the last
+ * listing is missing until this runs.
+ */
+export function useRefreshChatOpsChannelDiscovery() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      provider: "slack" | "ms-teams" | "telegram";
+      botId: string;
+    }) => {
+      const { error } = await archestraApiSdk.refreshChatOpsChannelDiscovery({
+        body: params,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
 export function useDeleteChatOpsBinding() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -124,11 +124,7 @@ Yells report confusing blocks or remedies. Archestra saves each report and its c
 
 Archestra also saves a local diagnostic when a blocked client cannot receive a remedy. These automatic reports stay in your deployment.
 
-Yells are shared across your organization. Users with OpenAPPA Diagnostics read permission can review reports from users and service accounts.
-
 The overview counts unresolved reports. You can search reports, download their diagnostic archive, and investigate them with the configuration agent. **Investigate in chat** attaches the archive to a new chat, where the agent can read its diagnostic contents. Opening a chat leaves the report unresolved. Mark it resolved after verifying the fix; you can reopen it later.
-
-OpenAPPA permissions have their own group under [Access Control](./platform-access-control). Policy and Settings permissions control management access. Diagnostics permissions control reports and consult logs. Policy enforcement applies regardless of these permissions.
 
 Existing reports sent before native storage was enabled are not imported.
 

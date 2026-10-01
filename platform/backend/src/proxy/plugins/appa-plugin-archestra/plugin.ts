@@ -723,9 +723,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
       }
     }
-    // Messages between agents cross or address before any other call of the
-    // batch opens: a crossing settles the sender's open calls.
-    const relays = await governRelays({
+    const reusedNames = await refuseReusedTeammateNames({
       binding,
       calls: calls.filter(
         (call) =>
@@ -733,10 +731,23 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ),
       session,
     });
+    // Messages between agents cross or address before any other call of the
+    // batch opens: a crossing settles the sender's open calls.
+    const relays = await governRelays({
+      binding,
+      calls: calls.filter(
+        (call) =>
+          !handbackIds.has(call.id) &&
+          !blockedTranscriptCalls.has(call.id) &&
+          !reusedNames.has(call.id),
+      ),
+      session,
+    });
     const rest = calls.filter(
       (call) =>
         !handbackIds.has(call.id) &&
         !blockedTranscriptCalls.has(call.id) &&
+        !reusedNames.has(call.id) &&
         !relays.has(call.id),
     );
     const policy = sharedPolicy(session.organization_id);
@@ -782,6 +793,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         feedback:
           "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
       });
+    }
+    for (const [id, feedback] of reusedNames) {
+      decisionById.set(id, { kind: "deny", feedback });
     }
     for (const [id, relay] of relays) {
       if (relay.kind === "deny") {
@@ -1482,6 +1496,7 @@ async function admitRelayArrivals(params: {
   const openingPrompt = params.binding.child?.lineage?.spawnPromptDigest;
   let crossed: Promise<string[]> | undefined;
   let addressed: Promise<string[]> | undefined;
+  let crossedOrAddressed: Promise<string[]> | undefined;
   const crossings = () => {
     crossed ??= loadChildReturns({
       organizationId: session.organization_id,
@@ -1498,20 +1513,31 @@ async function admitRelayArrivals(params: {
       : Promise.resolve([]);
     return addressed;
   };
+  // One list for each kind of sender, so the lookups built over it serve
+  // every message of that kind.
+  const crossingsAndAddresses = () => {
+    crossedOrAddressed ??= Promise.all([crossings(), addresses()]).then(
+      ([returns, addressedValues]) => [...returns, ...addressedValues],
+    );
+    return crossedOrAddressed;
+  };
   let withheldBefore: Promise<ReadonlySet<string>> | undefined;
-  // A fork reads its source's history, so what its source withheld stays
-  // withheld in the fork too.
+  // A fork reads its source's history and a worker fork its parent's, so
+  // what either withheld stays withheld here too. The binding names both
+  // before this session's first event writes its own row.
   const withheldEarlier = () => {
-    withheldBefore ??= OpenAppaSessionModel.forkLines({
+    const seeds = [
+      session.session_id,
+      session.parent_id,
+      session.fork_of,
+    ].filter((id): id is string => id !== undefined);
+    withheldBefore ??= OpenAppaSessionModel.historySources({
       organizationId: session.organization_id,
-      sessionIds: [session.session_id],
-    }).then((lines) =>
+      sessionIds: seeds,
+    }).then((sources) =>
       OpenAppaWithheldArrivalModel.digests({
         organizationId: session.organization_id,
-        sessionIds: [
-          session.session_id,
-          ...(lines.get(session.session_id) ?? []),
-        ],
+        sessionIds: [...new Set([...seeds, ...sources])],
       }),
     );
     return withheldBefore;
@@ -1526,10 +1552,10 @@ async function admitRelayArrivals(params: {
       continue;
     const records =
       arrival.kind === "session"
-        ? []
+        ? NO_RECORDS
         : arrival.kind === "coordinator"
           ? await addresses()
-          : [...(await crossings()), ...(await addresses())];
+          : await crossingsAndAddresses();
     const digest = relayArrivalDigest(arrival);
     // A message is withheld the first time the model would read it, and on
     // every turn after. A message the model replied to that was never
@@ -1556,6 +1582,9 @@ async function admitRelayArrivals(params: {
     digests: withheldNow,
   });
 }
+
+/** No record covers a message from another session. */
+const NO_RECORDS: readonly string[] = [];
 
 /** Names a message by its kind, its sender, and its text. */
 function relayArrivalDigest(arrival: AppaRelayArrival): string {
@@ -1596,6 +1625,48 @@ async function admitRelayReports(params: {
       params.updates[result.id] = admitted.content;
     }
   }
+}
+
+/**
+ * Refuses a spawn that names a teammate this session already launched or
+ * started. The child session takes its id from the teammate's name, so a
+ * second spawn's prepared fork would never open: the new teammate would run
+ * on the first one's trajectory, at its older label.
+ */
+async function refuseReusedTeammateNames(params: {
+  binding: AppaPluginBinding;
+  calls: readonly ToolCall[];
+  session: OpenAppaSession;
+}): Promise<Map<string, string>> {
+  const { binding, session } = params;
+  const refused = new Map<string, string>();
+  const adapter = binding.adapter;
+  if (!adapter?.teammateName) return refused;
+  const named = params.calls.flatMap((call) => {
+    const name = adapter.teammateName?.(call);
+    return name ? [{ call, name }] : [];
+  });
+  if (named.length === 0) return refused;
+  const started = await OpenAppaSessionModel.childNativeIds({
+    organizationId: session.organization_id,
+    parentSessionId: session.session_id,
+  });
+  const launched = adapter.teammateLaunches?.(binding.requestBody);
+  const spawned = new Set<string>();
+  for (const { call, name } of named) {
+    if (
+      spawned.has(name) ||
+      launched?.has(name) ||
+      started.some((id) => id === name || id.startsWith(`${name}@`))
+    ) {
+      refused.set(
+        call.id,
+        `This session already started a teammate named "${name}". OpenAPPA checks each teammate from its own spawn, so it did not start a second one under that name. Start the teammate under a new name.`,
+      );
+    }
+    spawned.add(name);
+  }
+  return refused;
 }
 
 /** How the runtime ruled on one message between agents. */
@@ -1778,7 +1849,7 @@ const RELAY_BROADCAST =
 const RELAY_UNKNOWN_RECIPIENT =
   "OpenAPPA cannot identify the agent this message is for, so it did not send the message. Send it to a teammate by the name the teammate started with.";
 const RELAY_UNCHECKED =
-  "OpenAPPA cannot check this teammate: it started while Guardrails enforcement was off, so OpenAPPA refuses its requests and did not send the message. To continue its work, start a new teammate with the Agent tool and give it the task. OpenAPPA checks that spawn.";
+  "OpenAPPA cannot check this teammate: it started while Guardrails enforcement was off, so OpenAPPA refuses its requests and did not send the message. To continue its work, start a new teammate under a new name with the Agent tool and give it the task. OpenAPPA checks that spawn.";
 const RELAY_UNGOVERNED =
   "OpenAPPA cannot tell which spawn started this agent, so it cannot check this message. The message was not sent.";
 const RELAY_RESHAPED_PROTOCOL =

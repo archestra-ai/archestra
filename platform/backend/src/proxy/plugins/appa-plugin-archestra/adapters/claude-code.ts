@@ -137,7 +137,11 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     const args = argumentRecord(call.arguments);
     const to = stringField(args?.to)?.trim();
     const message = args?.message;
-    if (!to || message === undefined || message === null) return undefined;
+    // An empty message carries nothing to cross. Claude Code refuses one
+    // unless it only subscribes to an idle notice, and a crossing with no
+    // output would end the sender's branch for good.
+    if (!to || message === undefined || message === null || message === "")
+      return undefined;
     return {
       to: relayRecipient(to),
       value: typeof message === "string" ? message : JSON.stringify(message),
@@ -161,7 +165,10 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 
   rewriteRelayMessage(args: unknown, value: string): string {
-    return JSON.stringify({ ...argumentRecord(args), message: value });
+    // The sender's summary previews the message it replaced. Without one,
+    // Claude Code previews the first line of the message it sends.
+    const { summary: _summary, ...rest } = argumentRecord(args) ?? {};
+    return JSON.stringify({ ...rest, message: value });
   }
 
   relayArrivals(requestBody: unknown): AppaRelayArrival[] {
@@ -183,6 +190,12 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   /** Claude Code names a teammate `<name>@<team>`; a subagent's id has no `@`. */
   isTeammate(childNativeId: string): boolean {
     return childNativeId.includes("@");
+  }
+
+  teammateName(call: { name: string; arguments: unknown }): string | undefined {
+    if (!CHILD_SPAWN_TOOLS.has(localToolName(call.name))) return undefined;
+    const name = stringField(argumentRecord(call.arguments)?.name)?.trim();
+    return name && isChildId(name) ? name : undefined;
   }
 
   isChildHandbackTool(name: string): boolean {

@@ -166,6 +166,8 @@ export type AppaClientAdapter = {
   relayArrivals?(requestBody: unknown): AppaRelayArrival[];
   /** The teammates the history's launch receipts name, by name. */
   teammateLaunches?(requestBody: unknown): Map<string, AppaTeammateLaunch>;
+  /** The name a spawn call gives the teammate it starts, if it names one. */
+  teammateName?(call: { name: string; arguments: unknown }): string | undefined;
   /**
    * True for a child that reports to its parent in messages rather than in
    * the result of the call that started it: a teammate.

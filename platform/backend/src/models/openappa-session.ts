@@ -251,6 +251,39 @@ class OpenAppaSessionModel {
   }
 
   /**
+   * The sessions whose history the supplied sessions can carry: each one, its
+   * fork source, and its parent, and theirs in turn. A fork starts from its
+   * source's transcript, and a worker fork from its parent's.
+   */
+  static async historySources(params: {
+    organizationId: string;
+    sessionIds: readonly string[];
+  }): Promise<string[]> {
+    if (params.sessionIds.length === 0) return [];
+    const sources = await db.execute(sql`
+      WITH RECURSIVE source(session_id, forked_from, parent_id, depth, visited) AS (
+        SELECT session_id, forked_from, parent_id, 0, ARRAY[session_id]::text[]
+        FROM ${table}
+        WHERE ${inArray(table.actor, params.sessionIds.map(openappaActor))}
+          AND organization_id = ${params.organizationId}
+        UNION ALL
+        SELECT next.session_id, next.forked_from, next.parent_id, line.depth + 1,
+          line.visited || next.session_id
+        FROM source AS line
+        JOIN ${table} AS next
+          ON next.organization_id = ${params.organizationId}
+          AND next.session_id IN (line.forked_from, line.parent_id)
+        WHERE line.depth < ${MAX_FORK_DEPTH}
+          AND NOT next.session_id = ANY(line.visited)
+      )
+      SELECT DISTINCT session_id AS "sessionId" FROM source
+    `);
+    return (sources.rows as Array<{ sessionId: string }>).map(
+      (row) => row.sessionId,
+    );
+  }
+
+  /**
    * Returns fork lineage for a client session ID.
    * If callerId is provided, queries only sessions for that caller.
    * When callerId is omitted, the client session ID must resolve to exactly one caller.

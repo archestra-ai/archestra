@@ -4379,6 +4379,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       reply("SendMessage", {
         to: "team-lead",
         message: "Triggers 4, 7, and 9 for customer-ledger are stuck",
+        summary: "customer-ledger triggers stuck",
       });
       const response = await send(auditor, [
         { role: "user", content: opening(prompt) },
@@ -4388,7 +4389,85 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       const sent = noticeFrom(response.body, true);
       expect(sent.name).toBe("SendMessage");
       expect(sent.input.message).toBe("Three triggers need attention");
+      // The sender's summary previewed the text the check replaced.
+      expect(sent.input.summary).toBeUndefined();
       expect(response.body).not.toContain("customer-ledger");
+    });
+
+    test("a teammate's empty message crosses nothing, and its branch stays open", async () => {
+      const { prompt } = await spawnTeammate();
+      reply("SendMessage", { to: "team-lead", message: "" });
+      events.length = 0;
+      const response = await send(auditor, [
+        { role: "user", content: opening(prompt) },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        events.filter((event) => event.event === "child_end"),
+      ).toHaveLength(0);
+    });
+
+    test("a spawn may take the name of an earlier spawn that failed to launch", async () => {
+      reply("Agent", spawnInput);
+      const response = await send(undefined, [
+        { role: "user", content: "Audit the triggers with a teammate" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_failed",
+              name: "Agent",
+              input: spawnInput,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_failed",
+              is_error: true,
+              content:
+                "<tool_use_error>Error: the team is full</tool_use_error>",
+            },
+          ],
+        },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(noticeFrom(response.body, true).name).toBe("Agent");
+    });
+
+    test("a spawn under the name of a teammate that already started is refused, and asks for a new name", async () => {
+      await db.insert(database.schema.openappaSessionsTable).values({
+        actor: openappaActor(scoped(`${lead}:${auditor}`)),
+        root: openappaActor(scoped(lead)),
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        sessionId: scoped(`${lead}:${auditor}`),
+        parentId: scoped(lead),
+        startDecision: { decision: "ack" },
+      });
+      reply("Agent", spawnInput);
+      events.length = 0;
+      const response = await send(undefined, [
+        { role: "user", content: "Audit the triggers again with a teammate" },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      const notice = noticeFrom(response.body, true);
+      expect(notice.name).toBe("archestra__get_remedy_plans");
+      const ruling = JSON.stringify(notice.input);
+      expect(ruling).toContain(
+        'already started a teammate named \\"auditor\\"',
+      );
+      expect(ruling).toContain("Start the teammate under a new name.");
+      expect(
+        events.filter((event) => event.event === "tool_call"),
+      ).toHaveLength(0);
     });
 
     test("a teammate's message the return check blocks is not sent", async () => {
@@ -5006,6 +5085,55 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(forwarded()).toContain("[appa] Message withheld");
       });
 
+      test("a worker fork keeps withheld what its parent withheld", async () => {
+        answerText();
+        const arrived = [
+          ...history(),
+          { role: "assistant", content: "It opened the PR." },
+          { role: "user", content: toLead(later) },
+        ];
+        const parent = await send(undefined, arrived);
+        expect(parent.statusCode, parent.body).toBe(200);
+        expect(forwarded()).not.toContain("release token");
+
+        // A worker fork starts from its parent's transcript, replies included.
+        const before = providerRequests.length;
+        const fork = await send("a0123456789abcdef", [
+          ...arrived,
+          { role: "assistant", content: "Its next message was withheld." },
+          {
+            role: "user",
+            content:
+              "You are a worker fork. The transcript above is the parent's history. Check the release.",
+          },
+        ]);
+        expect(fork.statusCode, fork.body).toBe(200);
+        // The fork's own request reached the model.
+        expect(providerRequests).toHaveLength(before + 1);
+        expect(forwarded()).not.toContain("release token");
+        expect(forwarded()).toContain("[appa] Message withheld");
+      });
+
+      test("a spawn under that teammate's name is refused, and asks for a new name", async () => {
+        reply("Agent", {
+          name: "sched-tools",
+          description: "Take over the tools",
+          prompt: "Finish the schedule trigger tools.",
+        });
+        events.length = 0;
+        const response = await send(undefined, history());
+
+        expect(response.statusCode, response.body).toBe(200);
+        const notice = noticeFrom(response.body, true);
+        expect(notice.name).toBe("archestra__get_remedy_plans");
+        expect(JSON.stringify(notice.input)).toContain(
+          'already started a teammate named \\"sched-tools\\"',
+        );
+        expect(
+          events.filter((event) => event.event === "tool_call"),
+        ).toHaveLength(0);
+      });
+
       test("the lead's message to that teammate is not sent, and names a new teammate as the way on", async () => {
         reply("SendMessage", {
           to: "sched-tools",
@@ -5021,7 +5149,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(ruling).toContain(
           "started while Guardrails enforcement was off",
         );
-        expect(ruling).toContain("start a new teammate with the Agent tool");
+        expect(ruling).toContain(
+          "start a new teammate under a new name with the Agent tool",
+        );
         expect(
           events.filter((event) => event.event === "child_address"),
         ).toHaveLength(0);

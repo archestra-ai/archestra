@@ -46,7 +46,7 @@ Claude Code teammates pass the same check. A teammate's message to its lead cros
 
 The model reads a message only if it passed the check on its way. Any other message is withheld, and the model reads a notice in its place. Messages from other sessions never pass the check. A message the model read while enforcement was off stays as the model read it, with a note that it was never checked.
 
-A teammate that started while enforcement was off cannot be checked. OpenAPPA refuses its requests and does not send it messages. Start a new teammate to continue its work.
+A teammate that started while enforcement was off cannot be checked. OpenAPPA refuses its requests and does not send it messages. Start a new teammate, under a new name, to continue its work. OpenAPPA checks each teammate from its own spawn, so it refuses a second teammate under a name the session already used.
 
 ## Client Support Matrix
 

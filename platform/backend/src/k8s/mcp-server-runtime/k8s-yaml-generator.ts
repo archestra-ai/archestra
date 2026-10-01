@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   type EnvironmentVariableSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
@@ -6,6 +7,7 @@ import type * as k8s from "@kubernetes/client-node";
 import * as yaml from "js-yaml";
 import type { z } from "zod";
 import config from "@/config";
+import type { InternalMcpCatalog } from "@/types/mcp-catalog";
 import { getMcpImagePullPolicy } from "./image-pull-policy";
 
 // Helper to create placeholder strings without triggering noTemplateCurlyInString lint rule
@@ -40,17 +42,17 @@ interface YamlValidationResult {
   warnings: string[];
 }
 
+type DeploymentYamlInputDefinitions = Partial<
+  Pick<InternalMcpCatalog, "localConfig" | "userConfig" | "oauthConfig">
+>;
+
 /**
  * Placeholder patterns used in the YAML template.
  * - ${env.KEY} for plain text environment variables
  * - ${secret.KEY} for secret-type environment variables
  * - ${archestra.*} for system-managed values
  */
-const PLACEHOLDER_PATTERNS = {
-  env: /\$\{env\.([^}]+)\}/g,
-  secret: /\$\{secret\.([^}]+)\}/g,
-  archestra: /\$\{archestra\.([^}]+)\}/g,
-};
+const RESOLVABLE_PLACEHOLDER = /\$\{(env|archestra)\.([^}]+)\}/g;
 
 /**
  * System-managed archestra placeholders.
@@ -209,6 +211,26 @@ export function generateDeploymentYamlTemplate(
 }
 
 /**
+ * Installation values are data for the authored program, never Kubernetes
+ * configuration. Check the parsed paths as well as scalar interpolation: a
+ * safely quoted value in serviceAccountName would still select an identity.
+ */
+export function findUnsafeDeploymentYamlPlaceholders(
+  yamlString: string,
+  inputDefinitions?: DeploymentYamlInputDefinitions,
+): string[] {
+  let parsed: unknown;
+  try {
+    parsed = parseDeploymentYamlTemplate(yamlString);
+  } catch (error) {
+    return [
+      `YAML syntax error: ${error instanceof Error ? error.message : String(error)}`,
+    ];
+  }
+  return findUnsafePlaceholders({ parsed, inputDefinitions });
+}
+
+/**
  * Validates a deployment YAML string.
  *
  * @param yamlString - The YAML string to validate
@@ -216,6 +238,7 @@ export function generateDeploymentYamlTemplate(
  */
 export function validateDeploymentYaml(
   yamlString: string,
+  inputDefinitions?: DeploymentYamlInputDefinitions,
 ): YamlValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -223,7 +246,7 @@ export function validateDeploymentYaml(
   // Try to parse the YAML
   let parsed: unknown;
   try {
-    parsed = yaml.load(yamlString);
+    parsed = parseDeploymentYamlTemplate(yamlString);
   } catch (e) {
     const error = e as Error;
     errors.push(`YAML syntax error: ${error.message}`);
@@ -289,6 +312,13 @@ export function validateDeploymentYaml(
   // Validate placeholders
   const placeholderWarnings = validatePlaceholders(yamlString);
   warnings.push(...placeholderWarnings);
+  errors.push(
+    ...findUnsafePlaceholders({
+      parsed,
+      inputDefinitions,
+      deferredWarnings: inputDefinitions === undefined ? warnings : undefined,
+    }),
+  );
 
   return {
     valid: errors.length === 0,
@@ -343,12 +373,12 @@ function validatePlaceholders(yamlString: string): string[] {
 }
 
 /**
- * Resolves placeholders in a YAML string with actual values.
+ * Resolves placeholders in parsed scalar values, so supplied text cannot
+ * introduce YAML structure or another interpolation pass.
  *
  * @param yamlString - The YAML string with placeholders
  * @param context - Values for archestra placeholders
  * @param envValues - Values for env placeholders
- * @param secretName - Name of the K8s secret for secret placeholders
  * @returns Resolved YAML string
  */
 export function resolvePlaceholders(
@@ -363,10 +393,27 @@ export function resolvePlaceholders(
     command?: string;
     arguments?: string[];
     serviceAccount?: string;
+    inputDefinitions?: DeploymentYamlInputDefinitions;
   },
   envValues: Record<string, string>,
 ): string {
-  let resolved = yamlString;
+  const plainScalarPaths = new Set<string>();
+  const parsed = parseDeploymentYamlTemplate(yamlString, plainScalarPaths);
+  const errors = findUnsafePlaceholders({
+    parsed,
+    inputDefinitions: context.inputDefinitions,
+  });
+  if (errors.length > 0) {
+    throw new Error(`Invalid deployment YAML: ${errors.join("; ")}`);
+  }
+
+  assertYamlExpansionSize(
+    context.arguments?.length ?? 0,
+    (context.arguments ?? []).reduce(
+      (size, argument) => size + argument.length + 3,
+      0,
+    ),
+  );
 
   // Resolve archestra placeholders
   const archestraMap: Record<string, string> = {
@@ -381,20 +428,296 @@ export function resolvePlaceholders(
     service_account: context.serviceAccount || "default",
   };
 
-  resolved = resolved.replace(PLACEHOLDER_PATTERNS.archestra, (_, key) => {
-    return archestraMap[key] || "";
-  });
-
-  // Resolve env placeholders
-  resolved = resolved.replace(PLACEHOLDER_PATTERNS.env, (_, key) => {
-    return envValues[key] || "";
+  const isCatalogOwned = catalogOwnedEnvironmentPredicate(
+    context.inputDefinitions,
+  );
+  const resolved = mapYamlStrings(parsed, ({ value, path, isKey }) => {
+    if (isKey) return value;
+    // This documented placeholder represents the whole args sequence. Quoted
+    // and unquoted spellings parse to the same scalar and retain that contract.
+    if (
+      value === placeholder("archestra", "arguments") &&
+      /^spec\.template\.spec\.(containers|initContainers)\.\d+\.args$/.test(
+        path.join("."),
+      )
+    ) {
+      return [...(context.arguments ?? [])];
+    }
+    let expandedLength = value.length;
+    const expanded = value.replace(
+      RESOLVABLE_PLACEHOLDER,
+      (token, prefix, key) => {
+        const values = prefix === "env" ? envValues : archestraMap;
+        const replacement = Object.hasOwn(values, key) ? values[key] : "";
+        expandedLength += replacement.length - token.length;
+        assertYamlExpansionSize(0, expandedLength);
+        return replacement;
+      },
+    );
+    const placeholders = [...value.matchAll(RESOLVABLE_PLACEHOLDER)];
+    if (
+      plainScalarPaths.has(JSON.stringify(path)) &&
+      placeholders.length > 0 &&
+      placeholders.every(
+        ([, prefix, key]) => prefix === "env" && isCatalogOwned(key),
+      ) &&
+      /^[\w.+~-]*$/.test(expanded.trim())
+    ) {
+      // Only primitive spellings reach the YAML parser: never collections,
+      // aliases, tags or newlines supplied by a placeholder value.
+      const scalar = expanded.trim()
+        ? yaml.load(expanded.trim(), { schema: yaml.JSON_SCHEMA })
+        : null;
+      if (
+        scalar === null ||
+        typeof scalar === "number" ||
+        typeof scalar === "boolean"
+      )
+        return scalar;
+    }
+    return expanded;
   });
 
   // Note: secret placeholders are not resolved here - they remain as secretKeyRef in the YAML
   // The K8s API will resolve them at runtime
 
-  return resolved;
+  return yaml.dump(resolved, { lineWidth: -1, noRefs: true });
 }
+
+function findUnsafePlaceholders({
+  parsed,
+  inputDefinitions,
+  deferredWarnings,
+}: {
+  parsed: unknown;
+  inputDefinitions?: DeploymentYamlInputDefinitions;
+  deferredWarnings?: string[];
+}): string[] {
+  const errors: string[] = [];
+  const isCatalogOwned = catalogOwnedEnvironmentPredicate(inputDefinitions);
+  try {
+    mapYamlStrings(parsed, ({ value, path, isKey }) => {
+      if (errors.length >= 20) {
+        throw new Error("Too many invalid deployment YAML placeholders");
+      }
+      const location = path.join(".");
+      const displayedLocation =
+        location.length > 200 ? `${location.slice(0, 200)}…` : location;
+      if (isKey && /\$\{[^}]+\}/.test(value)) {
+        errors.push(
+          `Placeholder map keys are not supported at ${displayedLocation}`,
+        );
+        return value;
+      }
+      for (const [token, prefix, key] of value.matchAll(
+        RESOLVABLE_PLACEHOLDER,
+      )) {
+        if (errors.length >= 20) {
+          throw new Error("Too many invalid deployment YAML placeholders");
+        }
+        if (prefix !== "env" && key !== "server_name") continue;
+        if (prefix === "env" && isCatalogOwned(key)) continue;
+        const programInput =
+          /^spec\.template\.spec\.(containers|initContainers)\.\d+\.(env\.\d+\.value|(command|args)\.\d+)$/.test(
+            location,
+          );
+        const overwrittenNameLabel =
+          prefix === "archestra" &&
+          (location === "metadata.labels.mcp-server-name" ||
+            location === "spec.template.metadata.labels.mcp-server-name");
+        if (!programInput && !overwrittenNameLabel) {
+          if (prefix === "env" && deferredWarnings) {
+            if (deferredWarnings.length < 20) {
+              deferredWarnings.push(
+                `Placeholder ${token.slice(0, 200)} at ${displayedLocation} requires a static catalog value; its source is checked when saving the catalog`,
+              );
+            }
+            continue;
+          }
+          errors.push(
+            `Installer placeholder ${token.slice(0, 200)} is not supported at ${displayedLocation}; use a static catalog value or a container environment value, command, or argument`,
+          );
+        }
+      }
+      return value;
+    });
+  } catch (error) {
+    errors.push(
+      error instanceof Error ? error.message : "Invalid YAML structure",
+    );
+  }
+  return errors;
+}
+
+/** Normalize template syntax only; supplied values are inserted after parsing. */
+function parseDeploymentYamlTemplate(
+  source: string,
+  plainScalarPaths?: Set<string>,
+): unknown {
+  const prefix = `ARCHESTRA_TEMPLATE_${randomUUID().replaceAll("-", "")}_`;
+  const placeholders: string[] = [];
+  const tokenized = source.replace(
+    /\$\{(?:env|archestra)\.[\w.-]+\}/g,
+    (token) => {
+      const index = placeholders.push(token) - 1;
+      return `${prefix}${index}_END`;
+    },
+  );
+  const plainScalars = new Set<string>();
+  const schema = plainScalarPaths
+    ? yaml.DEFAULT_SCHEMA.extend({
+        implicit: [
+          new yaml.Type("!archestra-template", {
+            kind: "scalar",
+            resolve(value: unknown) {
+              // Implicit resolvers run only for plain scalars. Each template
+              // occurrence has its own token, so quoted twins stay distinct.
+              if (typeof value === "string" && value.includes(prefix)) {
+                plainScalars.add(value);
+              }
+              return false;
+            },
+          }),
+        ],
+      })
+    : yaml.DEFAULT_SCHEMA;
+  const parsed: unknown = yaml.load(tokenized, { schema });
+  if (placeholders.length === 0) return parsed;
+  const tokenPattern = new RegExp(`${prefix}(\\d+)_END`, "g");
+  return mapYamlStrings(parsed, ({ value, path, isKey }) => {
+    if (!isKey && plainScalars.has(value)) {
+      plainScalarPaths?.add(JSON.stringify(path));
+    }
+    return value.replace(
+      tokenPattern,
+      (_token, index) => placeholders[Number(index)],
+    );
+  });
+}
+
+/** Follow the same catalog and connection-field precedence as runtime inputs. */
+function catalogOwnedEnvironmentPredicate(
+  definitions?: DeploymentYamlInputDefinitions,
+): (key: string) => boolean {
+  const environment = new Map<
+    string,
+    z.infer<typeof EnvironmentVariableSchema>[]
+  >();
+  for (const field of definitions?.localConfig?.environment ?? []) {
+    const fields = environment.get(field.key) ?? [];
+    fields.push(field);
+    environment.set(field.key, fields);
+  }
+  const visiting = new Set<string>();
+  const resolved = new Map<string, boolean>();
+  function staticValue(value: string): boolean {
+    return [...value.matchAll(/\$\{user_config\.([^}]+)\}/g)].every(
+      ([, key]) => {
+        if (visiting.has(key) || visiting.size >= 100) return false;
+        if (resolved.has(key)) return resolved.get(key) === true;
+        visiting.add(key);
+        const field =
+          definitions?.userConfig && Object.hasOwn(definitions.userConfig, key)
+            ? definitions.userConfig[key]
+            : undefined;
+        const owned = field
+          ? field.promptOnInstallation === false &&
+            field.default != null &&
+            staticValue(String(field.default))
+          : key !== definitions?.oauthConfig?.access_token_env_var &&
+            staticEnvironment(key);
+        visiting.delete(key);
+        resolved.set(key, owned);
+        return owned;
+      },
+    );
+  }
+  function staticEnvironment(key: string): boolean {
+    const fields = environment.get(key);
+    return Boolean(
+      fields?.length &&
+        fields.every(
+          (field) =>
+            !field.promptOnInstallation &&
+            !field.credentialId &&
+            field.type !== "secret" &&
+            field.value !== undefined &&
+            staticValue(String(field.value)),
+        ),
+    );
+  }
+  return staticEnvironment;
+}
+
+/** Visit aliases at each use site: their permitted paths can differ. Bound the
+ * expanded work, including diagnostic paths, before copying or serializing it. */
+function mapYamlStrings(
+  value: unknown,
+  transform: (scalar: {
+    value: string;
+    path: string[];
+    isKey: boolean;
+  }) => string | string[] | number | boolean | null,
+): unknown {
+  const ancestors = new Set<object>();
+  let nodes = 0;
+  let characters = 0;
+  function spend(nodeCount: number, characterCount: number): void {
+    nodes += nodeCount;
+    characters += characterCount;
+    assertYamlExpansionSize(nodes, characters);
+  }
+  function transformString(value: string, path: string[], isKey: boolean) {
+    assertYamlExpansionSize(0, value.length);
+    const transformed = transform({ value, path, isKey });
+    if (Array.isArray(transformed)) {
+      spend(transformed.length, 0);
+      for (const entry of transformed) spend(0, entry.length);
+    } else {
+      spend(0, String(transformed).length);
+    }
+    return transformed;
+  }
+  function visit(node: unknown, path: string[]): unknown {
+    if (path.length > 100) throw new Error(YAML_EXPANSION_ERROR);
+    spend(
+      1,
+      path.reduce((size, segment) => size + segment.length + 1, 0),
+    );
+    if (typeof node === "string") {
+      return transformString(node, path, false);
+    }
+    if (node === null || typeof node !== "object" || node instanceof Date) {
+      return node;
+    }
+    if (ancestors.has(node)) {
+      throw new Error(
+        `Cyclic YAML aliases are not supported at ${path.join(".")}`,
+      );
+    }
+    ancestors.add(node);
+    const result = Array.isArray(node)
+      ? node.map((entry, index) => visit(entry, [...path, String(index)]))
+      : Object.fromEntries(
+          Object.entries(node).map(([key, entry]) => {
+            const childPath = [...path, key];
+            const mappedKey = transformString(key, childPath, true);
+            return [mappedKey, visit(entry, childPath)];
+          }),
+        );
+    ancestors.delete(node);
+    return result;
+  }
+  return visit(value, []);
+}
+
+function assertYamlExpansionSize(nodes: number, characters: number): void {
+  if (nodes > 50_000 || characters > 2 * 1024 * 1024) {
+    throw new Error(YAML_EXPANSION_ERROR);
+  }
+}
+
+const YAML_EXPANSION_ERROR = "Deployment YAML exceeds the expansion limit";
 
 /**
  * Parses YAML and merges it with system-managed values.
@@ -448,6 +771,14 @@ export function customYamlToDeployment(
     }
     if (!parsed.spec.template.metadata) {
       parsed.spec.template.metadata = {};
+    }
+    if (
+      parsed.apiVersion !== "apps/v1" ||
+      parsed.kind !== "Deployment" ||
+      !Array.isArray(parsed.spec.template.spec?.containers) ||
+      parsed.spec.template.spec.containers.length === 0
+    ) {
+      return null;
     }
 
     // Override protected fields
@@ -531,7 +862,10 @@ export function mergeLocalConfigIntoYaml(
     }
 
     const yamlContent = lines.slice(contentStartIndex).join("\n");
-    const parsed = yaml.load(yamlContent) as Record<string, unknown>;
+    const parsed = parseDeploymentYamlTemplate(yamlContent) as Record<
+      string,
+      unknown
+    >;
 
     if (!parsed || typeof parsed !== "object") {
       return yamlString;

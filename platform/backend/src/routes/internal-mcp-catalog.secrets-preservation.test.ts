@@ -92,7 +92,13 @@ describe("Internal MCP Catalog - Local Config Secret Preservation on PUT", () =>
 
     expect(response.statusCode).toBe(200);
 
-    const stored = await secretManager().getSecret(existingSecret.id);
+    const current = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(current?.localConfigSecretId).toBe(existingSecret.id);
+    const stored = await secretManager().getSecret(
+      current?.localConfigSecretId ?? "",
+    );
     expect(stored?.secret).toEqual({ API_KEY: "kept-value-1" });
   });
 
@@ -146,7 +152,13 @@ describe("Internal MCP Catalog - Local Config Secret Preservation on PUT", () =>
 
     expect(response.statusCode).toBe(200);
 
-    const stored = await secretManager().getSecret(existingSecret.id);
+    const current = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(current?.localConfigSecretId).toBe(existingSecret.id);
+    const stored = await secretManager().getSecret(
+      current?.localConfigSecretId ?? "",
+    );
     expect(stored?.secret).toEqual({ API_KEY: "kept-value-2" });
   });
 
@@ -214,11 +226,20 @@ describe("Internal MCP Catalog - Local Config Secret Preservation on PUT", () =>
 
     expect(response.statusCode).toBe(200);
 
-    const stored = await secretManager().getSecret(existingSecret.id);
+    const current = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(current?.localConfigSecretId).not.toBe(existingSecret.id);
+    const stored = await secretManager().getSecret(
+      current?.localConfigSecretId ?? "",
+    );
     expect(stored?.secret).toEqual({
       EDITED_KEY: "new-edited",
       UNTOUCHED_KEY: "old-untouched",
     });
+    expect(
+      (await secretManager().getSecret(existingSecret.id))?.secret,
+    ).toEqual({ EDITED_KEY: "old-edited", UNTOUCHED_KEY: "old-untouched" });
   });
 
   test("4. PUT removing an env var entry drops its stored secret value", async ({
@@ -278,9 +299,18 @@ describe("Internal MCP Catalog - Local Config Secret Preservation on PUT", () =>
 
     expect(response.statusCode).toBe(200);
 
-    const stored = await secretManager().getSecret(existingSecret.id);
+    const current = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(current?.localConfigSecretId).not.toBe(existingSecret.id);
+    const stored = await secretManager().getSecret(
+      current?.localConfigSecretId ?? "",
+    );
     expect(stored?.secret).toEqual({ KEPT_KEY: "kept-value" });
     expect(stored?.secret).not.toHaveProperty("DROPPED_KEY");
+    expect(
+      (await secretManager().getSecret(existingSecret.id))?.secret,
+    ).toEqual({ KEPT_KEY: "kept-value", DROPPED_KEY: "dropped-value" });
   });
 
   test("5. PUT adding a new secret entry without a value does not insert an empty secret", async ({
@@ -338,7 +368,13 @@ describe("Internal MCP Catalog - Local Config Secret Preservation on PUT", () =>
 
     expect(response.statusCode).toBe(200);
 
-    const stored = await secretManager().getSecret(existingSecret.id);
+    const current = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(current?.localConfigSecretId).toBe(existingSecret.id);
+    const stored = await secretManager().getSecret(
+      current?.localConfigSecretId ?? "",
+    );
     expect(stored?.secret).toEqual({ EXISTING_KEY: "existing-value" });
     expect(stored?.secret).not.toHaveProperty("BRAND_NEW_KEY");
   });

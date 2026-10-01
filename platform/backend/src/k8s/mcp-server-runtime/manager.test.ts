@@ -1388,7 +1388,9 @@ describe("McpServerRuntimeManager", () => {
           GITHUB_TOKEN: "ghp_github_token",
           JIRA_API_KEY: "jira-key-123",
         },
-        catalogEnvironment: [{ key: "SLACK_TOKEN", type: "secret" }],
+        catalogEnvironment: [
+          { key: "SLACK_TOKEN", type: "secret", promptOnInstallation: true },
+        ],
       });
 
       await manager.startServer(mcpServer);
@@ -1417,8 +1419,16 @@ describe("McpServerRuntimeManager", () => {
       const { manager, mcpServer, cleanup } = await setupStartServerTest({
         vaultSecret: sharedVault,
         catalogEnvironment: [
-          { key: "SLACK_BOT_TOKEN", type: "secret" },
-          { key: "SLACK_SIGNING_SECRET", type: "secret" },
+          {
+            key: "SLACK_BOT_TOKEN",
+            type: "secret",
+            promptOnInstallation: true,
+          },
+          {
+            key: "SLACK_SIGNING_SECRET",
+            type: "secret",
+            promptOnInstallation: true,
+          },
         ],
       });
 
@@ -1444,24 +1454,31 @@ describe("McpServerRuntimeManager", () => {
       cleanup();
     });
 
-    test("passes all keys through when catalog has no environment config (backward compat)", async () => {
-      // For servers without catalog environment config (e.g., BYOS with no defined env schema),
-      // all vault keys should pass through to maintain backward compatibility
+    test.each([
+      false,
+      true,
+    ])("allows undeclared bag keys only for catalogless callers (catalogless: %s)", async (catalogless) => {
       const { manager, mcpServer, cleanup } = await setupStartServerTest({
         vaultSecret: {
           SOME_KEY: "some-value",
           OTHER_KEY: "other-value",
         },
         catalogEnvironment: [], // No environment config
+        ...(catalogless
+          ? { mcpServerOverrides: { catalogId: undefined } }
+          : {}),
       });
 
       await manager.startServer(mcpServer);
 
-      // All keys should pass through
-      expect(mockCreateK8sSecret).toHaveBeenCalledWith({
-        SOME_KEY: "some-value",
-        OTHER_KEY: "other-value",
-      });
+      if (catalogless) {
+        expect(mockCreateK8sSecret).toHaveBeenCalledWith({
+          SOME_KEY: "some-value",
+          OTHER_KEY: "other-value",
+        });
+      } else {
+        expect(mockCreateK8sSecret).not.toHaveBeenCalled();
+      }
 
       cleanup();
     });

@@ -2697,6 +2697,124 @@ spec:
     });
   }
 
+  test("preserves authorized static legacy identity, tokens, and host configuration", () => {
+    const deployment = createK8sDeploymentWithYaml(`
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      serviceAccount: custom-legacy-account
+      automountServiceAccountToken: true
+      hostNetwork: true
+      hostPID: true
+      hostIPC: true
+      volumes:
+        - name: host-data
+          hostPath:
+            path: /srv/mcp-data
+        - name: token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: custom-service
+                  path: token
+      containers:
+        - name: mcp-server
+          image: test:latest
+          securityContext:
+            privileged: true
+            capabilities:
+              add: [NET_ADMIN]
+          ports:
+            - containerPort: 8080
+              hostPort: 8080
+          volumeMounts:
+            - name: host-data
+              mountPath: /data
+            - name: token
+              mountPath: /token
+`);
+    const pod = deployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node" },
+      false,
+      8080,
+    ).spec?.template.spec;
+    expect(pod).toMatchObject({
+      serviceAccount: "custom-legacy-account",
+      automountServiceAccountToken: true,
+      hostNetwork: true,
+      hostPID: true,
+      hostIPC: true,
+      volumes: [
+        { name: "host-data", hostPath: { path: "/srv/mcp-data" } },
+        {
+          name: "token",
+          projected: {
+            sources: [
+              {
+                serviceAccountToken: {
+                  audience: "custom-service",
+                  path: "token",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(pod?.containers[0]).toMatchObject({
+      securityContext: {
+        privileged: true,
+        capabilities: { add: ["NET_ADMIN"] },
+      },
+      ports: [{ containerPort: 8080, hostPort: 8080 }],
+      volumeMounts: [
+        { name: "host-data", mountPath: "/data" },
+        { name: "token", mountPath: "/token" },
+      ],
+    });
+  });
+
+  test("keeps explicit YAML serviceAccountName and disabled token mounting", () => {
+    const deployment = createK8sDeploymentWithYaml(
+      minimalYaml.replace(
+        "      containers:",
+        "      serviceAccountName: yaml-account\n      automountServiceAccountToken: false\n      containers:",
+      ),
+    );
+    const pod = deployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", serviceAccount: "catalog-account" },
+      false,
+      8080,
+    ).spec?.template.spec;
+    expect(pod?.serviceAccountName).toBe("yaml-account");
+    expect(pod?.automountServiceAccountToken).toBe(false);
+  });
+
+  test.each([
+    "invalid: yaml: [",
+    "apiVersion: apps/v1\nkind: Deployment",
+    minimalYaml.replace("kind: Deployment", "kind: Pod"),
+    minimalYaml.replace(
+      "      containers:",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal installer placeholder must fail in a pod identity field.
+      "      serviceAccountName: ${env.ACCOUNT}\n      containers:",
+    ),
+  ])("rejects invalid stored YAML instead of generating a different default deployment: %s", (source) => {
+    const deployment = createK8sDeploymentWithYaml(source);
+    expect(() =>
+      deployment.generateDeploymentSpec(
+        "test:latest",
+        { command: "node" },
+        false,
+        8080,
+      ),
+    ).toThrow();
+  });
+
   test("fills missing TCP probes for custom HTTP YAML and preserves explicit probes", () => {
     const deployment = createK8sDeploymentWithYaml(`
 apiVersion: apps/v1

@@ -7,6 +7,7 @@ import {
   type ISecretManager,
   parseVaultSecretReference,
   SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+  type SecretDeletionOptions,
   type SecretsConnectivityResult,
   type SecretValue,
   type SelectSecret,
@@ -188,7 +189,13 @@ export default class ReadonlyVaultSecretManager
    * Delete the secret record from the database.
    * Note: This does NOT delete the secret from external Vault (we don't own it).
    */
-  async deleteSecret(secretId: string): Promise<boolean> {
+  async deleteSecret(
+    secretId: string,
+    options?: SecretDeletionOptions,
+  ): Promise<boolean> {
+    if (options?.onlyIfUnreferenced) {
+      return SecretModel.deleteIfUnreferenced({ id: secretId });
+    }
     logger.info(
       "BYOSVaultSecretManager.deleteSecret: deleting external vault secret reference",
     );

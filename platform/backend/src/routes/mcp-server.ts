@@ -43,6 +43,7 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import SecretModel from "@/models/secret";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
@@ -78,6 +79,7 @@ import {
   type EnterpriseManagedCredentialConfig,
   generateErrorResponseSchema,
   InsertMcpServerSchema,
+  type InternalMcpCatalog,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
   type McpServer,
@@ -304,7 +306,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           accessToken: z.string().optional(),
           // When true, environmentValues and userConfigValues contain vault references in "path#key" format
           isByosVault: z.boolean().optional(),
-          // Kubernetes service account override for local MCP servers
           serviceAccount: z.string().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
@@ -315,10 +316,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentIds,
         secretId,
         accessToken,
+        serviceAccount,
         isByosVault,
         userConfigValues,
         environmentValues,
-        serviceAccount,
         ...restDataFromRequestBody
       } = body;
       const serverData: typeof restDataFromRequestBody & {
@@ -362,6 +363,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Fetch catalog item FIRST to determine server type
       let catalogItem = null;
+      let catalogSnapshot: InternalMcpCatalog | null = null;
       if (serverData.catalogId) {
         const isCatalogAdmin = await isMcpInstallationAdmin({
           userId: user.id,
@@ -372,19 +374,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // caller the item's scope does not admit before any secret is resolved,
         // and answers exactly as it does for an item that does not exist — so an
         // install attempt never reveals another user's personal-scope item.
-        catalogItem = await InternalMcpCatalogModel.findById(
+        catalogSnapshot = await InternalMcpCatalogModel.findById(
           serverData.catalogId,
           {
             accessAction: "use",
             userId: user.id,
             isAdmin: isCatalogAdmin,
             organizationId,
+            expandSecrets: false,
           },
         );
 
-        if (!catalogItem) {
+        if (!catalogSnapshot) {
           throw new ApiError(400, "Catalog item not found");
         }
+        catalogItem =
+          await InternalMcpCatalogModel.expandSnapshotSecrets(catalogSnapshot);
 
         if (!isBuiltInCatalogId(catalogItem.id)) {
           await ResourcePermissions.require({
@@ -411,6 +416,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             400,
             "The Playwright browser runtime is managed automatically.",
           );
+        }
+
+        if (catalogItem.serverType === "local") {
+          ({ environmentValues, userConfigValues } = filterLocalInstallInputs({
+            catalogItem,
+            environmentValues,
+            userConfigValues,
+          }));
         }
 
         // Set serverType from catalog item
@@ -461,6 +474,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
           ],
         });
+
+        await assertInstallationSecretIsIndependent(secretId);
+        if (serviceAccount && catalogItem.serverType === "local") {
+          await assertInstallServiceAccountChangeAllowed({
+            catalogItem,
+            serviceAccount,
+            userId: user.id,
+            organizationId,
+          });
+        }
 
         // Validate no duplicate installations for this catalog item
         const existingServers = await McpServerModel.findByCatalogId(
@@ -532,26 +555,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // secret/deployment work, so a blocked install has no side effects beyond
         // the pending flag.
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
-
-        // Update catalog's serviceAccount if user provided a different value
-        const normalizedServiceAccount =
-          serviceAccount === "" ? undefined : serviceAccount;
-        if (
-          catalogItem?.serverType === "local" &&
-          normalizedServiceAccount !== undefined &&
-          catalogItem.localConfig?.serviceAccount !== normalizedServiceAccount
-        ) {
-          await InternalMcpCatalogModel.update(catalogItem.id, {
-            localConfig: {
-              ...catalogItem.localConfig,
-              serviceAccount: normalizedServiceAccount,
-            },
-          });
-          // Update local reference for deployment
-          if (catalogItem.localConfig) {
-            catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
-          }
-        }
       }
 
       // For REMOTE servers: create secrets and validate connection
@@ -725,7 +728,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // If isByosVault flag is set, use vault references from environmentValues for secret env vars
+        // Validate storage compatibility before publishing the account or
+        // creating installation secrets.
         if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
           if (!isByosEnabled()) {
             throw new ApiError(
@@ -734,7 +738,35 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
             );
           }
+        } else if (
+          !secretId &&
+          isByosEnabled() &&
+          catalogItem.localConfig?.environment?.some(
+            (env) =>
+              env.type === "secret" &&
+              !env.credentialId &&
+              env.promptOnInstallation &&
+              environmentValues?.[env.key],
+          )
+        ) {
+          throw new ApiError(
+            400,
+            "Manual secret input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
+          );
+        }
 
+        // The earlier permission check also covers duplicate installs. Publish
+        // only after validation, against the original catalog snapshot.
+        if (serviceAccount && catalogSnapshot) {
+          catalogItem = await updateInstallServiceAccount({
+            catalogItem,
+            original: catalogSnapshot,
+            serviceAccount,
+          });
+        }
+
+        // If isByosVault flag is set, use vault references from environmentValues for secret env vars
+        if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
           // Collect secret env vars with vault references from environmentValues
           const secretEnvVars: Record<string, string> = {
             ...catalogStaticUserConfigValues,
@@ -775,7 +807,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...catalogStaticUserConfigValues,
             ...(installUserConfigValues ?? {}),
           };
-          let hasPromptedSecrets = false;
 
           // Collect all secret-type env vars (static and prompted).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
@@ -785,9 +816,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               if (envDef.promptOnInstallation) {
                 // Prompted during installation - get from environmentValues
                 value = environmentValues?.[envDef.key];
-                if (value) {
-                  hasPromptedSecrets = true;
-                }
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;
@@ -797,15 +825,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 secretEnvVars[envDef.key] = value;
               }
             }
-          }
-
-          // Block user-prompted secrets when Readonly Vault is enabled (they should use Vault)
-          // Static secrets from catalog are allowed since they're not manual user input
-          if (hasPromptedSecrets && isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Manual secret input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
-            );
           }
 
           // Create secret in database if there are any secret env vars
@@ -936,182 +955,188 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
 
             // Start async tool fetching in the background (non-blocking)
-            (async () => {
-              try {
-                // Wait for the deployment to be fully ready before fetching tools
-                const k8sDeployment =
-                  await McpServerRuntimeManager.getOrLoadDeployment(
+            trackBackgroundWork(
+              (async () => {
+                try {
+                  // Wait for the deployment to be fully ready before fetching tools
+                  const k8sDeployment =
+                    await McpServerRuntimeManager.getOrLoadDeployment(
+                      mcpServer.id,
+                    );
+                  if (!k8sDeployment) {
+                    throw new Error("Deployment manager not found");
+                  }
+
+                  // SPDX-SnippetBegin
+                  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+                  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+                  // An install can adopt an existing shared (multitenant)
+                  // deployment that idle hibernation scaled to zero; wake it so
+                  // the readiness wait below isn't a guaranteed timeout.
+                  await McpServerRuntimeManager.ensureAwake(mcpServer.id);
+                  // SPDX-SnippetEnd
+
+                  fastify.log.info(
+                    `Waiting for deployment to be ready: ${mcpServer.name}`,
+                  );
+
+                  // Wait for deployment to be ready (with timeout)
+                  await k8sDeployment.waitForDeploymentReady(60, 2000); // 60 attempts * 2s = 2 minutes max
+
+                  fastify.log.info(
+                    `Deployment is ready, updating status to discovering-tools: ${mcpServer.name}`,
+                  );
+
+                  await McpServerModel.update(mcpServer.id, {
+                    localInstallationStatus: "discovering-tools",
+                    localInstallationError: null,
+                  });
+                  broadcastMcpInstallationStatus(
                     mcpServer.id,
+                    "discovering-tools",
+                    null,
                   );
-                if (!k8sDeployment) {
-                  throw new Error("Deployment manager not found");
-                }
 
-                // SPDX-SnippetBegin
-                // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-                // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-                // An install can adopt an existing shared (multitenant)
-                // deployment that idle hibernation scaled to zero; wake it so
-                // the readiness wait below isn't a guaranteed timeout.
-                await McpServerRuntimeManager.ensureAwake(mcpServer.id);
-                // SPDX-SnippetEnd
-
-                fastify.log.info(
-                  `Waiting for deployment to be ready: ${mcpServer.name}`,
-                );
-
-                // Wait for deployment to be ready (with timeout)
-                await k8sDeployment.waitForDeploymentReady(60, 2000); // 60 attempts * 2s = 2 minutes max
-
-                fastify.log.info(
-                  `Deployment is ready, updating status to discovering-tools: ${mcpServer.name}`,
-                );
-
-                await McpServerModel.update(mcpServer.id, {
-                  localInstallationStatus: "discovering-tools",
-                  localInstallationError: null,
-                });
-                broadcastMcpInstallationStatus(
-                  mcpServer.id,
-                  "discovering-tools",
-                  null,
-                );
-
-                fastify.log.info(
-                  `Attempting to fetch tools from local server: ${mcpServer.name}`,
-                );
-                // Enterprise-managed local servers (streamable-http) may
-                // require the per-user exchanged credential for tools/list,
-                // so route discovery through the install-time exchange.
-                const tools = capturedEnterpriseManagedConfig
-                  ? await connectAndGetToolsForInstallation({
-                      catalogItem: capturedCatalogItem,
-                      mcpServerId: mcpServer.id,
-                      secretId: mcpServer.secretId ?? undefined,
-                      userId: user.id,
-                      allowCurrentUserTokenFallback: true,
-                    })
-                  : await McpServerModel.getToolsFromServer(mcpServer);
-
-                // Persist tools in the database
-                // Use catalog item name (without userId) for tool naming to avoid duplicates across users
-                const toolNamePrefix = capturedCatalogName || mcpServer.name;
-                const toolsToCreate = tools.map((tool) => ({
-                  name: ToolModel.slugifyName(toolNamePrefix, tool.name),
-                  rawToolName: tool.name,
-                  description: tool.description ?? null,
-                  parameters: tool.inputSchema,
-                  meta: { _meta: tool._meta, annotations: tool.annotations },
-                  catalogId: capturedCatalogId,
-                }));
-
-                // Bulk create tools to avoid N+1 queries
-                const createdTools =
-                  await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
-
-                // Clone reconciliation: if this catalog has provisional cloned
-                // tools (first install of a clone), confirm the ones the server
-                // actually exposes and drop the rest. Genuinely-new tools were
-                // just created above with default policies (+ configurator).
-                const provisionalCount =
-                  await ToolModel.countProvisionalForCatalog(capturedCatalogId);
-                let confirmedClonedToolIds: string[] = [];
-                if (provisionalCount > 0) {
-                  const discoveredToolNames = new Set(
-                    toolsToCreate.map((t) => t.name),
+                  fastify.log.info(
+                    `Attempting to fetch tools from local server: ${mcpServer.name}`,
                   );
-                  const { confirmedToolIds } =
-                    await ToolModel.reconcileClonedCatalogTools({
-                      catalogId: capturedCatalogId,
-                      discoveredToolNames,
-                    });
-                  confirmedClonedToolIds = confirmedToolIds;
-                }
+                  // Enterprise-managed local servers (streamable-http) may
+                  // require the per-user exchanged credential for tools/list,
+                  // so route discovery through the install-time exchange.
+                  const tools = capturedEnterpriseManagedConfig
+                    ? await connectAndGetToolsForInstallation({
+                        catalogItem: capturedCatalogItem,
+                        mcpServerId: mcpServer.id,
+                        secretId: mcpServer.secretId ?? undefined,
+                        userId: user.id,
+                        allowCurrentUserTokenFallback: true,
+                      })
+                    : await McpServerModel.getToolsFromServer(mcpServer);
 
-                // For personal installs, auto-assign every discovered tool to the
-                // installer's personal gateway alongside any explicit agentIds.
-                // Team-scoped installs only honor explicit agentIds.
-                {
-                  // Confirmed clone tools are usually already in `createdTools`
-                  // (bulkCreateToolsIfNotExists returns existing rows matched by
-                  // name); include them explicitly as defense-in-depth and dedupe.
-                  const toolIds = Array.from(
-                    new Set([
-                      ...createdTools.map((t) => t.id),
-                      ...confirmedClonedToolIds,
-                    ]),
-                  );
-                  if (toolIds.length > 0) {
-                    const targetAgentIds: string[] = [];
-                    if (!mcpServer.teamId) {
-                      const personalGateway =
-                        await AgentModel.ensurePersonalMcpGateway({
-                          userId: targetUserId,
-                          organizationId,
-                        });
-                      targetAgentIds.push(personalGateway.id);
-                    }
-                    if (agentIds && agentIds.length > 0) {
-                      targetAgentIds.push(...agentIds);
-                    }
-                    const dedupedAgentIds = Array.from(new Set(targetAgentIds));
-                    if (dedupedAgentIds.length > 0) {
-                      await AgentToolModel.bulkCreateForAgentsAndTools(
-                        dedupedAgentIds,
-                        toolIds,
-                        {
-                          mcpServerId: mcpServer.id,
-                          credentialResolutionMode:
-                            capturedEnterpriseManagedConfig
-                              ? "enterprise_managed"
-                              : "static",
-                        },
+                  // Persist tools in the database
+                  // Use catalog item name (without userId) for tool naming to avoid duplicates across users
+                  const toolNamePrefix = capturedCatalogName || mcpServer.name;
+                  const toolsToCreate = tools.map((tool) => ({
+                    name: ToolModel.slugifyName(toolNamePrefix, tool.name),
+                    rawToolName: tool.name,
+                    description: tool.description ?? null,
+                    parameters: tool.inputSchema,
+                    meta: { _meta: tool._meta, annotations: tool.annotations },
+                    catalogId: capturedCatalogId,
+                  }));
+
+                  // Bulk create tools to avoid N+1 queries
+                  const createdTools =
+                    await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+
+                  // Clone reconciliation: if this catalog has provisional cloned
+                  // tools (first install of a clone), confirm the ones the server
+                  // actually exposes and drop the rest. Genuinely-new tools were
+                  // just created above with default policies (+ configurator).
+                  const provisionalCount =
+                    await ToolModel.countProvisionalForCatalog(
+                      capturedCatalogId,
+                    );
+                  let confirmedClonedToolIds: string[] = [];
+                  if (provisionalCount > 0) {
+                    const discoveredToolNames = new Set(
+                      toolsToCreate.map((t) => t.name),
+                    );
+                    const { confirmedToolIds } =
+                      await ToolModel.reconcileClonedCatalogTools({
+                        catalogId: capturedCatalogId,
+                        discoveredToolNames,
+                      });
+                    confirmedClonedToolIds = confirmedToolIds;
+                  }
+
+                  // For personal installs, auto-assign every discovered tool to the
+                  // installer's personal gateway alongside any explicit agentIds.
+                  // Team-scoped installs only honor explicit agentIds.
+                  {
+                    // Confirmed clone tools are usually already in `createdTools`
+                    // (bulkCreateToolsIfNotExists returns existing rows matched by
+                    // name); include them explicitly as defense-in-depth and dedupe.
+                    const toolIds = Array.from(
+                      new Set([
+                        ...createdTools.map((t) => t.id),
+                        ...confirmedClonedToolIds,
+                      ]),
+                    );
+                    if (toolIds.length > 0) {
+                      const targetAgentIds: string[] = [];
+                      if (!mcpServer.teamId) {
+                        const personalGateway =
+                          await AgentModel.ensurePersonalMcpGateway({
+                            userId: targetUserId,
+                            organizationId,
+                          });
+                        targetAgentIds.push(personalGateway.id);
+                      }
+                      if (agentIds && agentIds.length > 0) {
+                        targetAgentIds.push(...agentIds);
+                      }
+                      const dedupedAgentIds = Array.from(
+                        new Set(targetAgentIds),
                       );
+                      if (dedupedAgentIds.length > 0) {
+                        await AgentToolModel.bulkCreateForAgentsAndTools(
+                          dedupedAgentIds,
+                          toolIds,
+                          {
+                            mcpServerId: mcpServer.id,
+                            credentialResolutionMode:
+                              capturedEnterpriseManagedConfig
+                                ? "enterprise_managed"
+                                : "static",
+                          },
+                        );
+                      }
                     }
                   }
+
+                  await refreshMcpSkillMetadata({
+                    catalogId: capturedCatalogId,
+                    mcpServerId: mcpServer.id,
+                  });
+                  trackBackgroundWork(
+                    openappaBatteriesService.onCatalogToolsChanged(
+                      capturedCatalogId,
+                    ),
+                  );
+
+                  // Set status to success after tools are fetched
+                  await McpServerModel.update(mcpServer.id, {
+                    localInstallationStatus: "success",
+                    localInstallationError: null,
+                  });
+                  broadcastMcpInstallationStatus(mcpServer.id, "success", null);
+
+                  fastify.log.info(
+                    `Successfully fetched and persisted ${tools.length} tools from local server: ${mcpServer.name}`,
+                  );
+                } catch (toolError) {
+                  const errorMessage =
+                    toolError instanceof Error
+                      ? toolError.message
+                      : "Unknown error";
+                  fastify.log.error(
+                    `Failed to fetch tools from local server ${mcpServer.name}: ${errorMessage}`,
+                  );
+
+                  // Set status to error if tool fetching fails
+                  await McpServerModel.update(mcpServer.id, {
+                    localInstallationStatus: "error",
+                    localInstallationError: errorMessage,
+                  });
+                  broadcastMcpInstallationStatus(
+                    mcpServer.id,
+                    "error",
+                    errorMessage,
+                  );
                 }
-
-                await refreshMcpSkillMetadata({
-                  catalogId: capturedCatalogId,
-                  mcpServerId: mcpServer.id,
-                });
-                trackBackgroundWork(
-                  openappaBatteriesService.onCatalogToolsChanged(
-                    capturedCatalogId,
-                  ),
-                );
-
-                // Set status to success after tools are fetched
-                await McpServerModel.update(mcpServer.id, {
-                  localInstallationStatus: "success",
-                  localInstallationError: null,
-                });
-                broadcastMcpInstallationStatus(mcpServer.id, "success", null);
-
-                fastify.log.info(
-                  `Successfully fetched and persisted ${tools.length} tools from local server: ${mcpServer.name}`,
-                );
-              } catch (toolError) {
-                const errorMessage =
-                  toolError instanceof Error
-                    ? toolError.message
-                    : "Unknown error";
-                fastify.log.error(
-                  `Failed to fetch tools from local server ${mcpServer.name}: ${errorMessage}`,
-                );
-
-                // Set status to error if tool fetching fails
-                await McpServerModel.update(mcpServer.id, {
-                  localInstallationStatus: "error",
-                  localInstallationError: errorMessage,
-                });
-                broadcastMcpInstallationStatus(
-                  mcpServer.id,
-                  "error",
-                  errorMessage,
-                );
-              }
-            })();
+              })(),
+            );
 
             // Return the MCP server with pending status
             return reply.send({
@@ -1368,9 +1393,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "re-authenticate",
       });
 
+      await assertInstallationSecretIsIndependent(providedSecretId);
+      await assertInstallationSecretIsIndependent(mcpServer.secretId);
+
       const catalogItem = mcpServer.catalogId
         ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
         : null;
+
+      if (catalogItem?.serverType === "local") {
+        ({ environmentValues, userConfigValues } = filterLocalInstallInputs({
+          catalogItem,
+          environmentValues,
+          userConfigValues,
+        }));
+      }
 
       // Enforce the governing environment's allowlist regex against the newly
       // submitted non-secret, free-text config values.
@@ -2230,7 +2266,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues: z.record(z.string(), z.string()).optional(),
           // Whether environmentValues contains vault references in path#key format
           isByosVault: z.boolean().optional(),
-          // Kubernetes service account override
           serviceAccount: z.string().optional(),
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -2243,11 +2278,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, headers, organizationId }, reply) => {
-      const {
+      let {
+        serviceAccount,
         environmentValues,
         userConfigValues,
         isByosVault,
-        serviceAccount,
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2290,12 +2325,35 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Get catalog item
-      const catalogItem = mcpServer.catalogId
-        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+      const catalogSnapshot = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId, {
+            expandSecrets: false,
+          })
         : null;
 
-      if (!catalogItem) {
+      if (!catalogSnapshot) {
         throw new ApiError(404, "Catalog item not found for this server");
+      }
+      let catalogItem =
+        await InternalMcpCatalogModel.expandSnapshotSecrets(catalogSnapshot);
+
+      if (catalogItem.serverType === "local") {
+        ({ environmentValues, userConfigValues } = filterLocalInstallInputs({
+          catalogItem,
+          environmentValues,
+          userConfigValues,
+        }));
+      }
+
+      // Empty strings retain the legacy reinstall clearing behavior; omitted
+      // and equivalent accounts do not write shared catalog configuration.
+      if (serviceAccount !== undefined && catalogItem.serverType === "local") {
+        await assertInstallServiceAccountChangeAllowed({
+          catalogItem,
+          serviceAccount,
+          userId: user.id,
+          organizationId,
+        });
       }
 
       // SPDX-SnippetBegin
@@ -2384,6 +2442,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             mergedPlainEnv[envDef.key] = String(value);
           }
         }
+      }
+
+      if (
+        Object.keys(environmentValues ?? {}).length ||
+        Object.keys(userConfigValues ?? {}).length
+      ) {
+        await assertInstallationSecretIsIndependent(mcpServer.secretId);
       }
 
       // Fetch the existing secret bag once so validation and the non-BYOS
@@ -2481,12 +2546,34 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const hasInstallInputs =
+        Object.keys(environmentValues ?? {}).length > 0 ||
+        Object.keys(userConfigValues ?? {}).length > 0;
+      if (hasInstallInputs && isByosVault && !isByosEnabled()) {
+        throw new ApiError(
+          400,
+          "Readonly Vault is not enabled. " +
+            "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+        );
+      }
+
+      if (catalogItem.serverType === "local") {
+        await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+      }
+
+      // Publish the already-authorized account after validation and immediately
+      // before changing installation secrets or state.
+      if (serviceAccount !== undefined && catalogItem.serverType === "local") {
+        catalogItem = await updateInstallServiceAccount({
+          catalogItem,
+          original: catalogSnapshot,
+          serviceAccount,
+        });
+      }
+
       // New env/userConfig values land in this install's secret bag. The
       // runtime reload below reads `secretId` to pick them up.
-      if (
-        (environmentValues && Object.keys(environmentValues).length > 0) ||
-        (userConfigValues && Object.keys(userConfigValues).length > 0)
-      ) {
+      if (hasInstallInputs) {
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem.userConfig,
         );
@@ -2498,14 +2585,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Update or create secret with new values
         if (isByosVault) {
           // BYOS mode: values are vault references
-          if (!isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Readonly Vault is not enabled. " +
-                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-            );
-          }
-
           // BYOS vault bags hold only vault references. Plain (non-secret) env
           // values are literals that belong on the install row's column
           // (persisted below); spreading them here would have vault resolution
@@ -2608,19 +2687,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await McpServerModel.update(id, { environmentValues: mergedPlainEnv });
       }
 
-      // Update service account if provided
-      if (
-        serviceAccount !== undefined &&
-        catalogItem.localConfig?.serviceAccount !== serviceAccount
-      ) {
-        await InternalMcpCatalogModel.update(catalogItem.id, {
-          localConfig: {
-            ...catalogItem.localConfig,
-            serviceAccount: serviceAccount || undefined,
-          },
-        });
-      }
-
       // Set status to "pending" immediately so UI shows progress bar
       await McpServerModel.update(id, {
         localInstallationStatus: "pending",
@@ -2644,55 +2710,58 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Perform the reinstall asynchronously (don't block the response)
       // Use setImmediate to fully detach from the request lifecycle
       // This allows the frontend to show the progress bar immediately
-      setImmediate(async () => {
-        try {
-          await autoReinstallServer(updatedServer, catalogItem, {
-            getTools:
-              updatedServer.serverType === "remote"
-                ? async ({ server, catalogItem }) =>
-                    (
-                      await connectAndGetToolsForInstallation({
-                        catalogItem,
-                        mcpServerId: server.id,
-                        secretId: server.secretId ?? undefined,
-                        userId: user.id,
-                        allowCurrentUserTokenFallback:
-                          updatedServer.scope === "personal" ||
-                          catalogItem.enterpriseManagedConfig !== null,
-                      })
-                    ).map((tool) => ({
-                      name: tool.name,
-                      description: tool.description || `Tool: ${tool.name}`,
-                      inputSchema: tool.inputSchema,
-                      _meta: tool._meta,
-                      annotations: tool.annotations,
-                    }))
-                : undefined,
-          });
-          // Set status to success when done
-          await McpServerModel.update(id, {
-            localInstallationStatus: "success",
-          });
-          broadcastMcpInstallationStatus(id, "success", null);
-          logger.info(
-            { serverId: id, serverName: mcpServer.name },
-            "MCP server reinstalled successfully",
-          );
-        } catch (error) {
-          // Set status to error if reinstall fails
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          await McpServerModel.update(id, {
-            localInstallationStatus: "error",
-            localInstallationError: errorMessage,
-          });
-          broadcastMcpInstallationStatus(id, "error", errorMessage);
-          logger.error(
-            { err: error, serverId: id },
-            "Failed to reinstall MCP server",
-          );
-        }
-      });
+      trackBackgroundWork(
+        (async () => {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          try {
+            await autoReinstallServer(updatedServer, catalogItem, {
+              getTools:
+                updatedServer.serverType === "remote"
+                  ? async ({ server, catalogItem }) =>
+                      (
+                        await connectAndGetToolsForInstallation({
+                          catalogItem,
+                          mcpServerId: server.id,
+                          secretId: server.secretId ?? undefined,
+                          userId: user.id,
+                          allowCurrentUserTokenFallback:
+                            updatedServer.scope === "personal" ||
+                            catalogItem.enterpriseManagedConfig !== null,
+                        })
+                      ).map((tool) => ({
+                        name: tool.name,
+                        description: tool.description || `Tool: ${tool.name}`,
+                        inputSchema: tool.inputSchema,
+                        _meta: tool._meta,
+                        annotations: tool.annotations,
+                      }))
+                  : undefined,
+            });
+            // Set status to success when done
+            await McpServerModel.update(id, {
+              localInstallationStatus: "success",
+            });
+            broadcastMcpInstallationStatus(id, "success", null);
+            logger.info(
+              { serverId: id, serverName: mcpServer.name },
+              "MCP server reinstalled successfully",
+            );
+          } catch (error) {
+            // Set status to error if reinstall fails
+            const errorMessage =
+              error instanceof Error ? error.message : "Unknown error";
+            await McpServerModel.update(id, {
+              localInstallationStatus: "error",
+              localInstallationError: errorMessage,
+            });
+            broadcastMcpInstallationStatus(id, "error", errorMessage);
+            logger.error(
+              { err: error, serverId: id },
+              "Failed to reinstall MCP server",
+            );
+          }
+        })(),
+      );
 
       // Return the server immediately with "pending" status
       return reply.send(updatedServer);
@@ -4012,4 +4081,101 @@ async function validateScopeAndAuthorization(params: {
       );
     }
   }
+}
+
+/** Publish an already-authorized account after installation validation. */
+async function updateInstallServiceAccount(params: {
+  catalogItem: InternalMcpCatalog;
+  original: InternalMcpCatalog;
+  serviceAccount: string;
+}): Promise<InternalMcpCatalog> {
+  const { catalogItem, original, serviceAccount } = params;
+  if (
+    (original.localConfig?.serviceAccount || "default") ===
+    (serviceAccount || "default")
+  ) {
+    return catalogItem;
+  }
+  const published = await InternalMcpCatalogModel.publishReviewed({
+    original,
+    updates: { localConfig: { ...original.localConfig, serviceAccount } },
+  });
+  return InternalMcpCatalogModel.expandSnapshotSecrets(published.catalogItem);
+}
+
+/** Only catalog-declared prompted fields may supply process input. */
+function filterLocalInstallInputs(params: {
+  catalogItem: InternalMcpCatalog;
+  environmentValues: Record<string, string> | undefined;
+  userConfigValues: Record<string, string> | undefined;
+}): {
+  environmentValues: Record<string, string> | undefined;
+  userConfigValues: Record<string, string> | undefined;
+} {
+  const { catalogItem, environmentValues, userConfigValues } = params;
+  const promptedEnvironment = new Set(
+    (catalogItem.localConfig?.environment ?? [])
+      .filter((field) => field.promptOnInstallation && !field.credentialId)
+      .map((field) => field.key),
+  );
+  return {
+    environmentValues:
+      environmentValues &&
+      Object.fromEntries(
+        Object.entries(environmentValues).filter(([key]) =>
+          promptedEnvironment.has(key),
+        ),
+      ),
+    userConfigValues:
+      userConfigValues &&
+      Object.fromEntries(
+        Object.entries(userConfigValues).filter(([key]) => {
+          if (
+            !catalogItem.userConfig ||
+            !Object.hasOwn(catalogItem.userConfig, key)
+          )
+            return false;
+          const field = catalogItem.userConfig?.[key];
+          return field && field.promptOnInstallation !== false;
+        }),
+      ),
+  };
+}
+
+async function assertInstallationSecretIsIndependent(
+  secretId: string | null | undefined,
+): Promise<void> {
+  if (secretId && (await SecretModel.isReferencedByMcpCatalog(secretId))) {
+    throw new ApiError(
+      403,
+      "Catalog credentials cannot be used as an installation's mutable secret bag",
+    );
+  }
+}
+
+async function assertInstallServiceAccountChangeAllowed(params: {
+  catalogItem: InternalMcpCatalog;
+  serviceAccount: string;
+  userId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { catalogItem, serviceAccount, userId, organizationId } = params;
+  if (
+    (catalogItem.localConfig?.serviceAccount || "default") ===
+    (serviceAccount || "default")
+  )
+    return;
+  if (!(await isMcpInstallationAdmin({ userId, organizationId }))) {
+    throw new ApiError(
+      403,
+      "Only MCP registry administrators can change a server's Kubernetes service account",
+    );
+  }
+  await ResourcePermissions.require({
+    userId,
+    organizationId,
+    resource: "mcpRegistry",
+    scope: catalogItem.id,
+    action: "update",
+  });
 }

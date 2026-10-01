@@ -23,6 +23,7 @@ import {
   isMcpInstallationAdmin,
 } from "@/auth/mcp-catalog-permissions";
 import { userHasPermission } from "@/auth/utils";
+import { findUnsafeDeploymentYamlPlaceholders } from "@/k8s/mcp-server-runtime/k8s-yaml-generator";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
@@ -42,11 +43,13 @@ import {
 } from "@/services/environments/environment";
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
+  CatalogSecretStaging,
   extractLocalConfigSecrets,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
+import { assertMcpRuntimeChangeAllowed } from "@/services/mcp-runtime-authorization";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
@@ -978,20 +981,41 @@ async function handleEditMcpConfig(
       );
     }
 
-    // Validate before touching the secret bag: rotating a live credential and
-    // then rejecting the edit would leave the bag ahead of the catalog row.
     const validatedUpdate =
       PartialUpdateInternalMcpCatalogSchema.parse(updateData);
-    await moveCatalogSecretsToBag({
-      updateData: validatedUpdate as Record<string, unknown>,
-      catalogName: existing.name,
-      existingLocalConfigSecretId: existing.localConfigSecretId,
-      existingClientSecretId: existing.clientSecretId,
-    });
-    const updated = await InternalMcpCatalogModel.update(
-      existing.id,
-      validatedUpdate,
-    );
+    const staging = new CatalogSecretStaging();
+    let updated: InternalMcpCatalog;
+    try {
+      await moveCatalogSecretsToBag({
+        staging,
+        updateData: validatedUpdate as Record<string, unknown>,
+        catalogName: existing.name,
+        original: existing,
+      });
+      assertDeploymentYamlPlaceholdersSafe({
+        ...existing,
+        ...Object.fromEntries(
+          Object.entries(validatedUpdate).filter(
+            ([, value]) => value !== undefined,
+          ),
+        ),
+      });
+      await assertMcpRuntimeChangeAllowed({
+        userId: context.userId,
+        organizationId,
+        original: existing,
+        updates: validatedUpdate,
+      });
+      ({ catalogItem: updated } = await InternalMcpCatalogModel.publishReviewed(
+        {
+          original: existing,
+          updates: validatedUpdate,
+        },
+      ));
+      await staging.publish();
+    } finally {
+      await staging.dispose();
+    }
 
     if (!updated) {
       return errorResult("failed to update MCP server config.");
@@ -1019,6 +1043,9 @@ async function handleEditMcpConfig(
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    if (error instanceof ApiError && error.statusCode < 500) {
+      return errorResult(error.message);
+    }
     return catchError(error, "editing MCP server config");
   }
 }
@@ -1156,17 +1183,30 @@ async function handleCreateMcpServer(
       });
       // SPDX-SnippetEnd
     }
-    await moveCatalogSecretsToBag({
-      updateData: validatedParams as Record<string, unknown>,
-      catalogName: name,
-      existingLocalConfigSecretId: null,
-      existingClientSecretId: null,
-    });
-    const created = await InternalMcpCatalogModel.create(validatedParams, {
-      organizationId,
-      authorId: context.userId,
-      initialPermissionGrants: args.initialGrants ?? [],
-    });
+    const staging = new CatalogSecretStaging();
+    let created: InternalMcpCatalog;
+    try {
+      await moveCatalogSecretsToBag({
+        staging,
+        updateData: validatedParams as Record<string, unknown>,
+        catalogName: name,
+      });
+      assertDeploymentYamlPlaceholdersSafe(validatedParams);
+      await assertMcpRuntimeChangeAllowed({
+        userId: context.userId,
+        organizationId,
+        original: null,
+        updates: validatedParams,
+      });
+      created = await InternalMcpCatalogModel.create(validatedParams, {
+        organizationId,
+        authorId: context.userId,
+        initialPermissionGrants: args.initialGrants ?? [],
+      });
+      await staging.publish();
+    } finally {
+      await staging.dispose();
+    }
 
     const lines = [
       "Successfully created MCP server.",
@@ -1194,6 +1234,9 @@ async function handleCreateMcpServer(
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    if (error instanceof ApiError && error.statusCode < 500) {
+      return errorResult(error.message);
+    }
     return catchError(error, "creating MCP server");
   }
 }
@@ -1847,22 +1890,19 @@ async function authorizeDeployScope(params: {
  * bags, rewriting the payload to reference them instead.
  */
 async function moveCatalogSecretsToBag(params: {
+  staging: CatalogSecretStaging;
   updateData: Record<string, unknown>;
   catalogName: string;
-  existingLocalConfigSecretId: string | null;
-  existingClientSecretId: string | null;
+  original?: InternalMcpCatalog;
 }): Promise<void> {
-  const {
-    updateData,
-    catalogName,
-    existingLocalConfigSecretId,
-    existingClientSecretId,
-  } = params;
+  const { staging, updateData, catalogName, original } = params;
 
   if (updateData.localConfig !== undefined) {
     const { localConfig, secretId } = await extractLocalConfigSecrets({
+      staging,
       localConfig: updateData.localConfig as LocalConfig,
-      existingSecretId: existingLocalConfigSecretId,
+      existingSecretId: original?.localConfigSecretId,
+      existingLocalConfig: original?.localConfig,
       catalogName,
     });
     updateData.localConfig = localConfig;
@@ -1879,15 +1919,45 @@ async function moveCatalogSecretsToBag(params: {
       string,
       unknown
     >;
-    if (typeof clientSecret === "string" && clientSecret) {
-      const { id } = await upsertCatalogClientSecretValue({
-        clientSecretId: existingClientSecretId,
+    updateData.oauthConfig = rest;
+    if (
+      (typeof clientSecret === "string" && clientSecret) ||
+      original?.oauthConfig?.client_secret
+    ) {
+      const { id, inlineValue } = await upsertCatalogClientSecretValue({
+        staging,
+        clientSecretId: original?.clientSecretId,
         catalogName,
         key: "client_secret",
-        value: clientSecret,
+        value: typeof clientSecret === "string" ? clientSecret : undefined,
+        existingInlineValue: original?.oauthConfig?.client_secret,
       });
-      updateData.oauthConfig = rest;
+      updateData.oauthConfig =
+        inlineValue === undefined
+          ? rest
+          : { ...rest, client_secret: inlineValue };
       updateData.clientSecretId = id;
     }
+  }
+}
+
+function assertDeploymentYamlPlaceholdersSafe(
+  definition: Partial<
+    Pick<
+      InternalMcpCatalog,
+      "deploymentSpecYaml" | "localConfig" | "userConfig" | "oauthConfig"
+    >
+  >,
+): void {
+  if (typeof definition.deploymentSpecYaml !== "string") return;
+  const problems = findUnsafeDeploymentYamlPlaceholders(
+    definition.deploymentSpecYaml,
+    definition,
+  );
+  if (problems.length) {
+    throw new ApiError(
+      400,
+      `Invalid custom deployment YAML: ${problems.join("; ")}`,
+    );
   }
 }

@@ -1,5 +1,6 @@
-import { count, eq, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { count, eq, inArray, is, or, sql } from "drizzle-orm";
+import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
+import db, { schema, withDbTransaction } from "@/database";
 import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
 import {
   decryptSecretValue,
@@ -18,6 +19,20 @@ function decryptSecretRow<T extends SelectSecret | null | undefined>(
 }
 
 class SecretModel {
+  static async isReferencedByMcpCatalog(id: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        or(
+          eq(schema.internalMcpCatalogTable.localConfigSecretId, id),
+          eq(schema.internalMcpCatalogTable.clientSecretId, id),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   /**
    * Create a new secret entry
    */
@@ -126,6 +141,54 @@ class SecretModel {
       .where(eq(schema.secretsTable.id, id));
 
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  /** Reclaim a retired bag without clearing a concurrently attached FK. */
+  static async deleteIfUnreferenced(params: {
+    id: string;
+    deleteExternal?: (
+      secret: Pick<SelectSecret, "id" | "name" | "isVault">,
+    ) => Promise<void>;
+  }): Promise<boolean> {
+    return withDbTransaction(async (tx) => {
+      const [secret] = await tx
+        .select()
+        .from(schema.secretsTable)
+        .where(eq(schema.secretsTable.id, params.id))
+        .for("update");
+      if (!secret) return false;
+
+      // Derive owners from the schema so legacy presets, soft-deleted rows,
+      // installations and other credential consumers all retain their bags.
+      // FOR UPDATE also blocks new FK references until the decision commits.
+      const ownerQueries = Object.values(schema).flatMap((table) => {
+        if (!is(table, PgTable)) return [];
+        return getTableConfig(table).foreignKeys.flatMap((key) => {
+          const reference = key.reference();
+          if (reference.foreignTable !== schema.secretsTable) return [];
+          return reference.columns.map(
+            (column) =>
+              sql`select 1 from ${table} where ${column} = ${params.id}`,
+          );
+        });
+      });
+      // The creator's cleanup can arrive after another edit has already
+      // replaced its published bag. Its durable retirement still grants the
+      // snapshot grace period even though no catalog points at it now.
+      ownerQueries.push(sql`select 1 from ${schema.tasksTable}
+        where ${schema.tasksTable.taskType} = 'mcp_catalog_secret_retirement'
+          and ${schema.tasksTable.scheduledFor} > now()
+          and ${schema.tasksTable.payload}->'secretIds' @> ${JSON.stringify([params.id])}::jsonb`);
+      const { rows } = await tx.execute<{ referenced: boolean }>(
+        sql`select exists(${sql.join(ownerQueries, sql` union all `)}) as referenced`,
+      );
+      if (rows[0].referenced) return false;
+      await params.deleteExternal?.(secret);
+      await tx
+        .delete(schema.secretsTable)
+        .where(eq(schema.secretsTable.id, params.id));
+      return true;
+    });
   }
 }
 

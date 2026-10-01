@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
@@ -164,6 +165,10 @@ export function LocalServerInstallDialog({
   orgOnly = false,
   presentation = "dialog",
 }: LocalServerInstallDialogProps) {
+  const { data: canChangeServiceAccount } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    "*",
+  );
   const lockToExistingScope = isReinstall || isReauth;
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
     lockToExistingScope ? (existingTeamId ?? null) : null,
@@ -393,7 +398,11 @@ export function LocalServerInstallDialog({
         (secretEnvVars.length > 0 ||
           secretFileVars.length > 0 ||
           hasPromptedSensitiveUserConfig),
-      serviceAccount: serviceAccount || undefined,
+      serviceAccount:
+        canChangeServiceAccount &&
+        catalogItem.localConfig?.serviceAccount !== undefined
+          ? (serviceAccount ?? "")
+          : undefined,
     });
 
     // Reset form
@@ -661,11 +670,19 @@ export function LocalServerInstallDialog({
       )}
 
       {canInstall && catalogItem?.localConfig?.serviceAccount !== undefined && (
-        <ServiceAccountField
-          value={serviceAccount}
-          onChange={setServiceAccount}
-          disabled={isInstalling}
-        />
+        <div className="space-y-2">
+          <ServiceAccountField
+            value={serviceAccount}
+            onChange={setServiceAccount}
+            disabled={isInstalling || !canChangeServiceAccount}
+          />
+          {!canChangeServiceAccount && (
+            <FieldDescription>
+              The registry administrator manages this server&apos;s Kubernetes
+              service account.
+            </FieldDescription>
+          )}
+        </div>
       )}
 
       {canInstall && (

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   classifyMcpRuntimeAlert,
   createMcpServerAlertFingerprint,
@@ -31,6 +32,7 @@ import {
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 // SPDX-SnippetEnd
 import {
+  findUnsafeDeploymentYamlPlaceholders,
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
   validateDeploymentYaml,
@@ -49,7 +51,7 @@ import {
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { isByosEnabled } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
 import {
   assertCanAssignEnvironment,
@@ -58,8 +60,10 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import {
+  CatalogSecretStaging,
   extractLocalConfigSecrets,
   getCatalogClientSecretValues,
+  getCatalogSecretValues,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import {
@@ -74,6 +78,7 @@ import {
   reinstallMultitenantCatalog,
   requiresNewUserInputForReinstall,
 } from "@/services/mcp-reinstall";
+import { assertMcpRuntimeChangeAllowed } from "@/services/mcp-runtime-authorization";
 import { transferResourceOwnership } from "@/services/resource-ownership";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -511,206 +516,223 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
-      let clientSecretId: string | undefined;
-      let localConfigSecretId: string | undefined;
+      const staging = new CatalogSecretStaging();
+      try {
+        let clientSecretId: string | null | undefined;
+        let localConfigSecretId: string | undefined;
 
-      // Handle OAuth client secret - either via BYOS or direct value
-      if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
-        // BYOS flow for OAuth client secret
-        if (!isByosEnabled()) {
-          throw new ApiError(
-            400,
-            "Readonly Vault is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+        // Handle OAuth client secret - either via BYOS or direct value
+        if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
+          // BYOS flow for OAuth client secret
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Readonly Vault is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+            );
+          }
+
+          // Store as { client_secret: "path#key" } format
+          const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
+          const secret = await staging.createSecret(
+            { client_secret: vaultReference },
+            `${restBody.name}-oauth-client-secret-vault`,
           );
-        }
+          clientSecretId = secret.id;
+          restBody.clientSecretId = clientSecretId;
 
-        // Store as { client_secret: "path#key" } format
-        const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
-        const secret = await secretManager().createSecret(
-          { client_secret: vaultReference },
-          `${restBody.name}-oauth-client-secret-vault`,
-        );
-        clientSecretId = secret.id;
-        restBody.clientSecretId = clientSecretId;
+          // Remove client_secret from oauthConfig if present
+          if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
+            delete restBody.oauthConfig.client_secret;
+          }
 
-        // Remove client_secret from oauthConfig if present
-        if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
+          logger.info(
+            "Created Readonly Vault external vault secret reference for OAuth client secret",
+          );
+        } else if (
+          restBody.oauthConfig &&
+          "client_secret" in restBody.oauthConfig
+        ) {
+          // Direct client_secret value
+          const clientSecret = restBody.oauthConfig.client_secret;
+          if (clientSecret) {
+            // `rotated` is irrelevant here: no installs exist yet on create.
+            const result = await upsertCatalogClientSecretValue({
+              staging,
+              clientSecretId,
+              catalogName: restBody.name,
+              key: "client_secret",
+              value: clientSecret,
+            });
+            clientSecretId = result.id;
+
+            restBody.clientSecretId = clientSecretId;
+          }
           delete restBody.oauthConfig.client_secret;
         }
 
-        logger.info(
-          "Created Readonly Vault external vault secret reference for OAuth client secret",
-        );
-      } else if (
-        restBody.oauthConfig &&
-        "client_secret" in restBody.oauthConfig
-      ) {
-        // Direct client_secret value
-        const clientSecret = restBody.oauthConfig.client_secret;
-        if (clientSecret) {
-          // `rotated` is irrelevant here: no installs exist yet on create.
+        const enterpriseManagedClientSecretOverride =
+          restBody.enterpriseManagedConfig?.clientSecretOverride;
+        if (enterpriseManagedClientSecretOverride) {
           const result = await upsertCatalogClientSecretValue({
+            staging,
             clientSecretId,
             catalogName: restBody.name,
-            key: "client_secret",
-            value: clientSecret,
+            key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+            value: enterpriseManagedClientSecretOverride,
           });
           clientSecretId = result.id;
 
           restBody.clientSecretId = clientSecretId;
+          delete restBody.enterpriseManagedConfig?.clientSecretOverride;
         }
-        delete restBody.oauthConfig.client_secret;
-      }
 
-      const enterpriseManagedClientSecretOverride =
-        restBody.enterpriseManagedConfig?.clientSecretOverride;
-      if (enterpriseManagedClientSecretOverride) {
-        const result = await upsertCatalogClientSecretValue({
-          clientSecretId,
-          catalogName: restBody.name,
-          key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-          value: enterpriseManagedClientSecretOverride,
-        });
-        clientSecretId = result.id;
+        // Handle local config secrets - either via Readonly Vault or direct values
+        if (localConfigVaultPath && localConfigVaultKey) {
+          // Readonly Vault flow for local config secrets
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Readonly Vault is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+            );
+          }
 
-        restBody.clientSecretId = clientSecretId;
-        delete restBody.enterpriseManagedConfig?.clientSecretOverride;
-      }
-
-      // Handle local config secrets - either via Readonly Vault or direct values
-      if (localConfigVaultPath && localConfigVaultKey) {
-        // Readonly Vault flow for local config secrets
-        if (!isByosEnabled()) {
-          throw new ApiError(
-            400,
-            "Readonly Vault is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+          // Store as { vaultKey: "path#vaultKey" } format
+          // The vault key becomes both the Archestra key and references itself in the vault
+          const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
+          const secret = await staging.createSecret(
+            { [localConfigVaultKey]: vaultReference },
+            `${restBody.name}-local-config-env-vault`,
           );
-        }
+          localConfigSecretId = secret.id;
+          restBody.localConfigSecretId = localConfigSecretId;
 
-        // Store as { vaultKey: "path#vaultKey" } format
-        // The vault key becomes both the Archestra key and references itself in the vault
-        const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
-        const secret = await secretManager().createSecret(
-          { [localConfigVaultKey]: vaultReference },
-          `${restBody.name}-local-config-env-vault`,
-        );
-        localConfigSecretId = secret.id;
-        restBody.localConfigSecretId = localConfigSecretId;
-
-        // Remove values from secret env vars in catalog template
-        if (restBody.localConfig?.environment) {
-          for (const envVar of restBody.localConfig.environment) {
-            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
-              delete envVar.value;
+          // Remove values from secret env vars in catalog template
+          if (restBody.localConfig?.environment) {
+            for (const envVar of restBody.localConfig.environment) {
+              if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+                delete envVar.value;
+              }
             }
+          }
+
+          logger.info(
+            "Created Readonly Vault external vault secret reference for local config secrets",
+          );
+        } else if (
+          restBody.localConfig?.environment ||
+          restBody.localConfig?.imagePullSecrets ||
+          restBody.userConfig
+        ) {
+          const extraction = await extractLocalConfigSecrets({
+            staging,
+            localConfig: restBody.localConfig,
+            existingSecretId: null,
+            catalogName: restBody.name,
+          });
+          if (extraction.localConfig !== undefined) {
+            restBody.localConfig = extraction.localConfig;
+          }
+          if (extraction.secretId) {
+            localConfigSecretId = extraction.secretId;
+            restBody.localConfigSecretId = localConfigSecretId;
           }
         }
 
-        logger.info(
-          "Created Readonly Vault external vault secret reference for local config secrets",
-        );
-      } else if (
-        restBody.localConfig?.environment ||
-        restBody.localConfig?.imagePullSecrets ||
-        restBody.userConfig
-      ) {
-        const extraction = await extractLocalConfigSecrets({
-          localConfig: restBody.localConfig,
-          existingSecretId: null,
-          catalogName: restBody.name,
+        // Only merge environment variables into YAML if YAML is explicitly provided
+        // The YAML is only stored when explicitly edited via the "Edit Deployment Yaml" dialog
+        if (restBody.deploymentSpecYaml && restBody.localConfig?.environment) {
+          restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
+            restBody.deploymentSpecYaml,
+            restBody.localConfig.environment,
+          );
+        }
+
+        if (restBody.environmentId != null) {
+          const targetEnv = await EnvironmentModel.findByIdForOrganization(
+            restBody.environmentId,
+            request.organizationId,
+          );
+          if (!targetEnv) {
+            throw new ApiError(400, "Environment not found");
+          }
+        }
+        // Enforce the governing environment's allowlist regex against the
+        // admin-entered config values being persisted: static (non-prompted) env
+        // var values and non-secret userConfig defaults (the value a static header
+        // persists, and the suggested value a prompted field shows). Secrets are
+        // exempt; secret env values are extracted above.
+        await assertValuesMatchEnvironmentRegex({
+          environmentId: restBody.environmentId ?? null,
+          organizationId: request.organizationId,
+          valueSets: [
+            collectStaticEnvValues(restBody.localConfig?.environment),
+            collectStaticUserConfigValues(restBody.userConfig),
+          ],
         });
-        if (extraction.localConfig !== undefined) {
-          restBody.localConfig = extraction.localConfig;
+        // A remote server is reached over HTTP from the backend; block creating it
+        // in an environment whose egress policy would forbid that outbound hop.
+        await assertRemoteServerUrlAllowedByNetworkPolicy({
+          serverType: restBody.serverType,
+          serverUrl: restBody.serverUrl ?? null,
+          environmentId: restBody.environmentId ?? null,
+          organizationId: request.organizationId,
+        });
+        // Clone source must resolve under the CALLER's own access. `create` copies
+        // the source's tools, guardrail policies, and secret bags (OAuth client
+        // secret, local-config env, presets) onto the new item — which the caller
+        // owns and can therefore read back expanded. Resolving the source with a
+        // hardcoded admin flag would skip the personal/team scope checks and let
+        // any member clone someone else's item to harvest those values, so pass
+        // the caller's real privilege instead.
+        if (restBody.clonedFrom) {
+          const cloneSource = await InternalMcpCatalogModel.findById(
+            restBody.clonedFrom,
+            {
+              expandSecrets: false,
+              userId: request.user.id,
+              isAdmin: checker.isAdmin,
+              organizationId: request.organizationId,
+            },
+          );
+          if (!cloneSource) {
+            throw new ApiError(400, "Clone source catalog item not found");
+          }
         }
-        if (extraction.secretId) {
-          localConfigSecretId = extraction.secretId;
-          restBody.localConfigSecretId = localConfigSecretId;
-        }
-      }
 
-      // Only merge environment variables into YAML if YAML is explicitly provided
-      // The YAML is only stored when explicitly edited via the "Edit Deployment Yaml" dialog
-      if (restBody.deploymentSpecYaml && restBody.localConfig?.environment) {
-        restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
-          restBody.deploymentSpecYaml,
-          restBody.localConfig.environment,
-        );
-      }
+        if (InternalMcpCatalogModel.takesBuiltInToolPrefix(restBody.name))
+          throw new ApiError(
+            409,
+            `An MCP server named "${restBody.name}" would share its tool names with the built-in ${archestraMcpBranding.catalogName} tools.`,
+            "catalog_name_conflict",
+          );
 
-      if (restBody.environmentId != null) {
-        const targetEnv = await EnvironmentModel.findByIdForOrganization(
-          restBody.environmentId,
-          request.organizationId,
-        );
-        if (!targetEnv) {
-          throw new ApiError(400, "Environment not found");
-        }
-      }
-      // Enforce the governing environment's allowlist regex against the
-      // admin-entered config values being persisted: static (non-prompted) env
-      // var values and non-secret userConfig defaults (the value a static header
-      // persists, and the suggested value a prompted field shows). Secrets are
-      // exempt; secret env values are extracted above.
-      await assertValuesMatchEnvironmentRegex({
-        environmentId: restBody.environmentId ?? null,
-        organizationId: request.organizationId,
-        valueSets: [
-          collectStaticEnvValues(restBody.localConfig?.environment),
-          collectStaticUserConfigValues(restBody.userConfig),
-        ],
-      });
-      // A remote server is reached over HTTP from the backend; block creating it
-      // in an environment whose egress policy would forbid that outbound hop.
-      await assertRemoteServerUrlAllowedByNetworkPolicy({
-        serverType: restBody.serverType,
-        serverUrl: restBody.serverUrl ?? null,
-        environmentId: restBody.environmentId ?? null,
-        organizationId: request.organizationId,
-      });
-      // Clone source must resolve under the CALLER's own access. `create` copies
-      // the source's tools, guardrail policies, and secret bags (OAuth client
-      // secret, local-config env, presets) onto the new item — which the caller
-      // owns and can therefore read back expanded. Resolving the source with a
-      // hardcoded admin flag would skip the personal/team scope checks and let
-      // any member clone someone else's item to harvest those values, so pass
-      // the caller's real privilege instead.
-      if (restBody.clonedFrom) {
-        const cloneSource = await InternalMcpCatalogModel.findById(
-          restBody.clonedFrom,
-          {
-            expandSecrets: false,
-            userId: request.user.id,
-            isAdmin: checker.isAdmin,
-            organizationId: request.organizationId,
-          },
-        );
-        if (!cloneSource) {
-          throw new ApiError(400, "Clone source catalog item not found");
-        }
-      }
+        assertDeploymentYamlPlaceholdersSafe(restBody);
+        await assertMcpRuntimeChangeAllowed({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          original: null,
+          updates: restBody,
+        });
 
-      if (InternalMcpCatalogModel.takesBuiltInToolPrefix(restBody.name))
-        throw new ApiError(
-          409,
-          `An MCP server named "${restBody.name}" would share its tool names with the built-in ${archestraMcpBranding.catalogName} tools.`,
-          "catalog_name_conflict",
+        const catalogItem = await withCatalogTeamFkErrorMapped(() =>
+          InternalMcpCatalogModel.create(
+            // Who can reach the new item is its initial grants alone. The
+            // retired visibility column is NOT NULL; nothing reads it.
+            { ...restBody, scope: "personal" },
+            {
+              organizationId: request.organizationId,
+              authorId: request.user.id,
+              initialPermissionGrants: initialGrants ?? [],
+            },
+          ),
         );
-
-      const catalogItem = await withCatalogTeamFkErrorMapped(() =>
-        InternalMcpCatalogModel.create(
-          // Who can reach the new item is its initial grants alone. The
-          // retired visibility column is NOT NULL; nothing reads it.
-          { ...restBody, scope: "personal" },
-          {
-            organizationId: request.organizationId,
-            authorId: request.user.id,
-            initialPermissionGrants: initialGrants ?? [],
-          },
-        ),
-      );
-      return reply.send(catalogItem);
+        await staging.publish();
+        return reply.send(catalogItem);
+      } finally {
+        await staging.dispose();
+      }
     },
   );
 
@@ -903,17 +925,25 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       const isAdmin = checker.isAdmin;
 
-      // Get the original catalog item to check if name or serverUrl changed
-      const originalCatalogItem = await InternalMcpCatalogModel.findById(id, {
-        accessAction: "update",
-        userId: request.user.id,
-        isAdmin,
-        organizationId: request.organizationId,
-      });
+      // Derive the hydrated view and publication guard from the same reviewed row.
+      const originalCatalogItemForGate = await InternalMcpCatalogModel.findById(
+        id,
+        {
+          accessAction: "update",
+          userId: request.user.id,
+          isAdmin,
+          organizationId: request.organizationId,
+          expandSecrets: false,
+        },
+      );
 
-      if (!originalCatalogItem) {
+      if (!originalCatalogItemForGate) {
         throw new ApiError(404, "Catalog item not found");
       }
+      const originalCatalogItem =
+        await InternalMcpCatalogModel.expandSnapshotSecrets(
+          originalCatalogItemForGate,
+        );
 
       // App backing catalogs are owned by the Apps flow. Through this generic
       // endpoint, only visibility (scope/teams) and environment may change: lock
@@ -964,30 +994,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.deploymentSpecYaml = undefined;
       }
 
-      // A second copy of the same row WITHOUT expanded secret values, used
-      // solely for the cascade-reinstall gate's snapshot comparison. The
-      // expanded `originalCatalogItem` above is needed by the route body
-      // downstream (env-vault construction, userConfig diffing). But the
-      // gate compares `original` vs `Model.update`'s return, and
-      // `Model.update` returns the raw row. Without this unexpanded
-      // fetch, every PUT on a bag-bearing catalog would diff on
-      // `localConfig.environment[*].value` (expanded plaintext vs stored
-      // ID-ref) and cascade-reinstall on edits that didn't actually
-      // touch any runtime field — including pure description edits.
-      const originalCatalogItemForGate = await InternalMcpCatalogModel.findById(
-        id,
-        {
-          accessAction: "update",
-          userId: request.user.id,
-          isAdmin,
-          organizationId: request.organizationId,
-          expandSecrets: false,
-        },
-      );
-      if (!originalCatalogItemForGate) {
-        throw new ApiError(404, "Catalog item not found");
-      }
-
       // Gate the right to modify this item at its CURRENT scope. This lets an
       // admin of one of the item's `write` teams edit it, and still blocks
       // editing someone else's personal item or a `use`-only team's item.
@@ -1016,6 +1022,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      let rename:
+        | {
+            newName: string;
+            flagReinstallRequired: boolean;
+            freezeDeploymentNames: boolean;
+          }
+        | undefined;
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
       // gated (409) and applied atomically by renameCascade — a pure DB
@@ -1062,8 +1075,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           restBody.deploymentSpecYaml !== undefined
             ? restBody.deploymentSpecYaml
             : originalCatalogItemForGate.deploymentSpecYaml;
-        const renamedTools = await InternalMcpCatalogModel.renameCascade({
-          id,
+        rename = {
           newName: newCatalogName,
           flagReinstallRequired:
             originalCatalogItemForGate.serverType === "local" &&
@@ -1071,386 +1083,419 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               effectiveDeploymentSpecYaml?.includes(SERVER_NAME_PLACEHOLDER),
             ),
           freezeDeploymentNames: k8sRuntimeConfigured,
-        });
-        // The rename moved every tool prefix a policy's alias targets spell, so
-        // those targets follow it where the deployment owns the text, and the
-        // recompose shows `server_missing` where the repository owns it.
-        await openappaBatteriesService.onCatalogPrefixesRenamed({
-          catalogId: id,
-          organizationId: originalCatalogItem.organizationId,
-          userId: request.user.id,
-          renamedTools,
-        });
-
-        // Downstream must see NO name diff: the row is already renamed, and
-        // the reinstall gates below would otherwise misread the rename as a
-        // breaking change. A rename combined with a real breaking change
-        // still composes — the remaining diff drives the gates as usual.
+        };
+        // The name cascade and definition are published together after validation.
         restBody.name = undefined;
-        originalCatalogItemForGate.name = newCatalogName;
       }
 
-      let clientSecretId = originalCatalogItem.clientSecretId;
-      let localConfigSecretId = originalCatalogItem.localConfigSecretId;
+      const staging = new CatalogSecretStaging();
+      try {
+        let clientSecretId = originalCatalogItem.clientSecretId;
+        let localConfigSecretId = originalCatalogItem.localConfigSecretId;
 
-      // Catalog secret-bag value rotations are invisible to the
-      // unexpanded gate snapshot (the bag content lives outside the
-      // catalog row). Track here as we write to an EXISTING bag so the
-      // cascade can force the auto-restart path on rotation. Covers
-      // direct OAuth client_secret, enterprise-managed client-secret
-      // override, non-prompted secret env-var values, and image-pull-
-      // secret credential passwords. The Readonly-Vault flows always
-      // delete+create the bag — that swaps the `clientSecretId` /
-      // `localConfigSecretId` on the row itself, so the normal gate
-      // already detects them; no override needed there.
-      let catalogSharedSecretValuesRotated = false;
+        // Track explicit credential changes for the cascade's restart override.
+        // Changed bags are staged under new IDs and published with the catalog.
+        let catalogSharedSecretValuesRotated = false;
 
-      // Handle OAuth client secret - either via Readonly Vault or direct value
-      if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
-        // Readonly Vault flow for OAuth client secret
-        if (!isByosEnabled()) {
-          throw new ApiError(
-            400,
-            "Readonly Vault is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+        // Handle OAuth client secret - either via Readonly Vault or direct value
+        if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
+          // Readonly Vault flow for OAuth client secret
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Readonly Vault is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+            );
+          }
+
+          const existingSecretValues =
+            await getCatalogClientSecretValues(clientSecretId);
+
+          // Store as { client_secret: "path#key" } format
+          const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
+          if (existingSecretValues.client_secret !== vaultReference) {
+            const secret = await staging.createSecret(
+              { ...existingSecretValues, client_secret: vaultReference },
+              `${originalCatalogItem.name}-oauth-client-secret-vault`,
+            );
+            clientSecretId = secret.id;
+            restBody.clientSecretId = clientSecretId;
+          }
+
+          // Remove client_secret from oauthConfig if present
+          if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
+            delete restBody.oauthConfig.client_secret;
+          }
+
+          logger.info(
+            "Created Readonly Vault external vault secret reference for OAuth client secret",
           );
+        } else if (restBody.oauthConfig) {
+          const clientSecret = restBody.oauthConfig.client_secret;
+          if (
+            clientSecret ||
+            originalCatalogItemForGate.oauthConfig?.client_secret
+          ) {
+            const result = await upsertCatalogClientSecretValue({
+              staging,
+              clientSecretId,
+              catalogName: originalCatalogItem.name,
+              key: "client_secret",
+              value: clientSecret,
+              existingInlineValue:
+                originalCatalogItemForGate.oauthConfig?.client_secret,
+            });
+            clientSecretId = result.id;
+            if (result.rotated) catalogSharedSecretValuesRotated = true;
+
+            restBody.clientSecretId = clientSecretId;
+            if (result.inlineValue === undefined)
+              delete restBody.oauthConfig.client_secret;
+            else restBody.oauthConfig.client_secret = result.inlineValue;
+          } else {
+            delete restBody.oauthConfig.client_secret;
+          }
         }
 
-        const existingSecretValues =
-          await getCatalogClientSecretValues(clientSecretId);
-
-        // Delete existing secret if any
-        if (clientSecretId) {
-          await secretManager().deleteSecret(clientSecretId);
-        }
-
-        // Store as { client_secret: "path#key" } format
-        const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
-        const secret = await secretManager().createSecret(
-          { ...existingSecretValues, client_secret: vaultReference },
-          `${originalCatalogItem.name}-oauth-client-secret-vault`,
-        );
-        clientSecretId = secret.id;
-        restBody.clientSecretId = clientSecretId;
-
-        // Remove client_secret from oauthConfig if present
-        if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
-          delete restBody.oauthConfig.client_secret;
-        }
-
-        logger.info(
-          "Created Readonly Vault external vault secret reference for OAuth client secret",
-        );
-      } else if (
-        restBody.oauthConfig &&
-        "client_secret" in restBody.oauthConfig
-      ) {
-        // Direct client_secret value
-        const clientSecret = restBody.oauthConfig.client_secret;
-        if (clientSecret) {
+        const enterpriseManagedClientSecretOverride =
+          restBody.enterpriseManagedConfig?.clientSecretOverride;
+        if (
+          restBody.enterpriseManagedConfig &&
+          (enterpriseManagedClientSecretOverride ||
+            originalCatalogItemForGate.enterpriseManagedConfig
+              ?.clientSecretOverride)
+        ) {
           const result = await upsertCatalogClientSecretValue({
+            staging,
             clientSecretId,
             catalogName: originalCatalogItem.name,
-            key: "client_secret",
-            value: clientSecret,
+            key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+            value: enterpriseManagedClientSecretOverride,
+            existingInlineValue:
+              originalCatalogItemForGate.enterpriseManagedConfig
+                ?.clientSecretOverride,
           });
           clientSecretId = result.id;
           if (result.rotated) catalogSharedSecretValuesRotated = true;
 
           restBody.clientSecretId = clientSecretId;
-        }
-        delete restBody.oauthConfig.client_secret;
-      }
-
-      const enterpriseManagedClientSecretOverride =
-        restBody.enterpriseManagedConfig?.clientSecretOverride;
-      if (enterpriseManagedClientSecretOverride) {
-        const result = await upsertCatalogClientSecretValue({
-          clientSecretId,
-          catalogName: originalCatalogItem.name,
-          key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-          value: enterpriseManagedClientSecretOverride,
-        });
-        clientSecretId = result.id;
-        if (result.rotated) catalogSharedSecretValuesRotated = true;
-
-        restBody.clientSecretId = clientSecretId;
-        delete restBody.enterpriseManagedConfig?.clientSecretOverride;
-      }
-
-      // Handle local config secrets - either via Readonly Vault or direct values
-      if (localConfigVaultPath && localConfigVaultKey) {
-        // Readonly Vault flow for local config secrets
-        if (!isByosEnabled()) {
-          throw new ApiError(
-            400,
-            "Readonly Vault is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-          );
+          if (result.inlineValue === undefined)
+            delete restBody.enterpriseManagedConfig.clientSecretOverride;
+          else
+            restBody.enterpriseManagedConfig.clientSecretOverride =
+              result.inlineValue;
+        } else if (restBody.enterpriseManagedConfig) {
+          delete restBody.enterpriseManagedConfig.clientSecretOverride;
         }
 
-        // Delete existing secret if any
-        if (localConfigSecretId) {
-          await secretManager().deleteSecret(localConfigSecretId);
-        }
+        // Handle local config secrets - either via Readonly Vault or direct values
+        if (localConfigVaultPath && localConfigVaultKey) {
+          // Readonly Vault flow for local config secrets
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Readonly Vault is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+            );
+          }
 
-        // Store as { vaultKey: "path#vaultKey" } format
-        const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
-        const secret = await secretManager().createSecret(
-          { [localConfigVaultKey]: vaultReference },
-          `${originalCatalogItem.name}-local-config-env-vault`,
-        );
-        localConfigSecretId = secret.id;
-        restBody.localConfigSecretId = localConfigSecretId;
+          // Store as { vaultKey: "path#vaultKey" } format
+          const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
+          const references = { [localConfigVaultKey]: vaultReference };
+          if (
+            !isDeepStrictEqual(
+              await getCatalogSecretValues(localConfigSecretId),
+              references,
+            )
+          ) {
+            const secret = await staging.createSecret(
+              references,
+              `${originalCatalogItem.name}-local-config-env-vault`,
+            );
+            localConfigSecretId = secret.id;
+            restBody.localConfigSecretId = localConfigSecretId;
+          }
 
-        // Remove values from secret env vars in catalog template
-        if (restBody.localConfig?.environment) {
-          for (const envVar of restBody.localConfig.environment) {
-            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
-              delete envVar.value;
+          // Remove values from secret env vars in catalog template
+          if (restBody.localConfig?.environment) {
+            for (const envVar of restBody.localConfig.environment) {
+              if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+                delete envVar.value;
+              }
             }
+          }
+
+          logger.info(
+            "Created Readonly Vault external vault secret reference for local config secrets",
+          );
+        } else if (
+          restBody.localConfig?.environment ||
+          restBody.localConfig?.imagePullSecrets ||
+          restBody.userConfig
+        ) {
+          const extraction = await extractLocalConfigSecrets({
+            staging,
+            localConfig: restBody.localConfig,
+            existingSecretId: localConfigSecretId,
+            existingLocalConfig: originalCatalogItemForGate.localConfig,
+            catalogName: originalCatalogItem.name,
+          });
+          if (extraction.localConfig !== undefined) {
+            restBody.localConfig = extraction.localConfig;
+          }
+          if (extraction.rotated) catalogSharedSecretValuesRotated = true;
+          if (extraction.secretId) {
+            localConfigSecretId = extraction.secretId;
+            restBody.localConfigSecretId = localConfigSecretId;
           }
         }
 
-        logger.info(
-          "Created Readonly Vault external vault secret reference for local config secrets",
-        );
-      } else if (
-        restBody.localConfig?.environment ||
-        restBody.localConfig?.imagePullSecrets ||
-        restBody.userConfig
-      ) {
-        const extraction = await extractLocalConfigSecrets({
-          localConfig: restBody.localConfig,
-          existingSecretId: localConfigSecretId,
-          catalogName: originalCatalogItem.name,
-        });
-        // A userConfig-only edit reaches here with no localConfig. Assigning
-        // the (undefined) result would still create the key, and `update()`
-        // resets the image approval on `"localConfig" in dbValues` alone —
-        // re-blocking installs behind the trusted-image gate.
-        if (extraction.localConfig !== undefined) {
-          restBody.localConfig = extraction.localConfig;
+        const yamlToUpdate =
+          restBody.deploymentSpecYaml ?? originalCatalogItem.deploymentSpecYaml;
+        // Preserve authored overrides when the managed env/mount layout is unchanged.
+        if (
+          yamlToUpdate &&
+          restBody.localConfig?.environment &&
+          !isDeepStrictEqual(
+            managedEnvironmentLayout(
+              originalCatalogItem.localConfig?.environment,
+            ),
+            managedEnvironmentLayout(restBody.localConfig.environment),
+          )
+        ) {
+          restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
+            yamlToUpdate,
+            restBody.localConfig.environment,
+            new Set(
+              (originalCatalogItem.localConfig?.environment ?? []).map(
+                (env) => env.key,
+              ),
+            ),
+          );
         }
-        if (extraction.rotated) catalogSharedSecretValuesRotated = true;
-        if (extraction.secretId) {
-          localConfigSecretId = extraction.secretId;
-          restBody.localConfigSecretId = localConfigSecretId;
+
+        // When the environment assignment changes, gate it the same way create
+        // does — the target must belong to this org, and a restricted environment
+        // (or restricted default) requires a `use` grant on that environment.
+        const environmentChanged =
+          "environmentId" in restBody &&
+          restBody.environmentId !== originalCatalogItem.environmentId;
+        if (environmentChanged) {
+          await assertCanAssignEnvironment({
+            environmentId: restBody.environmentId ?? null,
+            organizationId: request.organizationId,
+            userId: request.user.id,
+          });
         }
-      }
 
-      // Merge environment variables into YAML in two cases:
-      // 1. YAML is explicitly provided in request (user editing via "Edit Deployment Yaml" dialog)
-      // 2. YAML already exists in database and env vars are being updated (main form edit)
-      const yamlToUpdate =
-        restBody.deploymentSpecYaml ?? originalCatalogItem.deploymentSpecYaml;
+        // Enforce the governing environment's allowlist regex. Validate when the
+        // local config / userConfig changes (incoming values) or the environment
+        // changes (re-check the EFFECTIVE persisted values against the new env, so
+        // moving an item into a stricter env catches values stored under the old
+        // one).
+        if (
+          environmentChanged ||
+          restBody.localConfig !== undefined ||
+          restBody.userConfig !== undefined
+        ) {
+          await assertValuesMatchEnvironmentRegex({
+            environmentId: ("environmentId" in restBody
+              ? restBody.environmentId
+              : originalCatalogItem.environmentId) as string | null,
+            organizationId: request.organizationId,
+            valueSets: [
+              collectStaticEnvValues(
+                restBody.localConfig?.environment ??
+                  originalCatalogItem.localConfig?.environment,
+              ),
+              collectStaticUserConfigValues(
+                restBody.userConfig ?? originalCatalogItem.userConfig,
+              ),
+            ],
+          });
+        }
 
-      if (yamlToUpdate && restBody.localConfig?.environment) {
-        const environment = restBody.localConfig.environment;
+        // Re-validate a remote server's URL against its environment's egress
+        // policy when the URL, server type, or environment changes. Unchanged
+        // existing servers are grandfathered (no retroactive block).
+        if (
+          environmentChanged ||
+          restBody.serverUrl !== undefined ||
+          restBody.serverType !== undefined
+        ) {
+          await assertRemoteServerUrlAllowedByNetworkPolicy({
+            serverType: restBody.serverType ?? originalCatalogItem.serverType,
+            serverUrl:
+              (restBody.serverUrl !== undefined
+                ? restBody.serverUrl
+                : originalCatalogItem.serverUrl) ?? null,
+            environmentId: ("environmentId" in restBody
+              ? restBody.environmentId
+              : originalCatalogItem.environmentId) as string | null,
+            organizationId: request.organizationId,
+          });
+        }
 
-        // Build set of previously managed keys to detect removed env vars
-        const previouslyManagedKeys = new Set<string>(
-          (originalCatalogItem.localConfig?.environment ?? []).map(
-            (env) => env.key,
+        // Detect an environment reassignment of a local catalog — it relocates
+        // the pod to a different namespace.
+        const relocatingLocalDeployment =
+          "environmentId" in restBody &&
+          restBody.environmentId !== originalCatalogItem.environmentId &&
+          originalCatalogItem.serverType === "local" &&
+          mcpServerRuntimeManager.isEnabled;
+
+        const finalUpdates = {
+          ...restBody,
+          ...(rename ? { name: rename.newName } : {}),
+        };
+        assertDeploymentYamlPlaceholdersSafe({
+          ...originalCatalogItemForGate,
+          ...Object.fromEntries(
+            Object.entries(finalUpdates).filter(
+              ([, value]) => value !== undefined,
+            ),
           ),
-        );
-
-        // Merge current environment into the YAML
-        restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
-          yamlToUpdate,
-          environment,
-          previouslyManagedKeys,
-        );
-      }
-
-      // When the environment assignment changes, gate it the same way create
-      // does — the target must belong to this org, and a restricted environment
-      // (or restricted default) requires a `use` grant on that environment.
-      const environmentChanged =
-        "environmentId" in restBody &&
-        restBody.environmentId !== originalCatalogItem.environmentId;
-      if (environmentChanged) {
-        await assertCanAssignEnvironment({
-          environmentId: restBody.environmentId ?? null,
-          organizationId: request.organizationId,
+        });
+        await assertMcpRuntimeChangeAllowed({
           userId: request.user.id,
-        });
-      }
-
-      // Enforce the governing environment's allowlist regex. Validate when the
-      // local config / userConfig changes (incoming values) or the environment
-      // changes (re-check the EFFECTIVE persisted values against the new env, so
-      // moving an item into a stricter env catches values stored under the old
-      // one).
-      if (
-        environmentChanged ||
-        restBody.localConfig !== undefined ||
-        restBody.userConfig !== undefined
-      ) {
-        await assertValuesMatchEnvironmentRegex({
-          environmentId: ("environmentId" in restBody
-            ? restBody.environmentId
-            : originalCatalogItem.environmentId) as string | null,
           organizationId: request.organizationId,
-          valueSets: [
-            collectStaticEnvValues(
-              restBody.localConfig?.environment ??
-                originalCatalogItem.localConfig?.environment,
-            ),
-            collectStaticUserConfigValues(
-              restBody.userConfig ?? originalCatalogItem.userConfig,
-            ),
-          ],
+          original: originalCatalogItemForGate,
+          updates: finalUpdates,
         });
-      }
 
-      // Re-validate a remote server's URL against its environment's egress
-      // policy when the URL, server type, or environment changes. Unchanged
-      // existing servers are grandfathered (no retroactive block).
-      if (
-        environmentChanged ||
-        restBody.serverUrl !== undefined ||
-        restBody.serverType !== undefined
-      ) {
-        await assertRemoteServerUrlAllowedByNetworkPolicy({
-          serverType: restBody.serverType ?? originalCatalogItem.serverType,
-          serverUrl:
-            (restBody.serverUrl !== undefined
-              ? restBody.serverUrl
-              : originalCatalogItem.serverUrl) ?? null,
-          environmentId: ("environmentId" in restBody
-            ? restBody.environmentId
-            : originalCatalogItem.environmentId) as string | null,
-          organizationId: request.organizationId,
-        });
-      }
+        // Update the catalog item
+        const { catalogItem, renamedTools } =
+          await withCatalogTeamFkErrorMapped(() =>
+            InternalMcpCatalogModel.publishReviewed({
+              original: originalCatalogItemForGate,
+              updates: restBody,
+              rename,
+            }),
+          );
+        await staging.publish();
+        if (rename) {
+          await openappaBatteriesService.onCatalogPrefixesRenamed({
+            catalogId: id,
+            organizationId: originalCatalogItem.organizationId,
+            userId: request.user.id,
+            renamedTools,
+          });
+          // Rename alone does not alter an ordinary deployment's definition.
+          originalCatalogItemForGate.name = rename.newName;
+        }
 
-      // Detect an environment reassignment of a local catalog — it relocates
-      // the pod to a different namespace.
-      const relocatingLocalDeployment =
-        "environmentId" in restBody &&
-        restBody.environmentId !== originalCatalogItem.environmentId &&
-        originalCatalogItem.serverType === "local" &&
-        mcpServerRuntimeManager.isEnabled;
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Cascade the per-server idle-hibernation override onto every live
+        // install of this catalog. The registry dialog is catalog-scoped, so
+        // this PUT is its write path; the reinstall route remains the
+        // per-install path when a single installation must diverge. Runs after
+        // the permission gate above — whoever may edit the catalog may pin it
+        // awake — and only once every validation gate and the catalog update
+        // itself have passed: a PUT that 409s on a rename conflict (or fails
+        // env-regex / network-policy / team checks) must not silently change
+        // runtime policy on the way out. Idempotent, so a failure later in
+        // this handler is repaired by re-sending the same request.
+        if (hibernationMode !== undefined) {
+          await McpServerModel.setHibernationModeForCatalog(
+            id,
+            hibernationMode,
+          );
+        }
+        // SPDX-SnippetEnd
 
-      // Update the catalog item
-      const catalogItem = await withCatalogTeamFkErrorMapped(() =>
-        InternalMcpCatalogModel.update(id, restBody),
-      );
+        // Only tear down the old-namespace deployment when it will actually be
+        // recreated. A single-tenant edit that ALSO requires new user input (e.g.
+        // a command or prompted-env-var change in the same PUT) makes the cascade
+        // mark the install reinstall-required WITHOUT recreating the pod — so
+        // tearing it down here would leave the install with no running pod until a
+        // manual reinstall. Multi-tenant always recreates via
+        // reinstallSharedDeployment below, so it's always safe there.
+        const recreatingRelocatedDeployment =
+          relocatingLocalDeployment &&
+          (originalCatalogItem.multitenant === true ||
+            !requiresNewUserInputForReinstall(
+              originalCatalogItemForGate,
+              catalogItem,
+            ));
+        if (recreatingRelocatedDeployment) {
+          // Remove the deployment(s) from the OLD namespace before recreating in
+          // the new one. The old namespace is derived from `originalCatalogItem`
+          // (captured before the update), so the teardown is correct even on a
+          // cache-cold or cache-stale replica — unlike the recreate paths below,
+          // which resolve the namespace from the now-updated row. Without this the
+          // old-namespace pod is orphaned: it keeps running in a namespace the
+          // catalog no longer points at, and the reconciler only scans the default
+          // namespace so it never reclaims it.
+          await mcpServerRuntimeManager.tearDownOldNamespaceDeployments(
+            originalCatalogItem,
+          );
+        }
 
-      if (!catalogItem) {
-        throw new ApiError(404, "Catalog item not found");
-      }
+        // Recreate in the new namespace. A multi-tenant local catalog shares one
+        // K8s Deployment across all installs, and a per-install restart no-ops on
+        // it (the sibling guard in restartServer), so it must be recreated
+        // explicitly via reinstallSharedDeployment — awaited before the cascade so
+        // its per-install tool sync runs against the relocated, ready pod rather
+        // than racing the recreate. Single-tenant installs are recreated by the
+        // cascade's per-install restart below.
+        if (
+          relocatingLocalDeployment &&
+          originalCatalogItem.multitenant === true
+        ) {
+          await mcpServerRuntimeManager.reinstallSharedDeployment(id);
+        }
 
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      // Cascade the per-server idle-hibernation override onto every live
-      // install of this catalog. The registry dialog is catalog-scoped, so
-      // this PUT is its write path; the reinstall route remains the
-      // per-install path when a single installation must diverge. Runs after
-      // the permission gate above — whoever may edit the catalog may pin it
-      // awake — and only once every validation gate and the catalog update
-      // itself have passed: a PUT that 409s on a rename conflict (or fails
-      // env-regex / network-policy / team checks) must not silently change
-      // runtime policy on the way out. Idempotent, so a failure later in
-      // this handler is repaired by re-sending the same request.
-      if (hibernationMode !== undefined) {
-        await McpServerModel.setHibernationModeForCatalog(id, hibernationMode);
-      }
-      // SPDX-SnippetEnd
+        // Trusted-image gate: when a non-privileged author swaps the image to an
+        // untrusted one, hold the new image for admin approval instead of rolling
+        // it out. Flip the catalog flag to `pending` and skip the auto-reinstall so
+        // every install keeps running its old, approved image until an admin
+        // approves — rather than auto-reinstalling onto an image that the gate
+        // would reject and marking the install failed.
+        const imageHeldForApproval = catalogItem.organizationId
+          ? await holdInstallIfImageGated({
+              catalogItem,
+              organizationId: catalogItem.organizationId,
+            })
+          : false;
 
-      // Only tear down the old-namespace deployment when it will actually be
-      // recreated. A single-tenant edit that ALSO requires new user input (e.g.
-      // a command or prompted-env-var change in the same PUT) makes the cascade
-      // mark the install reinstall-required WITHOUT recreating the pod — so
-      // tearing it down here would leave the install with no running pod until a
-      // manual reinstall. Multi-tenant always recreates via
-      // reinstallSharedDeployment below, so it's always safe there.
-      const recreatingRelocatedDeployment =
-        relocatingLocalDeployment &&
-        (originalCatalogItem.multitenant === true ||
-          !requiresNewUserInputForReinstall(
+        if (imageHeldForApproval) {
+          logger.info(
+            { catalogId: id },
+            "Catalog image edited to an untrusted image by a non-privileged author - holding for admin approval; skipping auto-reinstall",
+          );
+        } else {
+          // Cascade reinstall for the parent's own installs. Use the
+          // unexpanded snapshot so the gate's diff isn't fooled by
+          // expanded-vs-raw asymmetry on bag-bearing rows (see comment
+          // above on `originalCatalogItemForGate`). Pass the explicit rotation
+          // signal; the cascade still respects changes requiring new user input.
+          await cascadeReinstallForCatalog(
             originalCatalogItemForGate,
             catalogItem,
-          ));
-      if (recreatingRelocatedDeployment) {
-        // Remove the deployment(s) from the OLD namespace before recreating in
-        // the new one. The old namespace is derived from `originalCatalogItem`
-        // (captured before the update), so the teardown is correct even on a
-        // cache-cold or cache-stale replica — unlike the recreate paths below,
-        // which resolve the namespace from the now-updated row. Without this the
-        // old-namespace pod is orphaned: it keeps running in a namespace the
-        // catalog no longer points at, and the reconciler only scans the default
-        // namespace so it never reclaims it.
-        await mcpServerRuntimeManager.tearDownOldNamespaceDeployments(
-          originalCatalogItem,
-        );
+            {
+              forceAutoRestart: catalogSharedSecretValuesRotated,
+            },
+          );
+        }
+
+        // Note: Tools are NOT deleted - they are synced during reinstall to preserve
+        // policies and profile assignments
+
+        // Keep an app's linked row + backing server in sync with the catalog edit.
+        if (isAppCatalog) {
+          await propagateAppCatalogChange(id, {
+            scope: catalogItem.scope,
+            environmentId: catalogItem.environmentId,
+            description: catalogItem.description,
+          });
+        }
+
+        return reply.send(catalogItem);
+      } finally {
+        await staging.dispose();
       }
-
-      // Recreate in the new namespace. A multi-tenant local catalog shares one
-      // K8s Deployment across all installs, and a per-install restart no-ops on
-      // it (the sibling guard in restartServer), so it must be recreated
-      // explicitly via reinstallSharedDeployment — awaited before the cascade so
-      // its per-install tool sync runs against the relocated, ready pod rather
-      // than racing the recreate. Single-tenant installs are recreated by the
-      // cascade's per-install restart below.
-      if (
-        relocatingLocalDeployment &&
-        originalCatalogItem.multitenant === true
-      ) {
-        await mcpServerRuntimeManager.reinstallSharedDeployment(id);
-      }
-
-      // Trusted-image gate: when a non-privileged author swaps the image to an
-      // untrusted one, hold the new image for admin approval instead of rolling
-      // it out. Flip the catalog flag to `pending` and skip the auto-reinstall so
-      // every install keeps running its old, approved image until an admin
-      // approves — rather than auto-reinstalling onto an image that the gate
-      // would reject and marking the install failed.
-      const imageHeldForApproval = catalogItem.organizationId
-        ? await holdInstallIfImageGated({
-            catalogItem,
-            organizationId: catalogItem.organizationId,
-          })
-        : false;
-
-      if (imageHeldForApproval) {
-        logger.info(
-          { catalogId: id },
-          "Catalog image edited to an untrusted image by a non-privileged author - holding for admin approval; skipping auto-reinstall",
-        );
-      } else {
-        // Cascade reinstall for the parent's own installs. Use the
-        // unexpanded snapshot so the gate's diff isn't fooled by
-        // expanded-vs-raw asymmetry on bag-bearing rows (see comment
-        // above on `originalCatalogItemForGate`). Force the auto-restart
-        // path when secret bag values rotated — those changes are
-        // invisible to the row-diff gate, so without the override pods
-        // would keep injecting the stale value until something else
-        // triggered a restart.
-        await cascadeReinstallForCatalog(
-          originalCatalogItemForGate,
-          catalogItem,
-          {
-            forceAutoRestart: catalogSharedSecretValuesRotated,
-          },
-        );
-      }
-
-      // Note: Tools are NOT deleted - they are synced during reinstall to preserve
-      // policies and profile assignments
-
-      // Keep an app's linked row + backing server in sync with the catalog edit.
-      if (isAppCatalog) {
-        await propagateAppCatalogChange(id, {
-          scope: catalogItem.scope,
-          environmentId: catalogItem.environmentId,
-          description: catalogItem.description,
-        });
-      }
-
-      return reply.send(catalogItem);
     },
   );
 
@@ -1990,6 +2035,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         accessAction: "update",
+        expandSecrets: false,
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
@@ -2006,10 +2052,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Clear the custom deployment YAML
-      const updated = await InternalMcpCatalogModel.update(id, {
-        deploymentSpecYaml: null,
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "mcpRegistry",
+        scope: id,
+        action: "update",
       });
+      await assertMcpRuntimeChangeAllowed({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        original: catalogItem,
+        updates: { deploymentSpecYaml: null },
+      });
+      const { catalogItem: updated } =
+        await InternalMcpCatalogModel.publishReviewed({
+          original: catalogItem,
+          updates: { deploymentSpecYaml: null },
+        });
 
       // Cascade-reinstall installed pods so they pick up the
       // auto-generated manifest. Without this, existing pods would keep
@@ -2678,6 +2738,36 @@ function assertMcpServerAlertingEnabled(): void {
   if (!config.mcpServer.alertingEnabled) {
     throw new ApiError(404, "Not found");
   }
+}
+
+function assertDeploymentYamlPlaceholdersSafe(
+  definition: Partial<
+    Pick<
+      InternalMcpCatalog,
+      "deploymentSpecYaml" | "localConfig" | "userConfig" | "oauthConfig"
+    >
+  >,
+): void {
+  if (typeof definition.deploymentSpecYaml !== "string") return;
+  const problems = findUnsafeDeploymentYamlPlaceholders(
+    definition.deploymentSpecYaml,
+    definition,
+  );
+  if (problems.length === 0) return;
+  throw new ApiError(
+    400,
+    `Invalid custom deployment YAML: ${problems.join("; ")}`,
+  );
+}
+
+function managedEnvironmentLayout(
+  environment: NonNullable<InternalMcpCatalog["localConfig"]>["environment"],
+) {
+  return (environment ?? []).map(({ key, type, mounted }) => ({
+    key,
+    type,
+    mounted: type === "secret" && Boolean(mounted),
+  }));
 }
 
 export default internalMcpCatalogRoutes;

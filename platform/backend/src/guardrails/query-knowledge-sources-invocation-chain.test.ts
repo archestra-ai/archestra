@@ -14,7 +14,7 @@ import {
 // a query_knowledge_sources result must poison context trust so that a
 // subsequent restricted tool invocation is refused. The individual behaviors
 // (KB results untrusted by default, untrusted context blocking, policy
-// overrides) are each pinned in trusted-data.test.ts,
+// overrides) are each pinned in trusted-data.rollback.test.ts,
 // trusted-data-policy.test.ts and tool-invocation-policy.test.ts — this file
 // only pins the full chain.
 describe("guardrails: KB query -> subsequent restricted tool invocation is blocked", () => {

@@ -50,7 +50,7 @@ const testPatterns = {
   // which the ordinary lite stack is deliberately NOT: with it on the proxy
   // rejects any tool-declaring request that omits the two APPA tools, which
   // other lite specs rely on. So these live in their own project, run by
-  // their own CI leg against their own stack, and must stay out of every
+  // CI against their own stack (in the quickstart job), and must stay out of every
   // other project's testMatch.
   openappa: "**/openappa/**/*.spec.ts",
 };
@@ -162,6 +162,46 @@ const browserTestIgnore = [
   testPatterns.llmProxy,
   testPatterns.openappa,
 ];
+
+// CI splits the chromium project across two lite stacks by FILE, not with
+// Playwright's --shard: --shard cuts the alphabetical test list in half by test
+// COUNT, which piled the MCP-install-heavy specs onto one runner (~196s vs
+// ~115s of tests). E2E_CHROMIUM_SHARD=2 runs exactly the files below;
+// E2E_CHROMIUM_SHARD=1 runs every other uiTestMatch file — so a new spec lands
+// on shard 1 by default and can never be silently skipped. Shard 1 also hosts
+// the api and identity-providers projects after chromium, which this list is
+// balanced against. Unset (local runs) keeps the whole project.
+const chromiumShard2TestMatch = [
+  "**/dynamic-credentials.spec.ts",
+  "**/invitation.spec.ts",
+  "**/loading-states.spec.ts",
+  "**/mcp-edit.spec.ts",
+  "**/model-limits.spec.ts",
+  "**/outbound-a2a.spec.ts",
+  "**/resource-creation-footer.spec.ts",
+  "**/skill-page-editing.spec.ts",
+  "**/skill-share.spec.ts",
+  "**/skill-version-history.spec.ts",
+  "**/skills-bulk-actions.spec.ts",
+  "**/static-credentials-management.spec.ts",
+  "**/tool-guardrails.spec.ts",
+  "**/users-role-filter.spec.ts",
+];
+const chromiumShard = process.env.E2E_CHROMIUM_SHARD;
+const chromiumTestFiles =
+  chromiumShard === "2"
+    ? {
+        testMatch: chromiumShard2TestMatch.filter((f) =>
+          uiTestMatch.includes(f),
+        ),
+        testIgnore: browserTestIgnore,
+      }
+    : chromiumShard === "1"
+      ? {
+          testMatch: uiTestMatch,
+          testIgnore: [...browserTestIgnore, ...chromiumShard2TestMatch],
+        }
+      : { testMatch: uiTestMatch, testIgnore: browserTestIgnore };
 
 /**
  * Common dependency configurations
@@ -288,8 +328,7 @@ export default defineConfig({
     {
       name: projectNames.chromium,
       testDir: "./tests",
-      testMatch: uiTestMatch,
-      testIgnore: browserTestIgnore,
+      ...chromiumTestFiles,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,
@@ -347,7 +386,7 @@ export default defineConfig({
     },
     // OpenAPPA root tool flow (lite environment, but a stack booted with
     // ARCHESTRA_BETA=true — see scripts/e2e-lite.sh and the
-    // `openappa` leg of the lite E2E matrix). Never add these specs to another
+    // OpenAPPA half of the quickstart CI job). Never add these specs to another
     // project: against an OpenAPPA-off stack they cannot pass.
     {
       name: projectNames.openappa,

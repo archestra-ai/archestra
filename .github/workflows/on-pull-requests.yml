@@ -726,13 +726,73 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace --locked
 
+  # Decides whether the queued merge group can change a backend unit test
+  # result. merge_group events do not support `paths:` filters, so this diffs
+  # the group's base and head commits itself. Deliberately a SKIP list, not a
+  # run list: the shards are skipped only when every changed file sits under a
+  # path the backend suite never reads (frontend, docs prose, e2e specs, the
+  # MCP catalog, ai-labs, agent instructions). Anything else — backend,
+  # shared, archestra-rs, lockfiles, Dockerfiles, helm, .github, the e2e
+  # fixtures the backend tests import (e2e-tests/fixtures/**), and
+  # docs/openapi.json, which the codegen writes — runs them.
+  backend-test-inputs:
+    name: Detect Backend Test Inputs
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Required to checkout the repository and fetch the merge group base.
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # The token is passed to this one git command only (private mirrors need
+      # it to fetch), never written to .git/config. A depth-1 fetch is enough:
+      # diffing two commits only needs their trees, not shared history.
+      - name: Diff merge group against its base
+        id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          git -c credential.helper= \
+              -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
+              fetch --depth=1 origin "${BASE_SHA}"
+          changed=$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
+          run=false
+          while IFS= read -r file; do
+            [ -z "${file}" ] && continue
+            case "${file}" in
+              docs/openapi.json | platform/e2e-tests/fixtures/*)
+                ;;
+              platform/frontend/* | platform/e2e-tests/* | docs/* | mcp-catalog/* | ai-labs/* | .agents/* | .claude/* | .codex/*)
+                continue
+                ;;
+            esac
+            echo "Backend test input changed: ${file}"
+            run=true
+            break
+          done <<< "${changed}"
+          if [ "${run}" = "false" ]; then
+            echo "No backend test inputs changed; backend unit test shards will be skipped."
+          fi
+          echo "run=${run}" >> "${GITHUB_OUTPUT}"
+
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the
   # two jobs partition the suite exactly once. This trades about four minutes
   # of test-gate latency for much lower runner usage than the eight-job layout.
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
-    if: github.event_name == 'merge_group'
+    needs: [backend-test-inputs]
+    if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # A merge-queue shard can take about 15 minutes, including setup and
     # cleanup. Leave room for cold caches while bounding hung test workers.
@@ -841,15 +901,27 @@ jobs:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
     # Skip under the required name on PRs. On merge_group, always() makes
-    # failed, cancelled, or skipped shards turn the gate red.
+    # failed, cancelled, or skipped shards turn the gate red — except shards
+    # skipped because the input check found no backend changes.
     if: always() && github.event_name == 'merge_group'
-    needs: [backend-unit-tests]
+    needs: [backend-test-inputs, backend-unit-tests]
     permissions: {}
     steps:
       - name: Check shard results
         env:
+          INPUTS_RESULT: ${{ needs.backend-test-inputs.result }}
+          RUN_SHARDS: ${{ needs.backend-test-inputs.outputs.run }}
           SHARDS_RESULT: ${{ needs.backend-unit-tests.result }}
         run: |
+          # A failed or cancelled input check never licenses a skip.
+          if [ "$INPUTS_RESULT" != "success" ]; then
+            echo "::error::Backend test input detection did not succeed (result: $INPUTS_RESULT)."
+            exit 1
+          fi
+          if [ "$RUN_SHARDS" = "false" ] && [ "$SHARDS_RESULT" = "skipped" ]; then
+            echo "✅ No backend test inputs changed in this merge group; shards skipped."
+            exit 0
+          fi
           if [ "$SHARDS_RESULT" != "success" ]; then
             echo "::error::One or more backend unit test shards failed (result: $SHARDS_RESULT)."
             exit 1

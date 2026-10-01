@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";

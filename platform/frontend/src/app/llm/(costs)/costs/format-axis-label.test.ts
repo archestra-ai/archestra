@@ -1,3 +1,4 @@
+// @vitest-environment node
 import {
   getStatisticsBucketIntervalMinutes,
   type StatisticsTimeFrame,

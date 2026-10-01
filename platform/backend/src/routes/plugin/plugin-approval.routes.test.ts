@@ -1,19 +1,9 @@
-import { vi } from "vitest";
-import { userHasPermission } from "@/auth";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { PluginModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { CreatePlugin, User } from "@/types";
-
-vi.mock("@/auth");
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    plugins: { enabled: true },
-  }),
-);
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
 
 describe("plugin executable-content approval", () => {
   let app: FastifyInstanceWithZod;
@@ -21,10 +11,10 @@ describe("plugin executable-content approval", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
+    config.plugins.enabled = true;
     organizationId = (await makeOrganization()).id;
+    // Not a member of the organization, so it holds no permissions.
     user = await makeUser();
-    mockUserHasPermission.mockReset();
-    mockUserHasPermission.mockResolvedValue(false);
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (

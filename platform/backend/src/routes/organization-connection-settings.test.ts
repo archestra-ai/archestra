@@ -1,19 +1,11 @@
 import { vi } from "vitest";
+import { betterAuth } from "@/auth";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-import { OrganizationModel } from "@/models";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: true },
-  }),
-);
 
 describe("PATCH /api/organization/connection-settings", () => {
   let app: FastifyInstanceWithZod;
@@ -21,8 +13,10 @@ describe("PATCH /api/organization/connection-settings", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
-    vi.clearAllMocks();
-    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
+    config.enterpriseFeatures.core = true;
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: adminUser.id } }) as never,
+    );
 
     adminUser = await makeAdmin();
     const organization = await makeOrganization();

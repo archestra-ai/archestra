@@ -1,16 +1,9 @@
-import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { userHasPermission } from "@/auth";
 import { grantEverywhere } from "@/test/wildcard-grants";
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
+import type { User } from "@/types";
 
 describe("GET /api/llm-virtual-keys", () => {
   let app: FastifyInstanceWithZod;
@@ -22,8 +15,6 @@ describe("GET /api/llm-virtual-keys", () => {
     organizationId = organization.id;
     user = await makeUser();
     await makeMember(user.id, organizationId);
-    mockUserHasPermission.mockReset();
-    mockUserHasPermission.mockResolvedValue(false);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -152,7 +143,6 @@ describe("GET /api/llm-virtual-keys", () => {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
@@ -184,7 +174,6 @@ describe("GET /api/llm-virtual-keys", () => {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
@@ -280,7 +269,6 @@ describe("GET /api/llm-virtual-keys", () => {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
@@ -356,7 +344,6 @@ describe("GET /api/llm-virtual-keys", () => {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
@@ -447,7 +434,6 @@ describe("GET /api/llm-virtual-keys", () => {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });

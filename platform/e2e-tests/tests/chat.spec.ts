@@ -67,15 +67,6 @@ const geminiConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
-// Cerebras - Uses OpenAI-compatible streaming format
-// Note: Cerebras filters out models with "llama" in the name for chat, so we use cerebras-gpt
-const cerebrasConfig: ChatProviderTestConfig = {
-  providerName: "cerebras",
-  providerDisplayName: "Cerebras",
-  wiremockStubId: "chat-ui-e2e-test",
-  expectedResponse: "This is a mocked response for the chat UI e2e test.",
-};
-
 // Cohere - Uses Cohere v2 streaming format
 const cohereConfig: ChatProviderTestConfig = {
   providerName: "cohere",
@@ -103,34 +94,10 @@ const perplexityConfig: ChatProviderTestConfig = {
   matchModel: ({ id }) => !requiresPerplexityAgentApi(id),
 };
 
-// Ollama - Uses OpenAI-compatible streaming format
-const ollamaConfig: ChatProviderTestConfig = {
-  providerName: "ollama",
-  providerDisplayName: "Ollama",
-  wiremockStubId: "chat-ui-e2e-test",
-  expectedResponse: "This is a mocked response for the chat UI e2e test.",
-};
-
-// vLLM - Uses OpenAI-compatible streaming format
-const vllmConfig: ChatProviderTestConfig = {
-  providerName: "vllm",
-  providerDisplayName: "vLLM",
-  wiremockStubId: "chat-ui-e2e-test",
-  expectedResponse: "This is a mocked response for the chat UI e2e test.",
-};
-
 // ZhipuAI - Uses OpenAI-compatible streaming format
 const zhipuaiConfig: ChatProviderTestConfig = {
   providerName: "zhipuai",
   providerDisplayName: "ZhipuAI",
-  wiremockStubId: "chat-ui-e2e-test",
-  expectedResponse: "This is a mocked response for the chat UI e2e test.",
-};
-
-// DeepSeek - Uses OpenAI-compatible streaming format
-const deepseekConfig: ChatProviderTestConfig = {
-  providerName: "deepseek",
-  providerDisplayName: "DeepSeek",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -174,21 +141,20 @@ const azureConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked Azure AI Foundry response.",
 };
 
+// Cerebras, DeepSeek, Ollama and vLLM are deliberately absent: their adapters
+// are plain createOpenAiCompatibleAdapterFactory configs, owned by the backend
+// provider-matrix and llm-client tests rather than a browser round trip each.
 const testConfigs: ChatProviderTestConfig[] = [
   anthropicConfig,
   openaiConfig,
   geminiConfig,
-  cerebrasConfig,
   cohereConfig,
   mistralConfig,
   perplexityConfig,
   groqConfig,
   xaiConfig,
   openrouterConfig,
-  ollamaConfig,
-  vllmConfig,
   zhipuaiConfig,
-  deepseekConfig,
   minimaxConfig,
   azureConfig,
 ];

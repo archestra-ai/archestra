@@ -1,24 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { McpServerModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: false },
-  }),
-);
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
 
 /**
  * The registry's server settings dialog is catalog-scoped, so its PUT is the
@@ -33,18 +24,19 @@ describe("PUT /api/internal_mcp_catalog/:id — hibernation mode cascade", () =>
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
-    // Small team => enterprise core active. The shared setup's reset targets
-    // the clean project's module registry; this mocked-project file must seed
-    // the instance its own route imports.
+    // No license flag; small team => enterprise core active.
+    config.enterpriseFeatures.core = false;
     enterpriseTier.setUserCountForTesting(0);
 
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
     // Org-scoped catalog items are admin-managed, and the permission checker
-    // reads the REAL member table (mocking @/auth doesn't reach it).
+    // reads the real member table.
     await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();

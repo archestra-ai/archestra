@@ -12,8 +12,8 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { type Mock, vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import config from "@/config";
 import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
@@ -24,17 +24,15 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
-vi.mock("@/auth");
-
-const mockHasPermission = hasPermission as Mock;
-
 describe("internal MCP catalog routes", () => {
   let app: FastifyInstance;
   let organizationId: string;
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -73,6 +71,7 @@ describe("internal MCP catalog routes", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 

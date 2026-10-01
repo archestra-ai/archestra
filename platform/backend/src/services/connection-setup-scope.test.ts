@@ -1,13 +1,14 @@
 import { beforeEach, expect, test, vi } from "vitest";
-
-vi.mock("@/cache-manager");
-
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { beginConnectionPromptSession } from "./connection-prompt-session";
 import { issueConnectionSetupContext } from "./connection-setup-context";
 import {
   nativeSetupClientFromProvenance,
   resolveConnectionSetupScope,
 } from "./connection-setup-scope";
+
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 const userId = "user-1";
 const organizationId = "org-1";

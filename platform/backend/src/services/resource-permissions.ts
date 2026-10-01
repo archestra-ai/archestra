@@ -18,10 +18,8 @@ import {
   type ScopedResource,
 } from "@archestra/shared";
 import { roleActionResourceFor } from "@archestra/shared/access-control";
-import {
-  getPermissionsForUserContext,
-  SERVICE_ACCOUNT_USER_ID_PREFIX,
-} from "@/auth/utils";
+import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
+import { getPermissionsForUserContext } from "@/auth/utils";
 import { enterpriseTier } from "@/enterprise-tier";
 import AgentModel from "@/models/agent";
 import KbFileModel from "@/models/kb-file";

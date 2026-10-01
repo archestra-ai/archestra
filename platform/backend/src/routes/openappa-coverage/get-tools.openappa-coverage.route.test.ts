@@ -243,8 +243,8 @@ describe("GET /api/openappa/coverage/tools", () => {
       "acme__list_items",
       "mixed__list_items",
     ]);
-    expect(await rows("?governedBy=catchall")).toEqual(["docs__list_pages"]);
-    expect(await rows("?governedBy=built_in")).toEqual([]);
+    expect(await rows("?governedBy=not_covered")).toEqual(["docs__list_pages"]);
+    expect(await rows("?governedBy=catchall")).toEqual([]);
     expect(await rows("?kind=read")).toEqual([
       "acme__list_items",
       "docs__microsoft_docs_search(query:*azure*)",
@@ -328,8 +328,8 @@ describe("GET /api/openappa/coverage/tools", () => {
     expect(
       listed.find((row) => row.fullName === "docs__list_pages"),
     ).toMatchObject({
-      policySource: "fallback",
-      rule: null,
+      policySource: "not_covered",
+      rule: { source: "catchall", name: "*", annotator: "noop" },
       fallbackLine: ruleLine(content, "*"),
     });
   });
@@ -349,7 +349,7 @@ describe("GET /api/openappa/coverage/tools", () => {
     const listed = (await tools("?limit=100")).data;
     expect(
       listed.find((row) => row.fullName === "docs__list_pages"),
-    ).toMatchObject({ policySource: "fallback", fallbackLine: null });
+    ).toMatchObject({ policySource: "not_covered", fallbackLine: null });
     expect(
       listed.find((row) => row.fullName === "acme__delete_item"),
     ).toMatchObject({

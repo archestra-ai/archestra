@@ -16,7 +16,7 @@ This reference is for custom image authors. For maintained image targets and bui
 | Completion | Exit `0` only after the turn is complete. Any non-zero exit marks the run failed. The workspace supervisor does not replay an interrupted turn after Pod replacement. |
 | Storage | `/home/node` and `/var/run/archestra` are persisted on a workspace PVC. Privileged runtimes also persist `/var/lib/docker` there. Other container paths are ephemeral. Export final deliverables before the workspace's retention deadline. |
 
-The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
+The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. When `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` and the mode is `interactive`, an absent or empty task means reopen the saved conversation without submitting a prompt. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
 
 ## Failure Reasons
 
@@ -61,6 +61,12 @@ Pass `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` to the model. It includes a bounded
 Use the gateway's advertised tool names: `list_skills` discovers the Agent's effective catalog; `load_skill` loads instructions or a bundled file by `name` and optional `path`. Names carry the deployment's tool prefix. When the gateway uses tool search, discover these tools there first. The Agent's skill policy, environment, and caller permissions apply to every request.
 
 Bundled text files are returned as text. A `<skill_file encoding="base64">` contains bytes to decode before saving. Preserve resource paths relative to the skill root and provide the runtimes and dependencies its scripts require. Files are not automatically installed in native client skill directories. `/skills` mounts mentioned by sandbox-enabled tools belong to the separate Code Sandbox, not this container.
+
+## MCP Startup
+
+In the default TUI mode, the maintained images wait for their native client's gateway catalog before submitting a delegated task. A failed connection, catalog request, or discovery timeout fails the run instead of starting it with only local tools. Claude Code checks its own TUI's registered gateway tools before submitting the prompt. Custom clients must also complete gateway discovery before assembling their first model request; checking tool assignments or making a separate preflight connection does not establish that the client's tool catalog is ready.
+
+The real-client tests in `agent_images/tests/mcp-startup.py` run during image builds. They hold discovery behind a barrier, execute all three OpenAPPA recovery tools, resume a saved conversation, and check discovery errors and timeouts. The MCP and model endpoints are synthetic; the pinned clients, wrappers, tmux sessions, and tool execution paths are real.
 
 ## Readable Transcript
 

@@ -45,8 +45,8 @@ const totals = (counts: Partial<Totals>): Totals => ({
   root: 0,
   battery: 0,
   notEnforced: 0,
+  notCovered: 0,
   catchAll: 0,
-  builtInFallback: 0,
   ...counts,
 });
 
@@ -89,22 +89,23 @@ test("splits every tool by what judges it, with the share a rule covers and a ch
       root: 4,
       battery: 6,
       notEnforced: 8,
-      catchAll: 21,
-      builtInFallback: 1,
+      notCovered: 21,
+      catchAll: 1,
     }),
   });
 
   const coverage = card(
     await screen.findByRole("img", {
-      name: "Custom rule: 4, Battery rule: 6, Not enforced: 8, No rule: 22",
+      name: "Custom rule: 4, Battery rule: 6, Catch-all rule: 1, Not enforced: 8, No rule: 21",
     }),
   );
-  expect(coverage.getByText("25%")).toBeVisible();
+  expect(coverage.getByText("28%")).toBeVisible();
   const legend = [
     ["Custom rule", "4", "10%"],
     ["Battery rule", "6", "15%"],
     ["Not enforced", "8", "20%"],
-    ["No rule", "22", "55%"],
+    ["Catch-all rule", "1", "3%"],
+    ["No rule", "21", "53%"],
   ];
   for (const [label, count, share] of legend) {
     const term = coverage.getByText(label as string);
@@ -114,10 +115,14 @@ test("splits every tool by what judges it, with the share a rule covers and a ch
     );
   }
 
+  expect(
+    coverage.getByText(/53% of your tools can run without policy restrictions/),
+  ).toBeVisible();
+
   // A legend row explains its slice and puts its share in the middle.
   await userEvent.hover(coverage.getByText("No rule"));
   expect(await screen.findByRole("tooltip")).toHaveTextContent(
-    "No rule22 tools, 55%No rule names these tools, so your policy's catch-all decides their calls.",
+    "No rule21 tools, 53%Always allowed. Add rules to set limits.",
   );
   expect(coverage.getByText("no rule")).toBeVisible();
   expect(
@@ -130,7 +135,13 @@ test("splits every tool by what judges it, with the share a rule covers and a ch
 
 test("counts batteries by status, names them on hover, links each to its filter, and shows the coverage they would reach", async () => {
   renderCharts({
-    summary: totals({ tools: 40, battery: 6, notEnforced: 10, catchAll: 24 }),
+    summary: totals({
+      tools: 40,
+      battery: 6,
+      catchAll: 4,
+      notEnforced: 10,
+      notCovered: 20,
+    }),
     batteries: {
       active: [
         { name: "acme", tools: 4 },
@@ -177,11 +188,11 @@ test("counts batteries by status, names them on hover, links each to its filter,
     "Broken batteriesGitHubneeds a credential",
   );
 
-  // Fixing github and installing the rest takes 15% to 60%.
-  expect(batteries.getByText("15% → 60%")).toBeVisible();
+  // Catch-all coverage is included before adding the uncovered tools.
+  expect(batteries.getByText("25% → 70%")).toBeVisible();
   expect(
     batteries.getByRole("img", {
-      name: "Battery rule: 6, Fixing broken batteries: 10, Installing available batteries: 8",
+      name: "Battery rule: 6, Catch-all rule: 4, Fixing broken batteries: 10, Installing available batteries: 8",
     }),
   ).toBeVisible();
   expect(
@@ -217,17 +228,56 @@ test("shows no batteries card while no battery is included or fits", async () =>
 
   expect(
     await screen.findByRole("img", {
-      name: "Custom rule: 2, Battery rule: 0, Not enforced: 0, No rule: 0",
+      name: "Custom rule: 2, Battery rule: 0, Catch-all rule: 0, Not enforced: 0, No rule: 0",
     }),
   ).toBeVisible();
   expect(screen.queryByText("Batteries")).not.toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(
+    await screen.findByRole("link", { name: "Improve with chat" }),
+  ).toBeVisible();
+});
+
+test.each([
+  {
+    counts: { notCovered: 3, catchAll: 0 },
+    visible:
+      "100% of your tools can run without policy restrictions. Add rules to control what your agents can do.",
+    absent:
+      "100% of your tools share one catch-all rule. Add specific rules to set limits for individual tools.",
+  },
+  {
+    counts: { notCovered: 0, catchAll: 3 },
+    visible:
+      "100% of your tools share one catch-all rule. Add specific rules to set limits for individual tools.",
+    absent:
+      "100% of your tools can run without policy restrictions. Add rules to control what your agents can do.",
+  },
+])("shows the relevant warning without buttons and keeps one chat action", async (scenario) => {
+  renderCharts({ summary: totals({ tools: 3, ...scenario.counts }) });
+  expect(await screen.findByText(scenario.visible)).toBeVisible();
+  expect(screen.queryByText(scenario.absent)).not.toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent(scenario.visible);
+  expect(
+    within(screen.getByRole("alert")).queryByRole("button"),
+  ).not.toBeInTheDocument();
+  expect(
+    within(screen.getByRole("alert")).queryByRole("link"),
+  ).not.toBeInTheDocument();
+  const chat = await screen.findByRole("link", { name: "Improve with chat" });
+  expect(screen.getAllByRole("link")).toHaveLength(1);
+  expect(
+    new URL(chat.getAttribute("href") ?? "", origin).searchParams.get(
+      "user_prompt",
+    ),
+  ).toContain("tools covered by a non-noop catch-all");
 });
 
 test("says so instead of charting while there is no tool", async () => {
   renderCharts({ summary: totals({}) });
 
   expect(await screen.findByText("No MCP server tools yet.")).toBeVisible();
-  expect(screen.queryByText("have a rule")).not.toBeInTheDocument();
+  expect(screen.queryByText("covered")).not.toBeInTheDocument();
   expect(
     screen.queryByRole("link", { name: "Improve with chat" }),
   ).not.toBeInTheDocument();

@@ -1118,10 +1118,9 @@ describe("AgentChatAppsEditor", () => {
     );
 
     await openPicker(user, "Slack");
-    // The refusal names the field that lifts it, and where that field is on
-    // this surface — the record's page calls its first tab General.
+    // The refusal names the access to grant and where to grant it.
     const reason =
-      "A personal agent answers only in its owner's direct messages. Change Visibility from Personal on the General tab to use shared channels.";
+      'A personal agent answers only in its owner\'s direct messages. To use shared channels, open the Permissions tab and add "Everyone in this organization" with "Can use" access.';
     // One sentence for the whole group, not one per row.
     expect(screen.getAllByText(reason)).toHaveLength(1);
     const group = screen.getByRole("button", {

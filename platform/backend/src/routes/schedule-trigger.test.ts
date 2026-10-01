@@ -1,4 +1,5 @@
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -10,20 +11,15 @@ import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/auth");
-
-import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
-
 describe("schedule trigger routes", () => {
   let app: FastifyInstanceWithZod;
   let adminUser: User;
   let organizationId: string;
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
-    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: adminUser.id } }) as never,
+    );
 
     adminUser = await makeUser();
     const organization = await makeOrganization();
@@ -48,6 +44,7 @@ describe("schedule trigger routes", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -204,8 +201,6 @@ describe("schedule trigger routes", () => {
     makeScheduleTriggerRun,
     makeUser,
   }) => {
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
-
     const owner = await makeUser();
     const member = await makeUser();
     await makeMember(owner.id, organizationId, { role: "member" });

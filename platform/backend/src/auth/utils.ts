@@ -9,9 +9,14 @@ import {
 } from "@archestra/shared";
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { auth as betterAuth } from "@/auth/better-auth";
+import {
+  isServiceAccountUserId,
+  SERVICE_ACCOUNT_USER_ID_PREFIX,
+} from "@/auth/service-account-user-id";
 import logger from "@/logging";
-import { ServiceAccountModel, UserModel } from "@/models";
 import RoleCompositionModel from "@/models/role-composition";
+import ServiceAccountModel from "@/models/service-account";
+import UserModel from "@/models/user";
 import type { SelectServiceAccount } from "@/types";
 
 /**
@@ -24,17 +29,6 @@ type PermissionCheckResult = {
   error: Error | null;
   missingPermissions?: Permissions;
 };
-
-/** Prefix of the synthetic user id minted for service-account principals. */
-export const SERVICE_ACCOUNT_USER_ID_PREFIX = "service-account:";
-
-/**
- * Whether a user id is the synthetic id minted for service-account principals
- * (`service-account:<id>`, see fastify-plugin/middleware.ts). Such ids have no
- * `users` row, so anything that writes a `user_id` foreign key must not use them.
- */
-export const isServiceAccountUserId = (userId: string): boolean =>
-  userId.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX);
 
 export const hasPermission = async (
   permissions: Permissions,

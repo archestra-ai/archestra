@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""Submit the task only after this Claude TUI has loaded its MCP catalog.
+
+Claude's startup positional prompt bypasses MCP catalog readiness, even with
+blocking connection settings. The native /mcp screen reads the live client's
+registered tools. Observe that state in the runtime's tmux pane before sending
+our task. No separate connection, cached preflight, or sleep establishes
+readiness. Real-client image tests pin the supported CLI's status screen.
+"""
+
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import time
+
+
+def main() -> int:
+    pane = os.environ.get("TMUX_PANE")
+    child = None
+    try:
+        if not pane:
+            raise RuntimeError("The Claude Code TUI requires the runtime tmux pane")
+        child = subprocess.Popen(sys.argv[1:])
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(signum, lambda number, _frame: child.send_signal(number))
+        deadline = time.monotonic() + 35
+        opened = False
+        ready = False
+        next_probe = 0.0
+        while child.poll() is None and time.monotonic() < deadline:
+            screen = subprocess.check_output(
+                ["tmux", "capture-pane", "-p", "-t", pane], text=True
+            )
+            if not opened and "Manage MCP servers" not in screen and "bypass permissions" in screen and "❯" in screen and time.monotonic() >= next_probe:
+                subprocess.run(["tmux", "send-keys", "-t", pane, "-l", "/mcp"], check=True)
+                subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], check=True)
+                opened = True
+                next_probe = time.monotonic() + 0.5
+            if opened and "Manage MCP servers" in screen:
+                menu = screen.split("Manage MCP servers", 1)[1]
+                gateway = next((line for line in menu.splitlines() if "archestra" in line), "")
+                if re.search(r"\bconnected\b.*\b[1-9]\d* tools?\b", gateway):
+                    ready = True
+                    break
+                if "failed" in gateway.lower():
+                    break
+                # The resumed TUI can keep the menu's initial connecting
+                # snapshot. Reopen it to observe the native live state.
+                if time.monotonic() >= next_probe:
+                    subprocess.run(["tmux", "send-keys", "-t", pane, "Escape"], check=True)
+                    opened = False
+                    next_probe = time.monotonic() + 0.1
+            time.sleep(0.05)
+        if ready:
+            subprocess.run(["tmux", "send-keys", "-t", pane, "Escape"], check=True)
+            # Wait for the menu to close before placing the task into the input.
+            while child.poll() is None and time.monotonic() < deadline:
+                screen = subprocess.check_output(["tmux", "capture-pane", "-p", "-t", pane], text=True)
+                if "Manage MCP servers" not in screen:
+                    break
+                time.sleep(0.05)
+            else:
+                raise RuntimeError("Claude Code did not return to its prompt")
+            task = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TASK", "")
+            if not task:
+                # An interactive restore opens the saved session for input.
+                return child.wait()
+            # Bracketed paste preserves multiline tasks as one submitted prompt.
+            subprocess.run(["tmux", "send-keys", "-t", pane, "-l", "\x1b[200~" + task + "\x1b[201~"], check=True)
+            subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], check=True)
+            return child.wait()
+    except (OSError, subprocess.SubprocessError, RuntimeError):
+        pass
+    finally:
+        if child and child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+    subprocess.run([str(Path(__file__).with_name("archestra-mcp-startup-failure"))], check=False)
+    return 78
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

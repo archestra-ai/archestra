@@ -61,7 +61,7 @@ This tool takes no arguments.
 | `yell` | Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `toolPolicy:read` |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | `toolPolicy:read` |
-| `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is given. | `toolPolicy:read` |
+| `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | `toolPolicy:read` |
 | `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | `toolPolicy:update` |
 | `preview_guardrails_policy_change` | Validate and show a reviewable diff for a proposed organization.appa.toml. | `toolPolicy:read` |
 | `update_guardrails_policy` | Publish a validated change to organization.appa.toml. | `toolPolicy:update` |
@@ -138,7 +138,7 @@ Required RBAC permission: `toolPolicy:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `mcpServerId` | `string` | No | The catalog ID of one MCP server; omit for every server you can see. |
+| `mcpServerId` | `string \| null` | Yes | The catalog ID of one MCP server, or null for every server you can see. |
 
 
 #### validate_guardrails_policy

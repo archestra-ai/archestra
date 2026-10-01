@@ -77,6 +77,7 @@ export function buildAgentRuntimeTurnScript(
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
     TERM: "xterm-256color",
+    COLORTERM: "truecolor",
     ENV: AGENT_RUNTIME_SHELL_INIT_SCRIPT,
     PROMPT_COMMAND: `. ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
     ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "1",
@@ -117,7 +118,7 @@ export function buildAgentRuntimeTurnScript(
  */
 export function buildAgentRuntimeTerminalIntegrationScript(): string {
   return [
-    `printf '%s\\n' '#!/bin/sh' 'tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} mouse on' 'exec tmux attach -t ${AGENT_RUNTIME_TMUX_SESSION}' > ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
+    `printf '%s\\n' '#!/bin/sh' 'tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} mouse on' 'tmux set-option -s set-clipboard on' 'export TERM=xterm-256color COLORTERM=truecolor' 'exec tmux -T RGB,clipboard attach -t ${AGENT_RUNTIME_TMUX_SESSION}' > ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
     `chmod 755 ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
     `printf '%s\\n' 'if [ -t 0 ] && [ -t 1 ]; then date +%s > /var/run/archestra/development-activity; fi' 'if [ "\${ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && [ -z "\${TMUX:-}" ] && tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; then exec ${AGENT_RUNTIME_ATTACH_SCRIPT}; fi' > ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
     `chmod 644 ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
@@ -323,6 +324,7 @@ export function buildAgentRuntimeSandbox(
                   LANG: "C.UTF-8",
                   LC_ALL: "C.UTF-8",
                   TERM: "xterm-256color",
+                  COLORTERM: "truecolor",
                   // k9s opens `bash` or `sh` directly. These standard shell
                   // hooks join the already-running tmux pane on first prompt.
                   ENV: AGENT_RUNTIME_SHELL_INIT_SCRIPT,

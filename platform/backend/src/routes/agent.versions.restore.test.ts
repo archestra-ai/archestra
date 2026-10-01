@@ -19,8 +19,6 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createRestrictedEnvironment } from "@/test/environments";
 import type { User } from "@/types";
 
-vi.mock("@/observability");
-
 describe("POST /api/agents/:id/versions/:version/restore", () => {
   let app: FastifyInstanceWithZod;
   let user: User;

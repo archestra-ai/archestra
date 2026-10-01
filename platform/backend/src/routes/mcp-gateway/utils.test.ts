@@ -31,7 +31,7 @@ import {
   type ListToolsResult,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { onTestFinished, vi } from "vitest";
+import { type MockInstance, onTestFinished, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import {
   takeLeadingAttestation,
@@ -54,31 +54,29 @@ import {
   buildConnectorResourceUri,
 } from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
-import type { JwksValidationResult } from "@/services/jwks-validator";
-import { describe, expect, test } from "@/test";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: true },
-  }),
-);
-
-const mockValidateJwt = vi.fn<() => Promise<JwksValidationResult | null>>();
-
-vi.mock("@/services/jwks-validator", () => ({
-  jwksValidator: {
-    validateJwt: (...args: unknown[]) => mockValidateJwt(...(args as [])),
-  },
-}));
-
-const {
+import { jwksValidator } from "@/services/jwks-validator";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
   authenticateMCPGatewayRequest,
   createAgentServer,
   ensureRequestSocketDestroySoon,
+  validateExternalIdpToken,
   validateMCPGatewayToken,
   validateOAuthToken,
-  validateExternalIdpToken,
-} = await import("./utils");
+} from "./utils";
+
+let mockValidateJwt: MockInstance<typeof jwksValidator.validateJwt>;
+
+beforeEach(() => {
+  config.enterpriseFeatures.core = true;
+  mockValidateJwt = vi
+    .spyOn(jwksValidator, "validateJwt")
+    .mockResolvedValue(null);
+});
+
+afterEach(() => {
+  mockValidateJwt.mockRestore();
+});
 
 type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
 type TestCallToolHandler = (

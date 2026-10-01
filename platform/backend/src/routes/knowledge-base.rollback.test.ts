@@ -41,6 +41,7 @@ import {
   vi,
 } from "@/test";
 import type { ConnectorConfig, User } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 
 describe("knowledge base routes", () => {
   let app: FastifyInstanceWithZod;
@@ -3139,7 +3140,7 @@ describe("knowledge base routes", () => {
 
       // The audit hook persists after the response; its connector snapshot
       // must expose the state transition so this mutation has a real diff.
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await drainBackgroundWork();
       const { data: auditRows } = await AuditLogModel.findPaginated({
         organizationId,
         resourceType: "connector",
@@ -4068,7 +4069,7 @@ describe("knowledge base routes", () => {
       });
       expect(response.statusCode).toBe(200);
       // The audit row is written fire-and-forget after the response.
-      await new Promise((r) => setTimeout(r, 50));
+      await drainBackgroundWork();
 
       const { data } = await AuditLogModel.findPaginated({
         organizationId,
@@ -4110,7 +4111,7 @@ describe("knowledge base routes", () => {
         url: `/api/connectors/${connector.id}/member-overrides/acc-hidden`,
       });
       expect(deleteResponse.statusCode).toBe(200);
-      await new Promise((r) => setTimeout(r, 50));
+      await drainBackgroundWork();
 
       const { data } = await AuditLogModel.findPaginated({
         organizationId,

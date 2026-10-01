@@ -12,12 +12,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
+import { makeFastImageEntrypoint } from "@/test/subprocess-entrypoint";
 
 const execFileAsync = promisify(execFile);
-const ENTRYPOINT = path.resolve(
-  import.meta.dirname,
-  "../../../../agent_images/bin/archestra-claude-code",
-);
 const ATTENTION_ENTRYPOINT = path.resolve(
   import.meta.dirname,
   "../../../../agent_images/bin/archestra-agent-attention",
@@ -27,6 +24,10 @@ describe("Claude Code image entrypoint", () => {
   test("uses native Claude hooks to report and clear input attention", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-claude-code-"));
     try {
+      const entrypoint = await makeFastImageEntrypoint(
+        root,
+        "archestra-claude-code",
+      );
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
       const workspace = path.join(root, "workspace");
@@ -85,7 +86,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-curl"
         ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
         ARCHESTRA_AGENT_ATTENTION_COMMAND: ATTENTION_ENTRYPOINT,
       };
-      await execFileAsync("bash", [ENTRYPOINT], { cwd: workspace, env });
+      await execFileAsync("bash", [entrypoint], { cwd: workspace, env });
 
       expect(
         JSON.parse(

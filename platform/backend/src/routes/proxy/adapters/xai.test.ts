@@ -108,7 +108,7 @@ describe("extractInternalCode", () => {
       status: 401,
       error: {
         message:
-          "Your xAI SuperSuperGrok sign-in has expired or been revoked. Reconnect your Grok account to continue.",
+          "Your xAI SuperGrok sign-in has expired or been revoked. Reconnect your Grok account to continue.",
         type: "authentication_error",
         internal_code: ArchestraInternalErrorCode.ProviderAuthRequired,
       },

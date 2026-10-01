@@ -10,13 +10,11 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { User } from "@/types";
 
-// cacheManager needs a live PostgreSQL connection that PGlite tests don't
-// have; back it with the canonical Map-backed fake from
-// src/__mocks__/cache-manager.ts so the ingest rate limiter runs for real
-// against an in-memory store (reset before every test).
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("POST /api/rum/events", () => {
   let app: FastifyInstanceWithZod;

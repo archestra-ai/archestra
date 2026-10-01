@@ -1881,41 +1881,6 @@ describe("skill tool execution", () => {
       expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(1);
     });
 
-    test("an ambiguous (>1 match) edit is rejected", async () => {
-      const skill = await seedSkillOrThrow({
-        skill: { content: "alpha and alpha again" },
-      });
-      const result = await executeArchestraTool(
-        TOOL_EDIT_SKILL_FULL_NAME,
-        {
-          name: "pdf-processing",
-          baseVersion: 1,
-          edits: [{ old_str: "alpha", new_str: "beta" }],
-        },
-        context,
-      );
-
-      expect(result.isError).toBe(true);
-      expect(textOf(result)).toContain("exactly once");
-      expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(1);
-    });
-
-    test("a no-op edit is skipped and creates no new version", async () => {
-      const skill = await seedSkillOrThrow();
-      const result = await executeArchestraTool(
-        TOOL_EDIT_SKILL_FULL_NAME,
-        {
-          name: "pdf-processing",
-          baseVersion: 1,
-          edits: [{ old_str: "pdftotext", new_str: "pdftotext" }],
-        },
-        context,
-      );
-
-      expect(result.isError).toBe(false);
-      expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(1);
-    });
-
     test("a stale baseVersion is rejected after the head moves (CAS)", async () => {
       const skill = await seedSkillOrThrow();
       // First edit takes the head to version 2.

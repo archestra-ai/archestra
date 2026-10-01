@@ -325,7 +325,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     expect(response.json().data).toEqual([
       expect.objectContaining({
         fullName: "docs__search",
-        policySource: "built_in",
+        policySource: "not_covered",
         unlisted: true,
       }),
     ]);
@@ -399,8 +399,8 @@ describe("GET /api/openappa/coverage/entities", () => {
           root: 1,
           battery: 1,
           notEnforced: 0,
-          catchAll: 2,
-          builtInFallback: 0,
+          notCovered: 2,
+          catchAll: 0,
         },
         autoMode: false,
       }),
@@ -438,8 +438,8 @@ describe("GET /api/openappa/coverage/entities", () => {
           root: 0,
           battery: 2,
           notEnforced: 0,
-          catchAll: 1,
-          builtInFallback: 0,
+          notCovered: 1,
+          catchAll: 0,
         },
       }),
     ]);

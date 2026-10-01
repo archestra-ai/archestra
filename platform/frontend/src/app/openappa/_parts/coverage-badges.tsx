@@ -27,7 +27,8 @@ type CoverageTone = "critical" | "warning" | "ok";
 type GovernedBy =
   | { source: "battery"; name: string; status: BatteryStatus }
   | { source: "root" }
-  | { source: "catchall" };
+  | { source: "catchall" }
+  | { source: "not_covered" };
 
 export function GovernedByPill({
   governedBy,
@@ -55,7 +56,9 @@ export function GovernedByPill({
       ? batteryDisplayName(governedBy.name)
       : governedBy.source === "root"
         ? "Custom rule"
-        : "No rule";
+        : governedBy.source === "catchall"
+          ? "Catch-all rule"
+          : "No rule";
   const content = (
     <>
       <Icon aria-hidden="true" />
@@ -72,7 +75,7 @@ export function GovernedByPill({
       variant={tone ? TONE_VARIANTS[tone] : "outline"}
       className={cn(
         tone ? TONE_CLASSES[tone] : null,
-        governedBy.source === "catchall" && "text-muted-foreground",
+        governedBy.source === "not_covered" && "text-muted-foreground",
         href && "cursor-pointer",
         className,
       )}

@@ -1,9 +1,24 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const terminalHarness = vi.hoisted(() => {
   return {
     write: vi.fn(),
+    focus: vi.fn(),
+    blur: vi.fn(),
+    clearSelection: vi.fn(),
+    keyHandler: null as ((event: KeyboardEvent) => boolean) | null,
+    oscHandler: null as ((data: string) => boolean) | null,
+    selectedText: "",
+    copyToClipboard: vi.fn().mockResolvedValue(undefined),
+    element: null as HTMLDivElement | null,
+    textarea: null as HTMLTextAreaElement | null,
     dataHandler: null as ((data: string) => void) | null,
     resizeHandler: null as
       | ((dimensions: { cols: number; rows: number }) => void)
@@ -22,9 +37,43 @@ const terminalHarness = vi.hoisted(() => {
 vi.mock("@xterm/xterm", () => ({
   Terminal: class Terminal {
     rows = 24;
+    options: { disableStdin?: boolean };
+    textarea = document.createElement("textarea");
+    constructor(options: { disableStdin?: boolean }) {
+      this.options = options;
+    }
     loadAddon() {}
-    open() {}
+    open(element: HTMLDivElement) {
+      terminalHarness.element = element;
+      terminalHarness.textarea = this.textarea;
+      element.appendChild(this.textarea);
+      element.addEventListener("mousedown", () => this.focus());
+    }
     dispose() {}
+    focus() {
+      terminalHarness.focus();
+      this.textarea.focus();
+    }
+    blur() {
+      terminalHarness.blur();
+      this.textarea.blur();
+    }
+    clearSelection = terminalHarness.clearSelection;
+    hasSelection = () => !!terminalHarness.selectedText;
+    getSelection = () => terminalHarness.selectedText;
+    parser = {
+      registerOscHandler: (
+        identifier: number,
+        handler: (data: string) => boolean,
+      ) => {
+        expect(identifier).toBe(52);
+        terminalHarness.oscHandler = handler;
+        return { dispose: vi.fn() };
+      },
+    };
+    attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean) {
+      terminalHarness.keyHandler = handler;
+    }
     write = terminalHarness.write;
     onData(handler: (data: string) => void) {
       terminalHarness.dataHandler = handler;
@@ -43,6 +92,9 @@ vi.mock("@xterm/addon-fit", () => ({
 }));
 
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
+vi.mock("@/lib/clipboard", () => ({
+  copyToClipboard: terminalHarness.copyToClipboard,
+}));
 
 import {
   type ExecSessionHandlers,
@@ -60,6 +112,7 @@ global.ResizeObserver = class ResizeObserver {
 } as unknown as typeof ResizeObserver;
 
 describe("ExecTerminal", () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     vi.clearAllMocks();
     terminalHarness.dataHandler = null;
@@ -67,6 +120,199 @@ describe("ExecTerminal", () => {
     terminalHarness.resizeObserverCallback = null;
     terminalHarness.proposedDimensions = { cols: 80, rows: 24 };
     terminalHarness.write.mockReset();
+    terminalHarness.keyHandler = null;
+    terminalHarness.oscHandler = null;
+    terminalHarness.selectedText = "";
+    terminalHarness.copyToClipboard.mockResolvedValue(undefined);
+    terminalHarness.element = null;
+    terminalHarness.textarea = null;
+  });
+
+  it("routes input to the terminal by default and suppresses only its native context menu", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="focus-default"
+        transport={transport}
+        isActive
+      />,
+    );
+    await screen.findByText("Connected");
+    const toggle = screen.getByRole("button", { name: "Focus terminal" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    const terminal = terminalHarness.element;
+    const target = terminalHarness.textarea;
+    if (!terminal || !target) throw new Error("Terminal did not initialize");
+    const mouse = vi.fn(() => terminalHarness.emitData("\x1b[<2;8;12M"));
+    const mouseUp = vi.fn(() => terminalHarness.emitData("\x1b[<2;8;12m"));
+    const emulatorContextMenu = vi.fn();
+    target.addEventListener("mousedown", mouse);
+    target.addEventListener("mouseup", mouseUp);
+    target.addEventListener("contextmenu", emulatorContextMenu);
+    fireEvent.mouseDown(target, { button: 2 });
+    expect(mouse).toHaveBeenCalledOnce();
+    expect(transport.sendInput).toHaveBeenCalledWith("\x1b[<2;8;12M");
+    fireEvent.mouseUp(target, { button: 2 });
+    expect(mouseUp).toHaveBeenCalledOnce();
+    expect(transport.sendInput).toHaveBeenCalledWith("\x1b[<2;8;12m");
+    expect(fireEvent.contextMenu(target)).toBe(false);
+    expect(emulatorContextMenu).toHaveBeenCalledOnce();
+    expect(emulatorContextMenu.mock.calls[0][0].defaultPrevented).toBe(true);
+    expect(target).toHaveFocus();
+    const emulatorKey = vi.fn();
+    const appShortcut = vi.fn();
+    target.addEventListener("keydown", emulatorKey);
+    document.addEventListener("keydown", appShortcut);
+    fireEvent.keyDown(target, { key: "b", ctrlKey: true });
+    expect(emulatorKey).toHaveBeenCalledOnce();
+    expect(appShortcut).not.toHaveBeenCalled();
+    fireEvent.keyDown(toggle, { key: "b", ctrlKey: true });
+    expect(appShortcut).toHaveBeenCalledOnce();
+    document.removeEventListener("keydown", appShortcut);
+    expect(
+      terminalHarness.keyHandler?.(
+        new KeyboardEvent("keydown", { key: "c", ctrlKey: true }),
+      ),
+    ).toBe(true);
+    terminalHarness.emitData("\x03");
+    expect(transport.sendInput).toHaveBeenCalledWith("\x03");
+    // Header controls keep their normal context menu in either mode.
+    expect(fireEvent.contextMenu(toggle)).toBe(true);
+    expect(terminal.contains(toggle)).toBe(false);
+  });
+
+  it("restores browser defaults and blocks mouse, keyboard, paste and pending input when off", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="focus-browser"
+        transport={transport}
+        isActive
+      />,
+    );
+    await screen.findByText("Connected");
+    const target = terminalHarness.textarea;
+    if (!target) throw new Error("Terminal did not initialize");
+    const xtermEvent = vi.fn((event: Event) => {
+      event.preventDefault();
+      terminalHarness.emitData("terminal input");
+    });
+    for (const name of [
+      "mousedown",
+      "mousemove",
+      "mouseup",
+      "wheel",
+      "keydown",
+      "keyup",
+      "copy",
+      "paste",
+      "contextmenu",
+    ]) {
+      target.addEventListener(name, xtermEvent);
+    }
+    target.focus();
+    fireEvent.click(screen.getByRole("button", { name: "Focus terminal" }));
+    expect(target).toBeDisabled();
+    expect(target).not.toHaveFocus();
+    expect(terminalHarness.blur).toHaveBeenCalledOnce();
+    expect(
+      terminalHarness.keyHandler?.(
+        new KeyboardEvent("keydown", { key: "a", metaKey: true }),
+      ),
+    ).toBe(false);
+    for (const name of [
+      "mousedown",
+      "mousemove",
+      "mouseup",
+      "wheel",
+      "keydown",
+      "keyup",
+      "copy",
+      "paste",
+      "contextmenu",
+    ]) {
+      expect(
+        fireEvent(target, new Event(name, { bubbles: true, cancelable: true })),
+      ).toBe(true);
+    }
+    terminalHarness.emitData("pending paste\r\x1b[<2;8;12M");
+    expect(xtermEvent).not.toHaveBeenCalled();
+    expect(transport.sendInput).not.toHaveBeenCalled();
+  });
+
+  it("blurs on either mode change and only focuses on a terminal click, including repeated and hidden tab transitions", async () => {
+    const transport: ExecSessionTransport = {
+      open: vi.fn((handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      }),
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    const { rerender } = render(
+      <ExecTerminal
+        sessionKey="focus-transitions"
+        transport={transport}
+        isActive
+      />,
+    );
+    await screen.findByText("Connected");
+    const toggle = screen.getByRole("button", { name: "Focus terminal" });
+    for (let i = 0; i < 3; i++) {
+      const target = terminalHarness.textarea;
+      if (!target) throw new Error("Terminal did not initialize");
+      fireEvent.mouseDown(target);
+      expect(target).toHaveFocus();
+      fireEvent.click(toggle);
+      expect(target).not.toHaveFocus();
+      fireEvent.mouseDown(target);
+      expect(target).not.toHaveFocus();
+      terminalHarness.emitData("ignored");
+      fireEvent.click(toggle);
+      expect(target).not.toHaveFocus();
+      expect(terminalHarness.textarea).not.toBeDisabled();
+      fireEvent.mouseDown(target);
+      expect(target).toHaveFocus();
+      terminalHarness.emitData("accepted");
+    }
+    expect(transport.open).toHaveBeenCalledOnce();
+    expect(transport.sendInput).toHaveBeenCalledTimes(3);
+    fireEvent.click(toggle);
+    rerender(
+      <ExecTerminal
+        sessionKey="focus-transitions"
+        transport={transport}
+        isActive={false}
+      />,
+    );
+    rerender(
+      <ExecTerminal
+        sessionKey="focus-transitions"
+        transport={transport}
+        isActive
+      />,
+    );
+    await waitFor(() => expect(transport.open).toHaveBeenCalledTimes(2));
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(terminalHarness.textarea).toBeDisabled();
+    terminalHarness.emitData("still ignored");
+    expect(transport.sendInput).toHaveBeenCalledTimes(3);
+    fireEvent.click(toggle);
+    expect(terminalHarness.textarea).not.toHaveFocus();
   });
 
   it("waits for a usable terminal grid before opening the remote session", async () => {
@@ -399,7 +645,14 @@ describe("ExecTerminal", () => {
       sendResize: vi.fn(),
     };
 
-    render(<ExecTerminal sessionKey="task-1" transport={transport} isActive />);
+    render(
+      <ExecTerminal
+        sessionKey="task-1"
+        transport={transport}
+        isActive
+        claudeMouseWorkaround
+      />,
+    );
 
     await screen.findByText("Connected");
 
@@ -426,7 +679,12 @@ describe("ExecTerminal", () => {
     };
 
     render(
-      <ExecTerminal sessionKey="task-wheel" transport={transport} isActive />,
+      <ExecTerminal
+        sessionKey="task-wheel"
+        transport={transport}
+        isActive
+        claudeMouseWorkaround
+      />,
     );
     await screen.findByText("Connected");
 
@@ -438,6 +696,107 @@ describe("ExecTerminal", () => {
       "\x1b[<64;5;18M".repeat(3),
     );
     expect(transport.sendInput).toHaveBeenNthCalledWith(2, "j");
+  });
+
+  it("preserves native TUI hover, drag, release and wheel reports across focus switches", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal sessionKey="native-tui" transport={transport} isActive />,
+    );
+    await screen.findByText("Connected");
+    const reports =
+      "\x1b[<35;3;18M\x1b[<0;3;18M\x1b[<32;8;18M\x1b[<0;8;18m\x1b[<64;8;18M";
+    terminalHarness.emitData(reports);
+    expect(transport.sendInput).toHaveBeenLastCalledWith(reports);
+    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    terminalHarness.emitData(reports);
+    expect(transport.sendInput).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    terminalHarness.emitData(reports);
+    expect(transport.sendInput).toHaveBeenCalledTimes(2);
+    expect(transport.sendInput).toHaveBeenLastCalledWith(reports);
+  });
+
+  it("copies native TUI OSC 52 text to the host clipboard only in active terminal mode", async () => {
+    const focused = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal sessionKey="native-copy" transport={transport} isActive />,
+    );
+    await screen.findByText("Connected");
+    const report = `c;${btoa(String.fromCharCode(...new TextEncoder().encode("Copied ✓\nNext line")))}`;
+    terminalHarness.oscHandler?.(report);
+    expect(terminalHarness.copyToClipboard).toHaveBeenCalledWith(
+      "Copied ✓\nNext line",
+    );
+    terminalHarness.oscHandler?.("c;?");
+    terminalHarness.oscHandler?.("c;not base64!");
+    terminalHarness.oscHandler?.("missing separator");
+    expect(terminalHarness.copyToClipboard).toHaveBeenCalledTimes(1);
+    focused.mockReturnValue(false);
+    terminalHarness.oscHandler?.(report);
+    focused.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    terminalHarness.oscHandler?.(report);
+    expect(terminalHarness.copyToClipboard).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    terminalHarness.oscHandler?.(report);
+    expect(terminalHarness.copyToClipboard).toHaveBeenCalledTimes(2);
+    expect(transport.sendInput).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "metaKey",
+    "ctrlKey",
+  ] as const)("copies xterm selection with %s+C while retaining unselected terminal shortcuts", async (modifier) => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="keyboard-copy"
+        transport={transport}
+        isActive
+      />,
+    );
+    await screen.findByText("Connected");
+    const event = () =>
+      new KeyboardEvent("keydown", {
+        key: "c",
+        [modifier]: true,
+        cancelable: true,
+      });
+    expect(terminalHarness.keyHandler?.(event())).toBe(true);
+    terminalHarness.selectedText = "Selected terminal text";
+    const copy = event();
+    expect(terminalHarness.keyHandler?.(copy)).toBe(false);
+    expect(copy.defaultPrevented).toBe(true);
+    expect(terminalHarness.copyToClipboard).toHaveBeenCalledWith(
+      "Selected terminal text",
+    );
+    expect(transport.sendInput).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    terminalHarness.keyHandler?.(event());
+    expect(terminalHarness.copyToClipboard).toHaveBeenCalledTimes(1);
   });
 
   it("does not render tmux's exit notice into the completed frame", async () => {

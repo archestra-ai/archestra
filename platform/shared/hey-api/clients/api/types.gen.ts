@@ -22057,7 +22057,7 @@ export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRu
 
 export type ContinueAgentRunData = {
     body: {
-        message: string;
+        message?: string;
         attachments?: Array<{
             name: string;
             contentType: string;
@@ -85808,7 +85808,7 @@ export type GetOpenappaCoverageEntitiesResponses = {
                 battery: number;
                 notEnforced: number;
                 catchAll: number;
-                builtInFallback: number;
+                notCovered: number;
             };
             autoMode: boolean;
         }>;
@@ -85834,7 +85834,7 @@ export type GetOpenappaCoverageToolsData = {
         search?: string;
         catalogId?: string;
         entityId?: string;
-        governedBy?: 'battery' | 'root' | 'catchall' | 'built_in';
+        governedBy?: 'battery' | 'root' | 'catchall' | 'not_covered';
         battery?: string;
         kind?: 'read' | 'write' | 'approval';
     };
@@ -85921,9 +85921,9 @@ export type GetOpenappaCoverageToolsResponses = {
             fullName: string;
             readOnly: boolean | null;
             kind: 'read' | 'write' | 'approval' | 'neutral' | 'unlisted';
-            policySource: 'built_in' | 'fallback' | 'root' | 'battery';
+            policySource: 'root' | 'battery' | 'catchall' | 'not_covered';
             rule: {
-                source: 'root' | 'battery';
+                source: 'root' | 'battery' | 'catchall';
                 battery: string | null;
                 batteryEntry: string | null;
                 batteryStatus: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
@@ -86051,7 +86051,7 @@ export type GetOpenappaCoverageSummaryResponses = {
             battery: number;
             notEnforced: number;
             catchAll: number;
-            builtInFallback: number;
+            notCovered: number;
             tools: number;
         };
         batteries: {

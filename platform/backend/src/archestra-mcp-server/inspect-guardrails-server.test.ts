@@ -116,7 +116,11 @@ describe("inspect_guardrails_server", () => {
       coverage: expect.arrayContaining([
         expect.objectContaining({
           fullName: "inspection__read_54",
-          rule: null,
+          policySource: "not_covered",
+          rule: expect.objectContaining({
+            source: "catchall",
+            annotator: "noop",
+          }),
           unlisted: true,
         }),
       ]),

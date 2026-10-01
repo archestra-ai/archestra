@@ -176,6 +176,9 @@ RUN apk add --no-cache \
    # needs its own floor for the same reason the openssl ones above do: the cached layer
    # never re-runs against a newer index on its own.
    apk add --no-cache --upgrade "expat>=2.8.5-r0" && \
+   # CVE-2026-103111: require the fixed pcre2 release and invalidate the cached
+   # package layer, which otherwise retains the vulnerable 10.48-r0 build.
+   apk add --no-cache --upgrade "pcre2>=10.49-r0" && \
    # CVE-2026-81736, CVE-2026-81563, CVE-2026-80274, CVE-2026-77692, CVE-2026-76163,
    # CVE-2026-19667, CVE-2026-19666: BIND vulnerabilities (HIGH) fixed in 9.20.29-r0.
    # `bind` in the bare `apk upgrade` above has the same cached-layer problem as openssl,

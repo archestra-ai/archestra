@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run coding agents and delegated tasks in isolated containers
-lastUpdated: "2026-09-23"
+lastUpdated: "2026-09-30"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -253,6 +253,10 @@ Private mode can use the verified sender's personal credentials. Internal and Pu
 
 Select a runtime Agent in Chat and send a task to open its live terminal. Attach files before starting so the Agent can read them in its container. Startup progress and failures appear alongside the run.
 
+**Focus terminal** starts on. Mouse actions and keyboard shortcuts go to the terminal application. Turn it off for browser text selection, copying, and context menus.
+
+Terminal applications can copy selections to your computer's clipboard while this page is active. Cmd+C or Ctrl+C also copies selected terminal text. Paste it into another application, such as Notes. Without a selection, Ctrl+C keeps its normal terminal action.
+
 You can leave the page while work continues. Reopen it from the sidebar to see current output or retained history. Runs indicate when input is needed or progress has stalled. Send follow-up instructions to continue the work.
 
 ## Organize Runs In Projects
@@ -267,7 +271,7 @@ Runtime sessions use [granular access control](/docs/platform-access-control#ses
 
 ## View Runs From An Agent
 
-The Agent's **Runs** tab opens live terminals and completed recordings. Reattach while the client remains alive, or resume its saved conversation after suspension. Detaching leaves the run active.
+The Agent's **Runs** tab opens live terminals and completed recordings. **Resume** reopens the saved session without sending an instruction. You can type directly into the terminal once it connects. Detaching leaves the run active.
 
 Run ownership follows the user who started it, not the Agent creator. Sharing grants read-only output access, never an interactive terminal. Agent administrators can read output even without an explicit share. Project access also permits reading runs when paired with permission to read all project sessions.
 

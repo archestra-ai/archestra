@@ -8,8 +8,6 @@ import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
 
-vi.mock("@/observability");
-
 /**
  * The project lifecycle is audited as a whole, so these run through the HTTP
  * layer: the audit record is written by a Fastify hook, and calling the service

@@ -1,19 +1,21 @@
 "use client";
 
-import { Copy } from "lucide-react";
+import { Copy, SquareTerminal } from "lucide-react";
 import {
   type SyntheticEvent,
   useCallback,
   useEffect,
-  useId,
   useRef,
   useState,
 } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { copyToClipboard } from "@/lib/clipboard";
 import styles from "./exec-terminal.module.css";
 import { isUsableTerminalDimensions } from "./exec-terminal.utils";
@@ -146,7 +148,6 @@ export function ExecTerminal({
   const initializedRef = useRef(false);
   const [focusTerminal, setFocusTerminal] = useState(true);
   const focusTerminalRef = useRef(focusTerminal);
-  const focusSwitchId = useId();
 
   const handleFocusTerminalChange = (focused: boolean) => {
     // Update before React renders: a pending paste or mouse report must not
@@ -157,9 +158,10 @@ export function ExecTerminal({
     if (!terminal) return;
     terminal.options.disableStdin = !focused;
     terminal.clearSelection();
+    // A mode change relinquishes input focus in either direction. Enabling
+    // terminal controls must not capture keystrokes until the user clicks it.
+    terminal.blur();
     if (terminal.textarea) terminal.textarea.disabled = !focused;
-    if (focused) terminal.focus();
-    else terminal.blur();
   };
 
   const handleBrowserEvent = (event: SyntheticEvent) => {
@@ -373,15 +375,29 @@ export function ExecTerminal({
       <div className="flex flex-col gap-2 flex-1 min-h-0">
         <div className="flex items-center justify-between gap-3 flex-shrink-0">
           {title ? <h3 className="text-sm font-semibold">{title}</h3> : <div />}
-          <div className="flex items-center gap-2">
-            <Label htmlFor={focusSwitchId}>Focus terminal</Label>
-            <Switch
-              id={focusSwitchId}
-              checked={focusTerminal}
-              onCheckedChange={handleFocusTerminalChange}
-              aria-description="On: terminal mouse and keyboard controls. Off: browser selection, copy and context menu."
-            />
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Focus terminal"
+                aria-pressed={focusTerminal}
+                onClick={() => handleFocusTerminalChange(!focusTerminal)}
+                className="shrink-0 text-xs aria-pressed:bg-accent aria-pressed:text-accent-foreground"
+              >
+                <SquareTerminal />
+                <span>Focus terminal</span>
+                <span className="text-muted-foreground">
+                  {focusTerminal ? "On" : "Off"}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {focusTerminal
+                ? "Terminal controls enabled. Click inside to type. Turn off for browser selection, copy and context menu."
+                : "Browser selection, copy and context menu enabled. Turn on to use terminal controls."}
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
           {status === "connecting" &&
@@ -421,6 +437,7 @@ export function ExecTerminal({
                   : "block",
             }}
           >
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: xterm owns the interactive textarea; this wrapper gates its events. */}
             <div
               ref={terminalRef}
               className={`h-full ${focusTerminal ? "" : styles.browserMode}`}
@@ -434,11 +451,17 @@ export function ExecTerminal({
               onPasteCapture={handleBrowserEvent}
               onKeyDownCapture={handleBrowserEvent}
               onKeyUpCapture={handleBrowserEvent}
+              onKeyDown={(event) => {
+                if (focusTerminalRef.current) event.stopPropagation();
+              }}
+              onKeyUp={(event) => {
+                if (focusTerminalRef.current) event.stopPropagation();
+              }}
               onContextMenuCapture={(event) => {
-                // tmux already receives the right-button mouse report. Avoid
-                // xterm moving its textarea under the cursor and opening a
-                // second, native menu over tmux's menu.
-                event.stopPropagation();
+                // Let xterm handle the right click in terminal mode; suppress
+                // only the browser menu that would otherwise cover tmux's.
+                // Browser mode keeps native defaults without reaching xterm.
+                handleBrowserEvent(event);
                 if (focusTerminalRef.current) event.preventDefault();
               }}
             />

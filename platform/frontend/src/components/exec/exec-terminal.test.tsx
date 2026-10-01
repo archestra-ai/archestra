@@ -44,6 +44,7 @@ vi.mock("@xterm/xterm", () => ({
       terminalHarness.element = element;
       terminalHarness.textarea = this.textarea;
       element.appendChild(this.textarea);
+      element.addEventListener("mousedown", () => this.focus());
     }
     dispose() {}
     focus() {
@@ -122,20 +123,37 @@ describe("ExecTerminal", () => {
       />,
     );
     await screen.findByText("Connected");
-    const toggle = screen.getByRole("switch", { name: "Focus terminal" });
-    expect(toggle).toBeChecked();
+    const toggle = screen.getByRole("button", { name: "Focus terminal" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
     const terminal = terminalHarness.element;
     const target = terminalHarness.textarea;
     if (!terminal || !target) throw new Error("Terminal did not initialize");
     const mouse = vi.fn(() => terminalHarness.emitData("\x1b[<2;8;12M"));
-    const nativeMenu = vi.fn();
+    const mouseUp = vi.fn(() => terminalHarness.emitData("\x1b[<2;8;12m"));
+    const emulatorContextMenu = vi.fn();
     target.addEventListener("mousedown", mouse);
-    target.addEventListener("contextmenu", nativeMenu);
+    target.addEventListener("mouseup", mouseUp);
+    target.addEventListener("contextmenu", emulatorContextMenu);
     fireEvent.mouseDown(target, { button: 2 });
     expect(mouse).toHaveBeenCalledOnce();
     expect(transport.sendInput).toHaveBeenCalledWith("\x1b[<2;8;12M");
+    fireEvent.mouseUp(target, { button: 2 });
+    expect(mouseUp).toHaveBeenCalledOnce();
+    expect(transport.sendInput).toHaveBeenCalledWith("\x1b[<2;8;12m");
     expect(fireEvent.contextMenu(target)).toBe(false);
-    expect(nativeMenu).not.toHaveBeenCalled();
+    expect(emulatorContextMenu).toHaveBeenCalledOnce();
+    expect(emulatorContextMenu.mock.calls[0][0].defaultPrevented).toBe(true);
+    expect(target).toHaveFocus();
+    const emulatorKey = vi.fn();
+    const appShortcut = vi.fn();
+    target.addEventListener("keydown", emulatorKey);
+    document.addEventListener("keydown", appShortcut);
+    fireEvent.keyDown(target, { key: "b", ctrlKey: true });
+    expect(emulatorKey).toHaveBeenCalledOnce();
+    expect(appShortcut).not.toHaveBeenCalled();
+    fireEvent.keyDown(toggle, { key: "b", ctrlKey: true });
+    expect(appShortcut).toHaveBeenCalledOnce();
+    document.removeEventListener("keydown", appShortcut);
     expect(
       terminalHarness.keyHandler?.(
         new KeyboardEvent("keydown", { key: "c", ctrlKey: true }),
@@ -184,8 +202,10 @@ describe("ExecTerminal", () => {
     ]) {
       target.addEventListener(name, xtermEvent);
     }
-    fireEvent.click(screen.getByRole("switch", { name: "Focus terminal" }));
+    target.focus();
+    fireEvent.click(screen.getByRole("button", { name: "Focus terminal" }));
     expect(target).toBeDisabled();
+    expect(target).not.toHaveFocus();
     expect(terminalHarness.blur).toHaveBeenCalledOnce();
     expect(
       terminalHarness.keyHandler?.(
@@ -212,7 +232,7 @@ describe("ExecTerminal", () => {
     expect(transport.sendInput).not.toHaveBeenCalled();
   });
 
-  it("can repeatedly toggle and return focus without reopening the PTY, including a hidden tab transition", async () => {
+  it("blurs on either mode change and only focuses on a terminal click, including repeated and hidden tab transitions", async () => {
     const transport: ExecSessionTransport = {
       open: vi.fn((handlers) => {
         handlers.onStarted(null);
@@ -229,13 +249,22 @@ describe("ExecTerminal", () => {
       />,
     );
     await screen.findByText("Connected");
-    const toggle = screen.getByRole("switch", { name: "Focus terminal" });
+    const toggle = screen.getByRole("button", { name: "Focus terminal" });
     for (let i = 0; i < 3; i++) {
+      const target = terminalHarness.textarea;
+      if (!target) throw new Error("Terminal did not initialize");
+      fireEvent.mouseDown(target);
+      expect(target).toHaveFocus();
       fireEvent.click(toggle);
+      expect(target).not.toHaveFocus();
+      fireEvent.mouseDown(target);
+      expect(target).not.toHaveFocus();
       terminalHarness.emitData("ignored");
       fireEvent.click(toggle);
-      expect(terminalHarness.textarea).toHaveFocus();
+      expect(target).not.toHaveFocus();
       expect(terminalHarness.textarea).not.toBeDisabled();
+      fireEvent.mouseDown(target);
+      expect(target).toHaveFocus();
       terminalHarness.emitData("accepted");
     }
     expect(transport.open).toHaveBeenCalledOnce();
@@ -256,12 +285,12 @@ describe("ExecTerminal", () => {
       />,
     );
     await waitFor(() => expect(transport.open).toHaveBeenCalledTimes(2));
-    expect(toggle).not.toBeChecked();
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
     expect(terminalHarness.textarea).toBeDisabled();
     terminalHarness.emitData("still ignored");
     expect(transport.sendInput).toHaveBeenCalledTimes(3);
     fireEvent.click(toggle);
-    expect(terminalHarness.textarea).toHaveFocus();
+    expect(terminalHarness.textarea).not.toHaveFocus();
   });
 
   it("waits for a usable terminal grid before opening the remote session", async () => {

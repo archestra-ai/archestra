@@ -69,11 +69,7 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async findArchive(params: {
-    id: string;
-    organizationId: string;
-    callerId?: string;
-  }) {
+  static async findArchive(params: { id: string; organizationId: string }) {
     const [row] = await db
       .select({ archive: table.archive })
       .from(table)
@@ -81,7 +77,6 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
         ),
       );
     return row ? normalizeByteaField(row, "archive").archive : null;
@@ -106,11 +101,7 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async find(params: {
-    id: string;
-    organizationId: string;
-    callerId?: string;
-  }) {
+  static async find(params: { id: string; organizationId: string }) {
     const [row] = await db
       .select(metadataColumns())
       .from(table)
@@ -118,13 +109,12 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
         ),
       );
     return row ?? null;
   }
 
-  static async summary(params: { organizationId: string; callerId?: string }) {
+  static async summary(params: { organizationId: string }) {
     const [row] = await db
       .select({ unresolved: count() })
       .from(table)
@@ -132,15 +122,12 @@ export default class OpenAppaYellModel {
         and(
           eq(table.organizationId, params.organizationId),
           isNull(table.resolvedAt),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
         ),
       );
     return { unresolved: row?.unresolved ?? 0 };
   }
 
-  static async list(
-    params: OpenAppaYellQuery & { organizationId: string; callerId?: string },
-  ) {
+  static async list(params: OpenAppaYellQuery & { organizationId: string }) {
     const position = decodeCursor(params.cursor);
     const validCursor =
       position &&
@@ -152,7 +139,6 @@ export default class OpenAppaYellModel {
       .where(
         and(
           eq(table.organizationId, params.organizationId),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
           params.status === "unresolved"
             ? isNull(table.resolvedAt)
             : params.status === "resolved"
@@ -182,7 +168,6 @@ export default class OpenAppaYellModel {
     organizationId: string;
     userId: string;
     resolved: boolean;
-    callerId?: string;
   }) {
     const [row] = await db
       .update(table)
@@ -194,7 +179,6 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
         ),
       )
       .returning(metadataColumns());

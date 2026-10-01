@@ -56,7 +56,7 @@ This tool takes no arguments.
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `get_openappa_yell` | Read a saved OpenAPPA report visible to the current user. | `log:read` |
+| `get_openappa_yell` | Read a saved OpenAPPA report from the current organization, including its originating user or service account. | `log:read` |
 | `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | `toolPolicy:update` |
 | `yell` | Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `toolPolicy:read` |

@@ -3,7 +3,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Check,
-  Clock3,
   Download,
   Megaphone,
   MessageCircle,
@@ -11,6 +10,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { CreatedByCell } from "@/components/created-by-cell";
 import {
   CollectionFilters,
   FilterBar,
@@ -19,12 +19,9 @@ import {
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
-import { StandardDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogDescription } from "@/components/ui/dialog";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
@@ -41,9 +38,8 @@ import { useOpenAppaChatLaunch } from "./openappa-chat-button";
 export function YellsTable() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"unresolved" | "resolved" | "all">(
-    "unresolved",
+    "all",
   );
-  const [selected, setSelected] = useState<OpenAppaYell | null>(null);
   const pagination = useCursorPagination();
   const isMobile = useIsMobile();
   const { data: canRead, isPending: permissionsLoading } = useHasPermissions({
@@ -63,10 +59,9 @@ export function YellsTable() {
     !!canRead,
   );
   const resolve = useResolveOpenAppaYell();
-  const archive = useOpenAppaYellArchive();
   const clearFilters = () => {
     setSearch("");
-    setStatus("unresolved");
+    setStatus("all");
     pagination.goNewest();
   };
   const columns: ColumnDef<OpenAppaYell>[] = [
@@ -75,30 +70,32 @@ export function YellsTable() {
       header: "Report",
       size: isMobile ? 120 : 240,
       cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-1.5 h-auto w-full min-w-0 justify-start whitespace-normal px-1.5 text-left"
-          onClick={() => setSelected(row.original)}
-        >
-          <span className="min-w-0 space-y-1">
-            <span className="line-clamp-2 break-words">
-              {row.original.message}
-            </span>
-            {isMobile && (
-              <span className="block text-xs font-normal text-muted-foreground">
+        <div className="min-w-0 space-y-1">
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+            {row.original.message}
+          </p>
+          {isMobile && (
+            <span className="block space-y-1 text-xs font-normal text-muted-foreground">
+              <YellCaller yell={row.original} />
+              <span className="block">
                 {row.original.resolvedAt ? "Resolved" : "Unresolved"} ·{" "}
                 {formatRelativeTimeFromNow(row.original.createdAt)}
               </span>
-            )}
-          </span>
-        </Button>
+            </span>
+          )}
+        </div>
       ),
+    },
+    {
+      accessorKey: "caller",
+      header: "Reported by",
+      size: 280,
+      cell: ({ row }) => <YellCaller yell={row.original} />,
     },
     {
       id: "status",
       header: "Status",
-      size: 120,
+      size: 110,
       cell: ({ row }) => (
         <Badge variant="outline">
           {row.original.resolvedAt ? "Resolved" : "Unresolved"}
@@ -108,7 +105,7 @@ export function YellsTable() {
     {
       accessorKey: "createdAt",
       header: "Reported",
-      size: 170,
+      size: 150,
       cell: ({ row }) => (
         <span
           className="whitespace-nowrap text-muted-foreground"
@@ -160,19 +157,18 @@ export function YellsTable() {
               }}
             />
           }
-          onClearFilters={
-            search || status !== "unresolved" ? clearFilters : undefined
-          }
+          onClearFilters={search || status !== "all" ? clearFilters : undefined}
         >
           <FilterSelect
             value={status}
+            inactiveValue="all"
             ariaLabel="Yell status"
             placeholder="Status"
             showSearch={false}
             items={[
+              { value: "all", label: "All statuses" },
               { value: "unresolved", label: "Unresolved" },
               { value: "resolved", label: "Resolved" },
-              { value: "all", label: "All statuses" },
             ]}
             onValueChange={(value) => {
               if (
@@ -201,12 +197,13 @@ export function YellsTable() {
                     column.id !== "status" &&
                     !(
                       "accessorKey" in column &&
-                      column.accessorKey === "createdAt"
+                      (column.accessorKey === "createdAt" ||
+                        column.accessorKey === "caller")
                     ),
                 )
               : columns
           }
-          fixedWidthColumnIds={["status", "createdAt"]}
+          fixedWidthColumnIds={["caller", "status", "createdAt"]}
           flexibleColumnIds={["message"]}
           data={yells.data?.data ?? []}
           getRowId={(row) => row.id}
@@ -231,66 +228,10 @@ export function YellsTable() {
                 : "No yells yet"
           }
           emptyDescription="Reports appear here when an agent uses the yell tool."
-          hasActiveFilters={!!search}
+          hasActiveFilters={!!search || status !== "all"}
           filteredEmptyMessage="No reports match these filters."
-          onClearFilters={() => {
-            setSearch("");
-            setStatus("all");
-            pagination.goNewest();
-          }}
+          onClearFilters={clearFilters}
         />
-      )}
-      {selected && (
-        <StandardDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setSelected(null);
-          }}
-          title={
-            <span className="flex flex-wrap items-center gap-2 pr-6">
-              <span>OpenAPPA yell</span>
-              <Badge variant="outline">
-                {selected.resolvedAt ? "Resolved" : "Unresolved"}
-              </Badge>
-              <span
-                className="ml-auto flex items-center gap-1.5 text-xs font-normal text-muted-foreground"
-                title={formatDate({ date: selected.createdAt })}
-              >
-                <Clock3 className="size-3.5" />
-                <span>{formatRelativeTimeFromNow(selected.createdAt)}</span>
-              </span>
-            </span>
-          }
-          bodyClassName="space-y-4"
-          footer={
-            <>
-              {selected.hasArchive && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={archive.isPending}
-                  onClick={() =>
-                    archive.mutate({ id: selected.id, download: true })
-                  }
-                >
-                  <Download />
-                  <span>Download report</span>
-                </Button>
-              )}
-              <YellChatAction yell={selected} primary />
-            </>
-          }
-        >
-          <DialogDescription className="sr-only">
-            Review the reported issue, investigate it in chat, or download its
-            diagnostic report.
-          </DialogDescription>
-          <div className="rounded-md border bg-muted/30 p-3">
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-              {selected.message}
-            </p>
-          </div>
-        </StandardDialog>
       )}
     </div>
   );
@@ -326,27 +267,6 @@ function useYellInvestigation(yell: OpenAppaYell) {
       );
     },
   };
-}
-
-function YellChatAction({
-  yell,
-  primary = false,
-}: {
-  yell: OpenAppaYell;
-  primary?: boolean;
-}) {
-  const investigation = useYellInvestigation(yell);
-  return (
-    <Button
-      variant={primary ? "default" : "outline"}
-      size="sm"
-      disabled={investigation.disabled}
-      onClick={investigation.launch}
-    >
-      <MessageCircle />
-      <span>Investigate in chat</span>
-    </Button>
-  );
 }
 
 function YellRowActions({
@@ -398,4 +318,21 @@ function YellRowActions({
       ]}
     />
   );
+}
+
+function YellCaller({ yell }: { yell: OpenAppaYell }) {
+  if (yell.caller)
+    return (
+      <CreatedByCell createdBy={yell.caller} showServiceAccountBadge={false} />
+    );
+  const label = yell.callerId.startsWith("user:service-account:")
+    ? "Unknown service account"
+    : yell.callerId.startsWith("user:")
+      ? "Unknown user"
+      : yell.callerId.startsWith("app:")
+        ? "App"
+        : yell.callerId.startsWith("virtual-key:")
+          ? "Virtual key"
+          : "Unattributed caller";
+  return <span className="text-xs text-muted-foreground">{label}</span>;
 }

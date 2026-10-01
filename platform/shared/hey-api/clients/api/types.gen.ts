@@ -86921,6 +86921,12 @@ export type GetOpenAppaYellsResponses = {
             resolvedAt: string | null;
             resolvedBy: string | null;
             hasArchive: boolean;
+            caller: {
+                id: string;
+                type?: 'user' | 'service_account';
+                name: string | null;
+                email: string | null;
+            } | null;
         }>;
         pagination: {
             limit: number;
@@ -87107,6 +87113,12 @@ export type GetOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -87206,6 +87218,12 @@ export type UpdateOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 

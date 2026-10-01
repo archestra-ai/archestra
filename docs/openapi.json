@@ -335165,6 +335165,36 @@
                           },
                           "hasArchive": {
                             "type": "boolean"
+                          },
+                          "caller": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
+                              },
+                              "name": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "email": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "email"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -335180,7 +335210,8 @@
                           "reportFailed",
                           "resolvedAt",
                           "resolvedBy",
-                          "hasArchive"
+                          "hasArchive",
+                          "caller"
                         ],
                         "additionalProperties": false
                       }
@@ -335792,6 +335823,36 @@
                     },
                     "hasArchive": {
                       "type": "boolean"
+                    },
+                    "caller": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -335807,7 +335868,8 @@
                     "reportFailed",
                     "resolvedAt",
                     "resolvedBy",
-                    "hasArchive"
+                    "hasArchive",
+                    "caller"
                   ],
                   "additionalProperties": false
                 }
@@ -336140,6 +336202,36 @@
                     },
                     "hasArchive": {
                       "type": "boolean"
+                    },
+                    "caller": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -336155,7 +336247,8 @@
                     "reportFailed",
                     "resolvedAt",
                     "resolvedBy",
-                    "hasArchive"
+                    "hasArchive",
+                    "caller"
                   ],
                   "additionalProperties": false
                 }

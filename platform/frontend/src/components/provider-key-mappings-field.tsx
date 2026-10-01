@@ -1,6 +1,10 @@
 "use client";
 
-import { E2eTestId, type SupportedProvider } from "@archestra/shared";
+import {
+  E2eTestId,
+  providerHasEndpointLocalModels,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { KeyRound, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useState } from "react";
@@ -12,7 +16,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 
-export type ProviderApiKeyMap = Partial<Record<SupportedProvider, string>>;
+/**
+ * The provider API keys a credential routes to. One key per provider, except
+ * for providers whose keys are separate servers with their own models (vLLM,
+ * Ollama, …): there each key is another endpoint, and requests go to the one
+ * that serves the model.
+ */
+export type ProviderApiKeyMappings = Array<{
+  provider: SupportedProvider;
+  providerApiKeyId: string;
+}>;
 
 export function ProviderKeyMappingsField({
   providerApiKeyIds,
@@ -20,30 +33,34 @@ export function ProviderKeyMappingsField({
   providerApiKeys,
   className,
 }: {
-  providerApiKeyIds: ProviderApiKeyMap;
-  onProviderApiKeyIdsChange: (value: ProviderApiKeyMap) => void;
+  providerApiKeyIds: ProviderApiKeyMappings;
+  onProviderApiKeyIdsChange: (value: ProviderApiKeyMappings) => void;
   providerApiKeys: LlmProviderApiKeyResponse[];
   className?: string;
 }) {
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const providerCatalog = useModelProviderCatalog();
   const configuredMappings = useMemo(() => {
-    return providerApiKeyMapToArray(providerApiKeyIds)
+    return providerApiKeyIds
       .map(({ provider, providerApiKeyId }) => {
         const key = providerApiKeys.find(
           (apiKey) => apiKey.id === providerApiKeyId,
         );
         return { provider, providerApiKeyId, key };
       })
-      .sort((a, b) =>
-        providerCatalog
-          .label(a.provider)
-          .localeCompare(providerCatalog.label(b.provider)),
+      .sort(
+        (a, b) =>
+          providerCatalog
+            .label(a.provider)
+            .localeCompare(providerCatalog.label(b.provider)) ||
+          (a.key?.name ?? "").localeCompare(b.key?.name ?? ""),
       );
   }, [providerApiKeyIds, providerApiKeys, providerCatalog]);
   const availableProviderApiKeys = useMemo(
     () =>
-      providerApiKeys.filter((apiKey) => !providerApiKeyIds[apiKey.provider]),
+      providerApiKeys.filter((apiKey) =>
+        canAddProviderApiKey(providerApiKeyIds, apiKey),
+      ),
     [providerApiKeyIds, providerApiKeys],
   );
 
@@ -51,21 +68,23 @@ export function ProviderKeyMappingsField({
     const selectedKey = providerApiKeys.find(
       (apiKey) => apiKey.id === providerApiKeyId,
     );
-    if (!selectedKey || providerApiKeyIds[selectedKey.provider]) {
+    if (!selectedKey || !canAddProviderApiKey(providerApiKeyIds, selectedKey)) {
       return;
     }
 
-    onProviderApiKeyIdsChange({
+    onProviderApiKeyIdsChange([
       ...providerApiKeyIds,
-      [selectedKey.provider]: selectedKey.id,
-    });
+      { provider: selectedKey.provider, providerApiKeyId: selectedKey.id },
+    ]);
     setApiKeySelectorOpen(false);
   };
 
-  const handleRemoveProviderKey = (provider: SupportedProvider) => {
-    const nextMappings = { ...providerApiKeyIds };
-    delete nextMappings[provider];
-    onProviderApiKeyIdsChange(nextMappings);
+  const handleRemoveProviderKey = (providerApiKeyId: string) => {
+    onProviderApiKeyIdsChange(
+      providerApiKeyIds.filter(
+        (mapping) => mapping.providerApiKeyId !== providerApiKeyId,
+      ),
+    );
   };
 
   return (
@@ -116,7 +135,7 @@ export function ProviderKeyMappingsField({
               const label = providerCatalog.label(provider);
               return (
                 <div
-                  key={provider}
+                  key={providerApiKeyId}
                   className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2"
                 >
                   <div className="flex min-w-0 items-center gap-3">
@@ -140,8 +159,8 @@ export function ProviderKeyMappingsField({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleRemoveProviderKey(provider)}
-                    aria-label={`Remove ${label} key`}
+                    onClick={() => handleRemoveProviderKey(providerApiKeyId)}
+                    aria-label={`Remove ${key?.name ?? label} key`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -155,23 +174,20 @@ export function ProviderKeyMappingsField({
   );
 }
 
-export function providerApiKeyMapToArray(providerApiKeyIds: ProviderApiKeyMap) {
-  return Object.entries(providerApiKeyIds)
-    .filter((entry): entry is [SupportedProvider, string] => Boolean(entry[1]))
-    .map(([provider, providerApiKeyId]) => ({ provider, providerApiKeyId }));
-}
-
-export function providerApiKeyArrayToMap(
-  providerApiKeys: Array<{
-    provider: SupportedProvider;
-    providerApiKeyId: string;
-  }>,
-): ProviderApiKeyMap {
-  return Object.fromEntries(
-    providerApiKeys.map((mapping) => [
-      mapping.provider,
-      mapping.providerApiKeyId,
-    ]),
+/**
+ * Whether `apiKey` can join `mappings`: not already mapped, and either the
+ * first key of its provider or a further endpoint of a self-hosted provider.
+ */
+export function canAddProviderApiKey(
+  mappings: ProviderApiKeyMappings,
+  apiKey: { id: string; provider: SupportedProvider },
+): boolean {
+  if (mappings.some((mapping) => mapping.providerApiKeyId === apiKey.id)) {
+    return false;
+  }
+  return (
+    providerHasEndpointLocalModels(apiKey.provider) ||
+    !mappings.some((mapping) => mapping.provider === apiKey.provider)
   );
 }
 

@@ -643,4 +643,81 @@ describe("VirtualApiKeyModel", () => {
       await VirtualApiKeyModel.getTeamIdsForVirtualApiKey(virtualKey.id),
     ).toEqual([team.id]);
   });
+
+  test("ensureProviderMapping: replaces only the same provider's stale mapping", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const makeKey = async (provider: "anthropic" | "openai") =>
+      makeLlmProviderApiKey(
+        org.id,
+        (await makeSecret({ secret: { apiKey: `sk-${provider}` } })).id,
+        { provider },
+      );
+    const staleAnthropic = await makeKey("anthropic");
+    const openai = await makeKey("openai");
+    const freshAnthropic = await makeKey("anthropic");
+    const { virtualKey } = await VirtualApiKeyModel.create({
+      providerApiKeys: [
+        { provider: "anthropic", providerApiKeyId: staleAnthropic.id },
+        { provider: "openai", providerApiKeyId: openai.id },
+      ],
+      name: "connection key",
+    });
+
+    // Twice: a repeat (two concurrent setups converging) changes nothing.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await VirtualApiKeyModel.ensureProviderMapping({
+        virtualApiKeyId: virtualKey.id,
+        provider: "anthropic",
+        providerApiKeyId: freshAnthropic.id,
+      });
+    }
+
+    expect(
+      (await VirtualApiKeyModel.getProviderApiKeys(virtualKey.id)).map(
+        ({ provider, providerApiKeyId }) => ({ provider, providerApiKeyId }),
+      ),
+    ).toEqual([
+      { provider: "anthropic", providerApiKeyId: freshAnthropic.id },
+      { provider: "openai", providerApiKeyId: openai.id },
+    ]);
+  });
+
+  test("getProviderApiKeysForRouting: orders one provider's keys primary first, then oldest", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const keys = [];
+    for (const [name, isPrimary] of [
+      ["oldest", false],
+      ["newer", false],
+      ["primary", true],
+    ] as const) {
+      keys.push(
+        await makeLlmProviderApiKey(
+          org.id,
+          (await makeSecret({ secret: { apiKey: `sk-${name}` } })).id,
+          { provider: "vllm", name, isPrimary },
+        ),
+      );
+    }
+    const { virtualKey } = await VirtualApiKeyModel.create({
+      providerApiKeys: [...keys].reverse().map((key) => ({
+        provider: "vllm" as const,
+        providerApiKeyId: key.id,
+      })),
+      name: "three endpoints",
+    });
+
+    expect(
+      (
+        await VirtualApiKeyModel.getProviderApiKeysForRouting(virtualKey.id)
+      ).map((mapping) => mapping.providerApiKeyName),
+    ).toEqual(["primary", "oldest", "newer"]);
+  });
 });

@@ -46,13 +46,19 @@ vi.mock("@/components/proxy-auth-provider-key-fields", () => ({
   ProviderKeyAccessFields: ({
     onProviderApiKeyIdsChange,
   }: {
-    onProviderApiKeyIdsChange: (value: Record<string, string>) => void;
+    onProviderApiKeyIdsChange: (
+      value: Array<{ provider: string; providerApiKeyId: string }>,
+    ) => void;
   }) => (
     <section>
       <h3>Provider Keys</h3>
       <button
         type="button"
-        onClick={() => onProviderApiKeyIdsChange({ openai: "provider-key-1" })}
+        onClick={() =>
+          onProviderApiKeyIdsChange([
+            { provider: "openai", providerApiKeyId: "provider-key-1" },
+          ])
+        }
       >
         Map provider key
       </button>

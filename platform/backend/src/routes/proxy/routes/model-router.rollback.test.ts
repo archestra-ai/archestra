@@ -190,6 +190,68 @@ async function createModelRouterVirtualKey(params: {
   });
 }
 
+/**
+ * One OpenAI-compatible server: its own key, base URL, and the models it
+ * hosts — the shape of a self-hosted gateway per model.
+ */
+async function makeVllmEndpoint(params: {
+  organizationId: string;
+  name: string;
+  apiKey: string;
+  baseUrl: string;
+  modelIds: string[];
+  isPrimary?: boolean;
+  userId?: string;
+  makeSecret: (params: { secret: Record<string, unknown> }) => Promise<{
+    id: string;
+  }>;
+  makeLlmProviderApiKey: (
+    organizationId: string,
+    secretId: string,
+    overrides?: {
+      name?: string;
+      provider?: SupportedProvider;
+      baseUrl?: string | null;
+      isPrimary?: boolean;
+      userId?: string | null;
+    },
+  ) => Promise<{ id: string }>;
+}) {
+  const modelDbIds = [];
+  for (const modelId of params.modelIds) {
+    await upsertModel({ provider: "vllm", modelId });
+    const model = await ModelModel.findByProviderAndModelId("vllm", modelId);
+    if (!model) throw new Error(`model ${modelId} was not upserted`);
+    modelDbIds.push(model.id);
+  }
+  const secret = await params.makeSecret({
+    secret: { apiKey: params.apiKey },
+  });
+  const apiKey = await params.makeLlmProviderApiKey(
+    params.organizationId,
+    secret.id,
+    {
+      name: params.name,
+      provider: "vllm",
+      baseUrl: params.baseUrl,
+      isPrimary: params.isPrimary,
+      userId: params.userId,
+    },
+  );
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+    apiKey.id,
+    modelDbIds,
+  );
+  return apiKey;
+}
+
+/** `[apiKey, baseUrl]` of every vLLM client the router built, in order. */
+function vllmClientCalls() {
+  return vi
+    .mocked(vllmAdapterFactory.createClient)
+    .mock.calls.map(([apiKey, options]) => [apiKey, options.baseUrl]);
+}
+
 async function linkAllProviderModelsToApiKey(
   provider: SupportedProvider,
   apiKeyId: string,
@@ -2295,6 +2357,302 @@ describe("model router proxy routes", () => {
     expect(groqResponse.statusCode).toBe(200);
     expect(openaiAdapterFactory.createClient).toHaveBeenCalledOnce();
     expect(groqAdapterFactory.createClient).toHaveBeenCalledOnce();
+  });
+
+  test("routes each model to the OpenAI-compatible endpoint that serves it", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const glm = await makeVllmEndpoint({
+      organizationId: organization.id,
+      name: "GLM gateway",
+      apiKey: "sk-glm",
+      baseUrl: "https://glm.gateway.test/v1",
+      modelIds: ["glm-5.3"],
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const deepseek = await makeVllmEndpoint({
+      organizationId: organization.id,
+      name: "DeepSeek gateway",
+      apiKey: "sk-deepseek",
+      baseUrl: "https://deepseek.gateway.test/v1",
+      modelIds: ["deepseek-v4.1-flash"],
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "two-vllm-endpoints-vk",
+      providerApiKeys: [
+        { provider: "vllm", providerApiKeyId: glm.id },
+        { provider: "vllm", providerApiKeyId: deepseek.id },
+      ],
+      ...accessGrants("org"),
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Two endpoint Model Router Agent",
+      agentType: "llm_proxy",
+    });
+    const send = (model: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload: { model, messages: [{ role: "user", content: "Hello" }] },
+      });
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/v1/model-router/${agent.id}/models`,
+      headers: { authorization: `Bearer ${value}` },
+    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(
+      listResponse.json().data.map((model: { id: string }) => model.id),
+    ).toEqual(["vllm:deepseek-v4.1-flash", "vllm:glm-5.3"]);
+
+    // Qualified and bare slugs both resolve: every mapped key is one provider.
+    for (const model of [
+      "vllm:glm-5.3",
+      "deepseek-v4.1-flash",
+      "glm-5.3",
+      "vllm:deepseek-v4.1-flash",
+    ]) {
+      expect((await send(model)).statusCode).toBe(200);
+    }
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-glm", "https://glm.gateway.test/v1"],
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+      ["sk-glm", "https://glm.gateway.test/v1"],
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+    ]);
+  });
+
+  test("prefers the primary endpoint when several serve the model", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const older = await makeVllmEndpoint({
+      organizationId: organization.id,
+      name: "Older gateway",
+      apiKey: "sk-older",
+      baseUrl: "https://older.gateway.test/v1",
+      modelIds: ["shared-model", "older-only-model"],
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const primary = await makeVllmEndpoint({
+      organizationId: organization.id,
+      name: "Primary gateway",
+      apiKey: "sk-primary",
+      baseUrl: "https://primary.gateway.test/v1",
+      modelIds: ["shared-model"],
+      isPrimary: true,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "overlapping-endpoints-vk",
+      providerApiKeys: [older, primary].map((key) => ({
+        provider: "vllm" as const,
+        providerApiKeyId: key.id,
+      })),
+      ...accessGrants("org"),
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Overlapping endpoint Agent",
+      agentType: "llm_proxy",
+    });
+
+    for (const model of ["vllm:shared-model", "vllm:older-only-model"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+        },
+        payload: { model, messages: [{ role: "user", content: "Hello" }] },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-primary", "https://primary.gateway.test/v1"],
+      ["sk-older", "https://older.gateway.test/v1"],
+    ]);
+  });
+
+  test("routes each model to its endpoint for LLM OAuth client credentials", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(authRoutes);
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const endpoints = [];
+    for (const [name, modelId] of [
+      ["glm", "glm-5.3"],
+      ["deepseek", "deepseek-v4.1-flash"],
+    ]) {
+      endpoints.push(
+        await makeVllmEndpoint({
+          organizationId: organization.id,
+          name,
+          apiKey: `sk-${name}`,
+          baseUrl: `https://${name}.gateway.test/v1`,
+          modelIds: [modelId],
+          makeSecret,
+          makeLlmProviderApiKey,
+        }),
+      );
+    }
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "OAuth two endpoint Agent",
+      agentType: "llm_proxy",
+    });
+    const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      authorId: crypto.randomUUID(),
+      name: "Two Endpoint Service",
+      providerApiKeys: endpoints.map((key) => ({
+        provider: "vllm" as const,
+        providerApiKeyId: key.id,
+      })),
+    });
+    const tokenResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: LLM_PROXY_OAUTH_SCOPE,
+      },
+    });
+    const { access_token: accessToken } = tokenResponse.json();
+
+    for (const model of ["vllm:deepseek-v4.1-flash", "vllm:glm-5.3"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: { model, messages: [{ role: "user", content: "Hello" }] },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+      ["sk-glm", "https://glm.gateway.test/v1"],
+    ]);
+  });
+
+  test("routes each model to its endpoint for an OAuth user", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeSecret,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "two-endpoint-user@example.com" });
+    await makeMember(user.id, organization.id);
+    for (const [name, modelId] of [
+      ["glm", "glm-5.3"],
+      ["deepseek", "deepseek-v4.1-flash"],
+    ]) {
+      await makeVllmEndpoint({
+        organizationId: organization.id,
+        name,
+        apiKey: `sk-${name}`,
+        baseUrl: `https://${name}.gateway.test/v1`,
+        modelIds: [modelId],
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+    }
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "OAuth user two endpoint Agent",
+      agentType: "llm_proxy",
+    });
+    const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
+    await OAuthClientModel.upsertFromCimd({
+      id: crypto.randomUUID(),
+      clientId,
+      name: "Two Endpoint App",
+      redirectUris: ["http://localhost:3107/callback"],
+      grantTypes: ["authorization_code"],
+      responseTypes: ["code"],
+      scopes: ["mcp"],
+      tokenEndpointAuthMethod: "none",
+      isPublic: true,
+      metadata: {},
+    });
+    const rawAccessToken = `user-oauth-token-${crypto.randomUUID()}`;
+    await OAuthAccessTokenModel.create({
+      tokenHash: createHash("sha256")
+        .update(rawAccessToken)
+        .digest("base64url"),
+      clientId,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 60_000),
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
+    });
+    const send = (model: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${rawAccessToken}`,
+        },
+        payload: { model, messages: [{ role: "user", content: "Hello" }] },
+      });
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/v1/model-router/${agent.id}/models`,
+      headers: { authorization: `Bearer ${rawAccessToken}` },
+    });
+    expect(
+      listResponse.json().data.map((model: { id: string }) => model.id),
+    ).toEqual(["vllm:deepseek-v4.1-flash", "vllm:glm-5.3"]);
+    expect((await send("vllm:deepseek-v4.1-flash")).statusCode).toBe(200);
+    expect((await send("vllm:glm-5.3")).statusCode).toBe(200);
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+      ["sk-glm", "https://glm.gateway.test/v1"],
+    ]);
   });
 
   test("routes an unqualified model id when the key maps one provider", async ({

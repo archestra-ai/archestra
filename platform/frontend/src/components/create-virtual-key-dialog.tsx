@@ -19,10 +19,7 @@ import {
   OwnerSelectField,
   shouldShowOwnerField,
 } from "@/components/owner-select-field";
-import {
-  type ProviderApiKeyMap,
-  providerApiKeyMapToArray,
-} from "@/components/provider-key-mappings-field";
+import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -135,9 +132,8 @@ export function CreateVirtualKeyDialog({
   );
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
-    {},
-  );
+  const [providerApiKeyIds, setProviderApiKeyIds] =
+    useState<ProviderApiKeyMappings>([]);
   const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
   const [activeSection, setActiveSection] = useState<
     "general" | "permissions" | "connect"
@@ -182,7 +178,7 @@ export function CreateVirtualKeyDialog({
       setExpiresAt(initialExpiresAt);
       setInitialGrants([]);
       setLabels([]);
-      setProviderApiKeyIds({});
+      setProviderApiKeyIds([]);
       setOwnerId("");
       setSelectedOwnerName(null);
       initialSnapshotRef.current = {
@@ -191,7 +187,7 @@ export function CreateVirtualKeyDialog({
         ownerId: "",
         expiresAt: initialExpiresAt,
         initialGrants: [],
-        providerApiKeyIds: {},
+        providerApiKeyIds: [],
         labels: [],
       };
     }
@@ -213,7 +209,7 @@ export function CreateVirtualKeyDialog({
       return generatedName;
     });
   }, [createdKeyValue, generatedName, open]);
-  const standardReady = providerApiKeyMapToArray(providerApiKeyIds).length > 0;
+  const standardReady = providerApiKeyIds.length > 0;
   const canSubmit =
     newKeyName.trim().length > 0 &&
     (isPassthrough || standardReady) &&
@@ -255,7 +251,7 @@ export function CreateVirtualKeyDialog({
               initialGrants: initialGrants.map(
                 ({ name: _name, ...grant }) => grant,
               ),
-              providerApiKeys: providerApiKeyMapToArray(providerApiKeyIds),
+              providerApiKeys: providerApiKeyIds,
               ownerId: owner,
               labels: finalLabels,
             },

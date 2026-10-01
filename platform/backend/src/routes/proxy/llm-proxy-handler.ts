@@ -1031,6 +1031,7 @@ export async function handleLLMProxy<
         tokenValue: rawApiKey,
         expectedProvider: providerName,
         expectedOrganizationId: resolvedAgent.organizationId,
+        requestedModel: requestAdapter.getModel(),
       });
       await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;

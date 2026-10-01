@@ -395,9 +395,9 @@ describe("the container bootstrap", () => {
   });
 
   it("advertises truecolor to native TUIs and browser tmux clients", () => {
-    expect(buildAgentRuntimeTurnScript(SPEC)).toContain(
-      "export COLORTERM='truecolor'",
-    );
+    expect(
+      buildAgentRuntimeTurnScript({ ...SPEC, runtimeScope: SPEC.namespace }),
+    ).toContain("export COLORTERM='truecolor'");
     const attach = buildAgentRuntimeTerminalIntegrationScript();
     expect(attach).toContain("export TERM=xterm-256color COLORTERM=truecolor");
     expect(attach).toContain("tmux set-option -s set-clipboard on");

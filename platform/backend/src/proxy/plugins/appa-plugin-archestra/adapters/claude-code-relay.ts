@@ -24,14 +24,14 @@ export function claudeCodeRelayArrivals(
   requestBody: unknown,
 ): AppaRelayArrival[] {
   const arrivals: AppaRelayArrival[] = [];
-  for (const { holder, answered } of textHolders(requestBody)) {
+  for (const holder of textHolders(requestBody)) {
     const found: AppaRelayArrival[] = [];
     for (const envelope of ENVELOPES) {
-      collectEnvelopes(holder, envelope, answered, found);
+      collectEnvelopes(holder, envelope, found);
     }
-    collectCoordinatorMessages(holder, answered, found);
+    collectCoordinatorMessages(holder, found);
     if (found.length > MAX_MESSAGES_PER_TEXT) {
-      arrivals.push(crowdedText(holder, answered));
+      arrivals.push(crowdedText(holder));
     } else {
       arrivals.push(...found);
     }
@@ -231,10 +231,6 @@ const WITHHELD_MESSAGE =
   "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden.";
 const WITHHELD_FIELD =
   "[appa] withheld: no record of crossing from its sender, so its text is hidden";
-const UNCHECKED_NOTE =
-  "[appa] This message arrived while Guardrails enforcement was off, so OpenAPPA never checked it.";
-const UNCHECKED_TEXT_NOTE =
-  "[appa] The agent messages in this text arrived while Guardrails enforcement was off, so OpenAPPA never checked them.";
 const WITHHELD_REPORT =
   "[appa] Report withheld: the resumed agent's report has no record of crossing into this session.";
 
@@ -289,7 +285,6 @@ function envelope(params: {
 function collectEnvelopes(
   holder: TextHolder,
   envelope: Envelope,
-  answered: boolean,
   arrivals: AppaRelayArrival[],
 ): void {
   for (const match of holder.get().matchAll(envelope.pattern)) {
@@ -298,10 +293,8 @@ function collectEnvelopes(
       kind: envelope.kind,
       from: parseAttributes(attributes)[envelope.from] ?? "",
       body,
-      answered,
-      admit(records, unchecked = "withhold") {
-        const admitted = settle(
-          body,
+      admit(records) {
+        const admitted =
           envelope.kind === "session"
             ? { text: WITHHELD_MESSAGE, withheld: true }
             : admitBody({
@@ -310,9 +303,7 @@ function collectEnvelopes(
                 enveloped: envelopedRecords(records, envelope.tag, (value) =>
                   escapeEnvelopeBody(envelope, value),
                 ),
-              }),
-          unchecked,
-        );
+              });
         const rendered = renderEnvelope(envelope, attributes, admitted.text);
         if (rendered !== original) replaceOnce(holder, original, rendered);
         return { withheld: admitted.withheld };
@@ -323,7 +314,6 @@ function collectEnvelopes(
 
 function collectCoordinatorMessages(
   holder: TextHolder,
-  answered: boolean,
   arrivals: AppaRelayArrival[],
 ): void {
   for (const match of holder.get().matchAll(COORDINATOR)) {
@@ -332,24 +322,16 @@ function collectCoordinatorMessages(
       kind: "coordinator",
       from: "main",
       body,
-      answered,
-      admit(records, unchecked = "withhold") {
-        const admitted = settle(
+      admit(records) {
+        const admitted = admitBody({
           body,
-          admitBody({
-            body,
-            records: recordLookups(records),
-            enveloped: envelopedRecords(records, "coordinator", (value) =>
-              // The notice rides a system reminder, whose closing tag is
-              // escaped inside it.
-              value.replaceAll(
-                "</system-reminder>",
-                "&lt;/system-reminder&gt;",
-              ),
-            ),
-          }),
-          unchecked,
-        );
+          records: recordLookups(records),
+          enveloped: envelopedRecords(records, "coordinator", (value) =>
+            // The notice rides a system reminder, whose closing tag is
+            // escaped inside it.
+            value.replaceAll("</system-reminder>", "&lt;/system-reminder&gt;"),
+          ),
+        });
         if (admitted.text !== body) {
           replaceOnce(
             holder,
@@ -365,21 +347,15 @@ function collectCoordinatorMessages(
 
 /**
  * A text crowded with messages, read as one arrival. Nothing on record covers
- * it whole, so it is withheld message by message in one pass, unless the model
- * already read it unchecked.
+ * it whole, so it is withheld message by message in one pass.
  */
-function crowdedText(holder: TextHolder, answered: boolean): AppaRelayArrival {
+function crowdedText(holder: TextHolder): AppaRelayArrival {
   const text = holder.get();
   return {
     kind: "session",
     from: "",
     body: text,
-    answered,
-    admit(_records, unchecked = "withhold") {
-      if (unchecked === "keep") {
-        holder.set(`${text}\n\n${UNCHECKED_TEXT_NOTE}`);
-        return { withheld: false };
-      }
+    admit() {
       let withheld = text;
       for (const envelope of ENVELOPES) {
         withheld = withheld.replace(envelope.pattern, (_match, attributes) =>
@@ -394,20 +370,6 @@ function crowdedText(holder: TextHolder, answered: boolean): AppaRelayArrival {
       return { withheld: true };
     },
   };
-}
-
-/**
- * A message no record covers stays as the model already read it when that
- * reading was unchecked: withholding it now would only make the model disown
- * what it read and said about it.
- */
-function settle(
-  body: string,
-  admitted: Admission,
-  unchecked: "withhold" | "keep",
-): Admission {
-  if (!admitted.withheld || unchecked === "withhold") return admitted;
-  return { text: `${body}\n\n${UNCHECKED_NOTE}`, withheld: false };
 }
 
 /**
@@ -669,26 +631,13 @@ function replaceOnce(
   );
 }
 
-/**
- * Every text a user turn, a tool result, or a mid-conversation system message
- * carries, and whether the model has replied since. An assistant turn the
- * request ends on is a prefill the model goes on writing, not a reply.
- */
-function* textHolders(
-  requestBody: unknown,
-): Generator<{ holder: TextHolder; answered: boolean }> {
+/** Every text a user turn, a tool result, or a mid-conversation system message carries. */
+function* textHolders(requestBody: unknown): Generator<TextHolder> {
   const messages = asRecord(requestBody)?.messages;
-  const history = Array.isArray(messages) ? messages : [];
-  const lastReply = history.findLastIndex(
-    (message, index) =>
-      index < history.length - 1 && asRecord(message)?.role === "assistant",
-  );
-  for (const [index, message] of history.entries()) {
+  for (const message of Array.isArray(messages) ? messages : []) {
     const record = asRecord(message);
     if (!record || record.role === "assistant") continue;
-    for (const holder of contentHolders(record, "content")) {
-      yield { holder, answered: index < lastReply };
-    }
+    yield* contentHolders(record, "content");
   }
 }
 

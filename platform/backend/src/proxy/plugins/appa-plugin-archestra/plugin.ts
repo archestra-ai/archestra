@@ -1,9 +1,4 @@
-import {
-  createHash,
-  createHmac,
-  randomBytes,
-  timingSafeEqual,
-} from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import {
   buildElicitationMandateInstruction,
@@ -18,7 +13,6 @@ import config from "@/config";
 import logger from "@/logging";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
-import OpenAppaWithheldArrivalModel from "@/models/openappa-withheld-arrival";
 import { clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
@@ -93,7 +87,6 @@ import {
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaChildTrajectory,
   type AppaClientAdapter,
-  type AppaRelayArrival,
   type AppaRelayMessage,
   type AppaTrustedContext,
   type AskUserArguments,
@@ -1521,28 +1514,6 @@ async function admitRelayArrivals(params: {
     );
     return crossedOrAddressed;
   };
-  let withheldBefore: Promise<ReadonlySet<string>> | undefined;
-  // A fork reads its source's history and a worker fork its parent's, so
-  // what either withheld stays withheld here too. The binding names both
-  // before this session's first event writes its own row.
-  const withheldEarlier = () => {
-    const seeds = [
-      session.session_id,
-      session.parent_id,
-      session.fork_of,
-    ].filter((id): id is string => id !== undefined);
-    withheldBefore ??= OpenAppaSessionModel.historySources({
-      organizationId: session.organization_id,
-      sessionIds: seeds,
-    }).then((sources) =>
-      OpenAppaWithheldArrivalModel.digests({
-        organizationId: session.organization_id,
-        sessionIds: [...new Set([...seeds, ...sources])],
-      }),
-    );
-    return withheldBefore;
-  };
-  const withheldNow: string[] = [];
   for (const arrival of arrivals) {
     if (
       openingPrompt &&
@@ -1556,42 +1527,18 @@ async function admitRelayArrivals(params: {
         : arrival.kind === "coordinator"
           ? await addresses()
           : await crossingsAndAddresses();
-    const digest = relayArrivalDigest(arrival);
-    // A message is withheld the first time the model would read it, and on
-    // every turn after. A message the model replied to that was never
-    // withheld reached it while OpenAPPA was not checking: it stays as read.
-    const readUnchecked =
-      arrival.answered && !(await withheldEarlier()).has(digest);
-    const { withheld } = arrival.admit(
-      records,
-      readUnchecked ? "keep" : "withhold",
-    );
-    if (!withheld) continue;
-    if (!arrival.answered) withheldNow.push(digest);
-    logger.info(
-      { sessionId: session.session_id, kind: arrival.kind },
-      "OpenAPPA withheld a message with no record of crossing from its sender",
-    );
+    const { withheld } = arrival.admit(records);
+    if (withheld) {
+      logger.info(
+        { sessionId: session.session_id, kind: arrival.kind },
+        "OpenAPPA withheld a message with no record of crossing from its sender",
+      );
+    }
   }
-  // Recorded before the model reads the request: a withheld message the
-  // model replies to must never later pass for one it read unchecked.
-  await OpenAppaWithheldArrivalModel.record({
-    organizationId: session.organization_id,
-    callerId: session.caller_id,
-    sessionId: session.session_id,
-    digests: withheldNow,
-  });
 }
 
 /** No record covers a message from another session. */
 const NO_RECORDS: readonly string[] = [];
-
-/** Names a message by its kind, its sender, and its text. */
-function relayArrivalDigest(arrival: AppaRelayArrival): string {
-  return createHash("sha256")
-    .update(JSON.stringify([arrival.kind, arrival.from, arrival.body]))
-    .digest("base64url");
-}
 
 /**
  * A message call returns the client's receipt, or the report of an agent the

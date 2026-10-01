@@ -7,8 +7,6 @@ import {
 
 const WITHHELD =
   "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden.";
-const UNCHECKED =
-  "[appa] This message arrived while Guardrails enforcement was off, so OpenAPPA never checked it.";
 
 const WITHHELD_FIELD =
   "[appa] withheld: no record of crossing from its sender, so its text is hidden";
@@ -105,27 +103,7 @@ describe("claudeCodeRelayArrivals", () => {
     expect(claudeCodeRelayArrivals(request)).toHaveLength(0);
   });
 
-  test("marks a message the model has replied to since, and not one a prefill follows", () => {
-    const request = {
-      messages: [
-        { role: "user", content: teammateMessage("auditor@team", "First") },
-        { role: "assistant", content: "Noted." },
-        { role: "user", content: teammateMessage("auditor@team", "Second") },
-        { role: "assistant", content: "Prefilled" },
-      ],
-    };
-    expect(
-      claudeCodeRelayArrivals(request).map((arrival) => [
-        arrival.body,
-        arrival.answered,
-      ]),
-    ).toEqual([
-      ["First", true],
-      ["Second", false],
-    ]);
-  });
-
-  test("keeps a message the model already read unchecked as read, with a note", () => {
+  test("withholds a message no record covers, even one the model has replied to", () => {
     const idle = JSON.stringify({
       type: "idle_notification",
       from: "scout",
@@ -142,17 +120,13 @@ describe("claudeCodeRelayArrivals", () => {
       ],
     };
     const arrivals = claudeCodeRelayArrivals(request);
-    expect(arrivals.map((arrival) => arrival.admit([], "keep"))).toEqual([
-      { withheld: false },
-      { withheld: false },
+    expect(arrivals.map((arrival) => arrival.admit([]))).toEqual([
+      { withheld: true },
+      { withheld: true },
     ]);
     const forwarded = JSON.stringify(request);
-    expect(forwarded).toContain(
-      JSON.stringify(`scout reporting: all clear\n\n${UNCHECKED}`).slice(1, -1),
-    );
-    expect(forwarded).toContain(JSON.stringify(idle).slice(1, -1));
-    expect(forwarded).not.toContain("[appa] withheld");
-    expect(forwarded).not.toContain(WITHHELD);
+    expect(forwarded).not.toContain("scout reporting: all clear");
+    expect(forwarded).toContain(WITHHELD);
   });
 
   test("keeps a team protocol message's structure and withholds only unchecked agent text", () => {
@@ -455,13 +429,6 @@ describe("claudeCodeRelayArrivals", () => {
     expect(forwarded).toContain("Page text");
     expect(forwarded).not.toContain("Order 1");
     expect(forwarded.split(WITHHELD)).toHaveLength(66);
-
-    const read = page(`Page text\n${crowded}`);
-    expect(claudeCodeRelayArrivals(read)[0].admit([], "keep")).toEqual({
-      withheld: false,
-    });
-    expect(JSON.stringify(read)).toContain("Order 64");
-    expect(JSON.stringify(read)).toContain("never checked them");
   });
 });
 

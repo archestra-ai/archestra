@@ -999,10 +999,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "external consult dataset the native runtime appends",
   },
-  openappaWithheldArrivalsTable: {
-    audited: false,
-    reason: "digests of agent messages the proxy withheld from a session",
-  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

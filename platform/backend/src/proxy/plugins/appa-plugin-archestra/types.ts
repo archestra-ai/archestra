@@ -243,18 +243,11 @@ export type AppaRelayArrival = {
   from: string;
   /** The message as its envelope carries it. */
   body: string;
-  /** The model has replied since this message arrived. */
-  answered: boolean;
   /**
-   * Keeps the text the records show its sender sent here. Records are the
-   * retained values. The rest is withheld in the request the model reads,
-   * unless `unchecked` is "keep": a message the model already read while
-   * OpenAPPA was not checking stays as read, with a note saying so.
+   * Keeps the text the records show its sender sent here, and withholds the
+   * rest in the request the model reads. Records are the retained values.
    */
-  admit(
-    records: readonly string[],
-    unchecked?: "withhold" | "keep",
-  ): { withheld: boolean };
+  admit(records: readonly string[]): { withheld: boolean };
 };
 
 /** The arguments of the platform's ask_user tool. */

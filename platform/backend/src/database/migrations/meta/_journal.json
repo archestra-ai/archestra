@@ -3501,13 +3501,6 @@
       "when": 1790802786569,
       "tag": "0499_fantastic_blur",
       "breakpoints": true
-    },
-    {
-      "idx": 500,
-      "version": "7",
-      "when": 1790805383333,
-      "tag": "0500_thin_captain_marvel",
-      "breakpoints": true
     }
   ]
 }

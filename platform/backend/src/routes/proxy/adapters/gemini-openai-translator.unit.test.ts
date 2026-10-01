@@ -38,13 +38,10 @@ describe("openaiToGemini — reasoning and output limits", () => {
     ["gemini-2.5-flash", "none", { thinkingBudget: 0 }],
     ["gemini-2.5-flash-lite", "none", { thinkingBudget: 0 }],
     ["gemini-3-flash-preview", "minimal", { thinkingLevel: "minimal" }],
-    ["gemini-3.1-flash-lite-preview", "minimal", { thinkingLevel: "minimal" }],
-    ["gemini-3.5-flash-lite", "low", { thinkingLevel: "low" }],
-    ["gemini-3.5-flash", "minimal", { thinkingLevel: "minimal" }],
     ["gemini-3.6-flash", "low", { thinkingLevel: "low" }],
     ["gemini-3.6-flash-latest", "low", { thinkingLevel: "low" }],
-    ["gemini-3.7-flash", "medium", { thinkingLevel: "medium" }],
-    ["gemini-3.8-flash", "high", { thinkingLevel: "high" }],
+    ["gemini-3.8-flash", "medium", { thinkingLevel: "medium" }],
+    ["gemini-3-pro-preview", "minimal", { thinkingLevel: "low" }],
     ["gemini-3.1-pro-preview", "minimal", { thinkingLevel: "low" }],
     [
       "gemini-3.1-pro-preview-customtools",
@@ -58,6 +55,19 @@ describe("openaiToGemini — reasoning and output limits", () => {
   });
 
   test.each([
+    ["gemini-3.99-flash", "low"],
+    ["gemini-4-argon", "medium"],
+    ["gemini-4-new-family-preview", "high"],
+    ["gemini-3.10-pro", "minimal"],
+    ["gemini-3.80-flash", "minimal"],
+  ] as const)("forwards %s effort %s for provider validation", (model, reasoning_effort) => {
+    const { geminiBody } = openaiToGemini(req({ model, reasoning_effort }));
+    expect(geminiBody.generationConfig?.thinkingConfig).toEqual({
+      thinkingLevel: reasoning_effort,
+    });
+  });
+
+  test.each([
     ["gemini-2.5-pro", "none"],
     ["gemini-3.6-flash", "none"],
     ["gemini-3.7-flash", "minimal"],
@@ -67,7 +77,10 @@ describe("openaiToGemini — reasoning and output limits", () => {
     ["gemini-3.6-flash", "max"],
     ["gemini-2.0-flash", "low"],
     ["gemini-3.1-flash-lite-image", "low"],
-    ["gemini-3.99-flash", "low"],
+    ["gemini-4-argon-preview-tts", "low"],
+    ["gemma-4-31b-it", "low"],
+    ["gemini-3.99-flash", "none"],
+    ["gemini-4-argon", "max"],
   ] as const)("rejects unsupported %s effort %s", (model, reasoning_effort) => {
     expect(() => openaiToGemini(req({ model, reasoning_effort }))).toThrowError(
       expect.objectContaining({ statusCode: 400 }),

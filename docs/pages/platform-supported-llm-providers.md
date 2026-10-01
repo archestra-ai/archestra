@@ -94,7 +94,9 @@ For Gemini text models, `reasoning_effort` follows [Google's OpenAI compatibilit
 
 Gemini 2.5 uses thinking budgets. `minimal` and `low` map to 1,024 tokens, `medium` to 8,192, and `high` to 24,576. `none` disables thinking only for Gemini 2.5 Flash and Flash-Lite.
 
-Gemini 3 uses thinking levels. `low` stays `low`; `minimal` maps to `low` on Pro. `minimal` does not guarantee that thinking is disabled. Gemini 3.7 and 3.8 Flash reject `minimal`; Gemini 3 Pro rejects `medium`. Unsupported efforts or model variants return HTTP 400 when effort is explicitly requested.
+Archestra sends `thinkingLevel` for Gemini 3 and newer text models. `low` stays `low`. `minimal` maps to `low` on Gemini 3 and 3.1 Pro. Gemini 3.7 and 3.8 Flash reject `minimal`; Gemini 3 Pro rejects `medium`. `minimal` does not guarantee that thinking is disabled.
+
+New text model families receive the requested level for Google to validate. Archestra does not retry rejected requests with changed reasoning settings. `none` is supported only for Gemini 2.5 Flash and Flash-Lite. `xhigh`, `max`, and explicit effort on non-text model variants return HTTP 400.
 
 `max_completion_tokens` sets Gemini's output cap, including thinking tokens. It takes precedence over `max_tokens`; a null or omitted value falls back to `max_tokens`. Small caps can leave empty or truncated answers.
 

@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import {
+  type GeminiThinkingLevel,
+  supportsGeminiThinkingEffort,
+} from "@archestra/shared/gemini-models";
 import { ApiError } from "@archestra/shared/types";
 import type { Gemini, OpenAi, UsageView } from "@/types";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
@@ -220,36 +224,20 @@ export function openaiToGemini(req: OpenAiRequest): {
   };
 }
 
-type ThinkingLevel = "minimal" | "low" | "medium" | "high";
-const ALL_THINKING_LEVELS: readonly ThinkingLevel[] = [
-  "minimal",
-  "low",
-  "medium",
-  "high",
-];
-const THINKING_LEVELS_BY_FAMILY: Record<string, readonly ThinkingLevel[]> = {
-  "gemini-3-pro": ["low", "high"],
-  "gemini-3-flash": ALL_THINKING_LEVELS,
-  "gemini-3.1-pro": ["low", "medium", "high"],
-  "gemini-3.1-flash-lite": ALL_THINKING_LEVELS,
-  "gemini-3.5-flash-lite": ALL_THINKING_LEVELS,
-  "gemini-3.5-flash": ALL_THINKING_LEVELS,
-  "gemini-3.6-flash": ALL_THINKING_LEVELS,
-  "gemini-3.7-flash": ["low", "medium", "high"],
-  "gemini-3.8-flash": ["low", "medium", "high"],
-};
-
 // OpenAI compatibility uses different effort semantics from internal Chat's
 // depth selector: low stays low on Gemini 3, and 2.5 uses token budgets.
 // https://ai.google.dev/gemini-api/docs/openai#thinking
 function openaiEffortToGeminiThinkingConfig(
   modelId: string,
   effort: OpenAiRequest["reasoning_effort"],
-): { thinkingBudget: number } | { thinkingLevel: ThinkingLevel } | undefined {
+):
+  | { thinkingBudget: number }
+  | { thinkingLevel: GeminiThinkingLevel }
+  | undefined {
   if (effort === undefined || effort === null) return undefined;
 
-  // Recognize text model variants without treating image/audio variants or
-  // unknown future generations as having the same thinking capabilities.
+  // Identify documented exceptions, including their dated/preview aliases.
+  // New families use the shared text/version rules and provider validation.
   const family = modelId
     .toLowerCase()
     .match(
@@ -260,18 +248,14 @@ function openaiEffortToGeminiThinkingConfig(
       400,
       `reasoning_effort "${effort}" is not supported for model "${modelId}".`,
     );
-  if (!family) throw unsupported();
   if (effort === "xhigh" || effort === "max") throw unsupported();
   if (effort === "none") {
     if (family === "gemini-2.5-flash" || family === "gemini-2.5-flash-lite") {
       return { thinkingBudget: 0 };
     }
-    throw new ApiError(
-      400,
-      `Thinking cannot be disabled for model "${modelId}".`,
-    );
+    throw unsupported();
   }
-  if (family.startsWith("gemini-2.5-")) {
+  if (family?.startsWith("gemini-2.5-")) {
     return {
       thinkingBudget: { minimal: 1024, low: 1024, medium: 8192, high: 24576 }[
         effort
@@ -279,11 +263,19 @@ function openaiEffortToGeminiThinkingConfig(
     };
   }
 
-  const thinkingLevel =
-    effort === "minimal" && family.endsWith("-pro") ? "low" : effort;
-  if (!THINKING_LEVELS_BY_FAMILY[family]?.includes(thinkingLevel)) {
+  if (!supportsGeminiThinkingEffort(modelId)) throw unsupported();
+  if (
+    (effort === "medium" && family === "gemini-3-pro") ||
+    (effort === "minimal" &&
+      (family === "gemini-3.7-flash" || family === "gemini-3.8-flash"))
+  ) {
     throw unsupported();
   }
+  const thinkingLevel =
+    effort === "minimal" &&
+    (family === "gemini-3-pro" || family === "gemini-3.1-pro")
+      ? "low"
+      : effort;
   return { thinkingLevel };
 }
 

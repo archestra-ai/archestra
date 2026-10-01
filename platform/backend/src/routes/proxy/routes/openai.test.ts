@@ -1477,7 +1477,7 @@ describe("OpenAI Responses proxy", () => {
         "function_call",
         "custom_tool_call",
         "local_shell_call",
-        ...(stream ? ["generated_frame"] : []),
+        ...(stream ? ["generated_frame", "malformed_frame"] : []),
       ].map((kind) => ({
         stream,
         kind,
@@ -1499,7 +1499,7 @@ describe("OpenAI Responses proxy", () => {
     });
     const calls: Record<string, unknown>[] = [];
     const item = {
-      type: kind === "generated_frame" ? "message" : kind,
+      type: kind.endsWith("_frame") ? "message" : kind,
       id: "verification-item",
       call_id: "verification-call",
       name: "exec_command",
@@ -1517,15 +1517,18 @@ describe("OpenAI Responses proxy", () => {
       output: [item],
       usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
     };
-    if (kind === "generated_frame") {
+    if (kind.endsWith("_frame")) {
       const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
       // A safe provider event must not allow a synthesized executable frame.
       vi.spyOn(adapter, "processChunk").mockReturnValue({
-        sseData: `event: response.output_item.added\ndata: ${JSON.stringify({
-          type: "response.output_item.added",
-          output_index: 0,
-          item: { ...item, type: "function_call" },
-        })}\n\n`,
+        sseData:
+          kind === "malformed_frame"
+            ? 'data: {"type":\n\n'
+            : `event: response.output_item.added\ndata: ${JSON.stringify({
+                type: "response.output_item.added",
+                output_index: 0,
+                item: { ...item, type: "function_call" },
+              })}\n\n`,
         isToolCallChunk: false,
         isFinal: false,
       });
@@ -1603,10 +1606,14 @@ describe("OpenAI Responses proxy", () => {
       headers: { ...headers, originator: "archestra_codex_connection" },
       payload,
     });
-    const streamStarted = stream && kind !== "generated_frame";
+    const streamStarted = stream && !kind.endsWith("_frame");
     expect(result.statusCode, result.body).toBe(streamStarted ? 200 : 409);
     if (streamStarted) expect(result.body).toContain('"type":"error"');
-    expect(result.body).toContain("does not permit model tool calls");
+    expect(result.body).toContain(
+      kind === "malformed_frame"
+        ? "Malformed response during Codex connection verification"
+        : "does not permit model tool calls",
+    );
     expect(result.body).not.toContain("do-not-execute");
     expect(result.body).not.toContain('"type":"function_call"');
     expect(calls[0].tool_choice).toBe("none");

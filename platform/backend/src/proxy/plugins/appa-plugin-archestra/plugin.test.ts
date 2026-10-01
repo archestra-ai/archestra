@@ -341,6 +341,66 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("replaces native delegation guidance when declared tools change", async () => {
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({ sessionId: "codex-delegation-upsert" });
+    context.headers = { originator: "codex_cli_rs" };
+    context.interactionType = "openai:responses";
+    const collaboration = {
+      type: "namespace",
+      name: "collaboration",
+      tools: [
+        { type: "function", name: "spawn_agent" },
+        { type: "function", name: "wait_agent" },
+      ],
+    };
+    const developer = {
+      type: "message",
+      role: "developer",
+      content: [{ type: "input_text", text: "Keep unrelated instructions." }],
+    };
+    const request = {
+      input: [
+        {
+          type: "additional_tools",
+          role: "developer",
+          tools: [collaboration],
+        },
+        developer,
+      ],
+    };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request.input).toHaveLength(3);
+      expect(JSON.stringify(request.input)).toContain(
+        "collaboration.wait_agent",
+      );
+
+      collaboration.tools = [{ type: "function", name: "spawn_agent" }];
+      await plugin.onBeforeModel({ ...context, request });
+      const withoutWait = JSON.stringify(request.input);
+      expect(request.input).toHaveLength(3);
+      expect(
+        withoutWait.match(/collaboration\.spawn_agent is declared\./g),
+      ).toHaveLength(1);
+      expect(withoutWait).not.toContain("collaboration.wait_agent");
+      expect(request.input).toContainEqual(developer);
+
+      collaboration.tools = [];
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request.input).toHaveLength(2);
+      expect(JSON.stringify(request.input)).not.toContain(
+        "collaboration.spawn_agent is declared.",
+      );
+      expect(JSON.stringify(request.input)).not.toContain("nested Codex CLI");
+      expect(request.input).toContainEqual(developer);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("forces a native question after execute_remedy_plan requests review", async () => {
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
     const context = requestContext({ sessionId: "review-continuation" });
@@ -3682,6 +3742,125 @@ describe("delegation markers", () => {
           /^\[appa\] delegated trajectory appa2-[A-Za-z0-9_-]+\.[0-9a-f]{40} — child of t0\.$/,
         ),
       });
+    });
+
+    test.each([
+      { separateOutputs: false, wrapped: false },
+      { separateOutputs: false, wrapped: true },
+      { separateOutputs: true, wrapped: false },
+    ])("requires one accepted retry per output, not per history: $separateOutputs / $wrapped", async ({
+      separateOutputs,
+      wrapped,
+    }) => {
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(new AppaPluginArchestra([new AppaCodexAdapter()]));
+      const authorized = [
+        { message: "Read the bounded report", task_name: "reader" },
+        { message: "Check the bounded calculation", task_name: "checker" },
+      ];
+      const accepted = authorized.map((args) => ({
+        type: wrapped ? "text" : "input_text",
+        text: `[appa] Authorized. Call the collaboration.spawn_agent tool again with exactly these arguments: ${JSON.stringify(args)}`,
+      }));
+      const outputs = separateOutputs
+        ? accepted.map((block) => [block])
+        : [accepted];
+      const context = clientContext({
+        sessionId: "user:user|t0",
+        tools: true,
+        interactionType: "openai:responses",
+        headers: {
+          "user-agent": "codex_cli_rs/0.159.2",
+          "x-codex-turn-metadata": JSON.stringify({ thread_id: "t0" }),
+        },
+        body: {
+          prompt_cache_key: "t0",
+          input: outputs.map((content, index) => ({
+            type: "function_call_output",
+            call_id: `call_remedy_${index}`,
+            output: wrapped ? JSON.stringify({ content }) : content,
+          })),
+        },
+      });
+      await registry.onSessionInit(context);
+      const rewritten = authorized.map((args) => ({
+        ...args,
+        message: `Rewritten ${args.task_name} prompt`,
+      }));
+      const expected = separateOutputs
+        ? [rewritten[0], authorized[1]]
+        : rewritten;
+      await registry.onToolCalls(
+        toolCalls(
+          context,
+          rewritten.map((args, index) => ({
+            id: `call_retry_${index}`,
+            name: "spawn_agent",
+            namespace: "collaboration",
+            arguments: JSON.stringify(args),
+          })),
+        ),
+        async (calls) => {
+          expect(
+            calls.map((call) => JSON.parse(String(call.arguments))),
+          ).toEqual(expected);
+          return null;
+        },
+      );
+      expect(
+        evaluate.mock.calls
+          .at(-1)?.[1]
+          .map((call) => JSON.parse(String(call.arguments))),
+      ).toEqual(expected);
+    });
+
+    test("bounded accepted-retry inspection cannot crash on deeply nested JSON content", async () => {
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(new AppaPluginArchestra([new AppaCodexAdapter()]));
+      const authorized = {
+        message: "Read the bounded report",
+        task_name: "reader",
+      };
+      const leaf = JSON.stringify([
+        {
+          type: "input_text",
+          text: `[appa] Authorized. Call the collaboration.spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
+        },
+      ]);
+      const output = JSON.parse(
+        '[{"content":'.repeat(12000) + leaf + "}]".repeat(12000),
+      );
+      const context = clientContext({
+        sessionId: "user:user|t0",
+        tools: true,
+        interactionType: "openai:responses",
+        headers: {
+          "user-agent": "codex_cli_rs/0.159.2",
+          "x-codex-turn-metadata": JSON.stringify({ thread_id: "t0" }),
+        },
+        body: {
+          prompt_cache_key: "t0",
+          input: [
+            { type: "function_call_output", call_id: "call_deep", output },
+          ],
+        },
+      });
+      await registry.onSessionInit(context);
+      const rewrite = { message: "Rewritten task", task_name: "reader" };
+      const outcome = await registry.onToolCalls(
+        toolCalls(context, [
+          {
+            id: "call_retry",
+            name: "spawn_agent",
+            namespace: "collaboration",
+            arguments: JSON.stringify(rewrite),
+          },
+        ]),
+      );
+      expect(outcome.decision).toBe("allow");
+      expect(
+        JSON.parse(String(evaluate.mock.calls.at(-1)?.[1]?.[0]?.arguments)),
+      ).toEqual(rewrite);
     });
 
     test.each([

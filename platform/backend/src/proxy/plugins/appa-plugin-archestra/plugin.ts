@@ -1619,6 +1619,8 @@ type AuthorizedSpawn = {
  * offer covers. The runtime matches the tool and those arguments, not the
  * call id. A different task name, a non-spawn, or a retry that already
  * carried the authorized arguments is not rewritten.
+ * One pending acceptance restores at most one call in a batch; it does not
+ * authorize fan-out. Every remaining call still needs its own runtime ruling.
  */
 function restoreAuthorizedSpawnRetry(params: {
   calls: readonly ToolCall[];
@@ -1701,20 +1703,26 @@ function pendingAuthorizedSpawn(body: unknown): AuthorizedSpawn | undefined {
       pending = undefined;
       continue;
     }
-    for (const text of outputTexts(item.output)) {
-      const authorized = parseAuthorizedRetry(text);
-      if (!authorized) continue;
-      const task =
-        typeof authorized.arguments.task_name === "string"
-          ? authorized.arguments.task_name
-          : undefined;
-      pending = {
-        ...authorized,
-        ...(task && namespaceByTask.has(task)
-          ? { namespace: namespaceByTask.get(task) }
-          : {}),
-      };
+    const accepted = outputTexts(item.output)
+      .map(parseAuthorizedRetry)
+      .filter((retry) => retry !== undefined);
+    if (accepted.length > 1) {
+      // One output must identify one retry, not choose among accepted blobs.
+      pending = undefined;
+      continue;
     }
+    const authorized = accepted[0];
+    if (!authorized) continue;
+    const task =
+      typeof authorized.arguments.task_name === "string"
+        ? authorized.arguments.task_name
+        : undefined;
+    pending = {
+      ...authorized,
+      ...(task && namespaceByTask.has(task)
+        ? { namespace: namespaceByTask.get(task) }
+        : {}),
+    };
   }
   return pending;
 }
@@ -1806,14 +1814,16 @@ function localSpawnName(name: string): string {
   return name.slice(Math.max(slash, dotted) + 1);
 }
 
-function outputTexts(value: unknown): string[] {
+function outputTexts(value: unknown, depth = 0): string[] {
+  // Inspect at most eight nested content/JSON wrappers, not arbitrary documents.
+  if (depth > 8) return [];
   if (typeof value === "string") {
     try {
       const parsed: unknown = JSON.parse(value);
       if (typeof parsed === "string") return [parsed];
-      if (Array.isArray(parsed)) return outputTexts(parsed);
+      if (Array.isArray(parsed)) return outputTexts(parsed, depth + 1);
       if (isRecord(parsed) && Array.isArray(parsed.content)) {
-        return outputTexts(parsed.content);
+        return outputTexts(parsed.content, depth + 1);
       }
     } catch {
       /* Plain tool-result text is not JSON. */
@@ -1825,7 +1835,7 @@ function outputTexts(value: unknown): string[] {
     if (typeof item === "string") return [item];
     if (!isRecord(item)) return [];
     if (typeof item.text === "string") return [item.text];
-    return outputTexts(item.content);
+    return outputTexts(item.content, depth + 1);
   });
 }
 
@@ -2162,6 +2172,30 @@ function appendNativeDelegationGuidance(
   context: LlmProxyBeforeModelContext,
 ): void {
   if (context.interactionType !== "openai:responses") return;
+  if (!isRecord(context.request)) return;
+  if (Array.isArray(context.request.input)) {
+    // Replace our marked guidance, including stale variants for removed tools.
+    context.request.input = context.request.input.flatMap((item) => {
+      if (
+        !isRecord(item) ||
+        item.role !== "developer" ||
+        !Array.isArray(item.content)
+      ) {
+        return [item];
+      }
+      const content = item.content.filter(
+        (block) =>
+          !(
+            isRecord(block) &&
+            block.type === "input_text" &&
+            typeof block.text === "string" &&
+            block.text.startsWith(NATIVE_DELEGATION_GUIDANCE_MARKER)
+          ),
+      );
+      if (content.length === item.content.length) return [item];
+      return content.length > 0 ? [{ ...item, content }] : [];
+    });
+  }
   const declared = collectDeclaredToolNames(context.request);
   const spawnDeclared = declared.some(
     (tool) => tool.namespace === "collaboration" && tool.name === "spawn_agent",

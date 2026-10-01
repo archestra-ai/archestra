@@ -2442,8 +2442,18 @@ async function handleStreaming<
       ).split("\n")) {
         if (!line.startsWith("data:")) continue;
         const value = line.slice(5).trim();
-        if (value && value !== "[DONE]")
-          assertVerificationResponse(JSON.parse(value));
+        if (value && value !== "[DONE]") {
+          let frame: unknown;
+          try {
+            frame = JSON.parse(value);
+          } catch {
+            throw new ApiError(
+              409,
+              "Malformed response during Codex connection verification.",
+            );
+          }
+          assertVerificationResponse(frame);
+        }
       }
     }
     ensureStreamHeaders();

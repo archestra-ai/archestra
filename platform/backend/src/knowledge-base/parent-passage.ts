@@ -3,6 +3,7 @@ import type { VectorSearchResult } from "@/models/kb-chunk";
 import type { AclEntry } from "@/types";
 import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
 import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
+import { mergeSourceSpans } from "./source-spans";
 
 // ===== Exports =====
 
@@ -68,12 +69,20 @@ export async function resolveParentPassages(params: {
 
   const byParent = new Map<
     string,
-    Array<{ chunkIndex: number; content: string }>
+    Array<{
+      chunkIndex: number;
+      content: string;
+      sourceSpans: VectorSearchResult["sourceSpans"];
+    }>
   >();
   for (const sibling of siblings) {
     const key = parentKey(sibling.documentId, sibling.parentIndex);
     const group = byParent.get(key) ?? [];
-    group.push({ chunkIndex: sibling.chunkIndex, content: sibling.content });
+    group.push({
+      chunkIndex: sibling.chunkIndex,
+      content: sibling.content,
+      sourceSpans: sibling.sourceSpans,
+    });
     byParent.set(key, group);
   }
 
@@ -91,6 +100,7 @@ export async function resolveParentPassages(params: {
     return {
       ...result,
       content: stitchChunkContents(ordered.map((c) => c.content)),
+      sourceSpans: mergeSourceSpans(ordered.map((c) => c.sourceSpans)),
     };
   });
 

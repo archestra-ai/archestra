@@ -5,6 +5,7 @@ import type {
   InsertKbChunk,
   KbChunk,
   KbDocumentMetadataFilter,
+  KnowledgeSourceSpan,
 } from "@/types";
 
 // ===== Public contract =====
@@ -82,6 +83,7 @@ export interface NeighborChunk {
   documentId: string;
   chunkIndex: number;
   content: string;
+  sourceSpans?: KnowledgeSourceSpan[] | null;
 }
 
 export interface FindParentSiblingsParams extends AccessScope {

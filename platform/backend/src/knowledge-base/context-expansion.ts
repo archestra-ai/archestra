@@ -1,10 +1,11 @@
 import logger from "@/logging";
 import type { VectorSearchResult } from "@/models/kb-chunk";
-import type { AclEntry } from "@/types";
+import type { AclEntry, KnowledgeSourceSpan } from "@/types";
 import { stitchChunkContents } from "./parent-passage";
 import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
 import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 import { verifyExternalNeighborChunks } from "./retrieval-result-verifier";
+import { mergeSourceSpans } from "./source-spans";
 
 // ===== Exports =====
 
@@ -74,14 +75,20 @@ export async function expandChunkContext(params: {
 
   if (neighbors.length === 0) return results;
 
-  const byDocument = new Map<string, Map<number, string>>();
+  const byDocument = new Map<
+    string,
+    Map<number, { content: string; sourceSpans: KnowledgeSourceSpan[] | null }>
+  >();
   for (const neighbor of neighbors) {
     let doc = byDocument.get(neighbor.documentId);
     if (!doc) {
       doc = new Map();
       byDocument.set(neighbor.documentId, doc);
     }
-    doc.set(neighbor.chunkIndex, neighbor.content);
+    doc.set(neighbor.chunkIndex, {
+      content: neighbor.content,
+      sourceSpans: neighbor.sourceSpans ?? null,
+    });
   }
 
   // Claimed in rank order, so the best hit gets the widest window and a
@@ -109,15 +116,28 @@ export async function expandChunkContext(params: {
     if (window.length === 0) return result;
 
     expandedCount++;
-    const ordered = [
+    const ordered: Array<{
+      chunkIndex: number;
+      content: string;
+      sourceSpans: KnowledgeSourceSpan[] | null;
+    }> = [
       ...window.filter((c) => c.chunkIndex < result.chunkIndex),
-      { chunkIndex: result.chunkIndex, content: result.content },
+      {
+        chunkIndex: result.chunkIndex,
+        content: result.content,
+        sourceSpans: result.sourceSpans ?? null,
+      },
       ...window.filter((c) => c.chunkIndex > result.chunkIndex),
     ].sort((a, b) => a.chunkIndex - b.chunkIndex);
+
+    const sourceSpans = mergeSourceSpans(
+      ordered.map((chunk) => chunk.sourceSpans),
+    );
 
     return {
       ...result,
       content: stitchChunkContents(ordered.map((c) => c.content)),
+      sourceSpans,
     };
   });
 
@@ -151,12 +171,23 @@ function chunkKey(documentId: string, chunkIndex: number): string {
 function collectContiguousWindow(params: {
   anchorIndex: number;
   radius: number;
-  available: Map<number, string>;
+  available: Map<
+    number,
+    { content: string; sourceSpans: KnowledgeSourceSpan[] | null }
+  >;
   documentId: string;
   claimed: Set<string>;
-}): Array<{ chunkIndex: number; content: string }> {
+}): Array<{
+  chunkIndex: number;
+  content: string;
+  sourceSpans: KnowledgeSourceSpan[] | null;
+}> {
   const { anchorIndex, radius, available, documentId, claimed } = params;
-  const window: Array<{ chunkIndex: number; content: string }> = [];
+  const window: Array<{
+    chunkIndex: number;
+    content: string;
+    sourceSpans: KnowledgeSourceSpan[] | null;
+  }> = [];
 
   for (const direction of [-1, 1] as const) {
     for (let step = 1; step <= radius; step++) {
@@ -164,13 +195,13 @@ function collectContiguousWindow(params: {
       if (index < 0) break;
 
       const key = chunkKey(documentId, index);
-      const content = available.get(index);
+      const chunk = available.get(index);
       // A missing or already-claimed neighbour ends this side of the window:
       // continuing past it would splice together non-adjacent passages.
-      if (content === undefined || claimed.has(key)) break;
+      if (chunk === undefined || claimed.has(key)) break;
 
       claimed.add(key);
-      window.push({ chunkIndex: index, content });
+      window.push({ chunkIndex: index, ...chunk });
     }
   }
 

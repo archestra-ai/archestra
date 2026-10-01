@@ -1,12 +1,15 @@
 import { RecursiveChunker, Tokenizer } from "@chonkiejs/core";
 import type { Tiktoken } from "tiktoken";
 import config from "@/config";
+import type { KnowledgeSourceSpan } from "@/types";
 import { buildMetadataSuffixes } from "./metadata-suffix";
 import { countTokens, encodeText, getEncoding } from "./tokenizer";
 
 interface Chunk {
   content: string;
   chunkIndex: number;
+  /** Character ranges in the original document text that produced this chunk. */
+  sourceSpans: KnowledgeSourceSpan[];
   tokenCount: number;
   metadataSuffixSemantic: string | null;
   metadataSuffixKeyword: string | null;
@@ -116,6 +119,7 @@ export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
     return rawChunks.map((raw, index) => ({
       content: effectiveTitlePrefix + raw.text.trimStart(),
       chunkIndex: index,
+      sourceSpans: [sourceSpanForRawChunk(raw)],
       tokenCount: countTokens(
         encoding,
         effectiveTitlePrefix + raw.text.trimStart(),
@@ -139,6 +143,15 @@ export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
       chunks.push({
         content,
         chunkIndex: chunks.length,
+        sourceSpans: [
+          {
+            start:
+              parent.startIndex +
+              rawChild.startIndex +
+              leadingWhitespaceLength(rawChild.text),
+            end: parent.startIndex + rawChild.endIndex,
+          },
+        ],
         tokenCount: countTokens(encoding, content),
         metadataSuffixSemantic: childBudget.semanticSuffix,
         metadataSuffixKeyword: keywordSuffix,
@@ -211,6 +224,21 @@ function resolveChildBudget(params: {
 function buildTitlePrefix(title: string): string {
   if (!title.trim()) return "";
   return `TITLE: ${title}\n\n`;
+}
+
+function sourceSpanForRawChunk(raw: {
+  text: string;
+  startIndex: number;
+  endIndex: number;
+}): KnowledgeSourceSpan {
+  return {
+    start: raw.startIndex + leadingWhitespaceLength(raw.text),
+    end: raw.endIndex,
+  };
+}
+
+function leadingWhitespaceLength(text: string): number {
+  return text.length - text.trimStart().length;
 }
 
 function truncateTitlePrefix(

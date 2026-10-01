@@ -267,11 +267,9 @@ export function AgentChatAppsEditor({
   );
   const assignmentOptions = buildAssignmentOptions({
     subject,
-    // Same field, two hosts: the record's page calls its first tab General,
-    // the create wizard calls its first step Configuration.
     visibilityLocation: emailAgent
-      ? "the General tab"
-      : "the Configuration step",
+      ? "the Permissions tab"
+      : "Permissions in the Configuration step",
     agentNames,
     bindings,
     configuredDmProviders,
@@ -1384,7 +1382,7 @@ function buildAssignmentOptions({
   configuredDmProviders: ChatProvider[];
   currentUserId: string | undefined;
   canCreateDm: boolean;
-  /** Where this agent's Visibility field is, named as its host names it. */
+  /** Where this agent's permissions are edited, named as its host names it. */
   visibilityLocation: string;
 }): AssignmentOption[] {
   const virtualDmOptions = configuredDmProviders.map((provider) => ({
@@ -1419,10 +1417,7 @@ function buildAssignmentOptions({
           ? (agentNames.get(binding.agentId) ?? "another agent")
           : null,
       disabledReason: personalAssignmentRefused
-        ? // Says what to do about it, not just that it is so: the refusal is
-          // the agent's visibility, which is one field away and the reader's
-          // to change.
-          `A personal agent answers only in its owner's direct messages. Change Visibility from Personal on ${visibilityLocation} to use shared channels.`
+        ? `A personal agent answers only in its owner's direct messages. To use shared channels, open ${visibilityLocation} and add "Everyone in this organization" with "Can use" access.`
         : null,
       virtualDm: false,
       isDm: binding.isDm,

@@ -183,6 +183,22 @@ describe("gemini model fetchers", () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
+    test("stops after the page limit when tokens never end", async () => {
+      let page = 0;
+      mockFetch.mockImplementation(async () => {
+        page += 1;
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({ models: [], nextPageToken: `token-${page}` }),
+        };
+      });
+
+      await fetchGeminiModels("test-api-key");
+
+      expect(mockFetch).toHaveBeenCalledTimes(20);
+    });
+
     test("throws error on API failure", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,

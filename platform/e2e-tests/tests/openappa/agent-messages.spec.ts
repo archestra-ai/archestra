@@ -246,7 +246,9 @@ test("the lead's message to that teammate is not sent, and names a new teammate 
     expect(notice.name, body).toBe("archestra__get_remedy_plans");
     const ruling = JSON.stringify(notice.input);
     expect(ruling).toContain("started while Guardrails enforcement was off");
-    expect(ruling).toContain("start a new teammate with the Agent tool");
+    expect(ruling).toContain(
+      "start a new teammate under a new name with the Agent tool",
+    );
   } finally {
     await request
       .delete(`${WIREMOCK_BASE_URL}/__admin/mappings/${mappingId}`)

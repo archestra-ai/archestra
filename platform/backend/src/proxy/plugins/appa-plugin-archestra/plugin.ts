@@ -1866,7 +1866,7 @@ const RELAY_UNCHECKED =
 const RELAY_UNGOVERNED =
   "OpenAPPA cannot tell which spawn started this agent, so it cannot check this message. The message was not sent.";
 const RELAY_RESHAPED_PROTOCOL =
-  "OpenAPPA changed the content of this protocol message to meet the return check, and the changed content does not fit the protocol. The message was not sent.";
+  "OpenAPPA changed the content of this protocol message to meet the return check, and the changed content does not fit the protocol. The message was not sent. To pass on what it says, send it as a plain text message instead.";
 
 async function admitChildHandback(params: {
   binding: AppaPluginBinding;

@@ -4454,6 +4454,40 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.body).not.toContain("customer-ledger");
     });
 
+    test("a teammate's protocol message the return check reshapes is not sent, and says how to go on", async () => {
+      const { prompt } = await spawnTeammate();
+      runtime((event) =>
+        event.event === "child_end"
+          ? String(event.operation_id).endsWith(":echo")
+            ? { decision: "ack" }
+            : {
+                decision: "child_return",
+                value: "A shutdown response",
+                output_source: "runtime",
+              }
+          : undefined,
+      );
+      reply("SendMessage", {
+        to: "team-lead",
+        message: {
+          type: "shutdown_response",
+          request_id: "shutdown-1",
+          approve: false,
+          reason: "Still writing the customer-ledger report",
+        },
+      });
+      const response = await send(auditor, [
+        { role: "user", content: opening(prompt) },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      const notice = noticeFrom(response.body, true);
+      expect(notice.name).toBe("archestra__get_remedy_plans");
+      const ruling = JSON.stringify(notice.input);
+      expect(ruling).toContain("does not fit the protocol");
+      expect(ruling).toContain("send it as a plain text message instead");
+    });
+
     test("a teammate's empty message crosses nothing, and its branch stays open", async () => {
       const { prompt } = await spawnTeammate();
       reply("SendMessage", { to: "team-lead", message: "" });

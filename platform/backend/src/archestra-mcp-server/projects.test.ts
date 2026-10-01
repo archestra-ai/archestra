@@ -17,6 +17,8 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 const TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_project_from_conversation`;
 const LIST_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_projects`;
 const GET_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_project`;
+const LINK_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}link_app_to_project`;
+const UNLINK_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}unlink_app_from_project`;
 
 describe("create_project_from_conversation tool", () => {
   let agent: Agent;
@@ -328,5 +330,78 @@ describe("project read tools (list_projects, get_project)", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("Project not found");
+  });
+});
+
+describe("project app link tools (link_app_to_project, unlink_app_from_project)", () => {
+  let userId: string;
+  let organizationId: string;
+  let context: ArchestraContext;
+
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: "member" });
+    const agent = await makeAgent({ organizationId });
+    // No conversation: what an external MCP client on a gateway has.
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      userId,
+      organizationId,
+    };
+  });
+
+  const makeProject = (name: string) =>
+    projectService.create({ organizationId, userId, name, description: null });
+
+  const linkedAppIds = async (projectId: string) =>
+    (
+      await projectService.listApps({ id: projectId, organizationId, userId })
+    ).map((a) => a.id);
+
+  test("links and unlinks an app outside a chat", async ({ makeApp }) => {
+    const project = await makeProject("linkable");
+    const board = await makeApp({ organizationId, authorId: userId });
+
+    const linked = await executeArchestraTool(
+      LINK_TOOL_NAME,
+      { project_id: project.id, app_id: board.id },
+      context,
+    );
+    expect(linked.isError).toBe(false);
+    expect(await linkedAppIds(project.id)).toEqual([board.id]);
+
+    const unlinked = await executeArchestraTool(
+      UNLINK_TOOL_NAME,
+      { project_id: project.id, app_id: board.id },
+      context,
+    );
+    expect(unlinked.isError).toBe(false);
+    expect(await linkedAppIds(project.id)).toEqual([]);
+  });
+
+  test("refuses an app the caller cannot read", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const project = await makeProject("guarded");
+    const stranger = await makeUser();
+    await makeMember(stranger.id, organizationId, { role: "member" });
+    const theirs = await makeApp({
+      organizationId,
+      authorId: stranger.id,
+      access: "personal",
+    });
+
+    const result = await executeArchestraTool(
+      LINK_TOOL_NAME,
+      { project_id: project.id, app_id: theirs.id },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("App not found");
+    expect(await linkedAppIds(project.id)).toEqual([]);
   });
 });

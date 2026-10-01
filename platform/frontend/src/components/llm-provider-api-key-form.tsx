@@ -473,7 +473,7 @@ interface LlmProviderApiKeyFormProps {
   hideUnavailableProviders?: boolean;
   /** Hide the ownership and primary-key controls when the parent fixes them. */
   hideScopeAndPrimary?: boolean;
-  /** The host dialog renders permissions in its own tab. */
+  /** Defer permissions until editing, or let the host render its own tab. */
   hidePermissions?: boolean;
   /** When true, providers without embedding support are disabled in the picker. */
   forEmbedding?: boolean;
@@ -485,8 +485,6 @@ interface LlmProviderApiKeyFormProps {
   requiresExactSubscriptionCredential?: boolean;
   /** Hide optional API-key fields behind an Advanced settings disclosure. */
   progressive?: boolean;
-  /** Dialog section shown when advanced fields have their own tab. */
-  activeSection?: "general" | "connectivity";
   /** Called when a subscription sign-in returns a credential. */
   onSubscriptionCredential?: (credential: string) => void | Promise<void>;
   labels?: ProfileLabel[];
@@ -513,7 +511,6 @@ export function LlmProviderApiKeyForm({
   credentialMode,
   requiresExactSubscriptionCredential = false,
   progressive = false,
-  activeSection,
   onSubscriptionCredential,
   labels,
   onLabelsChange,
@@ -819,8 +816,7 @@ export function LlmProviderApiKeyForm({
   const isPerUserCredential = isPerUserProvider || isCredentialSubscriptionMode;
   const hasAdvancedSettings = !isSubscriptionFlow && !isPerUserCredential;
   const showAdvancedSettings =
-    hasAdvancedSettings &&
-    (!progressive || advancedSettingsOpen || !!activeSection);
+    hasAdvancedSettings && (!progressive || advancedSettingsOpen);
   // The subscription this form is currently connecting, if any: implied by the
   // provider when it is per-user outright, chosen by the auth-method tabs when
   // the provider also accepts API keys. Drives every piece of vendor copy below.
@@ -1043,7 +1039,7 @@ export function LlmProviderApiKeyForm({
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
-        <div hidden={activeSection === "connectivity"} className="space-y-4">
+        <div className="space-y-4">
           <DetailFacts facts={[createdByFact(existingKey?.createdBy)]} />
           {!isSubscriptionFlow && (
             <div
@@ -1580,6 +1576,31 @@ export function LlmProviderApiKeyForm({
             </div>
           )}
 
+          {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
+          {existingKey && hasLabelsEditor && (
+            <AdvancedLabelsSection
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={onLabelsChange}
+            />
+          )}
+        </div>
+        <div className="space-y-4">
+          {progressive && hasAdvancedSettings && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto w-full justify-between rounded-none border-t px-0 pt-4 pb-2 text-sm"
+              aria-expanded={advancedSettingsOpen}
+              onClick={() => setAdvancedSettingsOpen((open) => !open)}
+            >
+              <span>Advanced settings</span>
+              <ChevronDown
+                className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
+              />
+            </Button>
+          )}
+
           {showAdvancedSettings &&
             !isSubscriptionFlow &&
             !hideScopeAndPrimary && (
@@ -1617,31 +1638,6 @@ export function LlmProviderApiKeyForm({
                 />
               </div>
             )}
-
-          {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
-          {activeSection === "general" && hasLabelsEditor && (
-            <AdvancedLabelsSection
-              ref={labelsRef}
-              labels={labels}
-              onLabelsChange={onLabelsChange}
-            />
-          )}
-        </div>
-        <div hidden={activeSection === "general"} className="space-y-4">
-          {progressive && hasAdvancedSettings && !activeSection && (
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-auto w-full justify-between rounded-none border-t px-0 pt-4 pb-2 text-sm"
-              aria-expanded={advancedSettingsOpen}
-              onClick={() => setAdvancedSettingsOpen((open) => !open)}
-            >
-              Advanced settings
-              <ChevronDown
-                className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
-              />
-            </Button>
-          )}
 
           {!isSubscriptionFlow &&
             !showBaseUrlUpFront &&
@@ -1753,7 +1749,7 @@ export function LlmProviderApiKeyForm({
             </div>
           )}
 
-          {!activeSection && showAdvancedSettings && hasLabelsEditor && (
+          {!existingKey && showAdvancedSettings && hasLabelsEditor && (
             <ProfileLabels
               ref={labelsRef}
               labels={labels}

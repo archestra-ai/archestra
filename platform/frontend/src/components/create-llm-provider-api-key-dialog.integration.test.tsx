@@ -1,23 +1,24 @@
+import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/teams/team.query");
-vi.mock("@/lib/llm-provider-api-keys.query", () => ({
-  useLlmProviderApiKeys: () => ({ data: undefined }),
-  useCreateLlmProviderApiKey: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-  useReconnectLlmProviderApiKey: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-}));
 
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
@@ -32,6 +33,22 @@ Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
 Element.prototype.setPointerCapture = vi.fn();
 Element.prototype.releasePointerCapture = vi.fn();
 Element.prototype.scrollIntoView = vi.fn();
+
+const API_ORIGIN = "http://localhost:9000";
+const server = setupServer(
+  http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+    HttpResponse.json([]),
+  ),
+);
+beforeAll(() => {
+  archestraApiClient.setConfig({ baseUrl: API_ORIGIN });
+  server.listen({ onUnhandledRequest: "error" });
+});
+afterEach(() => server.resetHandlers());
+afterAll(() => {
+  server.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
 
 describe("CreateLlmProviderApiKeyDialog integration", () => {
   beforeEach(() => {
@@ -133,7 +150,7 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps shared key access in a separate permissions tab", async () => {
+  it("keeps creation simple when choosing a shared key", async () => {
     const user = userEvent.setup();
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -155,22 +172,40 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
       screen.queryByRole("button", { name: "Permissions" }),
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Shared" }));
-    await user.click(screen.getByRole("button", { name: "Permissions" }));
-    expect(screen.getByRole("heading", { name: "Permissions" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "General" }));
-    expect(screen.getByText("Who uses this key")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Shared" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Test & Create" })).toBeVisible();
   });
 
-  it("keeps key selection in General and endpoint settings in Connectivity", async () => {
+  it("submits endpoint settings from Advanced without leaving the creation form", async () => {
     const user = userEvent.setup();
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    const onOpenChange = vi.fn();
+    const onSuccess = vi.fn();
+    const requests: unknown[] = [];
+    server.use(
+      http.post(
+        `${API_ORIGIN}/api/llm-provider-api-keys`,
+        async ({ request }) => {
+          requests.push(await request.json());
+          return HttpResponse.json({ id: "created-key" });
+        },
+      ),
+    );
     render(
       <QueryClientProvider client={client}>
         <CreateLlmProviderApiKeyDialog
           open
-          onOpenChange={vi.fn()}
+          onOpenChange={onOpenChange}
+          onSuccess={onSuccess}
           title="Add API Key"
           description="Create a provider key"
           allowedProviders={["anthropic"]}
@@ -178,10 +213,32 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText("Primary key")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Connectivity" }));
+    expect(
+      screen.queryByRole("button", { name: "Connectivity" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Base URL/)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/^API Key/), "test-provider-key");
+    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
     expect(screen.getByLabelText(/Base URL/)).toBeVisible();
     expect(screen.getByText("Extra HTTP headers")).toBeVisible();
-    expect(screen.getByText("Primary key")).not.toBeVisible();
+    await user.type(
+      screen.getByLabelText(/Base URL/),
+      "https://gateway.example.com",
+    );
+    await user.click(screen.getByRole("button", { name: "Add header" }));
+    await user.type(screen.getByLabelText("Header name"), "X-Gateway");
+    await user.type(screen.getByLabelText("Header value"), "test-value");
+    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    expect(screen.queryByLabelText(/Base URL/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Test & Create" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("created-key"));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(requests).toEqual([
+      expect.objectContaining({
+        apiKey: "test-provider-key",
+        baseUrl: "https://gateway.example.com",
+        extraHeaders: { "X-Gateway": "test-value" },
+      }),
+    ]);
   });
 });

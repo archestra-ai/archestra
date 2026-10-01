@@ -36,6 +36,16 @@ test.describe("LLM Provider API Keys", () => {
 
     await llmKeysPage.goto();
     await llmKeysPage.addButton.click();
+    await expect(
+      page
+        .getByRole("dialog")
+        .getByRole("button", { name: "General", exact: true }),
+    ).toBeHidden();
+    await expect(
+      page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Permissions", exact: true }),
+    ).toBeHidden();
     await page.getByRole("combobox", { name: "Provider" }).click();
     await page
       .getByRole("option", { name: PROVIDER_OPTION_NAME, exact: true })
@@ -68,6 +78,22 @@ test.describe("LLM Provider API Keys", () => {
     });
 
     await llmKeysPage.editButtonFor(KEY_NAME).click();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await page
+      .getByRole("button", { name: "Permissions", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Permissions", exact: true }),
+    ).toBeVisible();
+    // SPDX-SnippetEnd
+    await page.getByRole("button", { name: "General", exact: true }).click();
+    await expect(page.getByLabel(/Base URL/)).toBeHidden();
+    await page
+      .getByRole("button", { name: "Advanced settings", exact: true })
+      .click();
+    await expect(page.getByLabel(/Base URL/)).toBeVisible();
     const editName = page.getByLabel(/^Name/);
     await editName.clear();
     await editName.fill(UPDATED_NAME);
@@ -198,6 +224,7 @@ test.describe("LLM Provider API Keys", () => {
       .getByRole("textbox", { name: /API Key/i })
       .fill(API_KEY_PLACEHOLDER);
 
+    await page.getByRole("button", { name: "Advanced settings" }).click();
     const primarySwitch = page.getByRole("switch", { name: /Primary key/i });
     await expect(primarySwitch).toBeChecked();
 
@@ -228,6 +255,7 @@ test.describe("LLM Provider API Keys", () => {
       .getByRole("textbox", { name: /API Key/i })
       .fill(API_KEY_PLACEHOLDER);
 
+    await page.getByRole("button", { name: "Advanced settings" }).click();
     const secondarySwitch = page.getByRole("switch", { name: /Primary key/i });
     await expect(secondarySwitch).not.toBeChecked();
     await expect(secondarySwitch).toBeDisabled();

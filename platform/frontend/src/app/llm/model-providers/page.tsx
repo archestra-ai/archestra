@@ -219,9 +219,9 @@ export default function ApiKeysPage() {
     defaultValues: DEFAULT_FORM_VALUES,
   });
   const [editLabels, setEditLabels] = useState<ProfileLabel[]>([]);
-  const [editSection, setEditSection] = useState<
-    "general" | "connectivity" | "permissions"
-  >("general");
+  const [editSection, setEditSection] = useState<"general" | "permissions">(
+    "general",
+  );
   const editLabelsRef = useRef<ProfileLabelsRef>(null);
 
   // Reset edit form with selected key values when dialog opens
@@ -821,7 +821,6 @@ export default function ApiKeysPage() {
           activeSection={editSection}
           navItems={[
             { id: "general", label: "General" },
-            { id: "connectivity", label: "Connectivity" },
             { id: "permissions", label: "Permissions" },
           ]}
           onActiveSectionChange={setEditSection}
@@ -856,9 +855,6 @@ export default function ApiKeysPage() {
                 form={editForm}
                 isPending={updateMutation.isPending}
                 progressive
-                activeSection={
-                  editSection === "connectivity" ? "connectivity" : "general"
-                }
                 hidePermissions
                 labels={editLabels}
                 onLabelsChange={setEditLabels}

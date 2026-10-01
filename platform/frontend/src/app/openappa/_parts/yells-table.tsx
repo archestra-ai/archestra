@@ -117,7 +117,7 @@ export function YellsTable() {
     {
       id: "actions",
       header: "Actions",
-      size: canResolve ? 112 : 72,
+      size: canResolve ? 128 : 96,
       cell: ({ row }) => (
         <YellRowActions
           yell={row.original}
@@ -238,12 +238,14 @@ export function YellsTable() {
 
 function useYellInvestigation(yell: OpenAppaYell) {
   const router = useRouter();
-  const { href, agents } = useOpenAppaChatLaunch({
+  const { href, agents, permissions } = useOpenAppaChatLaunch({
     promptKey: "explainPolicy",
     yellId: yell.id,
+    hasArchive: yell.hasArchive,
   });
   const archive = useOpenAppaYellArchive();
   return {
+    permissions,
     disabled: archive.isPending || (!href && !agents.isError),
     launch: () => {
       if (!href) {
@@ -287,6 +289,7 @@ function YellRowActions({
         {
           icon: <MessageCircle className="size-4" />,
           label: "Investigate in chat",
+          permissions: investigation.permissions,
           disabled: investigation.disabled,
           onClick: investigation.launch,
         },

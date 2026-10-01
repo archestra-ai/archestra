@@ -277,7 +277,7 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
   page,
   request,
   mswControl,
-}) => {
+}, testInfo) => {
   const config = await (
     await request.get("/internal-test/api/api/config")
   ).json();
@@ -298,6 +298,9 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
       url: "/api/user/permissions",
       body: {
         ...permissions,
+        chat: ["read"],
+        file: [],
+        sandbox: [],
         openappaPolicy: [],
         openappaSettings: [],
         openappaDiagnostics: ["read"],
@@ -307,7 +310,24 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
       method: "get",
       url: "/api/openappa/yells",
       body: {
-        data: [],
+        data: [
+          {
+            id: "diagnostic-report",
+            organizationId: "org",
+            callerId: "user:reporter",
+            caller: null,
+            sessionId: "session",
+            toolCallId: "call",
+            message: "Reading project notes was blocked.",
+            withTrajectory: true,
+            hasArchive: true,
+            createdAt: "2026-10-01T12:00:00Z",
+            reportedAt: null,
+            reportFailed: false,
+            resolvedAt: null,
+            resolvedBy: null,
+          },
+        ],
         pagination: { limit: 20, hasNext: false, nextCursor: null },
       },
     },
@@ -348,4 +368,27 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
     page.getByRole("link", { name: /Guardrails/, exact: false }).first(),
   ).toHaveAttribute("href", "/openappa/yells");
   expect(forbiddenRequests).toEqual([]);
+  const investigate = page.getByRole("button", { name: "Investigate in chat" });
+  await expect(investigate).toHaveAttribute("aria-disabled", "true");
+  await investigate.click({ force: true });
+  await expect(page).toHaveURL(/\/openappa\/yells$/);
+  await investigate.hover();
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toContainText("Missing permissions");
+  await expect(tooltip).toContainText("Chats: create");
+  await expect(tooltip).toContainText("OpenAPPA Policy: read");
+  await expect(tooltip).toContainText("Files: manage");
+  await expect(tooltip).toContainText("Code Sandbox: execute");
+  await expect(tooltip).not.toContainText("Diagnostics");
+  const table = await page.getByRole("table").boundingBox();
+  const download = await page
+    .getByRole("button", { name: "Download report" })
+    .boundingBox();
+  expect(table).not.toBeNull();
+  expect(download).not.toBeNull();
+  if (!table || !download) throw new Error("Table and action must be visible");
+  expect(download.x + download.width).toBeLessThanOrEqual(
+    table.x + table.width - 8,
+  );
+  await page.screenshot({ path: testInfo.outputPath("yells-permissions.png") });
 });

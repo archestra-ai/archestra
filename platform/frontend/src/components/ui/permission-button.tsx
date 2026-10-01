@@ -8,7 +8,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
+import {
+  formatMissingPermissions,
+  permissionResourceLabel,
+} from "@/lib/auth/auth.utils";
 import { cn } from "@/lib/utils/tailwind";
 
 type PermissionButtonProps = ButtonProps & {
@@ -53,10 +56,11 @@ export function PermissionButton({
   className,
   ...props
 }: PermissionButtonProps) {
-  const { data: hasPermission } = useHasPermissions(
-    permissions,
-    permissionScope,
-  );
+  const {
+    data: hasPermission,
+    missingPermissions,
+    isPending,
+  } = useHasPermissions(permissions, permissionScope);
   const reasonId = useId();
 
   // An enabled control the caller holds the permission for: the tooltip is a
@@ -91,17 +95,14 @@ export function PermissionButton({
   // would hand the caller's element (a link) the button's role, the second
   // would swallow the pointer events the tooltip trigger needs.
   const { asChild, disabled, ...rest } = props;
-  // A caller that disabled the control already has a reason for it, and that
-  // reason outlives a permission grant, so it is the one still worth stating.
-  // A control refused by the caller rather than by RBAC is the same greyed-out
-  // control to the reader, so it gets the same treatment: the reason as text,
-  // on a control that stays focusable to carry it.
-  const reason =
-    disabled && tooltip
+  // Permission failures win over loading or decorative action tooltips.
+  const reason = !hasPermission
+    ? isPending
+      ? "Checking permissions…"
+      : formatMissingPermissions(missingPermissions ?? permissions)
+    : disabled && tooltip
       ? tooltip
-      : hasPermission
-        ? undefined
-        : formatPermissionConstraint(permissions);
+      : undefined;
 
   if (!reason) {
     // Disabled by the caller with nothing said about why. There is no reason to
@@ -147,7 +148,25 @@ export function PermissionButton({
           </span>
         </Button>
       </TooltipTrigger>
-      <TooltipContent className="max-w-60">{reason}</TooltipContent>
+      <TooltipContent className="max-w-72">
+        {!hasPermission && !isPending ? (
+          <div>
+            <span className="font-medium">Missing permissions</span>
+            <ul className="mt-1 space-y-0.5">
+              {Object.entries(missingPermissions ?? permissions).map(
+                ([resource, actions]) => (
+                  <li key={resource}>
+                    <span>{permissionResourceLabel(resource)}</span>
+                    <span className="opacity-75">{`: ${actions.join(", ")}`}</span>
+                  </li>
+                ),
+              )}
+            </ul>
+          </div>
+        ) : (
+          reason
+        )}
+      </TooltipContent>
     </Tooltip>
   );
 }

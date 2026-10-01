@@ -31,6 +31,11 @@ export function formatPermissionConstraint(permissions: Permissions): string {
   return `Available to roles with the ${resources.join(SEPARATOR)} ${noun}`;
 }
 
+export function permissionResourceLabel(resource: string): string {
+  const label = resourceLabels[resource as Resource] ?? resource;
+  return resource.startsWith("openappa") ? `OpenAPPA ${label}` : label;
+}
+
 export function hasPermissions(
   userPermissions: Permissions | undefined,
   permissionsToCheck: Permissions,
@@ -86,7 +91,7 @@ export function hasPagePermissions(params: {
 /** One "Label (action, action)" entry per resource, in declaration order. */
 function describeResources(permissions: Permissions): string[] {
   return Object.entries(permissions).map(([resource, actions]) => {
-    const label = resourceLabels[resource as Resource] ?? resource;
+    const label = permissionResourceLabel(resource);
     return `${label} (${actions.join(SEPARATOR)})`;
   });
 }

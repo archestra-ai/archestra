@@ -30,6 +30,8 @@ export function claudeCodeRelayArrivals(
       collectEnvelopes(holder, envelope, found);
     }
     collectCoordinatorMessages(holder, found);
+    // Collection stops one past the limit, so a crowded text costs the same
+    // whatever it holds.
     if (found.length > MAX_MESSAGES_PER_TEXT) {
       arrivals.push(crowdedText(holder));
     } else {
@@ -288,6 +290,7 @@ function collectEnvelopes(
   arrivals: AppaRelayArrival[],
 ): void {
   for (const match of holder.get().matchAll(envelope.pattern)) {
+    if (arrivals.length > MAX_MESSAGES_PER_TEXT) return;
     const [original, attributes = "", body = ""] = match;
     arrivals.push({
       kind: envelope.kind,
@@ -317,6 +320,7 @@ function collectCoordinatorMessages(
   arrivals: AppaRelayArrival[],
 ): void {
   for (const match of holder.get().matchAll(COORDINATOR)) {
+    if (arrivals.length > MAX_MESSAGES_PER_TEXT) return;
     const [original, body = ""] = match;
     arrivals.push({
       kind: "coordinator",

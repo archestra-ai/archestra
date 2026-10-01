@@ -802,6 +802,16 @@ describe("list_guardrails_battery_fits", () => {
     return (result.structuredContent as any).fits;
   };
 
+  test("advertises a required nullable server ID for strict tool schemas", () => {
+    const tool = getAllArchestraMcpTools().find(
+      (candidate) => candidate.name === toolFullName,
+    );
+    expect(tool?.inputSchema.required).toContain("mcpServerId");
+    expect(tool?.inputSchema.properties?.mcpServerId).toMatchObject({
+      anyOf: [{ type: "string", format: "uuid" }, { type: "null" }],
+    });
+  });
+
   test("says how to declare a battery that fits and what its rules would do", async ({
     makeOrganization,
     makeUser,
@@ -822,7 +832,7 @@ describe("list_guardrails_battery_fits", () => {
     });
 
     // Docs and Acme already have their batteries declared, so only Linear fits.
-    expect(await fits({}, context)).toEqual([
+    expect(await fits({ mcpServerId: null }, context)).toEqual([
       expect.objectContaining({
         mcpServerId: catalogIds.linear,
         mcpServerName: "Linear",
@@ -904,9 +914,9 @@ describe("list_guardrails_battery_fits", () => {
       organizationId: org.id,
     });
 
-    expect(await fits({}, context(owner.id))).toEqual([
+    expect(await fits({ mcpServerId: null }, context(owner.id))).toEqual([
       expect.objectContaining({ mcpServerId: linear.id }),
     ]);
-    expect(await fits({}, context(viewer.id))).toEqual([]);
+    expect(await fits({ mcpServerId: null }, context(viewer.id))).toEqual([]);
   });
 });

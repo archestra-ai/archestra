@@ -60,6 +60,10 @@ export const CLAUDE_DESKTOP_CLIENT_ID = "anthropic_claude_desktop";
  */
 export const CODEX_CLIENT_ID = "openai_codex";
 
+/** Native app-server identity used by the installed connection verifier. */
+export const ARCHESTRA_CODEX_CONNECTION_ORIGINATOR =
+  "archestra_codex_connection";
+
 /**
  * `external_agent_id` value for the GitHub Copilot CLI. Set explicitly by the
  * connect-page setup scripts via the CLI's COPILOT_PROVIDER_HEADERS env var —
@@ -99,7 +103,10 @@ const CODEX_FIRST_PARTY_ORIGINATORS = new Set<string>([
   "codex_vscode",
 ]);
 
-/** Whether an `originator` value denotes a first-party Codex client. */
+/**
+ * Whether an `originator` value denotes a Codex subscription client: a
+ * first-party Codex originator, or the exact internal verifier identity.
+ */
 export function isCodexOriginator(
   originator: string | null | undefined,
 ): boolean {
@@ -107,11 +114,15 @@ export function isCodexOriginator(
     return false;
   }
   const value = originator.trim().toLowerCase();
-  return CODEX_FIRST_PARTY_ORIGINATORS.has(value) || value.startsWith("codex ");
+  return (
+    CODEX_FIRST_PARTY_ORIGINATORS.has(value) ||
+    value === ARCHESTRA_CODEX_CONNECTION_ORIGINATOR ||
+    value.startsWith("codex ")
+  );
 }
 
 /**
- * Whether a User-Agent denotes a first-party Codex client. Codex builds its UA
+ * Whether a User-Agent denotes a recognized native Codex client. Codex builds its UA
  * with the originator as the leading product token, e.g.
  * `codex_cli_rs/0.20.0 (Linux 6.6; x86_64) …` — checked as a fallback for when
  * a middlebox drops the `originator` header itself.

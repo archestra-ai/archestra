@@ -329,7 +329,7 @@ export function useDeleteProject() {
       }
       return true;
     },
-    onSuccess: (ok) => {
+    onSuccess: (ok, { id }) => {
       if (!ok) return;
       toast.success(
         "Project deleted — its chats were kept as ordinary conversations.",
@@ -342,7 +342,20 @@ export function useDeleteProject() {
       // The project's scheduled tasks are retained but hidden (paused) with it,
       // so drop them from any open scheduled-tasks list. Chats detach rather
       // than hide, so the conversations list needs no invalidation here.
-      queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
+      queryClient.invalidateQueries({
+        queryKey: scheduleTriggerKeys.all,
+        // The confirmation dialog still observes this project's schedule count
+        // until the mutation resolves. Refetching it now would return a 404.
+        predicate: (query) => {
+          const filters = query.queryKey[2];
+          return (
+            typeof filters !== "object" ||
+            filters === null ||
+            !("projectId" in filters) ||
+            filters.projectId !== id
+          );
+        },
+      });
     },
   });
 }

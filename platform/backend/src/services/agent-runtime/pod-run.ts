@@ -131,7 +131,11 @@ async function startAgentRunSession(params: {
 
   // The row lands before the workload: it is what teardown reads to find the
   // objects, so a crash between the two must leave a record, not an orphan.
-  const placeholderTitle = toPlaceholderTitle(params.task ?? "Run");
+  const resumeWithoutPrompt = Boolean(priorRun && !params.task?.trim());
+  const placeholderTitle =
+    resumeWithoutPrompt && priorRun
+      ? priorRun.title
+      : toPlaceholderTitle(params.task ?? "Run");
   const session = await AgentRunModel.create({
     id: runId,
     organizationId: params.organizationId,
@@ -150,29 +154,31 @@ async function startAgentRunSession(params: {
     completionTarget: params.completionTarget,
   });
 
-  trackBackgroundWork(
-    generateAgentRunTitle({
-      taskId: params.taskId,
-      prompt: params.task ?? "Run",
-      organizationId: params.organizationId,
-      userId: params.titleUserId,
-      modelId: params.modelId,
-      llmApiKeyId: params.llmApiKeyId,
-    })
-      .then((title) =>
-        AgentRunModel.updateTitleIfCurrent({
-          taskId: params.taskId,
-          expectedTitle: placeholderTitle,
-          title,
+  if (!resumeWithoutPrompt) {
+    trackBackgroundWork(
+      generateAgentRunTitle({
+        taskId: params.taskId,
+        prompt: params.task ?? "Run",
+        organizationId: params.organizationId,
+        userId: params.titleUserId,
+        modelId: params.modelId,
+        llmApiKeyId: params.llmApiKeyId,
+      })
+        .then((title) =>
+          AgentRunModel.updateTitleIfCurrent({
+            taskId: params.taskId,
+            expectedTitle: placeholderTitle,
+            title,
+          }),
+        )
+        .catch((error) => {
+          logger.warn(
+            { error, taskId: params.taskId },
+            "Could not generate an Agent run title",
+          );
         }),
-      )
-      .catch((error) => {
-        logger.warn(
-          { error, taskId: params.taskId },
-          "Could not generate an Agent run title",
-        );
-      }),
-  );
+    );
+  }
 
   let claimedWorkspace = false;
   let createdWorkspace:

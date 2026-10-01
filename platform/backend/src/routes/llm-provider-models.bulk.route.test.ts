@@ -1,12 +1,8 @@
-import { vi } from "vitest";
-import { userHasPermission } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import ModelModel from "@/models/model";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Model, User } from "@/types";
-
-vi.mock("@/auth");
 
 describe("PATCH /api/llm-models/bulk", () => {
   let app: FastifyInstanceWithZod;
@@ -14,11 +10,9 @@ describe("PATCH /api/llm-models/bulk", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    vi.clearAllMocks();
     organizationId = (await makeOrganization()).id;
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: "admin" });
-    vi.mocked(userHasPermission).mockResolvedValue(true);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -30,7 +24,6 @@ describe("PATCH /api/llm-models/bulk", () => {
   });
 
   afterEach(async () => {
-    vi.restoreAllMocks();
     await app.close();
   });
 

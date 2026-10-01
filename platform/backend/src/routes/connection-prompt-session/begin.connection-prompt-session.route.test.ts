@@ -1,7 +1,5 @@
 import { vi } from "vitest";
 
-vi.mock("@/cache-manager");
-
 import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin";
 import { cacheManager } from "@/cache-manager";
@@ -13,7 +11,11 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import { recognizeConnectionSetup } from "@/services/connection-prompt-session";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import routes from "./connection-prompt-session.routes";
+
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 const PROMPT =
   "Read https://ai.example.com/connect.md?client=claude-code and connect Claude Code.";

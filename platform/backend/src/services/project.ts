@@ -6,12 +6,14 @@ import {
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import { isGlobalAdmin } from "@/auth";
-import { isServiceAccountUserId } from "@/auth/utils";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
   AgentRunModel,
+  AppAccessModel,
+  AppModel,
   ConversationModel,
   ConversationNotOwnedError,
   CreatedByModel,
@@ -19,6 +21,7 @@ import {
   lookupCreator,
   ProjectAccessModel,
   ProjectAlreadyAssignedError,
+  ProjectAppModel,
   ProjectLabelModel,
   ProjectModel,
   ProjectPinModel,
@@ -35,6 +38,7 @@ import type {
   GetAgentRunResponse,
   LabelWithDetails,
   Project,
+  ProjectAppListItem,
   ProjectConversationItem,
   ProjectDetail,
   ProjectLifecycle,
@@ -606,6 +610,25 @@ class ProjectService {
   }
 
   /**
+   * Whether the caller may manage the project (owner or project admin) — the
+   * gate {@link setInstructions} applies, for callers that write the
+   * instructions file through another path (the agent file tools).
+   */
+  async canManage(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<boolean> {
+    try {
+      await this.requireManageable(params);
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 404) return false;
+      throw error;
+    }
+  }
+
+  /**
    * Create or replace the project's instructions (owner only). The first save
    * materializes the real `instructions.md` file; empty content is kept (an
    * empty file is simply not injected into chats), never deleted.
@@ -925,6 +948,77 @@ class ProjectService {
       409,
       `Could not find an available name for "${filename}"`,
     );
+  }
+
+  /**
+   * Apps linked into the project that the caller can read. A link never grants
+   * app access, so each member sees only the linked apps they could open anyway.
+   */
+  async listApps(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<ProjectAppListItem[]> {
+    const project = await this.requireReadable(params);
+    const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
+      organizationId: params.organizationId,
+      userId: params.userId,
+    });
+    return ProjectAppModel.listForProject({
+      projectId: project.id,
+      appIds: accessibleAppIds,
+    });
+  }
+
+  /**
+   * Link an app into the project. Anyone who can add files to the project may
+   * link an app, provided they can read the app. "No access" to either side
+   * reads as 404. Idempotent.
+   */
+  async linkApp(params: {
+    id: string;
+    appId: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<void> {
+    const project = await this.requireReadable(params);
+    const app = await AppModel.findByIdInOrg(
+      params.appId,
+      params.organizationId,
+    );
+    if (
+      !app ||
+      !(await AppAccessModel.userHasAppAccess({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        app,
+      }))
+    ) {
+      throw new ApiError(404, "App not found");
+    }
+    await ProjectAppModel.link({
+      projectId: project.id,
+      appId: app.id,
+      linkedBy: params.userId,
+    });
+  }
+
+  /**
+   * Unlink an app from the project (any project member). The app itself is
+   * untouched. 404 when it was not linked.
+   */
+  async unlinkApp(params: {
+    id: string;
+    appId: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<void> {
+    const project = await this.requireReadable(params);
+    const removed = await ProjectAppModel.unlink({
+      projectId: project.id,
+      appId: params.appId,
+    });
+    if (!removed) throw new ApiError(404, "App is not linked to this project");
   }
 
   async listConversations(params: {

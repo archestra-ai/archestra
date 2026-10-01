@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { classifyChatSubmitAction } from "@/lib/chat/chat-submit-action";
 

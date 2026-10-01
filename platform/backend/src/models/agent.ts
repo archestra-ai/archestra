@@ -39,7 +39,6 @@ import {
 } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import { LRUCacheManager } from "@/cache-manager";
-import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -50,7 +49,6 @@ import {
 } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
-import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import {
   type Agent,
   type AgentActivationSkillMode,
@@ -633,6 +631,11 @@ class AgentModel {
   ): Promise<void> {
     if (agents.length === 0 || !userId) return;
 
+    // Lazy: the availability check reaches into the service layer, which
+    // would otherwise load with every model.
+    const { isSkillSandboxAvailableForAgent } = await import(
+      "@/skills/skill-sandbox-availability"
+    );
     await Promise.all(
       agents.map(async (agent) => {
         agent.sandboxAvailable = await isSkillSandboxAvailableForAgent({
@@ -3453,6 +3456,11 @@ class AgentModel {
 
         // Invalidate tool cache for all parent agents so they pick up the new tool name
         const parentAgentIds = await ToolModel.getParentAgentIds(id);
+        // Lazy (here and below): the chat MCP client imports the service
+        // layer, which would otherwise load with every model.
+        const { clearChatMcpClient } = await import(
+          "@/clients/chat-mcp-client"
+        );
         for (const parentAgentId of parentAgentIds) {
           clearChatMcpClient(parentAgentId);
         }
@@ -3468,6 +3476,9 @@ class AgentModel {
         updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
         updatedAgent.accessAllTools !== existingAgent.accessAllTools
       ) {
+        const { clearChatMcpClient } = await import(
+          "@/clients/chat-mcp-client"
+        );
         clearChatMcpClient(id);
       }
     } else {

@@ -41,6 +41,9 @@ export default async function setup() {
   for (const migrationSql of getMigrationsSql()) {
     await pg.exec(migrationSql);
   }
+  // Migrations seed rows (e.g. a default organization). Ship an empty
+  // snapshot so a freshly loaded test database needs no reset (setup.ts).
+  await truncatePublicTables(pg);
 
   const dump = await pg.dumpDataDir("gzip");
   const bytes = Buffer.from(await dump.arrayBuffer());
@@ -58,4 +61,15 @@ export default async function setup() {
     fs.rmSync(snapshotPath, { force: true });
     delete process.env[SNAPSHOT_PATH_ENV];
   };
+}
+
+async function truncatePublicTables(pg: PGlite): Promise<void> {
+  const { rows } = await pg.query<{ tablename: string }>(`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public'
+    AND tablename NOT LIKE 'drizzle_%'
+  `);
+  if (rows.length === 0) return;
+  const tables = rows.map((row) => `"${row.tablename}"`).join(", ");
+  await pg.exec(`TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE`);
 }

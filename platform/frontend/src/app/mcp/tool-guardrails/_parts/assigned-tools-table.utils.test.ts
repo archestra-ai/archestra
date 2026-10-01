@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { archestraApiTypes } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {

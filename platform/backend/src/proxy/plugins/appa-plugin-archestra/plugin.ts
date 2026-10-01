@@ -79,6 +79,7 @@ import type {
   LlmProxyToolResultsOutcome,
 } from "@/proxy/plugins/registry";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
@@ -348,6 +349,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       });
     }
     if (binding?.compaction) return;
+    if (binding?.adapter?.id === "codex") {
+      appendNativeDelegationGuidance(context);
+    }
     if (binding && binding.adapter?.id !== "archestra-chat") {
       if (binding.request.tools?.control) {
         appendQuestionContinuation({
@@ -431,8 +435,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     const tools = binding?.request.tools;
     if (!binding || !tools) return;
-    let changed = false;
-    let incomingToolCalls = context.toolCalls;
+    // Restore before host validation; finalization may only append the child
+    // receipt, never change the arguments the other policies already checked.
+    let incomingToolCalls = restoreAuthorizedSpawnRetry({
+      calls: context.toolCalls,
+      requestBody: binding.requestBody,
+      isSpawn: (name, namespace) =>
+        binding.adapter?.isSpawnTool(name, namespace) === true,
+    });
+    let changed = incomingToolCalls !== context.toolCalls;
     if (binding.nativeHitlRulings.length > 0) {
       const blocked = context.toolCalls[0];
       if (!blocked) return;
@@ -2116,6 +2127,271 @@ function isChildSpawnCall(adapter: AppaClientAdapter, call: ToolCall): boolean {
   );
 }
 
+const AUTHORIZED_RETRY =
+  /Call the (\S+) tool again with exactly these arguments: /;
+
+type AuthorizedSpawn = {
+  tool: string;
+  arguments: Record<string, unknown>;
+  namespace?: string;
+};
+
+/**
+ * Replaces one rewritten retry of an authorized spawn with the arguments the
+ * offer covers. The runtime matches the tool and those arguments, not the
+ * call id. A different task name, a non-spawn, or a retry that already
+ * carried the authorized arguments is not rewritten.
+ * One pending acceptance restores at most one call in a batch; it does not
+ * authorize fan-out. Every remaining call still needs its own runtime ruling.
+ */
+function restoreAuthorizedSpawnRetry(params: {
+  calls: readonly ToolCall[];
+  requestBody: unknown;
+  isSpawn: (name: string, namespace?: string) => boolean;
+}): readonly ToolCall[] {
+  const pending = pendingAuthorizedSpawn(params.requestBody);
+  if (!pending) return params.calls;
+  let restored = false;
+  return params.calls.map((call) => {
+    if (restored || !params.isSpawn(call.name, call.namespace)) return call;
+    const args = argumentRecordOf(call.arguments);
+    if (
+      !args ||
+      !sameAuthorizedSpawn({
+        name: call.name,
+        arguments: args,
+        pending,
+      })
+    ) {
+      return call;
+    }
+    restored = true;
+    if (spawnArgumentsCovered(args, pending.arguments)) {
+      return call.namespace || !pending.namespace
+        ? call
+        : { ...call, namespace: pending.namespace };
+    }
+    return {
+      ...call,
+      ...(call.namespace || !pending.namespace
+        ? {}
+        : { namespace: pending.namespace }),
+      arguments:
+        typeof call.arguments === "string"
+          ? JSON.stringify(pending.arguments)
+          : pending.arguments,
+    };
+  });
+}
+
+function pendingAuthorizedSpawn(body: unknown): AuthorizedSpawn | undefined {
+  const input = isRecord(body) ? body.input : undefined;
+  if (!Array.isArray(input)) return undefined;
+  let pending: AuthorizedSpawn | undefined;
+  const namespaceByTask = new Map<string, string>();
+  for (const item of input) {
+    if (!isRecord(item)) continue;
+    if (item.type === "function_call" || item.type === "custom_tool_call") {
+      const args = argumentRecordOf(
+        typeof item.arguments === "string"
+          ? item.arguments
+          : JSON.stringify(item.arguments ?? {}),
+      );
+      const name = typeof item.name === "string" ? item.name : undefined;
+      if (!args || !name) continue;
+      const task =
+        typeof args.task_name === "string" ? args.task_name : undefined;
+      if (
+        task &&
+        typeof item.namespace === "string" &&
+        !namespaceByTask.has(task)
+      ) {
+        namespaceByTask.set(task, item.namespace);
+      }
+      if (
+        pending &&
+        sameAuthorizedSpawn({ name, arguments: args, pending }) &&
+        spawnArgumentsCovered(args, pending.arguments)
+      ) {
+        pending = undefined;
+      }
+      continue;
+    }
+    if (
+      pending &&
+      (item.type === "message" || item.type === undefined) &&
+      item.role === "user"
+    ) {
+      pending = undefined;
+      continue;
+    }
+    const accepted = outputTexts(item.output)
+      .map(parseAuthorizedRetry)
+      .filter((retry) => retry !== undefined);
+    if (accepted.length > 1) {
+      // One output must identify one retry, not choose among accepted blobs.
+      pending = undefined;
+      continue;
+    }
+    const authorized = accepted[0];
+    if (!authorized) continue;
+    const task =
+      typeof authorized.arguments.task_name === "string"
+        ? authorized.arguments.task_name
+        : undefined;
+    pending = {
+      ...authorized,
+      ...(task && namespaceByTask.has(task)
+        ? { namespace: namespaceByTask.get(task) }
+        : {}),
+    };
+  }
+  return pending;
+}
+
+function parseAuthorizedRetry(
+  text: string,
+): { tool: string; arguments: Record<string, unknown> } | undefined {
+  if (!text.startsWith("[appa] Authorized.")) return undefined;
+  const match = AUTHORIZED_RETRY.exec(text);
+  if (!match) return undefined;
+  const parsed = parseJsonObject(text.slice(match.index + match[0].length));
+  if (!parsed) return undefined;
+  return { tool: match[1], arguments: parsed };
+}
+
+function sameAuthorizedSpawn(params: {
+  name: string;
+  arguments: Record<string, unknown>;
+  pending: AuthorizedSpawn;
+}): boolean {
+  if (localSpawnName(params.name) !== localSpawnName(params.pending.tool)) {
+    return false;
+  }
+  // The prompt is the only field a retry may rewrite. Any other difference,
+  // including a reused task_name with different options, is another call.
+  const promptField =
+    typeof params.pending.arguments.message === "string"
+      ? "message"
+      : Array.isArray(params.pending.arguments.items)
+        ? "items"
+        : undefined;
+  if (
+    !promptField ||
+    ("message" in params.pending.arguments &&
+      "items" in params.pending.arguments) ||
+    ("message" in params.arguments && "items" in params.arguments) ||
+    (promptField === "message"
+      ? typeof params.arguments.message !== "string"
+      : !Array.isArray(params.arguments.items))
+  ) {
+    return false;
+  }
+  const authorizedKeys = Object.keys(params.pending.arguments)
+    .filter((key) => key !== promptField)
+    .sort();
+  const actualKeys = Object.keys(params.arguments)
+    .filter((key) => key !== promptField)
+    .sort();
+  if (authorizedKeys.join("\0") !== actualKeys.join("\0")) return false;
+  return authorizedKeys.every(
+    (key) =>
+      JSON.stringify(params.arguments[key]) ===
+      JSON.stringify(params.pending.arguments[key]),
+  );
+}
+
+function spawnArgumentsCovered(
+  actual: Record<string, unknown>,
+  authorized: Record<string, unknown>,
+): boolean {
+  if (
+    typeof authorized.task_name === "string" &&
+    actual.task_name !== authorized.task_name
+  ) {
+    return false;
+  }
+  if (typeof authorized.message === "string") {
+    return (
+      typeof actual.message === "string" &&
+      (actual.message === authorized.message ||
+        actual.message.startsWith(
+          `${authorized.message}\n\n[appa] delegated trajectory `,
+        ))
+    );
+  }
+  if (Array.isArray(authorized.items)) {
+    return (
+      Array.isArray(actual.items) &&
+      JSON.stringify(actual.items.slice(0, authorized.items.length)) ===
+        JSON.stringify(authorized.items)
+    );
+  }
+  return JSON.stringify(actual) === JSON.stringify(authorized);
+}
+
+function localSpawnName(name: string): string {
+  const slash = name.lastIndexOf("/");
+  const dotted = name.lastIndexOf(".");
+  return name.slice(Math.max(slash, dotted) + 1);
+}
+
+function outputTexts(value: unknown, depth = 0): string[] {
+  // Inspect at most eight nested content/JSON wrappers, not arbitrary documents.
+  if (depth > 8) return [];
+  if (typeof value === "string") {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (typeof parsed === "string") return [parsed];
+      if (Array.isArray(parsed)) return outputTexts(parsed, depth + 1);
+      if (isRecord(parsed) && Array.isArray(parsed.content)) {
+        return outputTexts(parsed.content, depth + 1);
+      }
+    } catch {
+      /* Plain tool-result text is not JSON. */
+    }
+    return [value];
+  }
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item === "string") return [item];
+    if (!isRecord(item)) return [];
+    if (typeof item.text === "string") return [item.text];
+    return outputTexts(item.content, depth + 1);
+  });
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | undefined {
+  const start = text.indexOf("{");
+  if (start < 0) return undefined;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index++) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          const parsed: unknown = JSON.parse(text.slice(start, index + 1));
+          return isRecord(parsed) ? parsed : undefined;
+        } catch {
+          return undefined;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 /**
  * A call's arguments as an object. Empty text is the empty object a call
  * with no input streams as; anything else must parse to an object.
@@ -2398,6 +2674,64 @@ const QUESTION_CONTINUATION_GUIDANCE = [
 
 const REMEDY_OFFER_CONTINUATION_GUIDANCE =
   "The get_remedy_plans result immediately above offers a remedy for the blocked call. Do not reply to the user and do not ask whether to continue. Immediately call execute_remedy_plan with the exact offer_id and plan from that result. The control call opens the human review when required.";
+
+const NATIVE_DELEGATION_GUIDANCE_MARKER =
+  "collaboration.spawn_agent is declared.";
+
+function nativeDelegationGuidance(waitDeclared: boolean): string {
+  const wait = waitDeclared
+    ? " Then call collaboration.wait_agent for its result."
+    : "";
+  return [
+    NATIVE_DELEGATION_GUIDANCE_MARKER,
+    `A request for a native subagent is a direct function call with namespace collaboration and name spawn_agent.${wait}`,
+    "Do not run a nested Codex CLI as that subagent, and do not report a nested CLI result as a subagent result.",
+    "An explicit user request to run a shell command stays a shell command. Do not rewrite it into spawn_agent.",
+  ].join(" ");
+}
+
+function appendNativeDelegationGuidance(
+  context: LlmProxyBeforeModelContext,
+): void {
+  if (context.interactionType !== "openai:responses") return;
+  if (!isRecord(context.request)) return;
+  if (Array.isArray(context.request.input)) {
+    // Replace our marked guidance, including stale variants for removed tools.
+    context.request.input = context.request.input.flatMap((item) => {
+      if (
+        !isRecord(item) ||
+        item.role !== "developer" ||
+        !Array.isArray(item.content)
+      ) {
+        return [item];
+      }
+      const content = item.content.filter(
+        (block) =>
+          !(
+            isRecord(block) &&
+            block.type === "input_text" &&
+            typeof block.text === "string" &&
+            block.text.startsWith(NATIVE_DELEGATION_GUIDANCE_MARKER)
+          ),
+      );
+      if (content.length === item.content.length) return [item];
+      return content.length > 0 ? [{ ...item, content }] : [];
+    });
+  }
+  const declared = collectDeclaredToolNames(context.request);
+  const spawnDeclared = declared.some(
+    (tool) => tool.namespace === "collaboration" && tool.name === "spawn_agent",
+  );
+  if (!spawnDeclared) return;
+  const waitDeclared = declared.some(
+    (tool) => tool.namespace === "collaboration" && tool.name === "wait_agent",
+  );
+  appendQuestionContinuation({
+    request: context.request,
+    interactionType: context.interactionType,
+    guidance: nativeDelegationGuidance(waitDeclared),
+  });
+}
 
 const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE =
   "When get_remedy_plans offers a remedy for a blocked call, do not ask the user whether to submit it. Immediately call execute_remedy_plan with the exact offer_id and plan from that ruling. If execute_remedy_plan returns outcome review_required, do not reply that review is pending. Immediately call the declared ask_user tool with that offer ID in remedy_offer_ids, header Approval, and options Approve and Deny. The platform supplies the exact review text. Wait for successful authorization before retrying the blocked tool.";

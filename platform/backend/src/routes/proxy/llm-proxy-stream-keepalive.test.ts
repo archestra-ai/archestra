@@ -22,6 +22,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import config from "@/config";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -31,19 +32,15 @@ import bedrockProxyRoutes from "./routes/bedrock";
 import { STREAM_KEEPALIVE_SSE_COMMENT } from "./stream-keepalive";
 
 /** Short enough to keep the suite fast, long enough to be unambiguous. */
-const { KEEPALIVE_INTERVAL_MS } = vi.hoisted(() => ({
-  KEEPALIVE_INTERVAL_MS: 40,
-}));
+const KEEPALIVE_INTERVAL_MS = 40;
 /** Upstream delta cadence; the withheld window is DELTA_COUNT × this. */
 const DELTA_GAP_MS = 25;
 const DELTA_COUNT = 12;
 const WITHHELD_WINDOW_MS = DELTA_COUNT * DELTA_GAP_MS;
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    llmProxy: { streamKeepAliveIntervalMs: KEEPALIVE_INTERVAL_MS },
-  }),
-);
+beforeEach(() => {
+  config.llmProxy.streamKeepAliveIntervalMs = KEEPALIVE_INTERVAL_MS;
+});
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

@@ -1,25 +1,23 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { vi } from "vitest";
-import { userHasPermission } from "@/auth";
+import config from "@/config";
 import { PluginModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
-import { grantEverywhere } from "@/test/wildcard-grants";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import skillShareRoutes from "./skill-share.routes";
 
-vi.mock("@/auth");
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    plugins: { enabled: true },
-  }),
-);
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
+beforeEach(() => {
+  config.plugins.enabled = true;
+});
 
 describe("executable marketplace link permissions", () => {
   const ctx = useRouteTestApp(skillShareRoutes);
 
-  test("requires both plugin:read and plugin:admin", async ({ makeMember }) => {
+  test("requires both plugin:read and plugin:admin", async ({
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
     await makeMember(ctx.user.id, ctx.organizationId, {
       role: ADMIN_ROLE_NAME,
     });
@@ -42,21 +40,30 @@ describe("executable marketplace link permissions", () => {
     });
     if (!plugin) throw new Error("failed to seed plugin");
 
-    grantEverywhere(["plugin"], async () =>
-      Boolean(
-        await mockUserHasPermission.getMockImplementation()?.(
-          "",
-          "",
-          "plugin",
-          "admin" as never,
-        ),
-      ),
-    );
-    for (const allowedAction of ["read", "admin"] as const) {
-      mockUserHasPermission.mockImplementation(
-        async (_userId, _organizationId, _resource, action) =>
-          action === allowedAction,
-      );
+    // plugin:read is a role permission; plugin:admin is an update grant at `*`.
+    const cases: Array<[Record<string, string[]>, boolean]> = [
+      [{ plugin: ["read"] }, false],
+      [{}, true],
+    ];
+    for (const [permission, pluginAdmin] of cases) {
+      const role = await makeCustomRole(ctx.organizationId, { permission });
+      // The skill marketplace gate every link passes first.
+      await grantRoleEverywhere({
+        organizationId: ctx.organizationId,
+        resource: "skill",
+        roleId: role.id,
+        actions: ["read", "use", "manage-permissions"],
+      });
+      if (pluginAdmin) {
+        await grantRoleEverywhere({
+          organizationId: ctx.organizationId,
+          resource: "plugin",
+          roleId: role.id,
+          actions: ["update"],
+        });
+      }
+      ctx.user = await makeUser();
+      await makeMember(ctx.user.id, ctx.organizationId, { role: role.role });
       const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skill-share-links",
@@ -68,6 +75,7 @@ describe("executable marketplace link permissions", () => {
         },
       });
       expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain("plugin:read");
     }
   });
 });

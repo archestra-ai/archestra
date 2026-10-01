@@ -2818,9 +2818,14 @@ const config = {
         verificationOrigin:
           process.env.ARCHESTRA_XAI_SUBSCRIPTION_VERIFICATION_ORIGIN ||
           "https://accounts.x.ai",
-        /** First-party session protocol version this integration targets. */
+        /**
+         * Optional override for the Grok CLI version reported to the session
+         * proxy. Unset, the version pinned in services/xai-subscription-token
+         * applies.
+         */
         clientVersion:
-          process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION || "1.0.0",
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION?.trim() ||
+          undefined,
         /** Public OAuth client id used for the SuperGrok device-code login. */
         clientId:
           process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_ID ||

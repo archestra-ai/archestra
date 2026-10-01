@@ -1,19 +1,16 @@
+import { adminPermissions } from "@archestra/shared/access-control";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { type Mock, vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import { InternalMcpCatalogModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
-
-vi.mock("@/auth");
-
-const mockHasPermission = hasPermission as Mock;
 
 describe("GET /api/internal_mcp_catalog", () => {
   let app: FastifyInstance;
@@ -22,7 +19,9 @@ describe("GET /api/internal_mcp_catalog", () => {
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -54,6 +53,7 @@ describe("GET /api/internal_mcp_catalog", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -104,7 +104,6 @@ describe("GET /api/internal_mcp_catalog", () => {
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     user = member;
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
 
     const response = await app.inject({
       method: "GET",
@@ -222,23 +221,21 @@ describe("GET /api/internal_mcp_catalog", () => {
     expect(backing.appEnabled).toBe(false);
   });
 
-  test("includeApps is ignored for a caller without app:read", async () => {
-    // Grant the route's own mcpRegistry probe but deny the app:read gate.
-    mockHasPermission.mockImplementation(
-      async (permissions: Record<string, unknown>) => ({
-        success: !("app" in permissions),
-        error: null,
-      }),
-    );
-
-    const appCatalog = await InternalMcpCatalogModel.create(
-      {
-        name: "gated-app-server",
-        serverType: "app",
-        scope: "org",
-      },
-      { organizationId, authorId: user.id },
-    );
+  test("includeApps is ignored for a caller without app:read", async ({
+    makeApp,
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    // Every admin permission except the app:read gate.
+    const { app: _app, ...withoutApp } = adminPermissions;
+    const role = await makeCustomRole(organizationId, {
+      permission: withoutApp,
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: role.role });
+    // The caller authored the app, so only the app:read gate hides its backing.
+    await makeApp({ organizationId, authorId: user.id });
 
     const response = await app.inject({
       method: "GET",
@@ -247,7 +244,9 @@ describe("GET /api/internal_mcp_catalog", () => {
 
     expect(response.statusCode).toBe(200);
     expect(
-      response.json().map((item: { id: string }) => item.id),
-    ).not.toContain(appCatalog.id);
+      response
+        .json()
+        .some((item: { serverType: string }) => item.serverType === "app"),
+    ).toBe(false);
   });
 });

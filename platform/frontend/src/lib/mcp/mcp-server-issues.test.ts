@@ -1,3 +1,4 @@
+// @vitest-environment node
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type McpDeploymentStatusEntry,

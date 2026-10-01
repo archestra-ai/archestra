@@ -744,14 +744,17 @@ export async function evaluateToolCalls(
       // The target is already canonical, so it is read, not re-canonicalized.
       const tool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn = options.isSpawn?.(call.name, call.namespace) === true;
+      const spelling = spawnRetrySpelling({
+        call,
+        tool,
+        spawn,
+        canonicalize: options.canonicalize,
+      });
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
         tool,
-        ...(tool !== call.name &&
-        options.canonicalize(call.name, call.namespace) === tool
-          ? { spelling: call.name }
-          : {}),
+        ...(spelling ? { spelling } : {}),
         presentation: nativePresentation(
           options.control?.name,
           options.supportsDelegation,
@@ -1342,6 +1345,37 @@ export async function loadOfferReview(params: {
     );
     throw openappaFailure(error);
   }
+}
+
+/**
+ * The name the authorized retry instruction should use. A direct dispatch
+ * keeps the client's spelling. A native spawn also names its namespace:
+ * Codex routes `collaboration.spawn_agent` on that field, and an instruction
+ * that says only `spawn_agent` is not a call the client can replay.
+ */
+function spawnRetrySpelling(params: {
+  call: { name: string; namespace?: string };
+  tool: string;
+  spawn: boolean;
+  canonicalize: (name: string, namespace?: string) => string;
+}): string | undefined {
+  if (
+    params.tool !== params.call.name &&
+    params.canonicalize(params.call.name, params.call.namespace) === params.tool
+  ) {
+    return params.call.name;
+  }
+  if (
+    !params.spawn ||
+    !params.call.namespace ||
+    params.call.namespace === "functions"
+  ) {
+    return undefined;
+  }
+  const prefix = `${params.call.namespace}.`;
+  return params.call.name.startsWith(prefix)
+    ? params.call.name
+    : `${prefix}${params.call.name}`;
 }
 
 function nativePresentation(

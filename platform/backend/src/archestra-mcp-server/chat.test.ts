@@ -5,12 +5,12 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ASK_USER_FULL_NAME,
 } from "@archestra/shared";
-import { vi } from "vitest";
 import config from "@/config";
 import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
 import { beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { Agent } from "@/types";
 import {
   type ArchestraContext,
@@ -18,7 +18,8 @@ import {
   getArchestraMcpTools,
 } from ".";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("chat tool execution", () => {
   let testAgent: Agent;
@@ -161,6 +162,33 @@ describe("chat tool execution", () => {
     const text = (result.content[0] as any).text;
     expect(text).toContain("This client did not answer the choice form");
     expect(text).toContain("Do not ask this as a plain-text chat question");
+  });
+
+  test("ask_user does not attribute an automatic client decline to the user", async () => {
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: {
+            action: "decline" as const,
+            _meta: { approvals_reviewer: "auto_review" },
+          },
+        }),
+      },
+    };
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Which option?",
+        options: [{ label: "One" }, { label: "Two" }],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("This client did not answer the choice form");
+    expect(text).not.toContain("The user declined");
   });
 
   test("ask_user returns the selected option after elicitation", async () => {
@@ -617,6 +645,46 @@ describe("chat tool execution", () => {
     expect(text).toContain("do not retry it");
   });
 
+  test("automatic client decline cannot be recorded as a human HITL denial", async () => {
+    const offerId = "offer-auto-decline";
+    const session = chatOpenAppaSession(
+      mockContext.organizationId as string,
+      mockContext.userId as string,
+      sessionId,
+    );
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Review this exact call." },
+    });
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: {
+            action: "decline" as const,
+            _meta: { approvals_reviewer: "auto_review" },
+          },
+        }),
+      },
+    };
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Approve this?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        remedy_offers: [sessionOffer(offerId)],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "cannot show the HITL review",
+    );
+    expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+  });
+
   test("parallel decisions keep accepted and declined offers separate", async () => {
     mockContext = {
       ...mockContext,
@@ -800,7 +868,7 @@ describe("chat tool execution", () => {
       "If this question offered the remedy, the user did not accept it: do not retry the blocked call and do not ask again.",
     );
     expect((result.content[0] as any).text).toContain(
-      "Do not ask it again, offer the same options in prose, or end with a follow-up question or invitation.",
+      "Do not ask again, offer the same options in prose, or end with a follow-up question or invitation.",
     );
     expect((result.content[0] as any).text).not.toContain(
       "Live remedy offers:",
@@ -872,7 +940,7 @@ describe("chat tool execution", () => {
       selected: [],
     });
     expect((result.content[0] as any).text).toContain(
-      "Do not ask it again, offer the same options in prose, or end with a follow-up question or invitation.",
+      "Do not ask again, offer the same options in prose, or end with a follow-up question or invitation.",
     );
     expect((result.content[0] as any).text).not.toContain(
       "Live remedy offers:",

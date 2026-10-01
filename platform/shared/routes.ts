@@ -145,6 +145,7 @@ export const RouteId = {
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
+  McpGatewayDelete: "mcpGatewayDelete",
   McpGatewaySseMessage: "mcpGatewaySseMessage", // Legacy HTTP+SSE message endpoint
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
   McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
@@ -907,6 +908,9 @@ export const RouteId = {
   SetProjectInstructions: "setProjectInstructions",
   PinProject: "pinProject",
   UnpinProject: "unpinProject",
+  GetProjectApps: "getProjectApps",
+  LinkProjectApp: "linkProjectApp",
+  UnlinkProjectApp: "unlinkProjectApp",
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
   UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 

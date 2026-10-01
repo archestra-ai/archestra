@@ -311,7 +311,12 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
     case "codex":
       if (ctx.mcp) {
         steps.push(
-          `Run \`codex\` — it opens your browser to finish the OAuth handshake for "${ctx.mcp.serverName}".`,
+          `If registration printed "Successfully logged in.", OAuth for "${ctx.mcp.serverName}" is already cached; do not repeat login. Otherwise check \`codex mcp list\` and run \`codex mcp login ${ctx.mcp.serverName}\` only when Auth is "Not logged in". Keep any pending login running until its browser callback finishes.`,
+        );
+      }
+      if (ctx.mcp || ctx.proxy) {
+        steps.push(
+          `Verification command: & (Join-Path $env:USERPROFILE ${psq(`${CODEX_GUARD_CLIENT.psScriptRelpath}.verify.ps1`)}) -CodexPath (Get-Command codex -CommandType Application | Select-Object -First 1).Source -OptionsBase64 ${psq(Buffer.from(JSON.stringify({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName })).toString("base64"))}`,
         );
       }
       if (ctx.proxy) {

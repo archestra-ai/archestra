@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -7,10 +8,6 @@ import AuditLogModel from "@/models/audit-log";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-
 describe("team routes", () => {
   let app: FastifyInstanceWithZod;
   let adminUser: User;
@@ -18,7 +15,9 @@ describe("team routes", () => {
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
     vi.clearAllMocks();
-    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: adminUser.id } }) as never,
+    );
 
     adminUser = await makeAdmin();
     const organization = await makeOrganization();
@@ -97,10 +96,6 @@ describe("team routes", () => {
       makeTeamMember,
     }) => {
       await MemberModel.updateRole(adminUser.id, organizationId, "member");
-      vi.mocked(hasPermission).mockResolvedValue({
-        success: false,
-        error: null,
-      });
       const own = await makeTeam(organizationId, adminUser.id);
       const other = await makeTeam(organizationId, adminUser.id);
       await makeTeamMember(own.id, adminUser.id, { role: "admin" });

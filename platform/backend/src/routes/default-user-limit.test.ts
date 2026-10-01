@@ -5,8 +5,6 @@ import { EnvironmentDefaultUserLimitModel, EnvironmentModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/observability");
-
 describe("default-user-limit routes", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;

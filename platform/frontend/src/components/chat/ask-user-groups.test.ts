@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import { identifyAskUserGroups } from "./ask-user-groups";

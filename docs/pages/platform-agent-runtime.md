@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run coding agents and delegated tasks in isolated containers
-lastUpdated: "2026-09-23"
+lastUpdated: "2026-09-30"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -267,7 +267,7 @@ Runtime sessions use [granular access control](/docs/platform-access-control#ses
 
 ## View Runs From An Agent
 
-The Agent's **Runs** tab opens live terminals and completed recordings. Reattach while the client remains alive, or resume its saved conversation after suspension. Detaching leaves the run active.
+The Agent's **Runs** tab opens live terminals and completed recordings. **Resume** reopens the saved session without sending an instruction. You can type directly into the terminal once it connects. Detaching leaves the run active.
 
 Run ownership follows the user who started it, not the Agent creator. Sharing grants read-only output access, never an interactive terminal. Agent administrators can read output even without an explicit share. Project access also permits reading runs when paired with permission to read all project sessions.
 

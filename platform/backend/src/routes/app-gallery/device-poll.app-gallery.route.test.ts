@@ -2,13 +2,12 @@ import { APPS_HACKATHON_OPENS_AT_MS } from "@archestra/shared";
 import { afterEach, beforeEach, describe, expect, vi } from "vitest";
 import config from "@/config";
 import { test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useRouteTestApp } from "@/test/route-test-app";
 import appGalleryRoutes from "./app-gallery.routes";
 
-// cacheManager (used by the rate limiter) needs a live PostgreSQL connection
-// that PGlite tests don't have; back it with the canonical Map-backed fake from
-// src/__mocks__/cache-manager.ts (reset before every test).
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("POST /api/app-gallery/device/poll", () => {
   const ctx = useRouteTestApp(appGalleryRoutes);

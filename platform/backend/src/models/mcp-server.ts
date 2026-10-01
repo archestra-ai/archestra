@@ -19,13 +19,11 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { isServiceAccountUserId } from "@/auth/utils";
-import mcpClient from "@/clients/mcp-client";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
-import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
@@ -1686,6 +1684,11 @@ class McpServerModel {
 
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
+      // Lazy (here and for `mcp-client` below): the runtime and client import
+      // the service layer, which would otherwise load with every model.
+      const { McpServerRuntimeManager } = await import(
+        "@/k8s/mcp-server-runtime"
+      );
       try {
         await McpServerRuntimeManager.removeMcpServer(id);
         logger.info(
@@ -2035,6 +2038,7 @@ class McpServerModel {
       }
     }
 
+    const { default: mcpClient } = await import("@/clients/mcp-client");
     try {
       // Use the new structured API for all server types
       const tools = await mcpClient.connectAndGetTools({
@@ -2239,6 +2243,7 @@ class McpServerModel {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
         if (catalogItem?.serverType === "remote") {
+          const { default: mcpClient } = await import("@/clients/mcp-client");
           // Use a temporary ID for validation (we don't have a real server ID yet)
           const tools = await mcpClient.connectAndGetTools({
             catalogItem,
@@ -2453,6 +2458,9 @@ class McpServerModel {
       // Tear the deployment (and its live K8s Secret) down before dropping the
       // row — `removeMcpServer` resolves the deployment through the DB row.
       if (server.serverType === "local") {
+        const { McpServerRuntimeManager } = await import(
+          "@/k8s/mcp-server-runtime"
+        );
         try {
           await McpServerRuntimeManager.removeMcpServer(server.id);
         } catch (error) {

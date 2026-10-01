@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
+import { makeFastImageEntrypoint } from "@/test/subprocess-entrypoint";
 
 const exec = promisify(execFile);
 
@@ -62,44 +63,42 @@ describe.each([
           path.join(runtime, marker),
           state === "present" ? "session-original\n" : "",
         );
-      const execution = exec(
-        "bash",
-        [
-          path.resolve(
-            import.meta.dirname,
-            `../../../../agent_images/bin/archestra-${client}`,
-          ),
-        ],
-        {
-          cwd: root,
-          env: {
-            PATH: `${bin}:${process.env.PATH}`,
-            HOME: root,
-            ARCHESTRA_LLM_PROXY_PROTOCOL: protocol,
-            ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
-            ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR: runtime,
-            ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
-            ARCHESTRA_AGENT_RUNTIME_TASK_ID: "test-task",
-            ARCHESTRA_AGENT_RUNTIME_TASK: "Continue the same work",
-            ARCHESTRA_AGENT_RUNTIME_MODE: "interactive",
-            ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH: "subscription",
-            ARCHESTRA_AGENT_RUNTIME_CONTINUE: "1",
-            ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
-            ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
-            ANTHROPIC_AUTH_TOKEN: "test-key",
-            CLAUDE_CODE_OAUTH_TOKEN: "test-subscription-token",
-            ...(client === "claude-code"
-              ? {
-                  ANTHROPIC_BASE_URL: "http://localhost:9000/v1/anthropic/test",
-                  ANTHROPIC_CUSTOM_HEADERS:
-                    "X-Archestra-Virtual-Key: test-passthrough-key",
-                }
-              : {}),
-            OPENAI_API_KEY: "test-key",
-            OPENAI_BASE_URL: "http://localhost:9000/v1/test",
-          },
+      const entrypoint =
+        client === "claude-code"
+          ? await makeFastImageEntrypoint(root, "archestra-claude-code")
+          : path.resolve(
+              import.meta.dirname,
+              `../../../../agent_images/bin/archestra-${client}`,
+            );
+      const execution = exec("bash", [entrypoint], {
+        cwd: root,
+        env: {
+          PATH: `${bin}:${process.env.PATH}`,
+          HOME: root,
+          ARCHESTRA_LLM_PROXY_PROTOCOL: protocol,
+          ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR: runtime,
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
+          ARCHESTRA_AGENT_RUNTIME_TASK_ID: "test-task",
+          ARCHESTRA_AGENT_RUNTIME_TASK: "Continue the same work",
+          ARCHESTRA_AGENT_RUNTIME_MODE: "interactive",
+          ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH: "subscription",
+          ARCHESTRA_AGENT_RUNTIME_CONTINUE: "1",
+          ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
+          ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
+          ANTHROPIC_AUTH_TOKEN: "test-key",
+          CLAUDE_CODE_OAUTH_TOKEN: "test-subscription-token",
+          ...(client === "claude-code"
+            ? {
+                ANTHROPIC_BASE_URL: "http://localhost:9000/v1/anthropic/test",
+                ANTHROPIC_CUSTOM_HEADERS:
+                  "X-Archestra-Virtual-Key: test-passthrough-key",
+              }
+            : {}),
+          OPENAI_API_KEY: "test-key",
+          OPENAI_BASE_URL: "http://localhost:9000/v1/test",
         },
-      );
+      });
       if (state === "present") {
         await execution;
         const args = (await readFile(path.join(runtime, "args"), "utf8"))
@@ -126,6 +125,8 @@ describe.each([
         ).rejects.toMatchObject({ code: "ENOENT" });
       }
     } finally {
+      // OpenCode owns read-only config directories; restore fixture cleanup access.
+      await exec("chmod", ["-R", "u+w", root]);
       await rm(root, { recursive: true, force: true });
     }
   });

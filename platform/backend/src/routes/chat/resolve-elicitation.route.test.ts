@@ -3,12 +3,12 @@ import { vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { createChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useRouteTestApp } from "@/test/route-test-app";
 import chatRoutes from "./routes";
 
-// The shared cache the waiter and the answer route meet in, as a Map-backed
-// fake with real get/set/getAndDelete semantics.
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("POST /api/chat/elicitation/:id", () => {
   const ctx = useRouteTestApp(chatRoutes);

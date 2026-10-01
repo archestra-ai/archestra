@@ -182,6 +182,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
+  // Linking or unlinking an app changes the project's `appIds` snapshot. Both
+  // methods are a project update — without this, DELETE would walk up to
+  // project.deleted.
+  "/api/projects/:id/apps/:appId": {
+    resourceType: "project",
+    action: "project.updated",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
   "/api/plugins/:id/transfer-ownership": {
     resourceType: "plugin",
     action: "plugin.updated",

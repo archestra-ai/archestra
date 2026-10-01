@@ -2,6 +2,7 @@ import { RouteId } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import { and, eq, sql } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
+import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -17,12 +18,6 @@ import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
 import websocketService from "@/websocket";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
 
 const NAMESPACE = "hard-reset-test-namespace";
 const DEPLOYMENT_NAME = "mcp-wedged-server";
@@ -351,7 +346,9 @@ describe("POST /api/mcp_server/:id/hard-reset", () => {
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     user = await makeUser();
     organizationId = (await makeOrganization()).id;

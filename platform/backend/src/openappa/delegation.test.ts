@@ -284,6 +284,77 @@ describe("collecting delegation markers", () => {
     });
     expect(bound).toEqual({});
   });
+
+  test("collects a signed opaque Codex task before restoring its exact ciphertext", () => {
+    const ciphertext = "gAAAA_native_encrypted_task==";
+    const marker = mintDelegationMarker({
+      ...SPAWN,
+      prompt: ciphertext,
+      spawnCallId: "call-spawn",
+    });
+    const encrypted = {
+      type: "encrypted_content",
+      encrypted_content: `${ciphertext}\n\n${marker}`,
+    };
+    const body = {
+      input: [
+        {
+          type: "agent_message",
+          author: "/root",
+          recipient: "/root/worker",
+          content: [
+            {
+              type: "input_text",
+              text: "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\n",
+            },
+            encrypted,
+          ],
+        },
+        {
+          type: "reasoning",
+          encrypted_content: "opaque reasoning must not change",
+        },
+      ],
+    };
+    const markers = collectDelegationMarkers({
+      family: "openai:responses",
+      body,
+    });
+    expect(markers).toHaveLength(1);
+    expect(markers[0].spawnCallId).toBe("call-spawn");
+    expect(verify(markers[0])).toBe(true);
+    expect(verify(markers[0], { callerId: "different-caller" })).toBe(false);
+    stripDelegationMarkers({ family: "openai:responses", body });
+    expect(encrypted.encrypted_content).toBe(ciphertext);
+    expect(body.input[1]).toEqual({
+      type: "reasoning",
+      encrypted_content: "opaque reasoning must not change",
+    });
+    expect(
+      collectDelegationMarkers({ family: "openai:responses", body }),
+    ).toEqual([]);
+    const changed = structuredClone(body);
+    if (!changed.input[0].content) throw new Error("missing task content");
+    changed.input[0].content[1] = {
+      type: "encrypted_content",
+      encrypted_content: `different encrypted task\n\n${marker}`,
+    };
+    const [tampered] = collectDelegationMarkers({
+      family: "openai:responses",
+      body: changed,
+    });
+    expect(verify(tampered)).toBe(false);
+    changed.input[0].content[0] = {
+      type: "input_text",
+      text: "Message Type: FINAL_ANSWER\nPayload:\n",
+    };
+    expect(
+      collectDelegationMarkers({ family: "openai:responses", body: changed }),
+    ).toEqual([]);
+    const completed = structuredClone(changed);
+    stripDelegationMarkers({ family: "openai:responses", body: changed });
+    expect(changed).toEqual(completed);
+  });
 });
 
 describe("stripping delegation markers", () => {

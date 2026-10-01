@@ -1860,6 +1860,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetProjectInstructions]: { project: ["update"] },
   [RouteId.PinProject]: { project: ["read"] },
   [RouteId.UnpinProject]: { project: ["read"] },
+  // Linked apps: project membership plus app read. Each app is re-checked
+  // against the caller's own app access in the handler, so a link never
+  // widens who can open an app.
+  [RouteId.GetProjectApps]: { project: ["read"], app: ["read"] },
+  [RouteId.LinkProjectApp]: { project: ["read"], app: ["read"] },
+  [RouteId.UnlinkProjectApp]: { project: ["read"], app: ["read"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
   // Editing a file's text content shares the delete path's authorization
   // (author / project access), enforced per-file in the store handler.
@@ -1965,6 +1971,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // MCP Gateway Routes - available to all authenticated users
   [RouteId.McpGatewayGet]: {}, // MCP transport probe; authenticates gateway credentials
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
+  [RouteId.McpGatewayDelete]: {}, // Session cleanup; validates gateway credentials and signed session ownership
   [RouteId.McpGatewaySseMessage]: {}, // Legacy HTTP+SSE message endpoint; authenticates gateway credentials
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
   [RouteId.McpServerProxyPost]: {}, // Server-scoped Apps proxy; access enforced in-handler

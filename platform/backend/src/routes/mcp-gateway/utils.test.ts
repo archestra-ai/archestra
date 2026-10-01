@@ -31,7 +31,7 @@ import {
   type ListToolsResult,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { onTestFinished, vi } from "vitest";
+import { type MockInstance, onTestFinished, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import {
   takeLeadingAttestation,
@@ -53,31 +53,29 @@ import {
   buildConnectorResourceUri,
 } from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
-import type { JwksValidationResult } from "@/services/jwks-validator";
-import { describe, expect, test } from "@/test";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: true },
-  }),
-);
-
-const mockValidateJwt = vi.fn<() => Promise<JwksValidationResult | null>>();
-
-vi.mock("@/services/jwks-validator", () => ({
-  jwksValidator: {
-    validateJwt: (...args: unknown[]) => mockValidateJwt(...(args as [])),
-  },
-}));
-
-const {
+import { jwksValidator } from "@/services/jwks-validator";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
   authenticateMCPGatewayRequest,
   createAgentServer,
   ensureRequestSocketDestroySoon,
+  validateExternalIdpToken,
   validateMCPGatewayToken,
   validateOAuthToken,
-  validateExternalIdpToken,
-} = await import("./utils");
+} from "./utils";
+
+let mockValidateJwt: MockInstance<typeof jwksValidator.validateJwt>;
+
+beforeEach(() => {
+  config.enterpriseFeatures.core = true;
+  mockValidateJwt = vi
+    .spyOn(jwksValidator, "validateJwt")
+    .mockResolvedValue(null);
+});
+
+afterEach(() => {
+  mockValidateJwt.mockRestore();
+});
 
 type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
 type TestCallToolHandler = (
@@ -1675,6 +1673,75 @@ describe("createAgentServer tools/list", () => {
     ] as const) {
       expect(names).toContain(archestraMcpBranding.getToolName(policyTool));
     }
+    expect(
+      response.tools.find(
+        (tool) =>
+          tool.name ===
+          archestraMcpBranding.getToolName("get_guardrails_policy"),
+      )?.annotations,
+    ).toMatchObject({ readOnlyHint: true });
+    expect(
+      response.tools.find(
+        (tool) =>
+          tool.name ===
+          archestraMcpBranding.getToolName("update_guardrails_policy"),
+      )?.annotations?.readOnlyHint,
+    ).not.toBe(true);
+  });
+
+  test("assigned read-only policy tool keeps its annotation without marking writes safe", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "full",
+    });
+    await seedAndAssignArchestraTools(gateway.id);
+    const { server } = await createAgentServer({
+      agentId: gateway.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const handler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!handler) throw new Error("Expected tools/list handler");
+    const response = await handler({ method: "tools/list", params: {} });
+    expect(
+      response.tools.find(
+        (tool) =>
+          tool.name ===
+          archestraMcpBranding.getToolName("get_guardrails_policy"),
+      )?.annotations,
+    ).toMatchObject({ readOnlyHint: true });
+    expect(
+      response.tools.find(
+        (tool) =>
+          tool.name ===
+          archestraMcpBranding.getToolName("update_guardrails_policy"),
+      )?.annotations?.readOnlyHint,
+    ).not.toBe(true);
   });
 
   test.for([
@@ -3615,6 +3682,47 @@ describe("createAgentServer tools/list", () => {
       action: "accept",
       selected: ["Accept for this session"],
     });
+  });
+
+  test("ask_user treats Codex automatic MCP decline as no visible form", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const handler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    if (!handler) throw new Error("Expected tools/call handler");
+    const result = await handler(
+      {
+        method: "tools/call",
+        params: {
+          name: TOOL_ASK_USER_FULL_NAME,
+          arguments: {
+            question: "Choose one",
+            options: [{ label: "One" }, { label: "Two" }],
+          },
+          _meta: {
+            "io.modelcontextprotocol/clientCapabilities": { elicitation: {} },
+          },
+        },
+      },
+      {
+        sendRequest: vi.fn().mockResolvedValue({
+          action: "decline",
+          _meta: { approvals_reviewer: "auto_review" },
+        }),
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "This client did not answer the choice form",
+    );
+    expect(JSON.stringify(result.content)).not.toContain("The user declined");
   });
 
   test("ask_user reports a question nobody answered in time, not a client without forms", async ({

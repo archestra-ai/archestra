@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
 import { toConsultView } from "./consult-details";

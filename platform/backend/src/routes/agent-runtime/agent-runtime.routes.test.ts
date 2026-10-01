@@ -1708,6 +1708,22 @@ describe("Agent Runtime routes", () => {
       before: { taskId: task.id },
       after: { taskId: next.id, previousTaskId: task.id, attachmentCount: 1 },
     });
+    const resume = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/continue`,
+      payload: {},
+    });
+    expect(resume.statusCode, resume.body).toBe(200);
+    expect(resume.json().prompt).toBe("");
+    expect(startDetachedAgentTask).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        message: "",
+        systemParams: expect.objectContaining({
+          runtimeMode: "interactive",
+          resumeFromTaskId: task.id,
+        }),
+      }),
+    );
     await AgentWorkspaceModel.transition({
       id: workspace.id,
       from: "idle",

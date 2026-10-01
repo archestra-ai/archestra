@@ -259,7 +259,7 @@ jobs:
   # codegen can commit its docs/openapi.json version bump to the PR.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-ci[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
+    if: github.event_name == 'merge_group' || github.event_name == 'pull_request' # VERIFY-ONLY
     # On a 16-vcpu Blacksmith runner: turbo fans out six
     # check tasks and @frontend:check:ci itself runs tsc/vitest/knip/biome
     # concurrently — so it scales with cores: the same all-cache-miss
@@ -737,7 +737,7 @@ jobs:
   # docs/openapi.json, which the codegen writes — runs them.
   backend-test-inputs:
     name: Detect Backend Test Inputs
-    if: github.event_name == 'merge_group'
+    if: github.event_name == 'merge_group' || github.event_name == 'pull_request' # VERIFY-ONLY
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -758,8 +758,8 @@ jobs:
         id: diff
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.merge_group.base_sha }}
-          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }} # VERIFY-ONLY fallback
+          HEAD_SHA: ${{ github.event.merge_group.head_sha || 'HEAD' }} # VERIFY-ONLY fallback
         run: |
           set -euo pipefail
           git -c credential.helper= \
@@ -792,7 +792,7 @@ jobs:
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
     needs: [backend-test-inputs]
-    if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
+    if: (github.event_name == 'merge_group' || github.event_name == 'pull_request') && needs.backend-test-inputs.outputs.run == 'true' # VERIFY-ONLY
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # A merge-queue shard can take about 15 minutes, including setup and
     # cleanup. Leave room for cold caches while bounding hung test workers.
@@ -903,7 +903,7 @@ jobs:
     # Skip under the required name on PRs. On merge_group, always() makes
     # failed, cancelled, or skipped shards turn the gate red — except shards
     # skipped because the input check found no backend changes.
-    if: always() && github.event_name == 'merge_group'
+    if: always() && (github.event_name == 'merge_group' || github.event_name == 'pull_request') # VERIFY-ONLY
     needs: [backend-test-inputs, backend-unit-tests]
     permissions: {}
     steps:
@@ -930,7 +930,7 @@ jobs:
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW runner)
-    if: github.event_name == 'merge_group'
+    if: github.event_name == 'merge_group' || github.event_name == 'pull_request' # VERIFY-ONLY
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
     permissions:
@@ -1076,7 +1076,7 @@ jobs:
   frontend-integration-tests-gate:
     name: Frontend Integration Tests (MSW)
     runs-on: ubuntu-latest
-    if: always() && github.event_name == 'merge_group'
+    if: always() && (github.event_name == 'merge_group' || github.event_name == 'pull_request') # VERIFY-ONLY
     needs: [frontend-integration-tests]
     permissions: {}
     steps:

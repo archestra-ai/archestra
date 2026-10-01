@@ -270,6 +270,9 @@ function CatalogItemDetails({
   const { data: userCanCreateCatalogItem } = useHasPermissions({
     mcpRegistry: ["create"],
   });
+  const { data: userCanViewDeploymentYaml } = useHasPermissions({
+    mcpAdvancedSettings: ["read"],
+  });
 
   const { data: allMcpServers } = useMcpServers();
   const { statuses: deploymentStatuses, state: deploymentFeedState } =
@@ -335,7 +338,8 @@ function CatalogItemDetails({
   const diagnosticPanels = DIAGNOSTIC_PANELS.filter(
     (panel) =>
       (variant === "local" || !panel.localOnly) &&
-      !(isPlaywright && panel.id === "yaml"),
+      !(isPlaywright && panel.id === "yaml") &&
+      (panel.id !== "yaml" || userCanViewDeploymentYaml),
   );
   // Diagnostics need at least one install to read from.
   const diagnosticTabs = allInstalls.length > 0 ? diagnosticPanels : [];

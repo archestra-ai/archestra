@@ -19,6 +19,8 @@ interface K8sYamlEditorProps {
   onChange: (value: string) => void;
   /** Whether the catalog item has been saved */
   isSaved?: boolean;
+  /** Show the YAML without letting the user change or reset it */
+  readOnly?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export function K8sYamlEditor({
   value,
   onChange,
   isSaved = false,
+  readOnly = false,
 }: K8sYamlEditorProps) {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
@@ -129,18 +132,20 @@ export function K8sYamlEditor({
       )}
 
       {/* Editor Header with Reset Button */}
-      <div className="flex justify-end items-center">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleResetToDefault}
-          disabled={!catalogId || resetYaml.isPending}
-        >
-          <RefreshCw className="h-3 w-3 mr-1" />
-          Reset to Default
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="flex justify-end items-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleResetToDefault}
+            disabled={!catalogId || resetYaml.isPending}
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Reset to Default
+          </Button>
+        </div>
+      )}
 
       {/* Monaco Editor */}
       <div className="min-h-0 flex-1 overflow-hidden rounded-md border">
@@ -155,6 +160,7 @@ export function K8sYamlEditor({
             </div>
           }
           options={{
+            readOnly,
             minimap: { enabled: false },
             lineNumbers: "on",
             folding: true,

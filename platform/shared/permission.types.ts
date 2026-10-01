@@ -40,6 +40,7 @@ export const resources = [
   "identityProvider",
   "mcpRegistry",
   "mcpServerInstallation",
+  "mcpAdvancedSettings",
   "knowledgeSource",
   "knowledgeSettings",
   "environment",
@@ -111,6 +112,7 @@ export const resourceLabels: Record<Resource, string> = {
   invitation: "Invitations",
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
+  mcpAdvancedSettings: "MCP Advanced Settings",
   knowledgeSource: "Knowledge Sources",
   knowledgeSettings: "Knowledge Settings",
   environment: "Environments",
@@ -180,6 +182,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpSettings: "MCP settings (online catalog availability)",
   skillsSettings: "Skills settings (online catalog availability)",
   mcpServerInstallation: "Installed MCP servers and their runtime",
+  mcpAdvancedSettings: "Kubernetes deployment YAML for self-hosted MCP servers",
   environment: "Deployment environments (namespace) for catalog items",
   credential:
     "Reusable custom secrets, GitHub tokens, and GitHub Apps across the platform",
@@ -238,6 +241,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "toolPolicy",
     "mcpRegistry",
     "mcpServerInstallation",
+    "mcpAdvancedSettings",
     "mcpSettings",
   ],
   LLM: [

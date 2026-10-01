@@ -57,6 +57,9 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
+  // Custom deployment YAML controls the pod spec of self-hosted MCP servers,
+  // so it is held back from editors and members by default.
+  mcpAdvancedSettings: ["read", "update"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
 
@@ -130,6 +133,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
+  mcpAdvancedSettings: [],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
 
@@ -209,6 +213,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   toolPolicy: ["read"],
   mcpRegistry: ["read", "update"],
   mcpServerInstallation: ["read", "create", "delete"],
+  mcpAdvancedSettings: [],
   environment: ["read"],
   // minting installation tokens from a stored App credential is privileged;
   // default members get no access — editors and admins manage/use App configs
@@ -448,6 +453,10 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:update": "Modify MCP registry entries",
   "mcpRegistry:delete":
     "Remove, view deleted, and restore MCP registry entries within your access",
+  "mcpAdvancedSettings:read":
+    "View the Kubernetes deployment YAML of self-hosted MCP servers",
+  "mcpAdvancedSettings:update":
+    "Edit the Kubernetes deployment YAML of self-hosted MCP servers",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
@@ -903,12 +912,14 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetDeploymentYamlPreview]: {
     mcpRegistry: ["read"],
+    mcpAdvancedSettings: ["read"],
   },
   [RouteId.ValidateDeploymentYaml]: {
-    mcpRegistry: ["read"],
+    mcpAdvancedSettings: ["read"],
   },
   [RouteId.ResetDeploymentYaml]: {
     mcpRegistry: ["update"],
+    mcpAdvancedSettings: ["update"],
   },
   [RouteId.GetK8sImagePullSecrets]: {
     mcpRegistry: ["read"],

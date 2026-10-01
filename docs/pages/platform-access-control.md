@@ -246,6 +246,8 @@ The following table lists all available permissions that can be assigned to cust
 | `llmVirtualKey:delete` | Delete LLM virtual keys |
 | `log:read` | View your own LLM proxy and MCP tool call logs in the active organization |
 | `log:admin` | View every LLM and MCP log in your organization (also requires Read) |
+| `mcpAdvancedSettings:read` | View the Kubernetes deployment YAML of self-hosted MCP servers |
+| `mcpAdvancedSettings:update` | Edit the Kubernetes deployment YAML of self-hosted MCP servers |
 | `mcpGateway:read` | View and list MCP gateways |
 | `mcpGateway:create` | Create new MCP gateways |
 | `mcpGateway:update` | Modify MCP gateway configuration |

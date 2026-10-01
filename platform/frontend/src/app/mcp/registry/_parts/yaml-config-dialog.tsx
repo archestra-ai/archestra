@@ -18,6 +18,7 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useGetDeploymentYamlPreview,
@@ -56,6 +57,9 @@ export function YamlConfigContent({
 }: YamlConfigContentProps) {
   const appName = useAppName();
   const updateMutation = useUpdateInternalMcpCatalogItem();
+  const { data: canEditYaml } = useHasPermissions({
+    mcpAdvancedSettings: ["update"],
+  });
 
   // Fetch the deployment YAML preview (generates default if not stored)
   const { data: yamlPreview, isLoading: isLoadingYaml } =
@@ -221,10 +225,12 @@ export function YamlConfigContent({
               value={deploymentYaml}
               onChange={handleYamlChange}
               isSaved={true}
+              readOnly={!canEditYaml}
             />
           ))}
 
-        {(!hideHeader || hasYamlChanged) &&
+        {canEditYaml &&
+          (!hideHeader || hasYamlChanged) &&
           (() => {
             const Footer = hideHeader ? DialogStickyFooter : DialogFooter;
             return (

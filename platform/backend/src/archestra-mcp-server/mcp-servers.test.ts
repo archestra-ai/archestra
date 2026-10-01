@@ -329,6 +329,143 @@ describe("mcp server tool execution", () => {
   });
 });
 
+describe("MCP server tools and custom deployment YAML", () => {
+  const EDIT_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`;
+  const CREATE_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_SHORT_NAME}`;
+  const DEPLOYMENT_YAML = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: example.invalid/mcp-server:1.0
+`;
+
+  async function makeContext(
+    role: string,
+    fixtures: {
+      makeAgent: any;
+      makeMember: any;
+      makeOrganization: any;
+      makeUser: any;
+    },
+  ) {
+    const org = await fixtures.makeOrganization();
+    const user = await fixtures.makeUser();
+    await fixtures.makeMember(user.id, org.id, { role });
+    const agent = await fixtures.makeAgent({ organizationId: org.id });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    return { context, organizationId: org.id, userId: user.id };
+  }
+
+  test("an editor cannot set deployment YAML through edit_mcp_config", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId, userId } = await makeContext("editor", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+      authorId: userId,
+    });
+
+    const result = await executeArchestraTool(
+      EDIT_TOOL,
+      { id: catalog.id, deploymentSpecYaml: DEPLOYMENT_YAML },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "mcpAdvancedSettings:update",
+    );
+    const persisted = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(persisted?.deploymentSpecYaml).toBeNull();
+  });
+
+  test("an editor cannot create a server with deployment YAML through create_mcp_server", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId } = await makeContext("editor", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+
+    const result = await executeArchestraTool(
+      CREATE_TOOL,
+      {
+        name: "Editor Yaml Server",
+        serverType: "local",
+        command: "node",
+        deploymentSpecYaml: DEPLOYMENT_YAML,
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "mcpAdvancedSettings:update",
+    );
+    expect(
+      await InternalMcpCatalogModel.findRootByNameInOrg({
+        name: "Editor Yaml Server",
+        organizationId,
+      }),
+    ).toBeFalsy();
+  });
+
+  test("an admin can set deployment YAML through edit_mcp_config", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId } = await makeContext(ADMIN_ROLE_NAME, {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+    });
+
+    const result = await executeArchestraTool(
+      EDIT_TOOL,
+      { id: catalog.id, deploymentSpecYaml: DEPLOYMENT_YAML },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const persisted = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
+  });
+});
+
 describe("deploy_mcp_server", () => {
   const DEPLOY_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}deploy_mcp_server`;
 

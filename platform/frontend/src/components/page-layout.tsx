@@ -50,7 +50,6 @@ export function PageLayout({
   children,
   tabs = [],
   actionButton,
-  actionInlineOnMobile = false,
   mobileVisibleCount = 3,
   maxWidth: maxWidthKey = "wide",
   minWidth: minWidthKey = "none",
@@ -109,8 +108,6 @@ export function PageLayout({
    */
   status?: React.ReactNode;
   actionButton?: React.ReactNode;
-  /** Keep a compact action beside the title on narrow screens. */
-  actionInlineOnMobile?: boolean;
   mobileVisibleCount?: number;
   /**
    * The column the header row and the content share. `wide` is the band list
@@ -213,13 +210,11 @@ export function PageLayout({
               maxWidthKey === "wizard" ? "pt-4 sm:pt-6" : "pt-6",
             )}
           >
-            {/* On wizard-width detail pages, phone actions share the back-link
-                row. The title can then
-                use the full width, and the actions do not create a spare row
-                between the title and tabs. */}
+            {/* On phones, the title and actions share a row while the
+                description uses the full width below them. */}
             <div
               className={cn(
-                "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 sm:gap-x-6",
+                "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 sm:gap-x-6 sm:gap-y-3",
                 maxWidthKey === "wizard" ? "mb-4 sm:mb-6" : "mb-6",
                 maxWidthKey === "wizard" && description && "sm:min-h-[3.75rem]",
               )}
@@ -231,9 +226,7 @@ export function PageLayout({
               )}
               <div
                 className={cn(
-                  actionInlineOnMobile && !backLink
-                    ? "col-span-1 min-w-0"
-                    : "col-span-2 min-w-0 sm:col-span-1",
+                  "contents sm:col-start-1 sm:block sm:min-w-0",
                   backLink ? "row-start-2" : "row-start-1",
                   maxWidthKey === "wizard" &&
                     description &&
@@ -257,18 +250,19 @@ export function PageLayout({
                   probe does. */}
                 <div
                   className={cn(
-                    "flex min-w-0 items-center gap-2",
+                    "col-start-1 flex min-w-0 items-center gap-2",
+                    backLink ? "row-start-2" : "row-start-1",
                     // 40px even without an icon, so a plain text title and
                     // the actions share one centre line.
                     maxWidthKey === "wizard"
                       ? "min-h-10 flex-nowrap overflow-hidden"
-                      : "flex-wrap",
-                    description && maxWidthKey !== "wizard" && "mb-2",
+                      : "min-h-9 flex-wrap",
+                    description && maxWidthKey !== "wizard" && "sm:mb-2",
                   )}
                 >
                   <h1
                     className={cn(
-                      "min-w-0 text-2xl font-semibold tracking-tight",
+                      "min-w-0 break-words text-2xl font-semibold tracking-tight",
                       maxWidthKey === "wizard" && "max-h-10 overflow-hidden",
                     )}
                   >
@@ -280,7 +274,8 @@ export function PageLayout({
                   <div
                     data-page-description
                     className={cn(
-                      "text-sm text-muted-foreground",
+                      "col-span-2 text-sm text-muted-foreground",
+                      backLink ? "row-start-3" : "row-start-2",
                       maxWidthKey === "wizard" &&
                         "hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:line-clamp-1",
                     )}
@@ -291,21 +286,14 @@ export function PageLayout({
               </div>
               {actionButton && (
                 <div
+                  data-page-actions
                   className={cn(
-                    "col-start-2 justify-self-end",
-                    maxWidthKey === "wizard" && backLink
-                      ? "row-start-1 sm:row-start-2"
-                      : backLink
-                        ? "row-start-3 sm:row-start-2"
-                        : actionInlineOnMobile
-                          ? "row-start-1"
-                          : "row-start-2 sm:row-start-1",
+                    "col-start-2 flex min-h-9 items-center justify-self-end self-start md:self-center",
+                    backLink ? "row-start-2" : "row-start-1",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
-                    // The left block is the 40px title row plus a description
-                    // pinned under it. Centre the actions on the title row,
-                    // not on the whole block, so both sides line up.
-                    maxWidthKey === "wizard" &&
-                      "sm:flex sm:h-10 sm:items-center sm:self-start",
+                    // Tablet and phone actions align with the title; desktop
+                    // actions centre against the title and description together.
+                    maxWidthKey === "wizard" && "min-h-10",
                   )}
                 >
                   {actionButton}

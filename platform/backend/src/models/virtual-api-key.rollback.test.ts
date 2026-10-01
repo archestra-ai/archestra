@@ -2,7 +2,9 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { describe } from "vitest";
+import db, { schema } from "@/database";
 import { expect, test } from "@/test";
 import LimitModel from "./limit";
 import VirtualApiKeyModel from "./virtual-api-key";
@@ -693,18 +695,25 @@ describe("VirtualApiKeyModel", () => {
   }) => {
     const org = await makeOrganization();
     const keys = [];
-    for (const [name, isPrimary] of [
-      ["oldest", false],
-      ["newer", false],
-      ["primary", true],
-    ] as const) {
-      keys.push(
-        await makeLlmProviderApiKey(
-          org.id,
-          (await makeSecret({ secret: { apiKey: `sk-${name}` } })).id,
-          { provider: "vllm", name, isPrimary },
-        ),
+    for (const [index, [name, isPrimary]] of (
+      [
+        ["oldest", false],
+        ["newer", false],
+        ["primary", true],
+      ] as const
+    ).entries()) {
+      const key = await makeLlmProviderApiKey(
+        org.id,
+        (await makeSecret({ secret: { apiKey: `sk-${name}` } })).id,
+        { provider: "vllm", name, isPrimary },
       );
+      // A rollback test runs in one transaction, where now() never advances:
+      // give each key its own creation time so "oldest" is well defined.
+      await db
+        .update(schema.llmProviderApiKeysTable)
+        .set({ createdAt: new Date(Date.UTC(2026, 0, index + 1)) })
+        .where(eq(schema.llmProviderApiKeysTable.id, key.id));
+      keys.push(key);
     }
     const { virtualKey } = await VirtualApiKeyModel.create({
       providerApiKeys: [...keys].reverse().map((key) => ({

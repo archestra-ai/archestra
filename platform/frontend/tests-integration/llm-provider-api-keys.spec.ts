@@ -89,9 +89,7 @@ test.describe("LLM Provider API Keys", () => {
     // SPDX-SnippetEnd
     await page.getByRole("button", { name: "General", exact: true }).click();
     await expect(page.getByLabel(/Base URL/)).toBeHidden();
-    await page
-      .getByRole("button", { name: "Advanced settings", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Advanced", exact: true }).click();
     await expect(page.getByLabel(/Base URL/)).toBeVisible();
     const editName = page.getByLabel(/^Name/);
     await editName.clear();
@@ -221,7 +219,7 @@ test.describe("LLM Provider API Keys", () => {
       .getByRole("textbox", { name: /API Key/i })
       .fill(API_KEY_PLACEHOLDER);
 
-    await page.getByRole("button", { name: "Advanced settings" }).click();
+    await page.getByRole("button", { name: "Advanced" }).click();
     const primarySwitch = page.getByRole("switch", { name: /Primary key/i });
     await expect(primarySwitch).toBeChecked();
 
@@ -252,7 +250,7 @@ test.describe("LLM Provider API Keys", () => {
       .getByRole("textbox", { name: /API Key/i })
       .fill(API_KEY_PLACEHOLDER);
 
-    await page.getByRole("button", { name: "Advanced settings" }).click();
+    await page.getByRole("button", { name: "Advanced" }).click();
     const secondarySwitch = page.getByRole("switch", { name: /Primary key/i });
     await expect(secondarySwitch).not.toBeChecked();
     await expect(secondarySwitch).toBeDisabled();

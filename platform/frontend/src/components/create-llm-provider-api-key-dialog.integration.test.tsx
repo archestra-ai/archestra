@@ -220,7 +220,7 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Base URL/)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText(/^API Key/), "test-provider-key");
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     expect(screen.getByLabelText(/Base URL/)).toBeVisible();
     expect(screen.getByText("Extra HTTP headers")).toBeVisible();
     await user.type(
@@ -230,7 +230,7 @@ describe("CreateLlmProviderApiKeyDialog integration", () => {
     await user.click(screen.getByRole("button", { name: "Add header" }));
     await user.type(screen.getByLabelText("Header name"), "X-Gateway");
     await user.type(screen.getByLabelText("Header value"), "test-value");
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     expect(screen.queryByLabelText(/Base URL/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Test & Create" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("created-key"));

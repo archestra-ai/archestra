@@ -172,7 +172,7 @@ describe("LlmProviderApiKeyForm", () => {
     });
 
     expect(
-      screen.queryByRole("button", { name: "Advanced settings" }),
+      screen.queryByRole("button", { name: "Advanced" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Labels", { exact: true }),
@@ -274,7 +274,7 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
     expect(screen.queryByText("Extra HTTP headers")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
 
     expect(screen.getByText("Primary key")).toBeInTheDocument();
     expect(screen.getByText("Base URL")).toBeInTheDocument();
@@ -516,12 +516,11 @@ describe("LlmProviderApiKeyForm", () => {
     await waitFor(() => {
       expect(screen.getByText("ChatGPT account connected")).toBeInTheDocument();
     });
-    expect(
-      screen.queryByRole("button", { name: "Advanced settings" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Labels", { exact: true }),
-    ).not.toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.queryByLabelText(/Base URL/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Labels", { exact: true })).toBeInTheDocument();
   });
 
   it("does not show the connected card when editing a plain OpenAI key on the subscription tab", async () => {
@@ -581,7 +580,7 @@ describe("LlmProviderApiKeyForm", () => {
         expect(screen.getByText("Base URL")).toBeInTheDocument();
       });
       expect(
-        screen.queryByRole("button", { name: "Advanced settings" }),
+        screen.queryByRole("button", { name: "Advanced" }),
       ).toBeInTheDocument();
       expect(screen.getByText("Base URL").textContent).not.toContain(
         "optional",
@@ -610,14 +609,14 @@ describe("LlmProviderApiKeyForm", () => {
 
   describe("Base URL placement", () => {
     /**
-     * A field rendered after the "Advanced settings" disclosure reads as part
+     * A field rendered after the "Advanced" disclosure reads as part
      * of it. For providers where the endpoint *is* the credential, that hid
      * the one field the key cannot work without.
      */
     function baseUrlPrecedesAdvancedSettings(): boolean {
       const baseUrl = screen.getByText("Base URL");
       const advanced = screen.getByRole("button", {
-        name: /Advanced settings/,
+        name: /Advanced/,
       });
       return Boolean(
         baseUrl.compareDocumentPosition(advanced) &
@@ -630,7 +629,7 @@ describe("LlmProviderApiKeyForm", () => {
       "ollama",
       "ollama-native",
       "archestra",
-    ] as const)("shows the endpoint above Advanced settings for %s", async (provider) => {
+    ] as const)("shows the endpoint above Advanced for %s", async (provider) => {
       renderForm({ defaults: { provider }, progressive: true });
 
       await waitFor(() => {
@@ -639,7 +638,7 @@ describe("LlmProviderApiKeyForm", () => {
       expect(baseUrlPrecedesAdvancedSettings()).toBe(true);
     });
 
-    it("keeps the endpoint inside Advanced settings for a cloud provider", async () => {
+    it("keeps the endpoint inside Advanced for a cloud provider", async () => {
       const user = userEvent.setup();
       renderForm({ defaults: { provider: "openai" }, progressive: true });
 
@@ -648,13 +647,11 @@ describe("LlmProviderApiKeyForm", () => {
       });
       expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
 
-      await user.click(
-        screen.getByRole("button", { name: /Advanced settings/ }),
-      );
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
       expect(baseUrlPrecedesAdvancedSettings()).toBe(false);
     });
 
-    it("puts the Bedrock region above Advanced settings and its endpoint inside", async () => {
+    it("puts the Bedrock region above Advanced and its endpoint inside", async () => {
       const user = userEvent.setup();
       renderForm({ defaults: { provider: "bedrock" }, progressive: true });
 
@@ -662,7 +659,7 @@ describe("LlmProviderApiKeyForm", () => {
         expect(screen.getByText("Region")).toBeInTheDocument();
       });
       const advanced = screen.getByRole("button", {
-        name: /Advanced settings/,
+        name: /Advanced/,
       });
       expect(
         screen.getByText("Region").compareDocumentPosition(advanced) &

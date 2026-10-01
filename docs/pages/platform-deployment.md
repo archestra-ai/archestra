@@ -2148,6 +2148,8 @@ Child lineage and return proofs are self-contained signed tokens. Proxy replicas
 
 Policies are stored in PostgreSQL and changed through the configuration agent on the OpenAPPA Overview tab. Container policy paths are no longer used. On upgrade, bring the existing policy into a configuration session or configure GitHub sync with the current policy file. Local revisions apply to new conversations; existing conversations keep their original policy. With GitHub sync, changes take effect after a pull request is merged and synced.
 
+Tool coverage counts custom rules, battery rules, and catch-all rules using an annotator other than `noop`. A `noop` catch-all adds no restrictions and counts as not covered. Tools without a matching rule also count as not covered. Coverage describes the policy; the enforcement switch controls whether checks run.
+
 `ARCHESTRA_BETA` does not enable OpenAPPA. Restart the backend after changing the feature flag.
 
 Reporting sends the agent’s message verbatim, plus filtered policy diagnostics. Reports identify Archestra and the hostname from `ARCHESTRA_FRONTEND_URL`. Agents can include their session’s policy decisions. Diagnostics exclude raw prompts, tool arguments, tool outputs, and session identifiers. Policy names remain visible. Messages must not contain secrets, personal data, or task content. Reporting does not change policies or grant tool permissions. The active policy must permit the `yell` tool, directly or through a matching wildcard. Restart the backend after changing the reporting flag.

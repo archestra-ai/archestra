@@ -12,7 +12,6 @@ import {
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { DEFAULT_FILTER_ALL } from "@/consts";
 import {
@@ -82,7 +81,7 @@ export function ToolTable({
           | "root"
           | "battery"
           | "catchall"
-          | "built_in"
+          | "not_covered"
           | undefined),
     battery,
     limit: pagination.pageSize,
@@ -113,7 +112,7 @@ export function ToolTable({
       },
       {
         id: "policy",
-        header: "Policy source",
+        header: "Coverage",
         size: 240,
         cell: ({ row }) => <PolicySourceCell tool={row.original} />,
       },
@@ -166,19 +165,19 @@ export function ToolTable({
           <FilterSelect
             value={policySource ?? DEFAULT_FILTER_ALL}
             onValueChange={updatePolicySource}
-            placeholder="Policy source"
-            ariaLabel="Policy source"
+            placeholder="Coverage"
+            ariaLabel="Coverage"
             showSearch={false}
             items={[
-              { value: DEFAULT_FILTER_ALL, label: "All policy sources" },
+              { value: DEFAULT_FILTER_ALL, label: "All coverage types" },
               { value: "root", label: "Custom rule" },
-              { value: "battery", label: "Battery" },
+              { value: "battery", label: "Battery rule" },
               ...(tools.data?.batteries ?? []).map((name) => ({
                 value: `battery:${name}`,
                 label: `${name} battery`,
               })),
-              { value: "catchall", label: "No rule" },
-              { value: "built_in", label: "Built-in fallback" },
+              { value: "catchall", label: "Catch-all rule" },
+              { value: "not_covered", label: "No rule" },
             ]}
           />
         </FilterBar>
@@ -221,16 +220,32 @@ function ToolNameCell({ tool }: { tool: CoverageTool }) {
 }
 
 function PolicySourceCell({ tool }: { tool: CoverageTool }) {
-  if (!tool.rule)
-    return tool.policySource === "built_in" ? (
-      <Badge variant="outline">Built-in fallback</Badge>
-    ) : (
-      <GovernedByPill
-        governedBy={{ source: "catchall" }}
-        href={tool.fallbackLine ? policyHref(tool.fallbackLine) : undefined}
-        line={tool.fallbackLine}
-      />
+  if (tool.policySource === "not_covered" || tool.rule?.source === "catchall") {
+    const line = tool.rule?.line ?? tool.fallbackLine;
+    return (
+      <div className="space-y-1">
+        <GovernedByPill
+          governedBy={{
+            source:
+              tool.policySource === "not_covered" ? "not_covered" : "catchall",
+          }}
+          href={line ? policyHref(line) : undefined}
+          line={line}
+        />
+        <div className="text-xs text-muted-foreground">
+          {tool.policySource === "not_covered"
+            ? tool.rule?.annotator === "noop"
+              ? "Allowed without restrictions"
+              : "No matching rule"
+            : (tool.rule?.annotator ?? "Static rule")}
+        </div>
+        {tool.rule && !tool.enforced && (
+          <div className="text-xs text-muted-foreground">Not enforced</div>
+        )}
+      </div>
     );
+  }
+  if (!tool.rule) return null;
 
   const href =
     tool.rule.source === "battery" &&

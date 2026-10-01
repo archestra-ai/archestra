@@ -160,7 +160,7 @@ export function EntitiesTable() {
               className="h-1.5 min-w-0 max-w-48 flex-1"
             />
             <span className="text-muted-foreground w-28 shrink-0 whitespace-nowrap text-right text-xs tabular-nums">
-              {`${(row.original.rules.root + row.original.rules.battery).toLocaleString()} of ${row.original.toolCount.toLocaleString()} covered`}
+              {`${(row.original.rules.root + row.original.rules.battery + row.original.rules.catchAll).toLocaleString()} of ${row.original.toolCount.toLocaleString()} covered`}
             </span>
           </div>
         ),
@@ -377,10 +377,13 @@ function EntitySummary({ entity }: { entity: CoverageEntity }) {
         : "assigned tools";
   const stats = [
     { value: entity.toolCount, label: toolLabel },
-    { value: entity.rules.root + entity.rules.battery, label: "with a rule" },
     {
-      value: entity.rules.catchAll + entity.rules.builtInFallback,
-      label: "with no rule",
+      value: entity.rules.root + entity.rules.battery + entity.rules.catchAll,
+      label: "covered",
+    },
+    {
+      value: entity.rules.notCovered,
+      label: "no rule",
     },
     ...(entity.builtInCount > 0
       ? [

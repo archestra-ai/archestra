@@ -109,12 +109,7 @@ class OpenAppaCoverageService {
           ].some((field) => field.toLowerCase().includes(search))) &&
         (!params.catalogId || tool.catalogId === params.catalogId) &&
         (!params.battery || tool.rule?.battery === params.battery) &&
-        (!params.governedBy ||
-          (params.governedBy === "catchall"
-            ? tool.policySource === "fallback"
-            : params.governedBy === "built_in"
-              ? tool.policySource === "built_in"
-              : tool.rule?.source === params.governedBy)) &&
+        (!params.governedBy || tool.policySource === params.governedBy) &&
         (!params.kind ||
           tool.kind === params.kind ||
           (params.kind === "write" && tool.kind === "approval")),
@@ -325,7 +320,7 @@ async function listedTools(
 }
 
 /**
- * The tools no rule names that a battery's policy would, once installed on
+ * The uncovered tools a battery's policy would govern once installed on
  * their server: an install binds every namespace the battery declares to the
  * server, so a rule `mcp/<namespace>/<tool>` names the server's `<tool>`.
  */
@@ -338,7 +333,9 @@ function wouldGovern(policy: string, tools: CoverageTool[]): number {
       return canonical ? [canonical[2]] : [];
     }),
   );
-  return tools.filter((tool) => !tool.rule && named.has(tool.name)).length;
+  return tools.filter(
+    (tool) => tool.policySource === "not_covered" && named.has(tool.name),
+  ).length;
 }
 
 /**
@@ -376,16 +373,19 @@ function batteryRules(
         delta: rule.delta,
         requires: rule.requires,
         annotator: rule.annotator,
-        currentRule: tool.rule?.source ?? null,
+        currentRule:
+          tool.policySource === "not_covered"
+            ? null
+            : (tool.rule?.source ?? null),
       },
     ];
   });
 }
 
 function ruleBucket(tool: CoverageTool): keyof CoverageRuleCounts {
-  if (!tool.rule)
-    return tool.policySource === "built_in" ? "builtInFallback" : "catchAll";
-  return tool.enforced ? tool.rule.source : "notEnforced";
+  if (tool.policySource === "not_covered" || !tool.rule) return "notCovered";
+  if (!tool.enforced) return "notEnforced";
+  return tool.rule.source === "catchall" ? "catchAll" : tool.rule.source;
 }
 
 function countRules(tools: CoverageTool[]): CoverageRuleCounts {
@@ -400,7 +400,7 @@ function emptyRuleCounts(): CoverageRuleCounts {
     battery: 0,
     notEnforced: 0,
     catchAll: 0,
-    builtInFallback: 0,
+    notCovered: 0,
   };
 }
 
@@ -471,13 +471,25 @@ async function buildReport(
   const rootEntries = toolEntries(rootContent);
   const rootLines =
     headerLines.length === rootEntries.length ? headerLines : [];
-  const fallbackLine = refused
-    ? null
-    : rootEntries.reduce<number | null>(
-        (line, entry, index) =>
-          entry.name === "*" ? (rootLines[index] ?? null) : line,
-        null,
-      );
+  const fallbackIndex = rootEntries.findIndex((entry) => entry.name === "*");
+  const fallbackEntry = rootEntries[fallbackIndex];
+  const fallbackLine = refused ? null : (rootLines[fallbackIndex] ?? null);
+  const fallback =
+    !refused && fallbackEntry
+      ? candidate({
+          entry: fallbackEntry,
+          spelled: splitSelector(fallbackEntry.name),
+          match: "*",
+          source: {
+            source: "catchall",
+            battery: null,
+            batteryEntry: null,
+            batteryStatus: null,
+            line: fallbackLine,
+          },
+          enforced: true,
+        })
+      : null;
   rootEntries.forEach((entry, index) => {
     const spelled = splitSelector(entry.name);
     if (spelled.base === "*") return;
@@ -624,21 +636,30 @@ async function buildReport(
       readOnly: tool.readOnlyHint,
       agents,
     };
-    const primary = matched.find((entry) => entry.rule.selector === null);
+    const specific = matched.find((entry) => entry.rule.selector === null);
+    const primary = specific ?? fallback;
+    // The default noop wildcard deliberately adds no coverage. Origin and
+    // revision do not change this classification.
+    const covered =
+      primary !== null &&
+      primary !== undefined &&
+      !(
+        primary.rule.source === "catchall" && primary.rule.annotator === "noop"
+      );
     const own: CoverageTool = primary
       ? {
           ...base,
-          kind: primary.kind,
-          policySource: primary.rule.source,
+          kind: covered ? primary.kind : "unlisted",
+          policySource: covered ? primary.rule.source : "not_covered",
           rule: primary.rule,
-          fallbackLine: null,
-          unlisted: false,
+          fallbackLine: specific ? null : fallbackLine,
+          unlisted: !covered,
           enforced: primary.rule.enforced,
         }
       : {
           ...base,
           kind: "unlisted",
-          policySource: snapshot.rootRevision === 0 ? "built_in" : "fallback",
+          policySource: "not_covered",
           rule: null,
           fallbackLine,
           unlisted: true,
@@ -669,7 +690,11 @@ async function buildReport(
       a.tool.fullName.localeCompare(b.tool.fullName),
   );
   const explicitlyGovernedTools = new Set(
-    rows.filter((row) => row.tool.enforced).map((row) => row.tool.toolId),
+    rows
+      .filter(
+        (row) => row.tool.enforced && row.tool.policySource !== "not_covered",
+      )
+      .map((row) => row.tool.toolId),
   );
 
   const entitiesById = new Map<string, CoverageEntity>(
@@ -697,7 +722,8 @@ async function buildReport(
       if (!entity) continue;
       entity.toolCount += 1;
       if (explicitlyGovernedTools.has(tool.toolId)) entity.governedCount += 1;
-      if (tool.unlisted) entity.fallbackCount += 1;
+      if (tool.rule === null || tool.rule.source === "catchall")
+        entity.fallbackCount += 1;
       if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID) entity.builtInCount += 1;
       entity.rules[ruleBucket(tool)] += 1;
       entitiesById.set(agent.id, entity);
@@ -721,7 +747,9 @@ async function buildReport(
       governedCount: serverTools.filter((tool) =>
         explicitlyGovernedTools.has(tool.toolId),
       ).length,
-      fallbackCount: serverTools.filter((tool) => tool.unlisted).length,
+      fallbackCount: serverTools.filter(
+        (tool) => tool.rule === null || tool.rule.source === "catchall",
+      ).length,
       builtInCount: 0,
       rules: countRules(serverTools),
       autoMode: false,

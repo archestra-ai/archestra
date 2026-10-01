@@ -93,8 +93,8 @@ beforeEach(() => {
               root: 1,
               battery: 1,
               notEnforced: 0,
-              catchAll: 1,
-              builtInFallback: 0,
+              notCovered: 1,
+              catchAll: 0,
             },
             autoMode: true,
           },
@@ -112,8 +112,8 @@ beforeEach(() => {
               root: 0,
               battery: 4,
               notEnforced: 0,
-              catchAll: 15,
-              builtInFallback: 0,
+              notCovered: 15,
+              catchAll: 0,
             },
             autoMode: false,
           },
@@ -140,7 +140,7 @@ beforeEach(() => {
           name: "search_tools",
           fullName: "archestra__search_tools",
           kind: "unlisted",
-          policySource: "built_in",
+          policySource: "not_covered",
           rule: null,
           unlisted: true,
           enforced: false,
@@ -155,7 +155,7 @@ beforeEach(() => {
           name: "get_issue",
           fullName: "github__get_issue",
           kind: "unlisted",
-          policySource: "fallback",
+          policySource: "not_covered",
           rule: null,
           unlisted: true,
           enforced: false,
@@ -249,15 +249,15 @@ test("lists registry servers and gateways, servers first, each with a chat and s
   const researchSummary = within(await screen.findByRole("dialog"));
   for (const [value, label] of [
     ["3", "tools reachable for you"],
-    ["2", "with a rule"],
-    ["1", "with no rule"],
+    ["2", "covered"],
+    ["1", "no rule"],
     ["1", "built-in tool"],
   ]) {
     expect(researchSummary.getByText(label).parentElement).toHaveTextContent(
       `${value}${label}`,
     );
   }
-  expect(await screen.findByText("Built-in fallback")).toBeVisible();
+  expect(await researchSummary.findAllByText("No rule")).toHaveLength(2);
   const dialog = screen.getByRole("dialog");
   expect(
     within(dialog).getByRole("columnheader", { name: "MCP server" }),
@@ -363,12 +363,33 @@ test("filters tool policy sources and links each rule to its TOML line", async (
       toolId: "tool-fallback",
       name: "unlisted",
       fullName: "github__unlisted",
-      policySource: "fallback",
+      policySource: "not_covered",
       kind: "unlisted",
       rule: null,
       unlisted: true,
       enforced: false,
       fallbackLine: 23,
+    },
+    {
+      ...base,
+      toolId: "tool-catchall",
+      name: "classified",
+      fullName: "github__classified",
+      policySource: "catchall",
+      fallbackLine: 23,
+      rule: {
+        source: "catchall",
+        name: "*",
+        annotator: "jev.tool-call",
+        line: 23,
+        selector: null,
+        delta: {},
+        requires: {},
+        battery: null,
+        batteryEntry: null,
+        batteryStatus: null,
+        enforced: true,
+      },
     },
   ];
   server.use(
@@ -379,10 +400,7 @@ test("filters tool policy sources and links each rule to its TOML line", async (
       return HttpResponse.json({
         data: rows.filter(
           (row) =>
-            (!source ||
-              (source === "catchall"
-                ? row.policySource === "fallback"
-                : row.policySource === source)) &&
+            (!source || row.policySource === source) &&
             (!battery || row.rule?.battery === battery),
         ),
         servers: [{ id: serverId, name: "GitHub", icon: "🐙" }],
@@ -429,15 +447,36 @@ test("filters tool policy sources and links each rule to its TOML line", async (
       name: "View source for No rule at line 23",
     }),
   ).toHaveAttribute("href", "/openappa/policy?line=23");
+  expect(
+    screen.getByRole("link", {
+      name: "View source for Catch-all rule at line 23",
+    }),
+  ).toHaveAttribute("href", "/openappa/policy?line=23");
+  expect(screen.getByText("jev.tool-call")).toBeVisible();
+  expect(screen.getByText("No matching rule")).toBeVisible();
 
-  await userEvent.click(
-    screen.getByRole("combobox", { name: "Policy source" }),
-  );
+  await userEvent.click(screen.getByRole("combobox", { name: "Coverage" }));
   await userEvent.click(screen.getByRole("option", { name: "github battery" }));
   await waitFor(() => {
     expect(screen.getByText("get_commit")).toBeVisible();
     expect(screen.queryByText("get_file_contents")).not.toBeInTheDocument();
     expect(screen.queryByText("unlisted")).not.toBeInTheDocument();
+  });
+  await userEvent.click(screen.getByRole("combobox", { name: "Coverage" }));
+  expect(
+    screen.queryByRole("option", { name: "Built-in fallback" }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("option", { name: "Catch-all rule" }));
+  await waitFor(() => {
+    expect(screen.getByText("classified")).toBeVisible();
+    expect(screen.queryByText("unlisted")).not.toBeInTheDocument();
+    expect(screen.queryByText("get_commit")).not.toBeInTheDocument();
+  });
+  await userEvent.click(screen.getByRole("combobox", { name: "Coverage" }));
+  await userEvent.click(screen.getByRole("option", { name: "No rule" }));
+  await waitFor(() => {
+    expect(screen.getByText("unlisted")).toBeVisible();
+    expect(screen.queryByText("classified")).not.toBeInTheDocument();
   });
 });
 
@@ -609,7 +648,7 @@ test("does not offer source links for a refused composition", async () => {
             name: "unlisted",
             fullName: "github__unlisted",
             kind: "unlisted",
-            policySource: "fallback",
+            policySource: "not_covered",
             rule: null,
             fallbackLine: null,
             unlisted: true,

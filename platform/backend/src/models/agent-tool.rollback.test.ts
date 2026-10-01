@@ -599,11 +599,19 @@ describe("AgentToolModel.findAll", () => {
       const tool3 = await makeTool({ name: "tool-3" });
 
       const agentTool1 = await makeAgentTool(agent.id, tool1.id);
-      // Add small delays to ensure different timestamps
-      await new Promise((resolve) => setTimeout(resolve, 10));
       const agentTool2 = await makeAgentTool(agent.id, tool2.id);
-      await new Promise((resolve) => setTimeout(resolve, 10));
       const agentTool3 = await makeAgentTool(agent.id, tool3.id);
+      // Pin distinct timestamps: now() is fixed within a transaction.
+      for (const [index, agentTool] of [
+        agentTool1,
+        agentTool2,
+        agentTool3,
+      ].entries()) {
+        await db
+          .update(schema.agentToolsTable)
+          .set({ createdAt: new Date(Date.UTC(2024, 0, 1, 0, index)) })
+          .where(eq(schema.agentToolsTable.id, agentTool.id));
+      }
 
       const result = await AgentToolModel.findAll({
         pagination: { limit: 10, offset: 0 },
@@ -831,9 +839,12 @@ describe("AgentToolModel.findAll", () => {
       expect(excludedToolNames).toContain("archestranounderscore_test");
       expect(excludedToolNames).not.toContain("archestra__todo_write");
 
-      // Without excludeArchestraTools - should include all tools including archestra__ ones
+      // Without excludeArchestraTools - should include all tools including archestra__ ones.
+      // The page must cover every seeded built-in tool: rows created in one
+      // transaction share createdAt, so the default order does not put the
+      // newest rows first.
       const resultIncluded = await AgentToolModel.findAll({
-        pagination: { limit: 10, offset: 0 },
+        pagination: { limit: 1000, offset: 0 },
         filters: { agentId: agent.id },
       });
 

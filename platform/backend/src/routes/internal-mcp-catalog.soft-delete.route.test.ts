@@ -1,5 +1,7 @@
+import { adminPermissions } from "@archestra/shared/access-control";
 import { and, eq } from "drizzle-orm";
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -7,12 +9,6 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
 import websocketService from "@/websocket";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
 
 /**
  * Soft-delete + restore of an internal MCP catalog item through the routes, and
@@ -25,7 +21,9 @@ describe("internal MCP catalog soft-delete routes", () => {
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
@@ -201,6 +199,9 @@ describe("internal MCP catalog soft-delete routes", () => {
 
   test("GET ?status=deleted requires manage-deleted and lists soft-deleted roots", async ({
     makeInternalMcpCatalog,
+    makeCustomRole,
+    makeMember,
+    makeUser,
   }) => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
@@ -223,14 +224,16 @@ describe("internal MCP catalog soft-delete routes", () => {
 
     // A caller with every ordinary permission (delete included) but not the
     // admin-default manage-deleted capability must not see the tombstone view.
-    mockHasPermission.mockImplementation(
-      async (permissions: Record<string, string[]>) => ({
-        success: !Object.values(permissions).some((actions) =>
-          actions.includes("manage-deleted"),
-        ),
-        error: null,
-      }),
-    );
+    const role = await makeCustomRole(organizationId, {
+      permission: Object.fromEntries(
+        Object.entries(adminPermissions).map(([resource, actions]) => [
+          resource,
+          actions.filter((action) => action !== "manage-deleted"),
+        ]),
+      ),
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: role.role });
     const forbidden = await app.inject({
       method: "GET",
       url: "/api/internal_mcp_catalog?status=deleted",

@@ -18,6 +18,7 @@ import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import * as openappaService from "@/openappa/service";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { seedCoverage } from "@/test/openappa-coverage";
 import type { Agent } from "@/types";
 import {
@@ -26,7 +27,8 @@ import {
   getAllArchestraMcpTools,
 } from ".";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 const TEST_SIGNING_SECRET = "test-offer-signing-secret-32chars";
 

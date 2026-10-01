@@ -1,5 +1,5 @@
 import { getArchestraAppResourceUri } from "@archestra/shared";
-import { isServiceAccountUserId } from "@/auth/utils";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
   AgentModel,

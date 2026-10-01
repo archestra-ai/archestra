@@ -4,8 +4,8 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { type Mock, vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import {
   accessGrants,
@@ -23,8 +23,6 @@ import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 // scope gate uses getPermissionsForUserContext (the REAL member role), so this
 // verifies the handler restricts a member to their own personal items even with
 // the route-level `mcpRegistry:update` grant.
-vi.mock("@/auth");
-const mockHasPermission = hasPermission as Mock;
 
 describe("member catalog update is limited to own personal items", () => {
   let app: FastifyInstance;
@@ -33,7 +31,9 @@ describe("member catalog update is limited to own personal items", () => {
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: member.id } }) as never,
+    );
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -66,6 +66,7 @@ describe("member catalog update is limited to own personal items", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 

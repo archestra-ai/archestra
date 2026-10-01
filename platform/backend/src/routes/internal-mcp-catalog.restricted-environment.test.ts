@@ -1,20 +1,15 @@
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { InternalMcpCatalogModel } from "@/models";
+import { createEnvironment } from "@/services/environments/environment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createRestrictedEnvironment,
   grantEnvironmentUse,
 } from "@/test/environments";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-import { createEnvironment } from "@/services/environments/environment";
-
-const mockHasPermission = hasPermission as Mock;
 
 /**
  * POST /api/internal_mcp_catalog must refuse to assign a *restricted*
@@ -37,7 +32,9 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     vi.clearAllMocks();
     // Every role probe (scope check, etc.) is granted so this suite isolates
     // the environment guard.
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     user = await makeUser();
     const organization = await makeOrganization();

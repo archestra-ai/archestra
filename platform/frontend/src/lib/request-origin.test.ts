@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { GET as connect } from "@/app/connect.md/route";
 import { GET as discovery } from "@/app/llms.txt/route";

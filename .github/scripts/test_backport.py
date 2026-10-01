@@ -264,6 +264,7 @@ assert.equal(allowed('pull_request', {label:'not-backport release/1.3'}), false)
             "platform-rust-checks",
             "openappa-native-tests",
             "ai-labs-rust-checks",
+            "backend-test-inputs",
             "backend-unit-tests",
             "backend-unit-tests-gate",
             "frontend-integration-tests",
@@ -293,7 +294,11 @@ for (const [job, condition] of Object.entries(conditions)) {
       startsWith: (value, prefix) => value.startsWith(prefix), always: () => true};
     assert.equal(vm.runInNewContext(condition, context), expected, job);
   }
-  assert.equal(vm.runInNewContext(condition, {github: {event_name:'merge_group'}, always: () => true}), true, job);
+  // Backend shards additionally wait on the input check reporting a backend
+  // change. Job ids contain hyphens, so rewrite needs.<id> as an index for JS.
+  const needs = {'backend-test-inputs': {outputs: {run: 'true'}}};
+  const mergeGroupCondition = condition.replace(/needs\.([\w-]+)/g, "needs['$1']");
+  assert.equal(vm.runInNewContext(mergeGroupCondition, {github: {event_name:'merge_group'}, needs, always: () => true}), true, job);
 }
 """
         subprocess.run(["node", "-e", program, json.dumps(conditions)], check=True)

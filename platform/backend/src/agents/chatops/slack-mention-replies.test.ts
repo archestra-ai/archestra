@@ -1,14 +1,15 @@
 import { SLACK_REQUIRED_BOT_SCOPES } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
-import { vi } from "vitest";
 import { ChatOpsChannelBindingModel } from "@/models";
 import { describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { ChatOpsManager } from "./chatops-manager";
 import SlackProvider from "./slack-provider";
 import { EventDedupMap } from "./utils";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 // biome-ignore lint/correctness/useHookAtTopLevel: registers test lifecycle hooks, not a React hook
 const server = useMswServer();

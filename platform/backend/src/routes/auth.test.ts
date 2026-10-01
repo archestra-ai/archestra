@@ -22,14 +22,12 @@ import {
 } from "@/services/apps/app-connector-resource";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-vi.mock("@/auth");
-
 describe("auth routes", () => {
   let app: FastifyInstanceWithZod;
 
   beforeEach(async () => {
-    // `handler` is not part of the canonical @/auth mock surface, so add it here.
-    betterAuth.handler = vi.fn();
+    // better-auth's own request handler is the boundary these routes wrap.
+    vi.spyOn(betterAuth, "handler").mockReturnValue(undefined as never);
     app = createFastifyInstance();
     const { default: authRoutes } = await import("./auth");
     await app.register(authRoutes);

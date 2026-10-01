@@ -378,7 +378,7 @@ describe("knowledge-source soft-delete", () => {
 
   // The guards report "no active parent" as `false` and write nothing; mapping
   // that to a 404 belongs to each entry point (route / MCP handler), not the
-  // model — see the route-level assertions in routes/knowledge-base.test.ts.
+  // model — see the route-level assertions in routes/knowledge-base.rollback.test.ts.
   describe("write guards refuse to attach to a soft-deleted parent", () => {
     test("connector→KB assignment is refused when the KB is soft-deleted", async ({
       makeOrganization,

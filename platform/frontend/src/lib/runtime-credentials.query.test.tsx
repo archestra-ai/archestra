@@ -62,10 +62,6 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-async function flushWrites() {
-  await new Promise((resolve) => setTimeout(resolve, 600));
-}
-
 describe("useRuntimeCredentials persistence", () => {
   it("survives a refresh, so a returning visit paints saved credentials without a loading placeholder", async () => {
     const client = new QueryClient({
@@ -79,8 +75,8 @@ describe("useRuntimeCredentials persistence", () => {
     const { result } = renderHook(() => useRuntimeCredentials(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
+    // Setting the scope writes the snapshot synchronously; no debounce wait.
     syncPersistedQueryCacheScope(client, "user-1:org-1");
-    await flushWrites();
     stopPersisting();
 
     // A fresh QueryClient stands in for the one a page refresh creates: the

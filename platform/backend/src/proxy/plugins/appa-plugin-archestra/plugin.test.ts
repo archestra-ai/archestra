@@ -22,6 +22,7 @@ import {
   type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
@@ -35,7 +36,8 @@ import {
   type AppaTrustedContext,
 } from "./types";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("APPA client adapters", () => {
   test("maps each integrated client to its real local tool namespace", () => {

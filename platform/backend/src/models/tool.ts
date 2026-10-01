@@ -41,7 +41,6 @@ import {
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 
-import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
@@ -1536,6 +1535,9 @@ class ToolModel {
     // App-runtime-only built-ins never become tool rows: no row means no agent
     // assignment, no search_tools hit, no gateway listing. They dispatch
     // in-process through the app MCP proxy alone.
+    // Lazy: the built-in tool registry imports the whole service layer, which
+    // would otherwise make every model importer load it too.
+    const { getArchestraMcpTools } = await import("@/archestra-mcp-server");
     const archestraTools = getArchestraMcpTools().filter((t) => {
       // Branding-aware parse: seeding runs on rebranded names, so the shared
       // strict `archestra__` parser could miss a white-labeled prefix here.

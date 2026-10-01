@@ -1,35 +1,34 @@
 import { vi } from "vitest";
-import { betterAuth, hasPermission } from "@/auth";
+import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin";
-import { AgentTeamModel } from "@/models";
-
-vi.mock("@/auth");
-
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { AgentTeamModel, MemberModel } from "@/models";
 import { afterEach, beforeEach, expect, test } from "@/test";
+import type { User } from "@/types";
 
 let app: FastifyInstanceWithZod;
 let organizationId: string;
+let user: User;
 beforeEach(async ({ makeOrganization, makeUser, makeMember, makeSession }) => {
   organizationId = (await makeOrganization()).id;
   app = createFastifyInstance();
-  const user = await makeUser();
+  user = await makeUser();
   await makeMember(user.id, organizationId, { role: "admin" });
   const session = await makeSession(user.id, {
     activeOrganizationId: organizationId,
   });
-  vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+  vi.spyOn(betterAuth.api, "getSession").mockResolvedValue({
     response: { user, session },
     headers: new Headers(),
   } as never);
-  vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
   await app.register(authPlugin);
   await app.register((await import("./statistics")).default);
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await app.close();
 });
 
@@ -194,7 +193,7 @@ test("validates filters and distinguishes empty results from errors", async () =
 });
 
 test("denies callers without organization cost access", async () => {
-  vi.mocked(hasPermission).mockResolvedValue({ success: false, error: null });
+  await MemberModel.updateRole(user.id, organizationId, "member");
   const response = await app.inject({ url: "/api/statistics/llm-proxy" });
   expect(response.statusCode).toBe(403);
 });

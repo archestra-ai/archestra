@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
-  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
-fi
-
 if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "anthropic" ]]; then
   echo "archestra: Claude Code requires an Agent configured with an Anthropic model" >&2
   exit 78
+fi
+
+if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
 fi
 
 # Claude Code treats ANTHROPIC_API_KEY as a user-supplied custom key and asks

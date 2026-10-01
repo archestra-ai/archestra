@@ -31,6 +31,19 @@ export async function makeFastImageEntrypoint(
   await writeFile(testSupervisor, shortened);
   await chmod(testSupervisor, 0o755);
 
+  if (name === "archestra-claude-code") {
+    // These wrapper tests stub the native CLI; image tests exercise the real
+    // terminal readiness gate. Keep that external terminal boundary synthetic.
+    await writeFile(
+      path.join(bin, "archestra-claude-tui-start"),
+      `#!/usr/bin/env python3
+import os
+import sys
+os.execvp(sys.argv[1], sys.argv[1:] + [os.environ["ARCHESTRA_AGENT_RUNTIME_TASK"]])
+`,
+    );
+  }
+
   for (const script of [
     name,
     "archestra-agent-failure",

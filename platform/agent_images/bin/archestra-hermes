@@ -271,7 +271,8 @@ chmod 0700 "${completion_hook}"
 # index can block agent construction past the native TUI's initialization limit.
 # The first turn must carry the gateway tools, including the OpenAPPA remedy
 # pair. Hermes waits at most 1.5s for MCP discovery by default; the wait ends
-# as soon as discovery does, so this bound only caps an unreachable gateway.
+# as soon as discovery does. The image patch rejects agent construction if
+# discovery is still running or the required gateway failed to connect.
 jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" \

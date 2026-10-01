@@ -62,6 +62,12 @@ Use the gateway's advertised tool names: `list_skills` discovers the Agent's eff
 
 Bundled text files are returned as text. A `<skill_file encoding="base64">` contains bytes to decode before saving. Preserve resource paths relative to the skill root and provide the runtimes and dependencies its scripts require. Files are not automatically installed in native client skill directories. `/skills` mounts mentioned by sandbox-enabled tools belong to the separate Code Sandbox, not this container.
 
+## MCP Startup
+
+In the default TUI mode, the maintained images wait for their native client's gateway catalog before submitting a delegated task. A failed connection, catalog request, or discovery timeout fails the run instead of starting it with only local tools. Claude Code checks its own TUI's registered gateway tools before submitting the prompt. Custom clients must also complete gateway discovery before assembling their first model request; checking tool assignments or making a separate preflight connection does not establish that the client's tool catalog is ready.
+
+The real-client tests in `agent_images/tests/mcp-startup.py` run during image builds. They hold discovery behind a barrier, execute all three OpenAPPA recovery tools, resume a saved conversation, and check discovery errors and timeouts. The MCP and model endpoints are synthetic; the pinned clients, wrappers, tmux sessions, and tool execution paths are real.
+
 ## Readable Transcript
 
 The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, and OpenClaw images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.

@@ -87,6 +87,10 @@ class FailureWatchTest(unittest.TestCase):
             def do_POST(self):
                 request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
                 if self.path == "/mcp":
+                    if "id" not in request:
+                        self.send_response(202)
+                        self.end_headers()
+                        return
                     if request.get("method") == "initialize":
                         result = {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "test", "version": "1"}}
                     else:

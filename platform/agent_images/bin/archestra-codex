@@ -248,7 +248,11 @@ wire_api = "responses"
 "X-Archestra-Session-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" '$value')
 "X-Appa-Session-ID" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" '$value')
 
+# The gateway is part of the runtime contract, not an optional integration.
+# Required MCP startup awaits initialization AND tools/list before any turn;
+# a timeout or discovery error aborts instead of sending a tool-less request.
 [mcp_servers.archestra]
+required = true
 url = $(jq -Rn --arg value "${ARCHESTRA_MCP_GATEWAY_URL:?}" '$value')
 bearer_token_env_var = "ARCHESTRA_MCP_GATEWAY_TOKEN"
 

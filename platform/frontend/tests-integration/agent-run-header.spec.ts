@@ -159,3 +159,76 @@ test("keeps the session title, status, and actions readable in narrow panels", a
     page.getByRole("heading", { name: "Live terminal" }),
   ).toBeVisible();
 });
+
+test("keeps mobile liveness notices on one compact row without hiding deadlines", async ({
+  page,
+  mswControl,
+  request,
+}) => {
+  const taskId = "12345678-abcd-4000-8000-123456789abc";
+  const now = Date.now();
+  const ago = (minutes: number) =>
+    new Date(now - minutes * 60_000).toISOString();
+  const run = {
+    taskId,
+    sessionId: taskId,
+    title: "Compact notice test",
+    viewerRole: "owner",
+    state: "TASK_STATE_WORKING",
+    attentionState: null,
+    startedAt: ago(3),
+    lastModelActivityAt: ago(0),
+    endedAt: null,
+    hardDeadlineAt: ago(-96),
+    agent: { id: "demo-agent", name: "Coding agent", icon: null },
+    workspace: null,
+  };
+  const config = await (
+    await request.get("/internal-test/api/api/config")
+  ).json();
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: "/api/config",
+      body: { ...config, features: { ...config.features, agentRuntime: true } },
+    },
+    {
+      method: "get",
+      url: "/api/agent-runs",
+      body: { data: [], pagination: {} },
+    },
+  ]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const overrides of [
+    { attentionState: "input_required" },
+    { attentionState: "auth_required" },
+    {},
+    { lastModelActivityAt: ago(2) },
+    { lastModelActivityAt: null },
+    { lastModelActivityAt: ago(19) },
+    { startedAt: ago(30), lastModelActivityAt: null },
+    { hardDeadlineAt: ago(15) },
+    { hardDeadlineAt: "invalid" },
+  ]) {
+    await mswControl.use({
+      method: "get",
+      url: `/api/agent-runs/${taskId}`,
+      body: { ...run, ...overrides },
+    });
+    await page.goto(`/chat/runs/${taskId}`);
+    const notice = page.getByRole("status").filter({
+      hasText: /Hard stop|Deadline passed|Hard deadline unavailable/,
+    });
+    await expect(notice).toBeVisible();
+    const box = await notice.boundingBox();
+    if (!box) throw new Error("Liveness notice is not rendered");
+    expect(box.height).toBeLessThanOrEqual(36);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(
+      await notice.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+  }
+});

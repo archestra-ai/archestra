@@ -984,6 +984,8 @@ jobs:
           extra_args: "--grep-invert '@quickstart' --workers=3"
           timeout: "20"
           env_file: /tmp/lite-e2e.env
+          # Both chromium legs would otherwise write the same default name.
+          blob_report_name: report-chromium-shard-${{ matrix.chromium_shard }}.zip
 
       - name: Run API and identity provider E2E tests on the same stack
         if: ${{ matrix.name == 'chromium-1of2' }}

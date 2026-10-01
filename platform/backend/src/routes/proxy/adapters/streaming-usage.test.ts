@@ -290,7 +290,10 @@ describe("bedrock-openai reports the gross prompt count", () => {
     prompt_tokens: 91_204,
     completion_tokens: 55,
     total_tokens: 91_259,
-    prompt_tokens_details: { cached_tokens: 90_000 },
+    prompt_tokens_details: {
+      cached_tokens: 90_000,
+      cache_write_tokens: 1_200,
+    },
   };
 
   test("translates a non-streaming Converse response", () => {

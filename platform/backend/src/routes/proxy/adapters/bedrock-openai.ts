@@ -143,7 +143,7 @@ class BedrockOpenaiStreamAdapter
   readonly provider = "bedrock" as const;
   private inner: LLMStreamAdapter<BedrockStreamEvent, BedrockResponse>;
   private encoder: ConverseToOpenaiSseEncoder;
-  private upstreamUsage: BedrockResponse["usage"];
+  private upstreamUsage?: BedrockResponse["usage"];
   /**
    * Tool-call events translated at arrival (once) and cached here. The handler
    * retrieves them via `getRawToolCallEvents()` after the per-tool policy

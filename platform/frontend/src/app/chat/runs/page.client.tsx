@@ -219,7 +219,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                     compact
                   />
                 </div>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="mt-1 truncate text-xs text-muted-foreground @2xl:mt-0">
                   {run.agent.name}
                 </p>
               </div>

@@ -843,9 +843,9 @@ A key can also point at a custom endpoint instead, for a VPC or PrivateLink setu
 
 Bedrock supports explicit caching on selected Claude and Nova models. Some models also offer implicit caching. Repeating a prefix does not guarantee a cache hit.
 
-Chat conversations and headless agent runs apply Archestra's automatic breakpoint policy. Model Router requests use the markers you supply. The router does not add automatic checkpoints.
+Chat conversations and headless agent runs apply Archestra's automatic breakpoint policy. Model Router Responses requests use the markers you supply. The router does not add automatic checkpoints.
 
-For Bedrock Chat Completions and Responses, add `cache_control` to a content part or message. Function tools can also carry markers on supported Claude models. Archestra translates each marker into a standalone Converse `cachePoint` after the marked content.
+For Bedrock Responses, add `cache_control` to an input content part or message. Function tools can also carry markers on supported Claude models. Archestra translates each marker into a standalone Converse `cachePoint` after the marked content.
 
 ```json
 {

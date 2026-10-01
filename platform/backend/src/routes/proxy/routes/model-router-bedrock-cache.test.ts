@@ -102,7 +102,7 @@ function sseEvents(body: string): Array<Record<string, unknown>> {
     .map((line) => JSON.parse(line.slice(6)));
 }
 
-for (const surface of ["responses", "chat", "converse"] as const) {
+for (const surface of ["responses", "converse"] as const) {
   for (const stream of [false, true]) {
     bedrockTest(
       `${surface}, stream=${stream}: preserves checkpoints, cache usage and logged native usage`,
@@ -168,33 +168,19 @@ for (const surface of ["responses", "chat", "converse"] as const) {
                   },
                 ],
               }
-            : surface === "chat"
-              ? {
-                  model: `bedrock:${modelId}`,
-                  stream,
-                  stream_options: { include_usage: true },
-                  messages: [
-                    {
-                      role: "user",
-                      content: [
-                        { type: "text", text: "prefix", cache_control },
-                      ],
-                    },
-                  ],
-                }
-              : {
-                  modelId,
-                  messages: [
-                    {
-                      role: "user",
-                      content: [{ text: "prefix" }, checkpoint],
-                    },
-                  ],
-                };
+            : {
+                modelId,
+                messages: [
+                  {
+                    role: "user",
+                    content: [{ text: "prefix" }, checkpoint],
+                  },
+                ],
+              };
         const url =
           surface === "converse"
             ? `/v1/bedrock/${router.agentId}/${stream ? "converse-stream" : "converse"}`
-            : `/v1/model-router/${router.agentId}/${surface === "chat" ? "chat/completions" : "responses"}`;
+            : `/v1/model-router/${router.agentId}/responses`;
         const response = await router.app.inject({
           method: "POST",
           url,
@@ -210,37 +196,23 @@ for (const surface of ["responses", "chat", "converse"] as const) {
         ]);
         if (!stream && surface === "converse")
           expect(response.json().usage).toEqual(usage);
-        if (surface !== "converse") {
+        if (surface === "responses") {
           const wire = !stream
             ? response.json().usage
-            : surface === "responses"
-              ? (
-                  sseEvents(response.body).find(
-                    (e) => e.type === "response.completed",
-                  )?.response as { usage: unknown }
-                ).usage
-              : sseEvents(response.body).find((e) => e.usage)?.usage;
-          expect(wire).toMatchObject(
-            surface === "responses"
-              ? {
-                  input_tokens: 12 + reads + writes,
-                  total_tokens: 15 + reads + writes,
-                  input_tokens_details: {
-                    cached_tokens: reads,
-                    cache_write_tokens: writes,
-                    cache_write_1h_tokens: writes,
-                  },
-                }
-              : {
-                  prompt_tokens: 12 + reads + writes,
-                  total_tokens: 15 + reads + writes,
-                  prompt_tokens_details: {
-                    cached_tokens: reads,
-                    cache_write_tokens: writes,
-                    cache_write_1h_tokens: writes,
-                  },
-                },
-          );
+            : (
+                sseEvents(response.body).find(
+                  (e) => e.type === "response.completed",
+                )?.response as { usage: unknown }
+              ).usage;
+          expect(wire).toMatchObject({
+            input_tokens: 12 + reads + writes,
+            total_tokens: 15 + reads + writes,
+            input_tokens_details: {
+              cached_tokens: reads,
+              cache_write_tokens: writes,
+              cache_write_1h_tokens: writes,
+            },
+          });
         }
         const logged = await InteractionModel.findAllPaginated({
           limit: 1,

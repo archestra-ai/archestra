@@ -190,7 +190,7 @@ If you use custom or self-hosted models, add pricing explicitly so cost reportin
 
 Prompt caching lets a provider reuse the unchanging prefix of a request, such as the system prompt, tool definitions, and earlier turns, instead of reprocessing it on every turn. Reused tokens are billed at a fraction of the input price, which matters most for agents with a long system prompt or many tools. Cache-write prices vary by model and TTL. Later requests can save money when the provider reports cache reads.
 
-Archestra adds cache breakpoints to supported chat conversations and headless agent runs. Native provider proxy requests preserve caller markers. Bedrock Model Router translates caller `cache_control` markers into Converse checkpoints. It adds no automatic router breakpoints. Supported models may also cache eligible prefixes implicitly.
+Archestra adds cache breakpoints to supported chat conversations and headless agent runs. Native provider proxy requests preserve caller markers. Bedrock Model Router Responses translates caller `cache_control` markers into Converse checkpoints. It adds no automatic router breakpoints. Supported models may also cache eligible prefixes implicitly.
 
 Archestra records provider-reported cache reads and writes in logs and cost statistics. Bedrock translated input totals include fresh input, cache reads, and cache writes. Repeated prompts do not guarantee cache hits. See [Supported LLM Providers](/docs/platform-supported-llm-providers#prompt-caching) for request formats, model support, and TTL limits.
 

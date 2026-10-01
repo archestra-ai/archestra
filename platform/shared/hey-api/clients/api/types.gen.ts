@@ -19,29 +19,23 @@ export type OpenAiChatCompletionRequestInput = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -60,7 +54,6 @@ export type OpenAiChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -72,21 +65,17 @@ export type OpenAiChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -125,14 +114,11 @@ export type OpenAiChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -144,7 +130,6 @@ export type OpenAiChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -157,7 +142,6 @@ export type OpenAiChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -273,7 +257,6 @@ export type OpenAiChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -1599,29 +1582,23 @@ export type CerebrasChatCompletionRequestInput = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -1640,7 +1617,6 @@ export type CerebrasChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -1652,21 +1628,17 @@ export type CerebrasChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -1705,14 +1677,11 @@ export type CerebrasChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -1724,7 +1693,6 @@ export type CerebrasChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -1737,7 +1705,6 @@ export type CerebrasChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -1853,7 +1820,6 @@ export type CerebrasChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -2131,29 +2097,23 @@ export type MistralChatCompletionRequestInput = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -2172,7 +2132,6 @@ export type MistralChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -2184,21 +2143,17 @@ export type MistralChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -2237,14 +2192,11 @@ export type MistralChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -2256,7 +2208,6 @@ export type MistralChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -2269,7 +2220,6 @@ export type MistralChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -2385,7 +2335,6 @@ export type MistralChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -2543,29 +2492,23 @@ export type PerplexityChatCompletionRequestInput = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -2584,7 +2527,6 @@ export type PerplexityChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -2596,21 +2538,17 @@ export type PerplexityChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -2649,14 +2587,11 @@ export type PerplexityChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -2668,7 +2603,6 @@ export type PerplexityChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -2681,7 +2615,6 @@ export type PerplexityChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -2797,7 +2730,6 @@ export type PerplexityChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -2956,29 +2888,23 @@ export type GroqChatCompletionRequestInput = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -2997,7 +2923,6 @@ export type GroqChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -3009,21 +2934,17 @@ export type GroqChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -3062,14 +2983,11 @@ export type GroqChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -3081,7 +2999,6 @@ export type GroqChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -3094,7 +3011,6 @@ export type GroqChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -3210,7 +3126,6 @@ export type GroqChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -3368,29 +3283,23 @@ export type OpenrouterChatCompletionRequestInput = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -3409,7 +3318,6 @@ export type OpenrouterChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -3421,21 +3329,17 @@ export type OpenrouterChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -3474,14 +3378,11 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -3493,7 +3394,6 @@ export type OpenrouterChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -3506,7 +3406,6 @@ export type OpenrouterChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -3622,7 +3521,6 @@ export type OpenrouterChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -4772,29 +4670,23 @@ export type DeepSeekChatCompletionRequestInput = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -4813,7 +4705,6 @@ export type DeepSeekChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -4825,21 +4716,17 @@ export type DeepSeekChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -4878,14 +4765,11 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -4897,7 +4781,6 @@ export type DeepSeekChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -4910,7 +4793,6 @@ export type DeepSeekChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -5026,7 +4908,6 @@ export type DeepSeekChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -5185,29 +5066,23 @@ export type ArchestraChatCompletionRequestInput = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -5226,7 +5101,6 @@ export type ArchestraChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -5238,21 +5112,17 @@ export type ArchestraChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -5291,14 +5161,11 @@ export type ArchestraChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -5310,7 +5177,6 @@ export type ArchestraChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -5323,7 +5189,6 @@ export type ArchestraChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -5439,7 +5304,6 @@ export type ArchestraChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -5594,17 +5458,14 @@ export type ArchestraChatCompletionResponseInput = {
 export type MinimaxChatCompletionRequestInput = {
     model: string;
     messages: Array<{
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -5647,29 +5508,23 @@ export type MinimaxChatCompletionRequestInput = {
         }>;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -5688,7 +5543,6 @@ export type MinimaxChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -5700,21 +5554,17 @@ export type MinimaxChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -5753,14 +5603,11 @@ export type MinimaxChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -5772,7 +5619,6 @@ export type MinimaxChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -5785,7 +5631,6 @@ export type MinimaxChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -5901,7 +5746,6 @@ export type MinimaxChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -6056,29 +5900,23 @@ export type XaiChatCompletionRequestInput = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -6097,7 +5935,6 @@ export type XaiChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -6109,21 +5946,17 @@ export type XaiChatCompletionRequestInput = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -6162,14 +5995,11 @@ export type XaiChatCompletionRequestInput = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -6181,7 +6011,6 @@ export type XaiChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -6194,7 +6023,6 @@ export type XaiChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -6310,7 +6138,6 @@ export type XaiChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -6508,29 +6335,23 @@ export type OpenAiChatCompletionRequest = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -6549,7 +6370,6 @@ export type OpenAiChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -6561,21 +6381,17 @@ export type OpenAiChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -6614,14 +6430,11 @@ export type OpenAiChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -6633,7 +6446,6 @@ export type OpenAiChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -6646,7 +6458,6 @@ export type OpenAiChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -6762,7 +6573,6 @@ export type OpenAiChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -8088,29 +7898,23 @@ export type CerebrasChatCompletionRequest = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -8129,7 +7933,6 @@ export type CerebrasChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -8141,21 +7944,17 @@ export type CerebrasChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -8194,14 +7993,11 @@ export type CerebrasChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -8213,7 +8009,6 @@ export type CerebrasChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -8226,7 +8021,6 @@ export type CerebrasChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -8342,7 +8136,6 @@ export type CerebrasChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -8620,29 +8413,23 @@ export type MistralChatCompletionRequest = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -8661,7 +8448,6 @@ export type MistralChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -8673,21 +8459,17 @@ export type MistralChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -8726,14 +8508,11 @@ export type MistralChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -8745,7 +8524,6 @@ export type MistralChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -8758,7 +8536,6 @@ export type MistralChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -8874,7 +8651,6 @@ export type MistralChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -9032,29 +8808,23 @@ export type PerplexityChatCompletionRequest = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -9073,7 +8843,6 @@ export type PerplexityChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -9085,21 +8854,17 @@ export type PerplexityChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -9138,14 +8903,11 @@ export type PerplexityChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -9157,7 +8919,6 @@ export type PerplexityChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -9170,7 +8931,6 @@ export type PerplexityChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -9286,7 +9046,6 @@ export type PerplexityChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -9445,29 +9204,23 @@ export type GroqChatCompletionRequest = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -9486,7 +9239,6 @@ export type GroqChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -9498,21 +9250,17 @@ export type GroqChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -9551,14 +9299,11 @@ export type GroqChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -9570,7 +9315,6 @@ export type GroqChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -9583,7 +9327,6 @@ export type GroqChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -9699,7 +9442,6 @@ export type GroqChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -9857,29 +9599,23 @@ export type OpenrouterChatCompletionRequest = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -9898,7 +9634,6 @@ export type OpenrouterChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -9910,21 +9645,17 @@ export type OpenrouterChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -9963,14 +9694,11 @@ export type OpenrouterChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -9982,7 +9710,6 @@ export type OpenrouterChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -9995,7 +9722,6 @@ export type OpenrouterChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -10111,7 +9837,6 @@ export type OpenrouterChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -11261,29 +10986,23 @@ export type DeepSeekChatCompletionRequest = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -11302,7 +11021,6 @@ export type DeepSeekChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -11314,21 +11032,17 @@ export type DeepSeekChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -11367,14 +11081,11 @@ export type DeepSeekChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -11386,7 +11097,6 @@ export type DeepSeekChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -11399,7 +11109,6 @@ export type DeepSeekChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -11515,7 +11224,6 @@ export type DeepSeekChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -11674,29 +11382,23 @@ export type ArchestraChatCompletionRequest = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -11715,7 +11417,6 @@ export type ArchestraChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -11727,21 +11428,17 @@ export type ArchestraChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -11780,14 +11477,11 @@ export type ArchestraChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -11799,7 +11493,6 @@ export type ArchestraChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -11812,7 +11505,6 @@ export type ArchestraChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -11928,7 +11620,6 @@ export type ArchestraChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -12083,17 +11774,14 @@ export type ArchestraChatCompletionResponse = {
 export type MinimaxChatCompletionRequest = {
     model: string;
     messages: Array<{
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -12136,29 +11824,23 @@ export type MinimaxChatCompletionRequest = {
         }>;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -12177,7 +11859,6 @@ export type MinimaxChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -12189,21 +11870,17 @@ export type MinimaxChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -12242,14 +11919,11 @@ export type MinimaxChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -12261,7 +11935,6 @@ export type MinimaxChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -12274,7 +11947,6 @@ export type MinimaxChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -12390,7 +12062,6 @@ export type MinimaxChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -12545,29 +12216,23 @@ export type XaiChatCompletionRequest = {
      */
     messages: Array<{
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'developer';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }>;
-        cache_control?: unknown;
         role: 'system';
         name?: string;
     } | {
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -12586,7 +12251,6 @@ export type XaiChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
-            cache_control?: unknown;
             type: 'file';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -12598,21 +12262,17 @@ export type XaiChatCompletionRequest = {
                 filename?: string;
             };
         }>;
-        cache_control?: unknown;
         role: 'user';
         name?: string;
     } | {
-        cache_control?: unknown;
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         }> | Array<{
-            cache_control?: unknown;
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -12651,14 +12311,11 @@ export type XaiChatCompletionRequest = {
             };
         }>;
     } | {
-        cache_control?: unknown;
         role: 'tool';
         content: string | Array<{
-            cache_control?: unknown;
             type: 'text';
             text: string;
         } | {
-            cache_control?: unknown;
             type: 'image_url';
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -12670,7 +12327,6 @@ export type XaiChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
-        cache_control?: unknown;
         role: 'function';
         content: string | null;
         name: string;
@@ -12683,7 +12339,6 @@ export type XaiChatCompletionRequest = {
      *
      */
     tools?: Array<{
-        cache_control?: unknown;
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -12799,7 +12454,6 @@ export type XaiChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -44082,29 +43736,23 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
          */
         messages: Array<{
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'developer';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'system';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -44123,7 +43771,6 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
-                cache_control?: unknown;
                 type: 'file';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -44135,21 +43782,17 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                     filename?: string;
                 };
             }>;
-            cache_control?: unknown;
             role: 'user';
             name?: string;
         } | {
-            cache_control?: unknown;
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }> | Array<{
-                cache_control?: unknown;
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -44188,14 +43831,11 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 };
             }>;
         } | {
-            cache_control?: unknown;
             role: 'tool';
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -44207,7 +43847,6 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             }>;
             tool_call_id: string;
         } | {
-            cache_control?: unknown;
             role: 'function';
             content: string | null;
             name: string;
@@ -44220,7 +43859,6 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
          *
          */
         tools?: Array<{
-            cache_control?: unknown;
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -44336,7 +43974,6 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
-                        cache_control?: unknown;
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -44582,29 +44219,23 @@ export type GithubCopilotChatCompletionsWithAgentData = {
          */
         messages: Array<{
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'developer';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'system';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -44623,7 +44254,6 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
-                cache_control?: unknown;
                 type: 'file';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -44635,21 +44265,17 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                     filename?: string;
                 };
             }>;
-            cache_control?: unknown;
             role: 'user';
             name?: string;
         } | {
-            cache_control?: unknown;
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }> | Array<{
-                cache_control?: unknown;
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -44688,14 +44314,11 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 };
             }>;
         } | {
-            cache_control?: unknown;
             role: 'tool';
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -44707,7 +44330,6 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             }>;
             tool_call_id: string;
         } | {
-            cache_control?: unknown;
             role: 'function';
             content: string | null;
             name: string;
@@ -44720,7 +44342,6 @@ export type GithubCopilotChatCompletionsWithAgentData = {
          *
          */
         tools?: Array<{
-            cache_control?: unknown;
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -44836,7 +44457,6 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
-                        cache_control?: unknown;
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -51036,29 +50656,23 @@ export type GetInteractionsResponses = {
                  */
                 messages: Array<{
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'developer';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'system';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -51077,7 +50691,6 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
-                        cache_control?: unknown;
                         type: 'file';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -51089,21 +50702,17 @@ export type GetInteractionsResponses = {
                             filename?: string;
                         };
                     }>;
-                    cache_control?: unknown;
                     role: 'user';
                     name?: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }> | Array<{
-                        cache_control?: unknown;
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -51142,14 +50751,11 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
-                    cache_control?: unknown;
                     role: 'tool';
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -51161,7 +50767,6 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -51174,7 +50779,6 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -51290,7 +50894,6 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
-                                cache_control?: unknown;
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -51380,29 +50983,23 @@ export type GetInteractionsResponses = {
                  */
                 messages: Array<{
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'developer';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'system';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -51421,7 +51018,6 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
-                        cache_control?: unknown;
                         type: 'file';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -51433,21 +51029,17 @@ export type GetInteractionsResponses = {
                             filename?: string;
                         };
                     }>;
-                    cache_control?: unknown;
                     role: 'user';
                     name?: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }> | Array<{
-                        cache_control?: unknown;
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -51486,14 +51078,11 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
-                    cache_control?: unknown;
                     role: 'tool';
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -51505,7 +51094,6 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -51518,7 +51106,6 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -51634,7 +51221,6 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
-                                cache_control?: unknown;
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -51883,29 +51469,23 @@ export type GetInteractionsResponses = {
                  */
                 messages: Array<{
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'developer';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'system';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -51924,7 +51504,6 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
-                        cache_control?: unknown;
                         type: 'file';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -51936,21 +51515,17 @@ export type GetInteractionsResponses = {
                             filename?: string;
                         };
                     }>;
-                    cache_control?: unknown;
                     role: 'user';
                     name?: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }> | Array<{
-                        cache_control?: unknown;
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -51989,14 +51564,11 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
-                    cache_control?: unknown;
                     role: 'tool';
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -52008,7 +51580,6 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -52021,7 +51592,6 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -52137,7 +51707,6 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
-                                cache_control?: unknown;
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -52227,29 +51796,23 @@ export type GetInteractionsResponses = {
                  */
                 messages: Array<{
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'developer';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'system';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -52268,7 +51831,6 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
-                        cache_control?: unknown;
                         type: 'file';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -52280,21 +51842,17 @@ export type GetInteractionsResponses = {
                             filename?: string;
                         };
                     }>;
-                    cache_control?: unknown;
                     role: 'user';
                     name?: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }> | Array<{
-                        cache_control?: unknown;
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -52333,14 +51891,11 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
-                    cache_control?: unknown;
                     role: 'tool';
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -52352,7 +51907,6 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -52365,7 +51919,6 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -52481,7 +52034,6 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
-                                cache_control?: unknown;
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -52730,29 +52282,23 @@ export type GetInteractionsResponses = {
                  */
                 messages: Array<{
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'developer';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'system';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -52771,7 +52317,6 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
-                        cache_control?: unknown;
                         type: 'file';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -52783,21 +52328,17 @@ export type GetInteractionsResponses = {
                             filename?: string;
                         };
                     }>;
-                    cache_control?: unknown;
                     role: 'user';
                     name?: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }> | Array<{
-                        cache_control?: unknown;
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -52836,14 +52377,11 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
-                    cache_control?: unknown;
                     role: 'tool';
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -52855,7 +52393,6 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -52868,7 +52405,6 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -52984,7 +52520,6 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
-                                cache_control?: unknown;
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -53074,29 +52609,23 @@ export type GetInteractionsResponses = {
                  */
                 messages: Array<{
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'developer';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }>;
-                    cache_control?: unknown;
                     role: 'system';
                     name?: string;
                 } | {
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -53115,7 +52644,6 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
-                        cache_control?: unknown;
                         type: 'file';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -53127,21 +52655,17 @@ export type GetInteractionsResponses = {
                             filename?: string;
                         };
                     }>;
-                    cache_control?: unknown;
                     role: 'user';
                     name?: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     }> | Array<{
-                        cache_control?: unknown;
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -53180,14 +52704,11 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
-                    cache_control?: unknown;
                     role: 'tool';
                     content: string | Array<{
-                        cache_control?: unknown;
                         type: 'text';
                         text: string;
                     } | {
-                        cache_control?: unknown;
                         type: 'image_url';
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -53199,7 +52720,6 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
-                    cache_control?: unknown;
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -53212,7 +52732,6 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
-                    cache_control?: unknown;
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -53328,7 +52847,6 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
-                                cache_control?: unknown;
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -58385,29 +57903,23 @@ export type GetInteractionResponses = {
              */
             messages: Array<{
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'developer';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'system';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -58426,7 +57938,6 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'file';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -58438,21 +57949,17 @@ export type GetInteractionResponses = {
                         filename?: string;
                     };
                 }>;
-                cache_control?: unknown;
                 role: 'user';
                 name?: string;
             } | {
-                cache_control?: unknown;
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }> | Array<{
-                    cache_control?: unknown;
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -58491,14 +57998,11 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
-                cache_control?: unknown;
                 role: 'tool';
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -58510,7 +58014,6 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
-                cache_control?: unknown;
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -58523,7 +58026,6 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
-                cache_control?: unknown;
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -58639,7 +58141,6 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
-                            cache_control?: unknown;
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -58729,29 +58230,23 @@ export type GetInteractionResponses = {
              */
             messages: Array<{
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'developer';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'system';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -58770,7 +58265,6 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'file';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -58782,21 +58276,17 @@ export type GetInteractionResponses = {
                         filename?: string;
                     };
                 }>;
-                cache_control?: unknown;
                 role: 'user';
                 name?: string;
             } | {
-                cache_control?: unknown;
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }> | Array<{
-                    cache_control?: unknown;
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -58835,14 +58325,11 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
-                cache_control?: unknown;
                 role: 'tool';
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -58854,7 +58341,6 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
-                cache_control?: unknown;
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -58867,7 +58353,6 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
-                cache_control?: unknown;
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -58983,7 +58468,6 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
-                            cache_control?: unknown;
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -59232,29 +58716,23 @@ export type GetInteractionResponses = {
              */
             messages: Array<{
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'developer';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'system';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -59273,7 +58751,6 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'file';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -59285,21 +58762,17 @@ export type GetInteractionResponses = {
                         filename?: string;
                     };
                 }>;
-                cache_control?: unknown;
                 role: 'user';
                 name?: string;
             } | {
-                cache_control?: unknown;
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }> | Array<{
-                    cache_control?: unknown;
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -59338,14 +58811,11 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
-                cache_control?: unknown;
                 role: 'tool';
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -59357,7 +58827,6 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
-                cache_control?: unknown;
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -59370,7 +58839,6 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
-                cache_control?: unknown;
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -59486,7 +58954,6 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
-                            cache_control?: unknown;
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -59576,29 +59043,23 @@ export type GetInteractionResponses = {
              */
             messages: Array<{
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'developer';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'system';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -59617,7 +59078,6 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'file';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -59629,21 +59089,17 @@ export type GetInteractionResponses = {
                         filename?: string;
                     };
                 }>;
-                cache_control?: unknown;
                 role: 'user';
                 name?: string;
             } | {
-                cache_control?: unknown;
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }> | Array<{
-                    cache_control?: unknown;
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -59682,14 +59138,11 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
-                cache_control?: unknown;
                 role: 'tool';
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -59701,7 +59154,6 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
-                cache_control?: unknown;
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -59714,7 +59166,6 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
-                cache_control?: unknown;
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -59830,7 +59281,6 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
-                            cache_control?: unknown;
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -60079,29 +59529,23 @@ export type GetInteractionResponses = {
              */
             messages: Array<{
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'developer';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'system';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -60120,7 +59564,6 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'file';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -60132,21 +59575,17 @@ export type GetInteractionResponses = {
                         filename?: string;
                     };
                 }>;
-                cache_control?: unknown;
                 role: 'user';
                 name?: string;
             } | {
-                cache_control?: unknown;
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }> | Array<{
-                    cache_control?: unknown;
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -60185,14 +59624,11 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
-                cache_control?: unknown;
                 role: 'tool';
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -60204,7 +59640,6 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
-                cache_control?: unknown;
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -60217,7 +59652,6 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
-                cache_control?: unknown;
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -60333,7 +59767,6 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
-                            cache_control?: unknown;
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -60423,29 +59856,23 @@ export type GetInteractionResponses = {
              */
             messages: Array<{
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'developer';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }>;
-                cache_control?: unknown;
                 role: 'system';
                 name?: string;
             } | {
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -60464,7 +59891,6 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'file';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -60476,21 +59902,17 @@ export type GetInteractionResponses = {
                         filename?: string;
                     };
                 }>;
-                cache_control?: unknown;
                 role: 'user';
                 name?: string;
             } | {
-                cache_control?: unknown;
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 }> | Array<{
-                    cache_control?: unknown;
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -60529,14 +59951,11 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
-                cache_control?: unknown;
                 role: 'tool';
                 content: string | Array<{
-                    cache_control?: unknown;
                     type: 'text';
                     text: string;
                 } | {
-                    cache_control?: unknown;
                     type: 'image_url';
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -60548,7 +59967,6 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
-                cache_control?: unknown;
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -60561,7 +59979,6 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
-                cache_control?: unknown;
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -60677,7 +60094,6 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
-                            cache_control?: unknown;
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -64999,29 +64415,23 @@ export type KimiChatCompletionsWithDefaultAgentData = {
          */
         messages: Array<{
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'developer';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'system';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -65040,7 +64450,6 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
-                cache_control?: unknown;
                 type: 'file';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -65052,21 +64461,17 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                     filename?: string;
                 };
             }>;
-            cache_control?: unknown;
             role: 'user';
             name?: string;
         } | {
-            cache_control?: unknown;
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }> | Array<{
-                cache_control?: unknown;
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -65105,14 +64510,11 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 };
             }>;
         } | {
-            cache_control?: unknown;
             role: 'tool';
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -65124,7 +64526,6 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             }>;
             tool_call_id: string;
         } | {
-            cache_control?: unknown;
             role: 'function';
             content: string | null;
             name: string;
@@ -65137,7 +64538,6 @@ export type KimiChatCompletionsWithDefaultAgentData = {
          *
          */
         tools?: Array<{
-            cache_control?: unknown;
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -65253,7 +64653,6 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
-                        cache_control?: unknown;
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -65499,29 +64898,23 @@ export type KimiChatCompletionsWithAgentData = {
          */
         messages: Array<{
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'developer';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'system';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -65540,7 +64933,6 @@ export type KimiChatCompletionsWithAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
-                cache_control?: unknown;
                 type: 'file';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -65552,21 +64944,17 @@ export type KimiChatCompletionsWithAgentData = {
                     filename?: string;
                 };
             }>;
-            cache_control?: unknown;
             role: 'user';
             name?: string;
         } | {
-            cache_control?: unknown;
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }> | Array<{
-                cache_control?: unknown;
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -65605,14 +64993,11 @@ export type KimiChatCompletionsWithAgentData = {
                 };
             }>;
         } | {
-            cache_control?: unknown;
             role: 'tool';
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -65624,7 +65009,6 @@ export type KimiChatCompletionsWithAgentData = {
             }>;
             tool_call_id: string;
         } | {
-            cache_control?: unknown;
             role: 'function';
             content: string | null;
             name: string;
@@ -65637,7 +65021,6 @@ export type KimiChatCompletionsWithAgentData = {
          *
          */
         tools?: Array<{
-            cache_control?: unknown;
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -65753,7 +65136,6 @@ export type KimiChatCompletionsWithAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
-                        cache_control?: unknown;
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -80057,29 +79439,23 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
          */
         messages: Array<{
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'developer';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'system';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -80098,7 +79474,6 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
-                cache_control?: unknown;
                 type: 'file';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -80110,21 +79485,17 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                     filename?: string;
                 };
             }>;
-            cache_control?: unknown;
             role: 'user';
             name?: string;
         } | {
-            cache_control?: unknown;
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }> | Array<{
-                cache_control?: unknown;
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -80163,14 +79534,11 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 };
             }>;
         } | {
-            cache_control?: unknown;
             role: 'tool';
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -80182,7 +79550,6 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             }>;
             tool_call_id: string;
         } | {
-            cache_control?: unknown;
             role: 'function';
             content: string | null;
             name: string;
@@ -80195,7 +79562,6 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
          *
          */
         tools?: Array<{
-            cache_control?: unknown;
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -80311,7 +79677,6 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
-                        cache_control?: unknown;
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -80557,29 +79922,23 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
          */
         messages: Array<{
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'developer';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }>;
-            cache_control?: unknown;
             role: 'system';
             name?: string;
         } | {
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -80598,7 +79957,6 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
-                cache_control?: unknown;
                 type: 'file';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
@@ -80610,21 +79968,17 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                     filename?: string;
                 };
             }>;
-            cache_control?: unknown;
             role: 'user';
             name?: string;
         } | {
-            cache_control?: unknown;
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             }> | Array<{
-                cache_control?: unknown;
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -80663,14 +80017,11 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 };
             }>;
         } | {
-            cache_control?: unknown;
             role: 'tool';
             content: string | Array<{
-                cache_control?: unknown;
                 type: 'text';
                 text: string;
             } | {
-                cache_control?: unknown;
                 type: 'image_url';
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
@@ -80682,7 +80033,6 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             }>;
             tool_call_id: string;
         } | {
-            cache_control?: unknown;
             role: 'function';
             content: string | null;
             name: string;
@@ -80695,7 +80045,6 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
          *
          */
         tools?: Array<{
-            cache_control?: unknown;
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
@@ -80811,7 +80160,6 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
-                        cache_control?: unknown;
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174

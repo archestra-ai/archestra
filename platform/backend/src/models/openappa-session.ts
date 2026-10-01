@@ -187,6 +187,31 @@ class OpenAppaSessionModel {
   }
 
   /**
+   * The client-native ids of the children a session started, such as a lead's
+   * teammates. A child session id is its parent's id, a colon, and the id the
+   * client gave the child.
+   */
+  static async childNativeIds(params: {
+    organizationId: string;
+    parentSessionId: string;
+  }): Promise<string[]> {
+    const prefix = `${params.parentSessionId}:`;
+    const rows = await db
+      .select({ sessionId: table.sessionId })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.parentId, params.parentSessionId),
+        ),
+      );
+    return rows
+      .map((row) => row.sessionId)
+      .filter((sessionId) => sessionId.startsWith(prefix))
+      .map((sessionId) => sessionId.slice(prefix.length));
+  }
+
+  /**
    * Finds fork ancestors for each supplied session, nearest first.
    * A recursive CTE keeps tool-stamp and session-receipt evidence coherent.
    */

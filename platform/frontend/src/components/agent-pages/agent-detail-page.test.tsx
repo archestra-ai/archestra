@@ -162,6 +162,29 @@ describe("AgentDetailPage", () => {
     mockAgent(baseAgent);
   });
 
+  it.each([
+    "personal",
+    "team",
+    "org",
+  ])("omits legacy %s visibility from agent and gateway headers", (scope) => {
+    mockAgent({ ...baseAgent, scope });
+    const { unmount } = render(<AgentDetailPage kind="agent" id="a1" />);
+    for (const label of ["Personal", "Team", "Organization"]) {
+      expect(
+        screen.queryByText(label, { exact: true }),
+      ).not.toBeInTheDocument();
+    }
+    unmount();
+    mockAgent({ ...baseAgent, scope, agentType: "mcp_gateway" });
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
+    expect(screen.getByText(baseAgent.name)).toBeVisible();
+    for (const label of ["Personal", "Team", "Organization"]) {
+      expect(
+        screen.queryByText(label, { exact: true }),
+      ).not.toBeInTheDocument();
+    }
+  });
+
   it("shows the not-found state for a trashed id, which the API no longer returns", () => {
     mockAgent(null);
     render(<AgentDetailPage kind="agent" id="a1" />);
@@ -344,6 +367,7 @@ describe("AgentDetailPage", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.getByText("form section: configuration")).toBeVisible();
+    expect(screen.getByText("Built-in")).toBeVisible();
     expect(
       screen.queryByRole("link", { name: "Tools, Skills & Knowledge" }),
     ).toBeNull();

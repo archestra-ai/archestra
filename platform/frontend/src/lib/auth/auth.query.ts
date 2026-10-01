@@ -80,24 +80,29 @@ export function useHasPermissions(
   } = useAllPermissions();
 
   const scopedCheck = permissionScope !== undefined;
-  const hasPermissionResult = Object.entries(permissionsToCheck).every(
-    ([resource, actions]) =>
-      actions.every((action) =>
-        scopedCheck &&
-        ScopedResourceSchema.safeParse(resource).success &&
-        ResourcePermissionActionSchema.safeParse(action).success
-          ? capabilities.data?.some(
-              (grant) =>
-                grant.resource === resource &&
-                grant.action === action &&
-                (grant.scope === "*" || grant.scope === permissionScope),
-            ) === true
-          : hasPermissions(userPermissions, { [resource]: [action] }),
-      ),
-  );
+  const missingPermissions: Permissions = {};
+  for (const [resource, actions] of Object.entries(permissionsToCheck)) {
+    const missingActions = actions.filter((action) =>
+      scopedCheck &&
+      ScopedResourceSchema.safeParse(resource).success &&
+      ResourcePermissionActionSchema.safeParse(action).success
+        ? !capabilities.data?.some(
+            (grant) =>
+              grant.resource === resource &&
+              grant.action === action &&
+              (grant.scope === "*" || grant.scope === permissionScope),
+          )
+        : !hasPermissions(userPermissions, { [resource]: [action] }),
+    );
+    if (missingActions.length) {
+      missingPermissions[resource as keyof Permissions] = missingActions;
+    }
+  }
+  const hasPermissionResult = Object.keys(missingPermissions).length === 0;
 
   return {
     data: hasPermissionResult,
+    missingPermissions,
     isPending: isPending || (scopedCheck && capabilities.isPending),
     isLoading: isLoading || (scopedCheck && capabilities.isLoading),
     isError,

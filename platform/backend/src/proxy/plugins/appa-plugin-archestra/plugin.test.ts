@@ -3162,7 +3162,7 @@ describe("AppaPluginArchestra", () => {
           response: {},
           responseText: "raw child return",
         }),
-      ).rejects.toMatchObject({ statusCode: 503 });
+      ).rejects.toMatchObject({ statusCode: 409, shouldRetry: false });
       expect(endChild).not.toHaveBeenCalled();
     } finally {
       endChild.mockRestore();
@@ -3195,6 +3195,44 @@ describe("AppaPluginArchestra", () => {
     trusted.request.turnEndOperationId = "turn_end:request-digest";
     const priorSecret = config.openappa.offerSigningSecret;
     config.openappa.offerSigningSecret = "";
+    // The child's spawn is on record, so only the missing marker key stops it.
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor("user:user|s1:a1"),
+      root: openappaActor("user:user|s1"),
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1:a1",
+      parentId: "user:user|s1",
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values([
+      {
+        organizationId: organization.id,
+        callerId: "user:user",
+        sessionId: "user:user|s1",
+        operationId: "call:spawn-one",
+        root: openappaActor("user:user|s1"),
+        status: "complete",
+        input: { semantic: { event: "tool_call", tool: "Agent", spawn: true } },
+        decision: { decision: "allow_call" },
+      },
+      {
+        organizationId: organization.id,
+        callerId: "user:user",
+        sessionId: "user:user|s1:a1",
+        operationId: "call:child-spawn-one",
+        root: openappaActor("user:user|s1"),
+        status: "complete",
+        input: {
+          semantic: {
+            event: "tool_call",
+            tool: "WebSearch",
+            spawn_call_id: "spawn-one",
+          },
+        },
+        decision: { decision: "deny_call" },
+      },
+    ]);
 
     try {
       await plugin.onSessionInit(context);
@@ -3204,7 +3242,10 @@ describe("AppaPluginArchestra", () => {
           response: {},
           responseText: "REPORT-RAW-KOALA-0831",
         }),
-      ).rejects.toMatchObject({ statusCode: 503 });
+      ).rejects.toMatchObject({
+        statusCode: 503,
+        message: "OpenAPPA could not protect the child return",
+      });
       expect(endChild).not.toHaveBeenCalled();
     } finally {
       config.openappa.offerSigningSecret = priorSecret;
@@ -5116,7 +5157,37 @@ context_control = true
           clientContext({
             interactionType: "anthropic:messages",
             headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
-            body: userTurns([SPAWN_PROMPT]),
+            body: claudeTurns([SPAWN_PROMPT]),
+          }),
+        ),
+      ).resolves.toBe("user:user|s1:a1");
+    });
+
+    // WebFetch reads its page with a model call of its own, sent under the
+    // headers of the agent that ran the tool.
+    test("keeps a tool's own model call out of the agent that ran the tool", async () => {
+      await expect(
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
+            body: userTurns([
+              "Web page content:\n---\nExample Domain\n---\n\nWhat is the page's title?",
+            ]),
+          }),
+        ),
+      ).resolves.toBe("user:user|s1");
+    });
+
+    test("binds a child that declares no tools by its marker", async () => {
+      await expect(
+        boundSessionId(
+          claudePlugin(),
+          clientContext({
+            interactionType: "anthropic:messages",
+            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
+            body: userTurns([marked({ parentId: "s1", spawner: "s1" })]),
           }),
         ),
       ).resolves.toBe("user:user|s1:a1");
@@ -5145,7 +5216,7 @@ context_control = true
             interactionType: "anthropic:messages",
             headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
             // The marker a1 put on its own child, read back.
-            body: userTurns([marked({ parentId: "s1:a1", spawner: "s1" })]),
+            body: claudeTurns([marked({ parentId: "s1:a1", spawner: "s1" })]),
           }),
         ),
       ).resolves.toBe("user:user|s1:a1");
@@ -5239,7 +5310,7 @@ context_control = true
           clientContext({
             interactionType: "anthropic:messages",
             headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "g1" },
-            body: userTurns([opening]),
+            body: claudeTurns([opening]),
           }),
         );
       const forged = marked({ parentId: "s1:a1", spawner: "s1" }).replace(
@@ -5391,7 +5462,7 @@ context_control = true
 
     test("falls back to the native parent when history has no receipt", async () => {
       await expect(
-        grandchild(userTurns(["Summary of the conversation so far."])),
+        grandchild(claudeTurns(["Summary of the conversation so far."])),
       ).resolves.toBe("user:user|s1:g1");
     });
   });
@@ -5470,6 +5541,20 @@ function userTurns(texts: string[]) {
       ...(index > 0 ? [{ role: "assistant", content: "ok" }] : []),
       { role: "user", content },
     ]),
+  };
+}
+
+/** An agent's own turn: Claude Code declares the agent's tools on each one. */
+function claudeTurns(texts: string[]) {
+  return {
+    ...userTurns(texts),
+    tools: [
+      {
+        name: "Read",
+        description: "Read a file",
+        input_schema: { type: "object", properties: {} },
+      },
+    ],
   };
 }
 

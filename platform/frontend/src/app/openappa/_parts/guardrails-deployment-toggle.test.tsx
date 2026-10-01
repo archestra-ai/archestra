@@ -131,9 +131,14 @@ test("an administrator selects whether unsupported clients bypass or block", asy
 });
 
 test("a non-admin cannot change unsupported client behavior", async () => {
-  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data:
+          permissions.openappaSettings?.every((action) => action === "read") ??
+          false,
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   show();
   expect(
     await screen.findByRole("combobox", {

@@ -66,6 +66,11 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
 
+  // OpenAPPA
+  openappaPolicy: ["read", "update"],
+  openappaSettings: ["read", "update"],
+  openappaDiagnostics: ["read", "update", "admin"],
+
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
 
@@ -132,6 +137,11 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
+
+  // OpenAPPA
+  openappaPolicy: ["read", "update"],
+  openappaSettings: ["read"],
+  openappaDiagnostics: ["read", "update"],
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
@@ -207,6 +217,11 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // minting installation tokens from a stored App credential is privileged;
   // default members get no access — editors and admins manage/use App configs
   credential: ["read"],
+
+  // OpenAPPA
+  openappaPolicy: ["read"],
+  openappaSettings: ["read"],
+  openappaDiagnostics: [],
 
   // Knowledge
   knowledgeSource: ["read", "query"],
@@ -304,6 +319,7 @@ export const adminPermissions: Record<Resource, Action[]> = {
  */
 export const platformAdminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
+  openappaDiagnostics: ["read", "update"],
   simpleView: [],
   log: ["read"],
   auditLog: ["read"],
@@ -374,6 +390,17 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
  * in allAvailableActions has a corresponding entry here.
  */
 export const permissionDescriptions: Record<string, string> = {
+  // OpenAPPA
+  "openappaPolicy:read": "View OpenAPPA policy, batteries, and coverage",
+  "openappaPolicy:update":
+    "Validate and edit OpenAPPA policy and manage batteries",
+  "openappaSettings:read": "View OpenAPPA enforcement settings and GitHub sync",
+  "openappaSettings:update":
+    "Manage OpenAPPA enforcement settings and GitHub sync",
+  "openappaDiagnostics:read":
+    "Read all organization yells and your own consult logs",
+  "openappaDiagnostics:update": "Resolve and reopen organization yells",
+  "openappaDiagnostics:admin": "Read consult logs across the organization",
   // Agents
   "agent:read": "View and list agents",
   "agent:create": "Create new agents",
@@ -561,9 +588,9 @@ export const requiredEndpointPermissionsMap: Partial<
 > = {
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
-  [RouteId.GetGuardrailsPolicy]: { toolPolicy: ["read"] },
-  [RouteId.ValidateGuardrailsPolicy]: { toolPolicy: ["update"] },
-  [RouteId.UpdateGuardrailsPolicy]: { toolPolicy: ["update"] },
+  [RouteId.GetGuardrailsPolicy]: { openappaPolicy: ["read"] },
+  [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["update"] },
+  [RouteId.UpdateGuardrailsPolicy]: { openappaPolicy: ["update"] },
   // Inspecting or mutating arbitrary outbound destinations can configure
   // credential-bearing egress, so those operations remain settings-manager
   // only. Credential-redacted registry summaries require Agent read and are
@@ -1746,40 +1773,40 @@ export const requiredEndpointPermissionsMap: Partial<
   // you past the trash.
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: {},
-  [RouteId.GetGuardrailsDeployment]: { toolPolicy: ["read"] },
-  [RouteId.UpdateGuardrailsDeployment]: { organization: ["update"] },
-  [RouteId.GetAppaGithubSync]: { toolPolicy: ["read"] },
-  [RouteId.ConfigureAppaGithubSync]: { organization: ["update"] },
-  [RouteId.CreateAppaGithubRepository]: { organization: ["update"] },
-  [RouteId.UpdateAppaGithubSync]: { organization: ["update"] },
-  [RouteId.GetOpenappaBatteries]: { toolPolicy: ["read"] },
-  [RouteId.GetOpenappaBatteryPolicySource]: { toolPolicy: ["read"] },
-  [RouteId.GetOpenappaEffectivePolicy]: { toolPolicy: ["read"] },
-  [RouteId.GetOpenappaBatteryMatches]: { toolPolicy: ["read"] },
-  [RouteId.CreateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
-  [RouteId.UpdateOpenappaBatteryInstall]: { toolPolicy: ["update"] },
-  [RouteId.DeleteOpenappaBatteryInstall]: { toolPolicy: ["update"] },
-  [RouteId.DeleteOpenappaBatteryInclude]: { toolPolicy: ["update"] },
-  [RouteId.UploadOpenappaBatteryPackage]: { toolPolicy: ["update"] },
-  [RouteId.DeleteOpenappaBatteryPackage]: { toolPolicy: ["update"] },
-  [RouteId.GetOpenappaPolicyDeclarations]: { toolPolicy: ["read"] },
+  [RouteId.GetGuardrailsDeployment]: { openappaSettings: ["read"] },
+  [RouteId.UpdateGuardrailsDeployment]: { openappaSettings: ["update"] },
+  [RouteId.GetAppaGithubSync]: { openappaSettings: ["read"] },
+  [RouteId.ConfigureAppaGithubSync]: { openappaSettings: ["update"] },
+  [RouteId.CreateAppaGithubRepository]: { openappaSettings: ["update"] },
+  [RouteId.UpdateAppaGithubSync]: { openappaSettings: ["update"] },
+  [RouteId.GetOpenappaBatteries]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryPolicySource]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaEffectivePolicy]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryMatches]: { openappaPolicy: ["read"] },
+  [RouteId.CreateOpenappaBatteryInstall]: { openappaPolicy: ["update"] },
+  [RouteId.UpdateOpenappaBatteryInstall]: { openappaPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryInstall]: { openappaPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryInclude]: { openappaPolicy: ["update"] },
+  [RouteId.UploadOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
+  [RouteId.GetOpenappaPolicyDeclarations]: { openappaPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
-  [RouteId.AcceptHeldAppaGithubPull]: { toolPolicy: ["update"] },
+  [RouteId.AcceptHeldAppaGithubPull]: { openappaPolicy: ["update"] },
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
-  // log:read sees the caller's own consults; log:admin lifts it org-wide in the handler.
-  [RouteId.GetOpenAppaYells]: { log: ["read"] },
-  [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
-  [RouteId.DownloadOpenAppaYell]: { log: ["read"] },
-  [RouteId.GetOpenAppaYell]: { log: ["read"] },
-  [RouteId.UpdateOpenAppaYell]: { log: ["read"], toolPolicy: ["update"] },
-  [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
+  // Diagnostics readers see all yells and their own consults; admin widens consult visibility.
+  [RouteId.GetOpenAppaYells]: { openappaDiagnostics: ["read"] },
+  [RouteId.GetOpenAppaYellsSummary]: { openappaDiagnostics: ["read"] },
+  [RouteId.DownloadOpenAppaYell]: { openappaDiagnostics: ["read"] },
+  [RouteId.GetOpenAppaYell]: { openappaDiagnostics: ["read"] },
+  [RouteId.UpdateOpenAppaYell]: { openappaDiagnostics: ["read", "update"] },
+  [RouteId.GetOpenappaExternalConsults]: { openappaDiagnostics: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
-  [RouteId.GetOpenappaCoverageEntities]: { toolPolicy: ["read"] },
-  [RouteId.GetOpenappaCoverageTools]: { toolPolicy: ["read"] },
-  [RouteId.GetOpenappaCoverageSummary]: { toolPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageEntities]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageTools]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageSummary]: { openappaPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
@@ -2083,7 +2110,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
-  "/openappa": { toolPolicy: ["read"] },
+  "/openappa": { openappaPolicy: ["read"] },
+  "/openappa/policy": { openappaPolicy: ["read"] },
+  "/openappa/batteries": { openappaPolicy: ["read"] },
+  "/openappa/yells": { openappaDiagnostics: ["read"] },
 
   // Logs
   "/llm/logs": { log: ["read"] },
@@ -2127,7 +2157,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/credentials": { credential: ["read"] },
-  "/settings/openappa": { toolPolicy: ["read"] },
+  "/settings/openappa": { openappaSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

@@ -499,7 +499,6 @@ async function routeChatCompletion(
 
 async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const body = request.body as OpenAi.Types.ResponsesRequest;
-  const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
   const auth = await getModelRouterAuth(request);
   const agent = params.agentId
@@ -507,7 +506,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
   const resolution = await resolveModelRoute({
-    requestedModel: chatBody.model,
+    requestedModel: body.model,
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
@@ -530,6 +529,9 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     );
   }
 
+  const { chatBody, responsesContext } = responsesToOpenaiChat(body, {
+    preserveContentParts: resolution.provider === "bedrock",
+  });
   const routedChatBody = {
     ...chatBody,
     model: resolution.modelId,

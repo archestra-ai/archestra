@@ -28,6 +28,13 @@ export interface BatteryPackage {
   files: Array<BatteryFileInput>
 }
 
+export interface ChildAddressRecord {
+  /** Fully scoped session id of the parent that addressed the child. */
+  parentSessionId: string
+  /** The exact message the parent addressed to the child. */
+  value: string
+}
+
 export interface ChildReturnRecord {
   /** Fully scoped session id of the child whose return crossed. */
   childSessionId: string
@@ -139,6 +146,13 @@ export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): 
  * which is what Archestra serves, or declare annotators alone.
  */
 export declare function listBundledOpenappaBatteries(): Promise<Array<BatteryPackage>>
+
+/**
+ * Loads the messages a child's parent addressed to it, from the retained
+ * ChildAddress operations in PostgreSQL. This is the authority the child side
+ * verifies an arriving message against; nothing the client carries proves one.
+ */
+export declare function loadChildAddresses(organizationId: string, childSessionId: string): Promise<Array<ChildAddressRecord>>
 
 /**
  * Loads the child returns a parent's family durably crossed, from the

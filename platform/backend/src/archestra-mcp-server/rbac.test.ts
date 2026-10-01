@@ -76,6 +76,63 @@ describe("checkToolPermission", () => {
     expect(result).toBeNull();
   });
 
+  test("runtime reporting and remediation remain available without management access", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const role = await makeCustomRole(org.id, {
+      permission: {},
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, {
+      role: role.role,
+    });
+    const context = {
+      ...memberContext,
+      organizationId: org.id,
+      userId: user.id,
+    };
+    for (const tool of ["yell", "execute_remedy_plan", "get_remedy_plans"]) {
+      expect(await checkToolPermission(t(tool), context)).toBeNull();
+    }
+    expect(
+      await checkToolPermission(t("get_guardrails_policy"), context),
+    ).not.toBeNull();
+    expect(
+      await checkToolPermission(t("get_openappa_yell"), context),
+    ).not.toBeNull();
+  });
+
+  test("diagnostics readers can retrieve yells independently of policy and LLM logs", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const role = await makeCustomRole(org.id, {
+      permission: { openappaDiagnostics: ["read"] },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, {
+      role: role.role,
+    });
+    const context = {
+      ...memberContext,
+      organizationId: org.id,
+      userId: user.id,
+    };
+    expect(
+      await checkToolPermission(t("get_openappa_yell"), context),
+    ).toBeNull();
+    expect(
+      await checkToolPermission(t("get_guardrails_policy"), context),
+    ).not.toBeNull();
+  });
+
   test("allows admin to use any tool", async () => {
     const result = await checkToolPermission(
       t("create_knowledge_base"),

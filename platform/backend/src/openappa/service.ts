@@ -1134,6 +1134,31 @@ export async function approveSpawnReturn(params: {
   }
 }
 
+/**
+ * A parent addresses a child it started, as a lead does when it sends its
+ * teammate a message. The runtime flows the parent's current label into the
+ * child before the child reads the message, and retains the message so the
+ * child's side can verify it arrived from this parent.
+ */
+export async function addressChild(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  childSessionId: string;
+  value: string;
+}): Promise<{ addressed: true } | { addressed: false; feedback: string }> {
+  const decision = await dispatch(params.session, {
+    event: "child_address",
+    operation_id: params.operationId,
+    spawned_id: params.childSessionId,
+    output: params.value,
+  });
+  // A child that ended, or one the runtime never forked, cannot take the
+  // parent's label, so the message must not reach it. The parent's model is
+  // told why; the rest of its turn stands.
+  if (decision.decision === "ack") return { addressed: true };
+  return { addressed: false, feedback: decisionMessage(decision) };
+}
+
 function runtimeToolResult(decision: NativeDecision): CallToolResult {
   if (decision.decision !== "mcp_result")
     return {
@@ -1254,17 +1279,16 @@ export type AppaChildReturnRecord = {
  * Loads the child returns a parent's family durably crossed, from the retained
  * ChildEnd operations in PostgreSQL. This is the authority the parent side
  * verifies arriving completions against.
+ *
+ * The deployment switch is not read here. The request that verifies the
+ * returns read it at its boundary; a switch turned off mid-request must not
+ * empty the records and refuse returns the runtime did retain.
  */
 export async function loadChildReturns(params: {
   organizationId: string;
   parentSessionId: string;
 }): Promise<AppaChildReturnRecord[]> {
   try {
-    if (
-      capturedActivation.getStore() !== "active" &&
-      !(await isGuardrailsV2Active())
-    )
-      return [];
     const module = await binding();
     const records = await module.loadChildReturns(
       params.organizationId,
@@ -1280,6 +1304,33 @@ export async function loadChildReturns(params: {
     logger.warn(
       { err: error, parentSessionId: params.parentSessionId },
       "Failed to load OpenAPPA child returns",
+    );
+    throw openappaFailure(error);
+  }
+}
+
+/**
+ * Loads the messages a child's parent addressed to it, from the retained
+ * ChildAddress operations in PostgreSQL. This is the authority the child side
+ * verifies arriving messages against.
+ *
+ * The deployment switch is not read here, for the reason `loadChildReturns`
+ * gives.
+ */
+export async function loadChildAddresses(params: {
+  organizationId: string;
+  childSessionId: string;
+}): Promise<Array<{ parentSessionId: string; value: string }>> {
+  try {
+    const module = await binding();
+    return await module.loadChildAddresses(
+      params.organizationId,
+      params.childSessionId,
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, childSessionId: params.childSessionId },
+      "Failed to load OpenAPPA child addresses",
     );
     throw openappaFailure(error);
   }

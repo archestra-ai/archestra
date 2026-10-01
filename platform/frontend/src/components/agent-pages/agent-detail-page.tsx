@@ -18,12 +18,12 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AgentBadge } from "@/components/agent-badge";
 import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime-credentials-dialog";
 import { AgentSavedSetupBanner } from "@/components/agent-saved-setup-banner";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { CreatedByCell } from "@/components/created-by-cell";
@@ -465,10 +465,7 @@ function AgentDetails({
             />
           </div>
           <span className="min-w-0 truncate">{agent.name}</span>
-          <AgentBadge
-            type={isBuiltIn ? "builtIn" : agent.scope}
-            className="font-normal"
-          />
+          {isBuiltIn && <BuiltInAgentBadge className="font-normal" />}
           {/* Hidden below sm: the header is one clipped line, and the Start
               run button below already carries the glyph. */}
           {hasAgentRuntime && (

@@ -361,14 +361,23 @@ describe("own-vs-all log split (log/auditLog read vs a grant at *)", () => {
 });
 
 describe("platform_admin predefined role", () => {
-  test("holds everything except member:impersonate", () => {
+  test("withholds impersonation and organization-wide diagnostics", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
+    expect(p.openappaDiagnostics).toEqual(["read", "update"]);
     // …and is otherwise the full admin set (modulo the UI-behavior resource).
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (["log", "auditLog", "member", "simpleView"].includes(resource)) {
+      if (
+        [
+          "log",
+          "auditLog",
+          "member",
+          "simpleView",
+          "openappaDiagnostics",
+        ].includes(resource)
+      ) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);
@@ -378,7 +387,10 @@ describe("platform_admin predefined role", () => {
   test("cannot grant the withheld permissions (no-escalation rule)", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(findUngrantablePermissions(p, adminPermissions)).toEqual(
-      expect.arrayContaining(["member:impersonate"]),
+      expect.arrayContaining([
+        "member:impersonate",
+        "openappaDiagnostics:admin",
+      ]),
     );
     // …while granting its own role or member stays possible.
     expect(findUngrantablePermissions(p, p)).toEqual([]);

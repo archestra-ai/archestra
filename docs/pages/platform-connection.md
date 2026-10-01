@@ -228,7 +228,7 @@ The `copilot` CLI must be on your `PATH`.
 
 ### Claude Desktop
 
-Download the setup helper and open it in normal Claude Desktop. Confirm its native installation prompt to start the reviewed setup. For an existing third-party profile, use the terminal option. The setup script supports macOS, Windows, and Linux. Choose subscription authentication or an API key in the review step. The script checks inference, saves a gateway profile, and restarts Desktop. It preserves manually created profiles and backs up changed files. Rerunning setup replaces the managed connection; a different deployment takes precedence over the previous one.
+Download the setup helper and open it in normal Claude Desktop. Confirm its native installation prompt to start the reviewed setup. For an existing third-party profile, use the terminal option. The setup script supports macOS, Windows, and Linux. Choose subscription authentication or an API key under **Customize setup**. The script checks inference, saves a gateway profile, and restarts Desktop. It preserves manually created profiles and backs up changed files. Rerunning setup replaces the managed connection; a different deployment takes precedence over the previous one.
 
 Connecting the LLM Proxy switches Desktop to third-party mode with separate conversation history. After restart, open **Settings → Import** in Desktop to copy your Claude.ai conversations. Import is a one-time copy; rerun it to add newer conversations. See [Import Conversations](/docs/platform-claude-desktop-example#import-conversations). Tools-only setup does not require this mode switch.
 

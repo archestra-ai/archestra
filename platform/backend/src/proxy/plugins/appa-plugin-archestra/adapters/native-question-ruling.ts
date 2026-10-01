@@ -6,11 +6,23 @@ export function structuredQuestionRuling(
   if (result.isError) return "none";
   try {
     const parsed = JSON.parse(result.content) as { answers?: unknown };
+    if (Array.isArray(parsed)) {
+      if (
+        parsed.length !== 1 ||
+        parsed[0]?.type !== "text" ||
+        typeof parsed[0]?.text !== "string"
+      )
+        return "none";
+      const text = parsed[0].text;
+      try {
+        const value = JSON.parse(text) as { answers?: unknown };
+        return rulingFromValues(answerValues(value?.answers));
+      } catch {
+        return textQuestionRuling(text);
+      }
+    }
     if (typeof parsed === "string") return textQuestionRuling(parsed);
-    const structured = rulingFromValues(stringValues(parsed.answers));
-    return structured !== "none"
-      ? structured
-      : textQuestionRuling(result.content);
+    return rulingFromValues(answerValues(parsed?.answers));
   } catch {
     return textQuestionRuling(result.content);
   }
@@ -25,25 +37,25 @@ export function openCodeQuestionRuling(
 
 function textQuestionRuling(content: string): NativeQuestionRuling {
   const claude = [
-    ...content.matchAll(/="(Approve|Deny)"\.\s*You can now continue\b/g),
+    ...content.matchAll(/="([^"\r\n]*)"\.\s*You can now continue\b/g),
   ].at(-1);
   if (claude?.[1]) return rulingFromValues([claude[1]]);
-  const openCode = content.trimEnd().match(/="(Approve|Deny)"$/);
+  const openCode = content.trimEnd().match(/="([^"\r\n]*)"$/);
   return rulingFromValues(openCode?.[1] ? [openCode[1]] : []);
 }
 
-function rulingFromValues(values: readonly string[]): NativeQuestionRuling {
-  const selected = values.filter(
-    (value) => value === "Approve" || value === "Deny",
-  );
-  if (selected.length !== 1) return "none";
-  return selected[0] === "Approve" ? "approve" : "deny";
+function rulingFromValues(values: readonly unknown[]): NativeQuestionRuling {
+  if (values.length !== 1) return "none";
+  if (values[0] === "Approve") return "approve";
+  return values[0] === "Deny" ? "deny" : "none";
 }
 
-function stringValues(value: unknown): string[] {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(stringValues);
-  if (value && typeof value === "object")
-    return Object.values(value).flatMap(stringValues);
-  return [];
+function answerValues(value: unknown): unknown[] {
+  if (Array.isArray(value))
+    return value.length ? value.flatMap(answerValues) : [undefined];
+  if (value && typeof value === "object") {
+    const values = Object.values(value);
+    return values.length ? values.flatMap(answerValues) : [undefined];
+  }
+  return [value];
 }

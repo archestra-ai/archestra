@@ -3,8 +3,17 @@ import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { executeArchestraTool } from "@/archestra-mcp-server";
+import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import { verifyOfferClaims } from "@/openappa/offer-claims";
+import {
+  SHELL_EXECUTION_PATH,
+  shellExecutionCacheKey,
+  signShellExecutionResponse,
+  verifyShellExecutionTicket,
+} from "@/openappa/shell-execution";
 import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
 import {
   ApiError,
@@ -61,6 +70,71 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
 
   logger.debug("[UnifiedProxy] Registering unified OpenAI routes");
+
+  // Proxy routes bypass browser auth; this endpoint accepts only a leased,
+  // single-use ticket signed for the exact APPA session and control call.
+  fastify.post(
+    SHELL_EXECUTION_PATH,
+    {
+      bodyLimit: 48 * 1024,
+      schema: {
+        hide: true,
+        body: z.object({ ticket: z.string().min(1).max(32_768) }),
+        response: constructResponseSchema(z.unknown()),
+      },
+    },
+    async (request) => {
+      if (!config.openappa.opencodeShellRemedy) {
+        throw new ApiError(404, "OpenAPPA shell execution is disabled");
+      }
+      const ticket = verifyShellExecutionTicket({
+        token: request.body.ticket,
+        secret: config.openappa.offerSigningSecret,
+      });
+      const claims =
+        ticket &&
+        verifyOfferClaims(ticket.offer, config.openappa.offerSigningSecret);
+      if (
+        !ticket ||
+        !claims ||
+        claims.organization_id !== ticket.organizationId ||
+        claims.session_id !== ticket.sessionId ||
+        claims.caller_id !== ticket.callerId ||
+        (claims.parent_id ?? undefined) !== ticket.parentId ||
+        claims.offer_id !== ticket.arguments.offer_id
+      ) {
+        throw new ApiError(403, "Invalid OpenAPPA execution ticket");
+      }
+      const key = shellExecutionCacheKey(
+        request.body.ticket,
+      ) as AllowedCacheKey;
+      const claimed = await cacheManager.getAndDeleteMany<{ nonce: string }>([
+        key,
+      ]);
+      if (claimed[0]?.value.nonce !== ticket.nonce) {
+        throw new ApiError(409, "OpenAPPA execution ticket was already used");
+      }
+      const result = await executeArchestraTool(
+        "archestra__execute_remedy_plan",
+        ticket.arguments,
+        {
+          agent: { id: ticket.agentId, name: "OpenAPPA proxy" },
+          organizationId: ticket.organizationId,
+          ...(ticket.callerId.startsWith("user:")
+            ? { userId: ticket.callerId.slice("user:".length) }
+            : {}),
+          sessionId: ticket.sessionId,
+          currentToolCallId: ticket.callId,
+          mrtr: { enabled: true },
+        },
+      );
+      return signShellExecutionResponse({
+        ticket,
+        result,
+        secret: config.openappa.offerSigningSecret,
+      });
+    },
+  );
 
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.openai.baseUrl,

@@ -128,6 +128,112 @@ describe("ZhipuaiStreamAdapter policy refusal", () => {
   });
 });
 
+describe("ZhipuaiStreamAdapter session receipt", () => {
+  test("prefixes only the first text delta and keeps recorded content aligned", () => {
+    const adapter = zhipuaiAdapterFactory.createStreamAdapter();
+    let issued = 0;
+    adapter.setTextSuffix?.((firstText) => {
+      issued++;
+      return firstText ? "protected session QA" : "";
+    });
+
+    const first = adapter.processChunk(textChunk("first"));
+    const second = adapter.processChunk(textChunk(" second"));
+    const firstSse = first.sseData;
+    const frames = (
+      typeof firstSse === "string"
+        ? firstSse
+        : firstSse
+          ? new TextDecoder().decode(firstSse)
+          : ""
+    )
+      .split("\n\n")
+      .filter(Boolean);
+    expect(frames.map(deltaOf).map((delta) => delta.content)).toEqual([
+      "protected session QA\n\n",
+      "first",
+    ]);
+    expect(second.sseData && deltaOf(second.sseData).content).toBe(" second");
+    expect(issued).toBe(1);
+    expect(adapter.toProviderResponse().choices[0].message.content).toBe(
+      "protected session QA\n\nfirst second",
+    );
+  });
+
+  test("does not issue the receipt on a tool-call-only turn", () => {
+    const adapter = zhipuaiAdapterFactory.createStreamAdapter();
+    let issued = 0;
+    adapter.setTextSuffix?.((firstText) => {
+      issued++;
+      return firstText ? "protected session QA" : "";
+    });
+    adapter.processChunk({
+      id: "chatcmpl-tool",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: "glm-5.3",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "read", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    } as StreamChunk);
+    expect(issued).toBe(1);
+    expect(adapter.toProviderResponse().choices[0].message.content).toBeNull();
+  });
+
+  test("keeps a child receipt on a tool-only turn without repeating it", () => {
+    const adapter = zhipuaiAdapterFactory.createStreamAdapter();
+    let issued = 0;
+    adapter.setTextSuffix?.(() => {
+      issued++;
+      return "child trajectory receipt";
+    });
+    const chunk = {
+      id: "chatcmpl-child",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: "glm-5.3",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_child",
+                type: "function",
+                function: { name: "read", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    } as StreamChunk;
+    const first = adapter.processChunk(chunk);
+    adapter.processChunk(chunk);
+    expect(first.sseData && deltaOf(first.sseData).content).toBe(
+      "child trajectory receipt",
+    );
+    expect(issued).toBe(1);
+    expect(adapter.toProviderResponse().choices[0].message.content).toBe(
+      "child trajectory receipt",
+    );
+  });
+});
+
 describe("ZhipuaiResponseAdapter", () => {
   // The governed-response replace path refuses to send a response it cannot
   // safely rewrite; without withReplacedText an admitted final answer 503'd.

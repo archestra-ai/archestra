@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
 import { structuredQuestionRuling } from "./native-question-ruling";
+import { readableReviewQuestion } from "./native-review-question";
 import {
   asRecord,
   bindMintedChildTrajectory,
@@ -39,10 +40,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     fromAskUser: (args: AskUserArguments) => ({
       questions: [
         {
-          question: args.question,
+          question: readableReviewQuestion(
+            args.question,
+            reviewOptions(args).some((option) => option.label === "Dismiss"),
+          ),
           // Claude Code's AskUserQuestion tab label is at most 12 characters.
           header: questionHeader(args.header, 12),
-          options: args.options.map((option) => ({
+          options: reviewOptions(args).map((option) => ({
             label: option.label,
             description: option.description ?? option.label,
           })),
@@ -207,6 +211,29 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
       return;
     }
   }
+}
+
+function reviewOptions(args: AskUserArguments): AskUserArguments["options"] {
+  if (
+    args.header !== "Approval" ||
+    args.allowMultiple !== false ||
+    args.remedy_offer_ids?.length !== 1 ||
+    !args.remedy_offer_ids[0] ||
+    args.options.length !== 2 ||
+    args.options[0].label !== "Approve" ||
+    args.options[1].label !== "Deny"
+  ) {
+    return args.options;
+  }
+  // A normal answer returns through the client's next turn. Esc still cancels it.
+  return [
+    ...args.options,
+    {
+      label: "Dismiss",
+      description:
+        "Leave this call unanswered without approving or denying it. Continue other reviews.",
+    },
+  ];
 }
 
 function parentSessionId(context: AppaMatchContext): string | undefined {

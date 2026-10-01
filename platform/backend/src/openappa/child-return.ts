@@ -1,6 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 import config from "@/config";
 import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
+import { taskNotificationEnvelope } from "@/openappa/notification-framing";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
 
@@ -103,12 +104,19 @@ export function collectAndStripChildReturns(
       }
 
       let rewritten = value;
+      const taskNotification = taskNotificationEnvelope(value);
       if (
-        isStandaloneEnvelope(value, TASK_NOTIFICATION) ||
+        taskNotification !== undefined ||
         (context.nativeResultSite &&
           startsWithEnvelope(value, TASK_NOTIFICATION))
       ) {
-        rewritten = replaceTaskNotifications(value, context, collected);
+        const completionCount = collected.completions.length;
+        rewritten = replaceTaskNotifications(
+          taskNotification ?? value,
+          context,
+          collected,
+        );
+        if (collected.completions.length === completionCount) rewritten = value;
       } else if (
         isStandaloneEnvelope(value, SUBAGENT_NOTIFICATION) ||
         (context.nativeResultSite &&

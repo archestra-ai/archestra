@@ -14,6 +14,8 @@ export interface OpenAiStubOptions {
   throwAtChunk?: number;
   /** Stream a `get_weather` tool call, closing the turn as `tool_calls`. */
   includeToolCalls?: boolean;
+  /** Override the streamed call for multi-turn proxy tests. */
+  streamingToolCall?: { id: string; name: string; arguments: string };
   /**
    * Return these tool calls (instead of the fixed `list_files` one) from the
    * buffered (non-streaming) response.
@@ -54,9 +56,17 @@ export interface AnthropicStubOptions {
    * buffered (non-streaming) response, e.g. a gateway `run_tool` dispatch with
    * a client-decorated name. Implies a `tool_use` stop reason.
    */
-  nonStreamingToolUse?: { name: string; input: Record<string, unknown> };
+  nonStreamingToolUse?: {
+    id?: string;
+    name: string;
+    input: Record<string, unknown>;
+  };
   /** Emit this tool call through the streamed input-json deltas. */
-  streamingToolUse?: { name: string; input: Record<string, unknown> };
+  streamingToolUse?: {
+    id?: string;
+    name: string;
+    input: Record<string, unknown>;
+  };
 }
 
 export interface GeminiStubOptions {
@@ -166,7 +176,7 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
                   },
                   {
                     type: "tool_use",
-                    id: "toolu_test_weather",
+                    id: options.nonStreamingToolUse?.id ?? "toolu_test_weather",
                     name: options.nonStreamingToolUse?.name ?? "get_weather",
                     input: options.nonStreamingToolUse?.input ?? {
                       location: "SF",
@@ -278,6 +288,11 @@ function openAiStreamOver(
 
 function createOpenAiStream(options: OpenAiStubOptions) {
   if (options.includeToolCalls) {
+    const toolCall = options.streamingToolCall ?? {
+      id: "call_test_weather",
+      name: "get_weather",
+      arguments: '{"location":"SF"}',
+    };
     return openAiStreamOver(
       [
         {
@@ -293,9 +308,9 @@ function createOpenAiStream(options: OpenAiStubOptions) {
                 tool_calls: [
                   {
                     index: 0,
-                    id: "call_test_weather",
+                    id: toolCall.id,
                     type: "function",
-                    function: { name: "get_weather", arguments: "" },
+                    function: { name: toolCall.name, arguments: "" },
                   },
                 ],
               },
@@ -316,7 +331,7 @@ function createOpenAiStream(options: OpenAiStubOptions) {
                 tool_calls: [
                   {
                     index: 0,
-                    function: { arguments: '{"location":"SF"}' },
+                    function: { arguments: toolCall.arguments },
                   },
                 ],
               },
@@ -477,7 +492,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 1,
         content_block: {
           type: "tool_use",
-          id: "toolu_test_weather",
+          id: options.streamingToolUse?.id ?? "toolu_test_weather",
           caller: { type: "direct" },
           name: "get_weather",
           input: {},
@@ -508,7 +523,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 0,
         content_block: {
           type: "tool_use",
-          id: "toolu_test_weather",
+          id: options.streamingToolUse?.id ?? "toolu_test_weather",
           caller: { type: "direct" },
           name: options.streamingToolUse?.name ?? "get_weather",
           input: {},

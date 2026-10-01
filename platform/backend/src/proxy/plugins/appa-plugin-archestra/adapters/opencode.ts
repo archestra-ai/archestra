@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
 import { openCodeQuestionRuling } from "./native-question-ruling";
+import { readableReviewQuestion } from "./native-review-question";
 
 // OpenCode labels each question's tab with a header of at most 30 characters,
 // the same bound ask_user declares for it.
@@ -37,7 +38,7 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
     fromAskUser: (args: AskUserArguments) => ({
       questions: [
         {
-          question: args.question,
+          question: readableReviewQuestion(args.question),
           header: questionHeader(args.header, QUESTION_HEADER_MAX_LENGTH),
           options: args.options.map((option) => ({
             label: option.label,

@@ -664,6 +664,8 @@ class ZhipuaiStreamAdapter
   private reasoningText = "";
 
   private replacedText: string | null = null;
+  private getTextSuffix: ((completedText: string) => string) | null = null;
+  private textPrefixIssued = false;
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
   }
@@ -682,6 +684,10 @@ class ZhipuaiStreamAdapter
         firstChunkTime: null,
       },
     };
+  }
+
+  setTextSuffix(getSuffix: (completedText: string) => string): void {
+    this.getTextSuffix = getSuffix;
   }
 
   processChunk(chunk: ZhipuaiStreamChunk): ChunkProcessingResult {
@@ -734,12 +740,28 @@ class ZhipuaiStreamAdapter
       delta.content || delta.reasoning_content,
     );
     if (hasStreamableContent) {
-      sseData = `data: ${JSON.stringify(
-        delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk,
-      )}\n\n`;
+      const outbound = delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk;
+      if (delta.content && !this.textPrefixIssued && this.getTextSuffix) {
+        this.textPrefixIssued = true;
+        const prefix = this.getTextSuffix(delta.content);
+        if (prefix) {
+          this.state.text = `${prefix}\n\n${this.state.text}`;
+          sseData = this.formatTextDeltaSSE(`${prefix}\n\n`);
+        }
+      }
+      sseData = `${sseData ?? ""}data: ${JSON.stringify(outbound)}\n\n`;
     }
 
     if (delta.tool_calls) {
+      if (!this.textPrefixIssued && this.getTextSuffix) {
+        const prefix = this.getTextSuffix("");
+        if (prefix) {
+          this.textPrefixIssued = true;
+          this.state.text = prefix;
+          const prefixSse = this.formatTextDeltaSSE(prefix);
+          sseData = sseData ? `${prefixSse}${sseData}` : prefixSse;
+        }
+      }
       for (const toolCallDelta of delta.tool_calls) {
         const index = toolCallDelta.index;
 

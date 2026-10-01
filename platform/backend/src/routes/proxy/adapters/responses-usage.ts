@@ -30,14 +30,22 @@ import type { UsageView } from "@/types";
 /** A `usage` object as the Responses wire shape reports it. */
 export interface ResponsesWireUsage {
   input_tokens?: number;
-  input_tokens_details?: { cached_tokens?: number } | null;
+  input_tokens_details?: {
+    cached_tokens?: number;
+    cache_write_tokens?: number;
+    cache_write_1h_tokens?: number;
+  } | null;
   output_tokens?: number;
   output_tokens_details?: { reasoning_tokens?: number } | null;
 }
 
 export interface ResponsesUsage {
   input_tokens: number;
-  input_tokens_details: { cached_tokens: number };
+  input_tokens_details: {
+    cached_tokens: number;
+    cache_write_tokens?: number;
+    cache_write_1h_tokens?: number;
+  };
   output_tokens: number;
   output_tokens_details: { reasoning_tokens: number };
   total_tokens: number;
@@ -47,12 +55,16 @@ export interface ResponsesUsage {
 export function fromResponsesUsage(
   usage: ResponsesWireUsage | null | undefined,
 ): UsageView {
-  const { input, output, cacheRead, reasoning } = responsesUsageTokens(usage);
+  const { input, output, cacheRead, cacheWrite, reasoning } =
+    responsesUsageTokens(usage);
   return {
     inputTokens: input,
     outputTokens: output,
     cacheReadTokens: cacheRead,
-    cacheWriteTokens: 0,
+    cacheWriteTokens: cacheWrite,
+    ...(usage?.input_tokens_details?.cache_write_1h_tokens !== undefined
+      ? { cacheWrite1hTokens: usage.input_tokens_details.cache_write_1h_tokens }
+      : {}),
     reasoningTokens: reasoning,
   };
 }
@@ -70,11 +82,12 @@ export function responsesUsageTokens(
   usage: ResponsesWireUsage | null | undefined,
 ) {
   const cacheRead = usage?.input_tokens_details?.cached_tokens ?? 0;
+  const cacheWrite = usage?.input_tokens_details?.cache_write_tokens ?? 0;
   return {
-    input: Math.max(0, (usage?.input_tokens ?? 0) - cacheRead),
+    input: Math.max(0, (usage?.input_tokens ?? 0) - cacheRead - cacheWrite),
     output: usage?.output_tokens ?? 0,
     cacheRead,
-    cacheWrite: 0,
+    cacheWrite,
     reasoning: usage?.output_tokens_details?.reasoning_tokens ?? 0,
   };
 }
@@ -86,11 +99,19 @@ export function toResponsesUsage(
   const cachedTokens = usage?.cacheReadTokens ?? 0;
   // Back to the gross prompt count the provider reported, so a turn the proxy
   // replaced reports the same input as the turn it replaced.
-  const inputTokens = (usage?.inputTokens ?? 0) + cachedTokens;
+  const cacheWriteTokens = usage?.cacheWriteTokens ?? 0;
+  const inputTokens =
+    (usage?.inputTokens ?? 0) + cachedTokens + cacheWriteTokens;
   const outputTokens = usage?.outputTokens ?? 0;
   return {
     input_tokens: inputTokens,
-    input_tokens_details: { cached_tokens: cachedTokens },
+    input_tokens_details: {
+      cached_tokens: cachedTokens,
+      ...(cacheWriteTokens > 0 ? { cache_write_tokens: cacheWriteTokens } : {}),
+      ...(usage?.cacheWrite1hTokens
+        ? { cache_write_1h_tokens: usage.cacheWrite1hTokens }
+        : {}),
+    },
     output_tokens: outputTokens,
     output_tokens_details: { reasoning_tokens: usage?.reasoningTokens ?? 0 },
     total_tokens: inputTokens + outputTokens,

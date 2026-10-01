@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 import { APPA_PARENT_HEADER, APPA_SESSION_HEADER } from "@archestra/shared";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
-import { verifyDelegationMarker } from "@/openappa/delegation";
+import { verifyDelegatedPrompt } from "@/openappa/delegation";
 import { isWellFormedAppaId } from "@/openappa/service";
 import { ApiError } from "@/types";
 import type { AppaChildTrajectory, AppaMatchContext } from "../types";
@@ -147,6 +147,9 @@ export function bindMintedChildTrajectory(params: {
         : recorded?.spawnCallId
           ? { spawnCallId: recorded.spawnCallId }
           : {}),
+      ...(delegated?.promptDigest
+        ? { spawnPromptDigest: delegated.promptDigest }
+        : {}),
     },
   };
 }
@@ -314,25 +317,26 @@ function delegatedParent(params: {
   context: AppaMatchContext;
   parentNativeId: string;
   childNativeId: string | undefined;
-}): { parentId: string; spawnCallId?: string } | undefined {
+}):
+  | { parentId: string; spawnCallId?: string; promptDigest?: string }
+  | undefined {
   const trusted = params.context.trustedContext;
   if (!trusted) return undefined;
   for (const marker of trusted.request.delegation?.markers ?? []) {
-    if (
-      !verifyDelegationMarker({
-        marker,
-        organizationId: trusted.session.organization_id,
-        callerId: trusted.session.caller_id,
-        spawnerNativeId: params.parentNativeId,
-      })
-    )
-      continue;
+    const verified = verifyDelegatedPrompt({
+      marker,
+      organizationId: trusted.session.organization_id,
+      callerId: trusted.session.caller_id,
+      spawnerNativeId: params.parentNativeId,
+    });
+    if (!verified) continue;
     const childIdentity = params.childNativeId ?? marker.spawnCallId;
     if (childIdentity && `:${marker.parentId}:`.includes(`:${childIdentity}:`))
       continue;
     return {
       parentId: marker.parentId,
       ...(marker.spawnCallId ? { spawnCallId: marker.spawnCallId } : {}),
+      ...verified,
     };
   }
   return undefined;

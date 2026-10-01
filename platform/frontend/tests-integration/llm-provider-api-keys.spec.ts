@@ -1,4 +1,3 @@
-import { sessionSeed } from "../src/mocks/data/auth";
 import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 
@@ -36,6 +35,16 @@ test.describe("LLM Provider API Keys", () => {
 
     await llmKeysPage.goto();
     await llmKeysPage.addButton.click();
+    await expect(
+      page
+        .getByRole("dialog")
+        .getByRole("button", { name: "General", exact: true }),
+    ).toBeHidden();
+    await expect(
+      page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Permissions", exact: true }),
+    ).toBeHidden();
     await page.getByRole("combobox", { name: "Provider" }).click();
     await page
       .getByRole("option", { name: PROVIDER_OPTION_NAME, exact: true })
@@ -68,6 +77,20 @@ test.describe("LLM Provider API Keys", () => {
     });
 
     await llmKeysPage.editButtonFor(KEY_NAME).click();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await page
+      .getByRole("button", { name: "Permissions", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Permissions", exact: true }),
+    ).toBeVisible();
+    // SPDX-SnippetEnd
+    await page.getByRole("button", { name: "General", exact: true }).click();
+    await expect(page.getByLabel(/Base URL/)).toBeHidden();
+    await page.getByRole("button", { name: "Advanced", exact: true }).click();
+    await expect(page.getByLabel(/Base URL/)).toBeVisible();
     const editName = page.getByLabel(/^Name/);
     await editName.clear();
     await editName.fill(UPDATED_NAME);
@@ -168,16 +191,14 @@ test.describe("LLM Provider API Keys", () => {
   }) => {
     const PRIMARY = "Primary Key";
     const SECONDARY = "Secondary Key";
-    // The create dialog defaults to "Just for me", and a primary key only
-    // competes with keys of the same owner. Own the mock key as the signed-in
-    // user so `hasAnyKeyForProvider` in LlmProviderApiKeyForm detects it.
+    // New API keys have no owner and resolve access through their grants.
     const primary = makeLlmProviderApiKey({
       id: "llm-key-primary",
       name: PRIMARY,
       provider: PROVIDER,
       isPrimary: true,
-      scope: "personal",
-      userId: sessionSeed.user.id,
+      scope: "org",
+      userId: null,
     });
 
     // Start with no keys so the primary toggle defaults on.
@@ -198,6 +219,7 @@ test.describe("LLM Provider API Keys", () => {
       .getByRole("textbox", { name: /API Key/i })
       .fill(API_KEY_PLACEHOLDER);
 
+    await page.getByRole("button", { name: "Advanced" }).click();
     const primarySwitch = page.getByRole("switch", { name: /Primary key/i });
     await expect(primarySwitch).toBeChecked();
 
@@ -228,11 +250,14 @@ test.describe("LLM Provider API Keys", () => {
       .getByRole("textbox", { name: /API Key/i })
       .fill(API_KEY_PLACEHOLDER);
 
+    await page.getByRole("button", { name: "Advanced" }).click();
     const secondarySwitch = page.getByRole("switch", { name: /Primary key/i });
     await expect(secondarySwitch).not.toBeChecked();
     await expect(secondarySwitch).toBeDisabled();
     await expect(
-      page.getByText(new RegExp(`"${PRIMARY}" is already your primary key`)),
+      page.getByText(
+        new RegExp(`"${PRIMARY}" is already the primary shared key`),
+      ),
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Cancel" }).click();

@@ -50,6 +50,22 @@ class OpenAppaSpawnCorrelationModel {
       .limit(2);
     if (rows.length !== 1) return null;
 
+    const allowed = await OpenAppaSpawnCorrelationModel.allowedSpawn({
+      organizationId: params.organizationId,
+      callerId: params.callerId,
+      parentSessionId: params.parentSessionId,
+      spawnCallId: rows[0].toolCallId,
+    });
+    return allowed ? rows[0].toolCallId : null;
+  }
+
+  /** Whether the runtime allowed `spawnCallId` as a spawn in the parent session. */
+  static async allowedSpawn(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    parentSessionId: string;
+    spawnCallId: string;
+  }): Promise<boolean> {
     const [spawn] = await db
       .select({ operationId: operations.operationId })
       .from(operations)
@@ -57,7 +73,7 @@ class OpenAppaSpawnCorrelationModel {
         and(
           eq(operations.organizationId, params.organizationId),
           eq(operations.sessionId, params.parentSessionId),
-          eq(operations.operationId, `call:${rows[0].toolCallId}`),
+          eq(operations.operationId, `call:${params.spawnCallId}`),
           eq(operations.status, "complete"),
           params.callerId
             ? eq(operations.callerId, params.callerId)
@@ -67,7 +83,7 @@ class OpenAppaSpawnCorrelationModel {
         ),
       )
       .limit(1);
-    return spawn ? rows[0].toolCallId : null;
+    return spawn !== undefined;
   }
 }
 

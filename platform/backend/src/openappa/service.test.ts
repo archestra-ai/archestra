@@ -2432,6 +2432,30 @@ describe("remedy by offer", () => {
     ]);
   });
 
+  test("loads retained child returns after the deployment switch turns off mid-request", async () => {
+    // The request read the switch as on at its boundary. Returning nothing
+    // here would refuse every return the runtime retained.
+    await GuardrailsDeploymentModel.setEnabled(false);
+    native.loadChildReturns.mockResolvedValueOnce([
+      {
+        childSessionId: "user:alice|conversation:a1",
+        value: "SUMMARY(24 characters): safe",
+      },
+    ]);
+
+    const records = await loadChildReturns({
+      organizationId,
+      parentSessionId: "user:alice|conversation",
+    });
+
+    expect(records).toEqual([
+      {
+        childSessionId: "user:alice|conversation:a1",
+        value: "SUMMARY(24 characters): safe",
+      },
+    ]);
+  });
+
   test("fails closed with 503 when the child returns cannot be loaded", async () => {
     native.loadChildReturns.mockRejectedValueOnce(
       new Error("host SQL requires a leased connection"),

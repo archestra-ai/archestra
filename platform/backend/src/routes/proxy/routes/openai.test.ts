@@ -24,6 +24,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -37,6 +38,7 @@ import {
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
+import { useMswServer } from "@/test/msw";
 import { ApiError, type OpenAi } from "@/types";
 import {
   openAiEmbeddingsAdapterFactory,
@@ -156,6 +158,72 @@ function createOpenAiRouteTestApp() {
   });
   return app;
 }
+
+describe("OpenAI proxy reasoning effort", () => {
+  const server = useMswServer();
+
+  test("forwards max reasoning effort to the upstream provider", async ({
+    makeAgent,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Reasoning Effort Agent" });
+    await ModelModel.create({
+      externalId: "openai/reasoning-model",
+      provider: "openai",
+      modelId: "reasoning-model",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    let upstreamBody: unknown;
+    server.use(
+      http.post(
+        "https://api.openai.com/v1/chat/completions",
+        async ({ request }) => {
+          upstreamBody = await request.json();
+          return HttpResponse.json({
+            id: "chatcmpl-reasoning",
+            object: "chat.completion",
+            created: 1700000000,
+            model: "reasoning-model",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: "Hello", refusal: null },
+                finish_reason: "stop",
+                logprobs: null,
+              },
+            ],
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 10,
+              total_tokens: 22,
+            },
+          });
+        },
+      ),
+    );
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: { authorization: "Bearer test-key" },
+        payload: {
+          model: "reasoning-model",
+          messages: [{ role: "user", content: "Hello" }],
+          reasoning_effort: "max",
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamBody).toMatchObject({ reasoning_effort: "max" });
+      expect(response.json().choices[0].message.content).toBe("Hello");
+    } finally {
+      await app.close();
+    }
+  });
+});
 
 describe("OpenAI proxy streaming", () => {
   let openAiStubOptions: { interruptAtChunk?: number };

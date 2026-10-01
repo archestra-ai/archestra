@@ -253,6 +253,10 @@ Private mode can use the verified sender's personal credentials. Internal and Pu
 
 Select a runtime Agent in Chat and send a task to open its live terminal. Attach files before starting so the Agent can read them in its container. Startup progress and failures appear alongside the run.
 
+**Focus terminal** starts on. Mouse actions and keyboard shortcuts go to the terminal application. Turn it off for browser text selection, copying, and context menus.
+
+Terminal applications can copy selections to your computer's clipboard while this page is active. Cmd+C or Ctrl+C also copies selected terminal text. Paste it into another application, such as Notes. Without a selection, Ctrl+C keeps its normal terminal action.
+
 You can leave the page while work continues. Reopen it from the sidebar to see current output or retained history. Runs indicate when input is needed or progress has stalled. Send follow-up instructions to continue the work.
 
 ## Organize Runs In Projects

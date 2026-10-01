@@ -10,6 +10,7 @@ import {
   ARCHESTRA_MARK_TAGLINE_ROW,
   archestraMarkWithText,
 } from "./archestra-mark";
+import { CODEX_CONNECTION_VERIFICATION_WINDOWS } from "./codex-connection-verification.windows";
 import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
 import { describeMarketplaceContents } from "./marketplace-copy";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
@@ -131,6 +132,24 @@ $Script:GuardUninstalled = $false
 # is a dependency that can only ever break a future claude launch (deleted
 # files, reconfigured shells); connect re-installs everything.
 function Remove-ArchGuard {
+  ${
+    client.clientId === "codex"
+      ? `if (Test-Path ($GuardPath + '.handoff.cjs')) {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+      Write-Warning 'Could not restore Codex settings; keeping the startup guard for a later retry.'
+      return
+    }
+    try {
+      & node ($GuardPath + '.handoff.cjs') --remove-direct
+      if ($LASTEXITCODE -ne 0) { throw 'Codex settings restoration failed.' }
+    } catch {
+      Write-Warning 'Could not restore Codex settings; keeping the startup guard for a later retry.'
+      return
+    }
+  }
+  Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.handoff.cjs'), ($GuardPath + '.verify.ps1')`
+      : ""
+  }
   $Script:GuardUninstalled = $true
   Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile
   $profilePaths = @()
@@ -943,9 +962,8 @@ export function buildWindowsStartupGuardInstallSection(
     : `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(promptRelpath)})`;
   const extraInstall =
     client.clientId === "codex"
-      ? handoffEnabled
-        ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.cjs'), [Convert]::FromBase64String('${Buffer.from(CODEX_HANDOFF_HELPER).toString("base64")}'))`
-        : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.handoff.cjs')`
+      ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.cjs'), [Convert]::FromBase64String('${Buffer.from(CODEX_HANDOFF_HELPER).toString("base64")}'))
+[IO.File]::WriteAllBytes(($archGuardPath + '.verify.ps1'), [Convert]::FromBase64String('${Buffer.from(CODEX_CONNECTION_VERIFICATION_WINDOWS).toString("base64")}'))`
       : client.clientId === "copilot-cli"
         ? handoffEnabled
           ? `$null = New-Item -ItemType Directory -Force ($archGuardPath + '.instructions')\nCopy-Item -Force (Join-Path $env:USERPROFILE ${psq(promptRelpath)}) ($archGuardPath + '.instructions/AGENTS.md')`
@@ -984,6 +1002,16 @@ $archGuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archGuardPath)
 ${promptInstall}
 ${extraInstall}
+${
+  client.clientId === "codex"
+    ? ctx.proxy
+      ? `$archCodexExe = Get-Command -Name codex -CommandType Application -ErrorAction Stop | Select-Object -First 1
+& node ($archGuardPath + '.handoff.cjs') --install-direct $archCodexExe.Source
+if ($LASTEXITCODE -ne 0) { throw 'Could not prepare Codex for direct tool calls.' }`
+      : `& node ($archGuardPath + '.handoff.cjs') --remove-direct
+if ($LASTEXITCODE -ne 0) { throw 'Could not restore Codex direct tool settings.' }`
+    : ""
+}
 # A guard installed BEFORE the version-check feature has no $GuardFormatVersion
 # stamp and no [U] update check, so at launch it can never nudge the user to
 # re-connect on its own. Running connect is the one moment we can lift such a
@@ -1026,6 +1054,28 @@ function ${client.binary} {
   if ($archReal) {
     if ($archUtilityCommand) { & $archReal.Source @args; return }
     ${promptArgs}
+    ${client.clientId === "codex" ? "$archDirectReady = $false" : ""}
+    ${
+      client.clientId === "codex" && ctx.proxy
+        ? `$archLaunchArgs = if ($null -ne $archLaunchArgs) { @($archLaunchArgs) } else { @($args) }
+    $archSkippedProxy = 'proxy' -in @(Get-Content -Path (Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}) -ErrorAction SilentlyContinue)
+    if ((Test-Path $archGuard) -and -not $archSkippedProxy) {
+      if (-not (Test-Path ($archGuard + '.handoff.cjs')) -or -not (Get-Command node -ErrorAction SilentlyContinue)) {
+        Write-Error 'Could not prepare Codex direct tool mode; refusing a proxy-connected launch.'
+        return
+      }
+      try {
+        $archDirectConfig = & node ($archGuard + '.handoff.cjs') --direct $archReal.Source --output-base64 @args 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $archDirectConfig) { throw 'Catalog refresh failed.' }
+        $archLaunchArgs = @('-c', 'features.code_mode_host=false', '-c', 'web_search="disabled"', '-c', [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$archDirectConfig))) + $archLaunchArgs
+        $archDirectReady = $true
+      } catch {
+        Write-Error 'Could not refresh Codex direct tool mode; refusing a proxy-connected launch.'
+        return
+      }
+    }`
+        : ""
+    }
     ${
       handoffEnabled && client.clientId === "copilot-cli"
         ? `$archPreviousDirs = $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS
@@ -1038,8 +1088,8 @@ function ${client.binary} {
           : ""
     }
     ${
-      handoffEnabled && client.clientId === "codex"
-        ? `if ((Test-Path ($archGuard + '.handoff.cjs')) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+      client.clientId === "codex"
+        ? `if (($archDirectReady -or ${handoffEnabled ? "$true" : "$false"}) -and (Test-Path ($archGuard + '.handoff.cjs')) -and (Get-Command node -ErrorAction SilentlyContinue)) {
       $archPreviousLaunchArgs = $env:ARCHESTRA_CODEX_LAUNCH_ARGS
       $archPreviousLaunchMarker = $env:ARCHESTRA_CODEX_LAUNCH_MARKER
       $archLaunchMarker = Join-Path ([IO.Path]::GetTempPath()) ('archestra-codex-' + [IO.Path]::GetRandomFileName())

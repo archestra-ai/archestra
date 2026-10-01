@@ -182,6 +182,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: "get_guardrails_policy",
     title: "Read OpenAPPA policy",
+    annotations: { readOnlyHint: true },
     description:
       "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Use this read to recover after a lost local publish response, without publishing again. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),

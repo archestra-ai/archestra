@@ -8438,6 +8438,50 @@ describe("McpClient", () => {
     });
 
     describe("MCP aggregate methods with OAuth headers", () => {
+      test("resource and prompt discovery skips the in-process catalog without fake uninstall errors", async ({
+        seedAndAssignArchestraTools,
+      }) => {
+        await seedAndAssignArchestraTools(agentId);
+        expect(await mcpClient.listResources(agentId)).toEqual({
+          resources: [],
+        });
+        expect(await mcpClient.listResourceTemplates(agentId)).toEqual({
+          resourceTemplates: [],
+        });
+        expect(await mcpClient.listPrompts(agentId)).toEqual({ prompts: [] });
+        expect(mockConnect).not.toHaveBeenCalled();
+        expect(
+          await db
+            .select()
+            .from(schema.mcpToolCallsTable)
+            .where(eq(schema.mcpToolCallsTable.agentId, agentId)),
+        ).toHaveLength(0);
+
+        const external = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__resource_probe",
+          description: "Resource probe",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, external.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+        mockListResources.mockResolvedValue({
+          resources: [{ uri: "resource://external", name: "External" }],
+        });
+        expect(await mcpClient.listResources(agentId)).toEqual({
+          resources: [{ uri: "resource://external", name: "External" }],
+        });
+        expect(mockConnect).toHaveBeenCalledTimes(1);
+        expect(
+          await db
+            .select()
+            .from(schema.mcpToolCallsTable)
+            .where(eq(schema.mcpToolCallsTable.agentId, agentId)),
+        ).toHaveLength(0);
+      });
+
       test("uses separate aggregate cached clients for external IdP users", async () => {
         const tool = await ToolModel.createToolIfNotExists({
           name: "github-mcp-server__external_idp_resources",

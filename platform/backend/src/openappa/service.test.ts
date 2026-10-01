@@ -10,6 +10,7 @@ import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
 import {
@@ -188,6 +189,46 @@ describe("APPA feature boundary", () => {
         child_native_id: "child",
       }),
     );
+  });
+
+  test.each([
+    "spawn_agent",
+    "collaboration.spawn_agent",
+  ])("names a collaboration spawn in the retry spelling without changing its tool: %s", async (name) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call", spawn_binding: "fork-1" }),
+    );
+
+    await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "spawn",
+          name,
+          namespace: "collaboration",
+          arguments: { message: "Read the report", task_name: "reader" },
+        },
+      ],
+      {
+        canonicalize: (name) => name,
+        isSpawn: (candidate, namespace) =>
+          (candidate === "spawn_agent" ||
+            candidate === "collaboration.spawn_agent") &&
+          (namespace === undefined ||
+            namespace === "functions" ||
+            namespace === "collaboration"),
+      },
+    );
+
+    expect(
+      JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
+    ).toMatchObject({
+      event: "tool_call",
+      tool: name,
+      spelling: "collaboration.spawn_agent",
+      spawn: true,
+      arguments: { message: "Read the report", task_name: "reader" },
+    });
   });
 
   test("reports through the authenticated native session after policy checking", async () => {
@@ -1116,18 +1157,27 @@ describe("APPA feature boundary", () => {
     );
   });
 
-  test("keeps a successful spawn launch pending until the child binds", async () => {
+  test.each([
+    '{"agent_id":"child-1"}',
+    '{"task_name":"/root/child"}',
+  ])("keeps a successful spawn launch pending until the child binds: %s", async (content) => {
+    const adapter = new AppaCodexAdapter();
+    const launch = {
+      id: "spawn",
+      name: "spawn_agent",
+      namespace: "collaboration",
+      content,
+      isError: false,
+    };
     native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
     const result = await processProxyResults({
       session,
       canonicalize: (name) => name,
-      classifySpawnResult: (answer) =>
-        answer.name === "spawn_agent" ? "pending" : undefined,
+      classifySpawnResult: (answer) => adapter.classifySpawnResult(answer),
       results: [
         {
-          id: "spawn",
-          name: "spawn_agent",
-          content: '{"agent_id":"child-1"}',
+          ...launch,
+          content: adapter.normalizeChildLaunchResult(launch) ?? content,
           isError: false,
         },
       ],

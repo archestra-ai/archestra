@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
 import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import { extractGatewayToolDeclarations } from "@/routes/proxy/utils/gateway-tool-declarations";
 import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
@@ -3271,6 +3272,58 @@ describe("client session identity", () => {
       sessionId: "chat-conversation",
       parentId: "parent-root",
       provenance: "appa-header",
+    });
+  });
+
+  test("a Codex guardian auto-review is not bound as an unprepared child", () => {
+    // The review names the requester session as parent_thread_id and its own
+    // thread as thread_id, with no top-level tools and a json_schema verdict.
+    // That is not a spawn. Opening it as a child is refused because no fork
+    // was prepared, and that refusal is reported as an unavailable runtime.
+    const codex = new AppaCodexAdapter();
+    const context = {
+      headers: {
+        "user-agent": "codex_cli_rs/0.99.0",
+        "x-openai-subagent": "guardian",
+      },
+      requestBody: {
+        model: "codex-auto-review",
+        text: { format: { type: "json_schema", name: "codex_output_schema" } },
+        client_metadata: {
+          session_id: "requester-session",
+          thread_id: "review-thread",
+          "x-codex-parent-thread-id": "requester-session",
+          "x-openai-subagent": "guardian",
+          "x-codex-turn-metadata": JSON.stringify({
+            session_id: "requester-session",
+            thread_id: "review-thread",
+            parent_thread_id: "requester-session",
+            request_kind: "turn",
+            turn_trigger: "guardian_review",
+            thread_source: "guardian_review",
+            subagent_kind: "guardian",
+            model: "codex-auto-review",
+          }),
+        },
+        input: [
+          {
+            type: "additional_tools",
+            tools: [{ type: "namespace", name: "functions", tools: [] }],
+          },
+        ],
+      },
+    };
+    expect(codex.bindChildTrajectory(context)).toBeUndefined();
+    expect(
+      extractAppaSessionIdentity({
+        family: "openai:responses",
+        body: context.requestBody,
+        headers: context.headers,
+      }),
+    ).toMatchObject({
+      sessionId: "review-thread",
+      parentId: undefined,
+      provenance: "codex-turn-metadata",
     });
   });
 

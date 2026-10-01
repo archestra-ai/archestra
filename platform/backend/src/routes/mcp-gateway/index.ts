@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { RUN_ID_HEADER } from "@archestra/shared";
+import { RouteId, RUN_ID_HEADER } from "@archestra/shared";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -663,6 +663,58 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         id: null,
       };
+    },
+  );
+
+  // Codex (rmcp) DELETEs the Mcp-Session-Id it was given once exec finishes.
+  // That id is signed capability metadata, not a legacy SSE session record.
+  // Looking it up in the legacy transport 404s. Acknowledge termination only
+  // when the signature binds this gateway and this principal.
+  fastify.delete(
+    `${endpoint}/:profileId`,
+    {
+      schema: {
+        operationId: RouteId.McpGatewayDelete,
+        hide: true,
+        params: z.object({
+          profileId: UuidOrSlugSchema,
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { profileId, token } =
+        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
+
+      if (!profileId || !token) {
+        setWWWAuthenticateHeader(request, reply);
+        throw new ApiError(401, "Missing or invalid Authorization header");
+      }
+
+      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+        profileId,
+        token,
+      );
+      if (!tokenAuth) {
+        setWWWAuthenticateHeader(request, reply);
+        throw new ApiError(401, describeGatewayAuthFailure(reason));
+      }
+
+      const sessionId = readHeader(request, MCP_SESSION_ID_HEADER);
+      if (!sessionId) {
+        throw new ApiError(400, "Missing Mcp-Session-Id header");
+      }
+
+      const capabilities = readCapabilitySession({
+        sessionId,
+        profileId,
+        principal: deriveStatePrincipal(tokenAuth),
+      });
+      if (capabilities === undefined) {
+        throw new ApiError(404, "Unknown session");
+      }
+
+      reply.status(204);
+      return reply.send();
     },
   );
 

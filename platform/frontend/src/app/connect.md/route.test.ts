@@ -1,7 +1,15 @@
 // @vitest-environment node
+import { execFile } from "node:child_process";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 import { GET } from "./route";
+
+const execFileAsync = promisify(execFile);
 
 describe("Connect agent instructions", () => {
   it("keeps the full instructions when no client is specified", async () => {
@@ -25,6 +33,8 @@ describe("Connect agent instructions", () => {
     expect(instructions).toContain(
       "curl --fail --silent --show-error http://localhost:3000/api/client-connections/installer",
     );
+    expect(instructions).toContain("trap 'unlink \"$p\"' EXIT");
+    expect(instructions).not.toContain("rm -f");
   });
 
   it("focuses Cursor instructions on its own setup and native checks", async () => {
@@ -48,6 +58,27 @@ describe("Connect agent instructions", () => {
   });
 
   it.each([
+    "",
+    "?client=codex",
+  ])("does not repeat completed Codex OAuth in %s instructions", async (query) => {
+    const instructions = await GET(
+      new Request(`http://localhost:3000/connect.md${query}`),
+    ).text();
+    expect(instructions).toContain(
+      "gateway OAuth is already cached. Do not run codex mcp login again",
+    );
+    expect(instructions).toContain("If auth_status is oauth, skip login");
+    expect(instructions).toContain(
+      "Only if auth_status is not_logged_in, run codex mcp login SERVER_NAME once",
+    );
+    expect(instructions).toContain(
+      "Do not ask the user to run verification commands",
+    );
+    expect(instructions).not.toContain("run codex mcp login SERVER_NAME, then");
+    expect(instructions).not.toContain("Run codex mcp login SERVER_NAME, then");
+  });
+
+  it.each([
     ["claude-code", "Claude Code", "--client claude-code"],
     ["codex", "Codex", "--client codex"],
     ["copilot-cli", "Copilot CLI", "--client copilot-cli"],
@@ -60,8 +91,87 @@ describe("Connect agent instructions", () => {
 
     expect(instructions).toContain(`# Connect ${label}`);
     expect(instructions).toContain(command);
+    expect(instructions).toContain("trap 'unlink \"$p\"' EXIT");
+    expect(instructions).not.toContain("rm -f");
     expect(instructions).not.toContain("## Claude Desktop");
     expect(instructions).not.toContain("Cursor subscription");
+    if (client === "codex") {
+      expect(instructions).toContain(
+        "Report the connection status briefly without listing tool names or quoting the test response.",
+      );
+    }
+  });
+
+  it.each([
+    "",
+    "?client=codex",
+  ])("uses the deterministic native verifier in %s instructions", async (query) => {
+    const instructions = await GET(
+      new Request(`http://localhost:3000/connect.md${query}`),
+    ).text();
+    expect(instructions).toContain(
+      "run the exact Verification command printed by the installer yourself",
+    );
+    expect(instructions).toContain(
+      "Do not substitute codex exec or a model-driven shell probe",
+    );
+    expect(instructions).toContain(
+      "configured model, approval mode and sandbox unchanged",
+    );
+    expect(instructions).toContain(
+      "Report success only when the helper returns verified",
+    );
+    expect(instructions).toContain("printed native PowerShell verifier");
+    expect(instructions).toContain("ordinary native per-command approval");
+    expect(instructions).toContain("retry once");
+    expect(instructions).toContain(
+      "never auto-approve app-server permission requests",
+    );
+  });
+
+  it("runs the Codex installer command and cleans only its temporary script", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "codex-connect-"));
+    const resultFile = join(directory, "result.json");
+    const server = createServer((request, response) => {
+      if (request.url !== "/api/client-connections/installer") {
+        response.writeHead(404).end();
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "application/javascript" });
+      response.end(
+        `require('node:fs').writeFileSync(${JSON.stringify(resultFile)},JSON.stringify(process.argv.slice(2)))`,
+      );
+    });
+    try {
+      await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", resolve),
+      );
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Expected installer test server port");
+      }
+      const origin = `http://127.0.0.1:${address.port}`;
+      const instructions = await GET(
+        new Request(`${origin}/connect.md?client=codex`),
+      ).text();
+      const command = instructions.match(/macOS\/Linux:\n([^\n]+)/)?.[1];
+      if (!command) throw new Error("Missing macOS/Linux installer command");
+      await execFileAsync("bash", ["-c", command], {
+        env: { ...process.env, TMPDIR: directory },
+      });
+      expect(JSON.parse(await readFile(resultFile, "utf8"))).toEqual([
+        "--url",
+        origin,
+        "--client",
+        "codex",
+      ]);
+      expect(await readdir(directory)).toEqual(["result.json"]);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it.each([

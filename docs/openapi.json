@@ -965,7 +965,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -5440,7 +5439,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -7308,7 +7306,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -8596,7 +8593,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -9891,7 +9887,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -11179,7 +11174,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -16036,7 +16030,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -17325,7 +17318,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -18821,7 +18813,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -20129,7 +20120,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -21673,7 +21663,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -26338,7 +26327,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -28291,7 +28279,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -29636,7 +29623,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -30988,7 +30974,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -32333,7 +32318,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -37381,7 +37365,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -38726,7 +38709,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -40288,7 +40270,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -41657,7 +41638,6 @@
               {
                 "type": "object",
                 "properties": {
-                  "cache_control": {},
                   "type": {
                     "type": "string",
                     "enum": [
@@ -159750,7 +159730,6 @@
                       {
                         "type": "object",
                         "properties": {
-                          "cache_control": {},
                           "type": {
                             "type": "string",
                             "enum": [
@@ -161315,7 +161294,6 @@
                       {
                         "type": "object",
                         "properties": {
-                          "cache_control": {},
                           "type": {
                             "type": "string",
                             "enum": [
@@ -191308,7 +191286,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "cache_control": {},
                                               "type": {
                                                 "type": "string",
                                                 "enum": [
@@ -192423,7 +192400,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "cache_control": {},
                                               "type": {
                                                 "type": "string",
                                                 "enum": [
@@ -194381,7 +194357,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "cache_control": {},
                                               "type": {
                                                 "type": "string",
                                                 "enum": [
@@ -195496,7 +195471,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "cache_control": {},
                                               "type": {
                                                 "type": "string",
                                                 "enum": [
@@ -197449,7 +197423,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "cache_control": {},
                                               "type": {
                                                 "type": "string",
                                                 "enum": [
@@ -198564,7 +198537,6 @@
                                           {
                                             "type": "object",
                                             "properties": {
-                                              "cache_control": {},
                                               "type": {
                                                 "type": "string",
                                                 "enum": [
@@ -227355,7 +227327,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "cache_control": {},
                                         "type": {
                                           "type": "string",
                                           "enum": [
@@ -228470,7 +228441,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "cache_control": {},
                                         "type": {
                                           "type": "string",
                                           "enum": [
@@ -230428,7 +230398,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "cache_control": {},
                                         "type": {
                                           "type": "string",
                                           "enum": [
@@ -231543,7 +231512,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "cache_control": {},
                                         "type": {
                                           "type": "string",
                                           "enum": [
@@ -233496,7 +233464,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "cache_control": {},
                                         "type": {
                                           "type": "string",
                                           "enum": [
@@ -234611,7 +234578,6 @@
                                     {
                                       "type": "object",
                                       "properties": {
-                                        "cache_control": {},
                                         "type": {
                                           "type": "string",
                                           "enum": [
@@ -253678,7 +253644,6 @@
                       {
                         "type": "object",
                         "properties": {
-                          "cache_control": {},
                           "type": {
                             "type": "string",
                             "enum": [
@@ -255248,7 +255213,6 @@
                       {
                         "type": "object",
                         "properties": {
-                          "cache_control": {},
                           "type": {
                             "type": "string",
                             "enum": [
@@ -311079,7 +311043,6 @@
                       {
                         "type": "object",
                         "properties": {
-                          "cache_control": {},
                           "type": {
                             "type": "string",
                             "enum": [
@@ -312649,7 +312612,6 @@
                       {
                         "type": "object",
                         "properties": {
-                          "cache_control": {},
                           "type": {
                             "type": "string",
                             "enum": [

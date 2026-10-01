@@ -530,27 +530,32 @@ export function newChatcmplId(): string {
 
 function textContentToBedrock(content: unknown): BedrockContentBlock[] {
   if (content == null) return [];
-  if (typeof content === "string") return [{ text: content }];
-  if (!Array.isArray(content))
-    throw new ApiError(
-      400,
-      "Bedrock content must be text or an array of supported parts",
-    );
+  if (typeof content === "string") return content ? [{ text: content }] : [];
+  if (!Array.isArray(content)) return [];
   return content.flatMap((part: Loose) => {
-    if (part?.type !== "text" && part?.type !== "refusal")
-      throw new ApiError(
-        400,
-        "Bedrock system and assistant content only support text parts",
-      );
-    const blocks: BedrockContentBlock[] = [
-      { text: String(part.text ?? part.refusal ?? "") },
-    ];
+    if (part?.type !== "text" && part?.type !== "refusal") {
+      if (part?.cache_control !== undefined)
+        throw new ApiError(
+          400,
+          "Unsupported Bedrock content part with cache_control",
+        );
+      return [];
+    }
+    const text = String(part.text ?? part.refusal ?? "");
+    const blocks: BedrockContentBlock[] = text ? [{ text }] : [];
     appendCacheMarker(blocks, part?.cache_control);
     return blocks;
   });
 }
 
 function appendCacheMarker(blocks: BedrockContentBlock[], marker: Loose): void {
+  const point = cachePointFromMarker(marker);
+  if (point) blocks.push(point);
+}
+
+function cachePointFromMarker(
+  marker: Loose,
+): { cachePoint: { type: "default"; ttl?: "5m" | "1h" } } | undefined {
   if (marker === undefined) return;
   if (
     !marker ||
@@ -561,9 +566,9 @@ function appendCacheMarker(blocks: BedrockContentBlock[], marker: Loose): void {
       400,
       "Bedrock cache_control requires type ephemeral and ttl 5m or 1h",
     );
-  blocks.push({
+  return {
     cachePoint: { type: "default", ...(marker.ttl ? { ttl: marker.ttl } : {}) },
-  });
+  };
 }
 
 const BEDROCK_CLAUDE_ONE_HOUR_CACHE_MODELS = new Set([
@@ -690,11 +695,7 @@ function userContentToBedrock(content: unknown): BedrockContentBlock[] {
   if (typeof content === "string") {
     return [{ text: content }];
   }
-  if (!Array.isArray(content))
-    throw new ApiError(
-      400,
-      "Bedrock user content must be text or an array of supported parts",
-    );
+  if (!Array.isArray(content)) return [];
   const out: BedrockContentBlock[] = [];
   for (const part of content as Loose[]) {
     if (part?.type === "text") {
@@ -707,7 +708,12 @@ function userContentToBedrock(content: unknown): BedrockContentBlock[] {
       const file = part.file;
       out.push(fileDataToBlock(file) as BedrockContentBlock);
     } else {
-      throw new ApiError(400, "Unsupported Bedrock content part");
+      if (part?.cache_control !== undefined)
+        throw new ApiError(
+          400,
+          "Unsupported Bedrock content part with cache_control",
+        );
+      continue;
     }
     appendCacheMarker(out, part.cache_control);
   }
@@ -800,11 +806,7 @@ function imageUrlToBlock(url: string): unknown {
 
 function toolResultContent(content: unknown): Loose[] {
   if (typeof content === "string") return [{ text: content }];
-  if (!Array.isArray(content))
-    throw new ApiError(
-      400,
-      "Bedrock tool output must be text or supported content parts",
-    );
+  if (!Array.isArray(content)) return [{ text: "" }];
   const out: Loose[] = [];
   for (const [index, part] of content.entries()) {
     if (part?.cache_control !== undefined && index !== content.length - 1)
@@ -822,8 +824,11 @@ function toolResultContent(content: unknown): Loose[] {
       typeof part.json === "object"
     )
       out.push({ json: part.json });
-    else
-      throw new ApiError(400, "Unsupported Bedrock tool-result content part");
+    else if (part?.cache_control !== undefined)
+      throw new ApiError(
+        400,
+        "Unsupported Bedrock tool-result content part with cache_control",
+      );
   }
   return out.length > 0 ? out : [{ text: "" }];
 }
@@ -863,10 +868,8 @@ function buildToolConfig(
         },
       },
     });
-    const points: BedrockContentBlock[] = [];
-    appendCacheMarker(points, t.cache_control);
-    for (const point of points)
-      if ("cachePoint" in point) mapped.push({ cachePoint: point.cachePoint });
+    const point = cachePointFromMarker(t.cache_control);
+    if (point) mapped.push(point);
   }
 
   const cfg: NonNullable<BedrockRequest["toolConfig"]> = { tools: mapped };

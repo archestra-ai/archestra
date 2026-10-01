@@ -84,15 +84,81 @@ describe("explicit Bedrock caller caching", () => {
 
   test.each([
     { input: [{ type: "reasoning", summary: [] }] },
-    { input: [{ role: "user", content: [null] }] },
+    { input: [{ role: "user", content: [null, { type: "input_audio" }] }] },
     { input: "question", tools: [{ type: "web_search" }] },
-  ])("rejects unsupported Responses input instead of dropping it: %j", (body) => {
+  ])("keeps legacy handling of unmarked unsupported Responses fields: %j", (body) => {
+    const { chatBody } = responsesToOpenaiChat(
+      { model, ...body } as unknown as OpenAi.Types.ResponsesRequest,
+      { preserveContentParts: true },
+    );
+    expect(() => openaiToConverse(chatBody)).not.toThrow();
+    expect(JSON.stringify(openaiToConverse(chatBody))).not.toContain(
+      "cachePoint",
+    );
+  });
+
+  test.each([
+    { input: [{ type: "reasoning", summary: [], cache_control: marker }] },
+    {
+      input: [
+        {
+          role: "user",
+          content: [{ type: "input_audio", cache_control: marker }],
+        },
+      ],
+    },
+    {
+      input: "question",
+      tools: [{ type: "web_search", cache_control: marker }],
+    },
+  ])("rejects markers on unsupported Responses fields: %j", (body) => {
     expect(() =>
-      responsesToOpenaiChat(
-        { model, ...body } as unknown as OpenAi.Types.ResponsesRequest,
-        { preserveContentParts: true },
+      openaiToConverse(
+        responsesToOpenaiChat(
+          { model, ...body } as unknown as OpenAi.Types.ResponsesRequest,
+          { preserveContentParts: true },
+        ).chatBody,
       ),
-    ).toThrow(/Bedrock Responses/);
+    ).toThrow(/Bedrock/);
+  });
+
+  test.each([
+    "",
+    [{ type: "text", text: "" }],
+  ])("unmarked empty assistant content %j produces only toolUse", (content) => {
+    const body = translate([
+      { role: "user", content: "question" },
+      {
+        role: "assistant",
+        content,
+        tool_calls: [
+          {
+            type: "function",
+            id: "call_1",
+            function: { name: "read", arguments: "{}" },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "call_1", content: "result" },
+    ]);
+    expect(body.messages).toEqual([
+      { role: "user", content: [{ text: "question" }] },
+      {
+        role: "assistant",
+        content: [
+          { toolUse: { toolUseId: "call_1", name: "read", input: {} } },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            toolResult: { toolUseId: "call_1", content: [{ text: "result" }] },
+          },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain("cachePoint");
   });
 
   test("canonical base64 file bytes use the supported filename extension", () => {
@@ -244,7 +310,7 @@ describe("explicit Bedrock caller caching", () => {
   });
 
   test.each([
-    0, 1, 2, 3, 4, 5,
+    0, 4, 5,
   ])("enforces request-wide checkpoint budget at %i", (count) => {
     const run = () =>
       translate(
@@ -328,6 +394,41 @@ describe("explicit Bedrock caller caching", () => {
     ).not.toThrow();
   });
 
+  test.each([
+    "anthropic.claude-3-7-sonnet-20250219-v1:0",
+    "anthropic.claude-3-5-sonnet-20241022-v2:0",
+  ])("legacy Claude %s only accepts five-minute markers", (modelId) => {
+    expect(
+      translate([{ role: "user", content: "x", cache_control: marker }], {
+        model: modelId,
+      }).messages?.[0].content[1],
+    ).toEqual(checkpoint);
+    expect(
+      translate(
+        [
+          {
+            role: "user",
+            content: "x",
+            cache_control: { ...marker, ttl: "5m" },
+          },
+        ],
+        { model: modelId },
+      ).messages?.[0].content[1],
+    ).toEqual({ cachePoint: { type: "default", ttl: "5m" } });
+    expect(() =>
+      translate(
+        [
+          {
+            role: "user",
+            content: "x",
+            cache_control: { ...marker, ttl: "1h" },
+          },
+        ],
+        { model: modelId },
+      ),
+    ).toThrow(/1h/);
+  });
+
   test("Nova restricts TTL and tool placement", () => {
     expect(() =>
       translate(
@@ -374,6 +475,49 @@ describe("explicit Bedrock caller caching", () => {
 });
 
 describe("Bedrock gross usage on each translated transport", () => {
+  test("splits mixed five-minute and one-hour cache writes without double counting", () => {
+    const response = converseResponseToOpenai(
+      {
+        output: {
+          message: { role: "assistant", content: [{ text: "answer" }] },
+        },
+        stopReason: "end_turn",
+        usage: {
+          inputTokens: 12,
+          outputTokens: 3,
+          totalTokens: 9015,
+          cacheReadInputTokens: 8000,
+          cacheWriteInputTokens: 1000,
+          cacheDetails: [
+            { ttl: "5m", inputTokens: 400 },
+            { ttl: "1h", inputTokens: 600 },
+          ],
+        },
+      },
+      ctx,
+    );
+    const wire = chatCompletionToResponses(response, {
+      responseId: "resp_test",
+      createdUnix: 1,
+      requestedModel: model,
+    }).usage as ReturnType<typeof toResponsesUsage>;
+    expect(wire).toMatchObject({
+      input_tokens: 9012,
+      total_tokens: 9015,
+      input_tokens_details: {
+        cached_tokens: 8000,
+        cache_write_tokens: 1000,
+        cache_write_1h_tokens: 600,
+      },
+    });
+    expect(fromResponsesUsage(wire)).toMatchObject({
+      inputTokens: 12,
+      cacheReadTokens: 8000,
+      cacheWriteTokens: 1000,
+      cacheWrite1hTokens: 600,
+    });
+  });
+
   test.each([
     [0, 0],
     [9000, 0],

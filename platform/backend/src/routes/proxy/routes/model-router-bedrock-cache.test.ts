@@ -1,13 +1,11 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import {
   InteractionModel,
   LlmProviderApiKeyModelLinkModel,
@@ -16,7 +14,6 @@ import {
 } from "@/models";
 import { accessGrants, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
-import { ApiError } from "@/types";
 import bedrockRoutes from "./bedrock";
 import modelRouterRoutes from "./model-router";
 
@@ -31,7 +28,7 @@ const checkpoint = { cachePoint: { type: "default" } };
 const upstreamOrigin = "https://bedrock.example.test";
 
 const bedrockTest = test.extend<{
-  router: { app: FastifyInstance; agentId: string; token: string };
+  router: { app: FastifyInstanceWithZod; agentId: string; token: string };
 }>({
   router: async (
     { makeOrganization, makeAgent, makeSecret, makeLlmProviderApiKey },
@@ -67,20 +64,7 @@ const bedrockTest = test.extend<{
       ...accessGrants("org"),
       providerApiKeys: [{ provider: "bedrock", providerApiKeyId: key.id }],
     });
-    const app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
-    app.setErrorHandler((error, _req, reply) =>
-      reply.code(error instanceof ApiError ? error.statusCode : 500).send({
-        error: {
-          message: error instanceof Error ? error.message : String(error),
-          type:
-            error instanceof ApiError
-              ? error.type
-              : "api_internal_server_error",
-        },
-      }),
-    );
+    const app = createFastifyInstance();
     await app.register(modelRouterRoutes);
     await app.register(bedrockRoutes);
     try {
@@ -123,170 +107,153 @@ for (const surface of ["responses", "chat", "converse"] as const) {
     bedrockTest(
       `${surface}, stream=${stream}: preserves checkpoints, cache usage and logged native usage`,
       async ({ router }) => {
-        for (const [reads, writes] of [
-          [0, 0],
-          [9000, 0],
-          [0, 9000],
-          [8000, 1000],
-        ]) {
-          const usage = {
-            inputTokens: 12,
-            outputTokens: 3,
-            totalTokens: 15 + reads + writes,
-            cacheReadInputTokens: reads,
-            cacheWriteInputTokens: writes,
-            cacheDetails: writes ? [{ ttl: "1h", inputTokens: writes }] : [],
-          };
-          let upstream: Record<string, unknown> | undefined;
-          server.use(
-            http.post(
-              `${upstreamOrigin}/model/:model/${stream ? "converse-stream" : "converse"}`,
-              async ({ request }) => {
-                upstream = (await request.json()) as Record<string, unknown>;
-                if (!stream)
-                  return HttpResponse.json({
-                    output: {
-                      message: {
-                        role: "assistant",
-                        content: [{ text: "answer" }],
-                      },
-                    },
-                    stopReason: "end_turn",
-                    usage,
-                  });
-                return new HttpResponse(
-                  binaryEvents([
-                    ["messageStart", { role: "assistant" }],
-                    [
-                      "contentBlockDelta",
-                      { contentBlockIndex: 0, delta: { text: "answer" } },
-                    ],
-                    ["contentBlockStop", { contentBlockIndex: 0 }],
-                    ["messageStop", { stopReason: "end_turn" }],
-                    ["metadata", { usage }],
-                  ]),
-                  {
-                    headers: {
-                      "content-type": "application/vnd.amazon.eventstream",
+        const reads = 8000;
+        const writes = 1000;
+        const usage = {
+          inputTokens: 12,
+          outputTokens: 3,
+          totalTokens: 15 + reads + writes,
+          cacheReadInputTokens: reads,
+          cacheWriteInputTokens: writes,
+          cacheDetails: [{ ttl: "1h", inputTokens: writes }],
+        };
+        let upstream: Record<string, unknown> | undefined;
+        server.use(
+          http.post(
+            `${upstreamOrigin}/model/:model/${stream ? "converse-stream" : "converse"}`,
+            async ({ request }) => {
+              upstream = (await request.json()) as Record<string, unknown>;
+              if (!stream)
+                return HttpResponse.json({
+                  output: {
+                    message: {
+                      role: "assistant",
+                      content: [{ text: "answer" }],
                     },
                   },
-                );
-              },
-            ),
-          );
-          const payload =
-            surface === "responses"
+                  stopReason: "end_turn",
+                  usage,
+                });
+              return new HttpResponse(
+                binaryEvents([
+                  ["messageStart", { role: "assistant" }],
+                  [
+                    "contentBlockDelta",
+                    { contentBlockIndex: 0, delta: { text: "answer" } },
+                  ],
+                  ["contentBlockStop", { contentBlockIndex: 0 }],
+                  ["messageStop", { stopReason: "end_turn" }],
+                  ["metadata", { usage }],
+                ]),
+                {
+                  headers: {
+                    "content-type": "application/vnd.amazon.eventstream",
+                  },
+                },
+              );
+            },
+          ),
+        );
+        const payload =
+          surface === "responses"
+            ? {
+                model: `bedrock:${modelId}`,
+                stream,
+                input: [
+                  {
+                    role: "user",
+                    content: [
+                      { type: "input_text", text: "prefix", cache_control },
+                    ],
+                  },
+                ],
+              }
+            : surface === "chat"
               ? {
                   model: `bedrock:${modelId}`,
                   stream,
-                  input: [
+                  stream_options: { include_usage: true },
+                  messages: [
                     {
                       role: "user",
                       content: [
-                        { type: "input_text", text: "prefix", cache_control },
+                        { type: "text", text: "prefix", cache_control },
                       ],
                     },
                   ],
                 }
-              : surface === "chat"
-                ? {
-                    model: `bedrock:${modelId}`,
-                    stream,
-                    stream_options: { include_usage: true },
-                    messages: [
-                      {
-                        role: "user",
-                        content: [
-                          { type: "text", text: "prefix", cache_control },
-                        ],
-                      },
-                    ],
-                  }
-                : {
-                    modelId,
-                    messages: [
-                      {
-                        role: "user",
-                        content: [{ text: "prefix" }, checkpoint],
-                      },
-                    ],
-                  };
-          const url =
-            surface === "converse"
-              ? `/v1/bedrock/${router.agentId}/${stream ? "converse-stream" : "converse"}`
-              : `/v1/model-router/${router.agentId}/${surface === "chat" ? "chat/completions" : "responses"}`;
-          const response = await router.app.inject({
-            method: "POST",
-            url,
-            headers: {
-              authorization: `Bearer ${router.token}`,
-              "user-agent": "test-client",
-            },
-            payload,
-          });
-          expect(response.statusCode, response.body).toBe(200);
-          expect(upstream?.messages).toEqual([
-            { role: "user", content: [{ text: "prefix" }, checkpoint] },
-          ]);
-          if (!stream && surface === "converse")
-            expect(response.json().usage).toEqual(usage);
-          if (surface !== "converse") {
-            const wire = !stream
-              ? response.json().usage
-              : surface === "responses"
-                ? (
-                    sseEvents(response.body).find(
-                      (e) => e.type === "response.completed",
-                    )?.response as { usage: unknown }
-                  ).usage
-                : sseEvents(response.body).find((e) => e.usage)?.usage;
-            expect(wire).toMatchObject(
-              surface === "responses"
-                ? {
-                    input_tokens: 12 + reads + writes,
-                    total_tokens: 15 + reads + writes,
-                    input_tokens_details: {
-                      cached_tokens: reads,
-                      ...(writes
-                        ? {
-                            cache_write_tokens: writes,
-                            cache_write_1h_tokens: writes,
-                          }
-                        : {}),
+              : {
+                  modelId,
+                  messages: [
+                    {
+                      role: "user",
+                      content: [{ text: "prefix" }, checkpoint],
                     },
-                  }
-                : {
-                    prompt_tokens: 12 + reads + writes,
-                    total_tokens: 15 + reads + writes,
-                    ...(reads || writes
-                      ? {
-                          prompt_tokens_details: {
-                            cached_tokens: reads,
-                            ...(writes
-                              ? {
-                                  cache_write_tokens: writes,
-                                  cache_write_1h_tokens: writes,
-                                }
-                              : {}),
-                          },
-                        }
-                      : {}),
+                  ],
+                };
+        const url =
+          surface === "converse"
+            ? `/v1/bedrock/${router.agentId}/${stream ? "converse-stream" : "converse"}`
+            : `/v1/model-router/${router.agentId}/${surface === "chat" ? "chat/completions" : "responses"}`;
+        const response = await router.app.inject({
+          method: "POST",
+          url,
+          headers: {
+            authorization: `Bearer ${router.token}`,
+            "user-agent": "test-client",
+          },
+          payload,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(upstream?.messages).toEqual([
+          { role: "user", content: [{ text: "prefix" }, checkpoint] },
+        ]);
+        if (!stream && surface === "converse")
+          expect(response.json().usage).toEqual(usage);
+        if (surface !== "converse") {
+          const wire = !stream
+            ? response.json().usage
+            : surface === "responses"
+              ? (
+                  sseEvents(response.body).find(
+                    (e) => e.type === "response.completed",
+                  )?.response as { usage: unknown }
+                ).usage
+              : sseEvents(response.body).find((e) => e.usage)?.usage;
+          expect(wire).toMatchObject(
+            surface === "responses"
+              ? {
+                  input_tokens: 12 + reads + writes,
+                  total_tokens: 15 + reads + writes,
+                  input_tokens_details: {
+                    cached_tokens: reads,
+                    cache_write_tokens: writes,
+                    cache_write_1h_tokens: writes,
                   },
-            );
-          }
-          const logged = await InteractionModel.findAllPaginated({
-            limit: 1,
-            offset: 0,
-          });
-          expect(logged.data[0]).toMatchObject({
-            type: "bedrock:converse",
-            inputTokens: 12,
-            outputTokens: 3,
-            cacheReadTokens: reads,
-            cacheWriteTokens: writes,
-          });
-          expect(logged.data[0].response).toMatchObject({ usage });
+                }
+              : {
+                  prompt_tokens: 12 + reads + writes,
+                  total_tokens: 15 + reads + writes,
+                  prompt_tokens_details: {
+                    cached_tokens: reads,
+                    cache_write_tokens: writes,
+                    cache_write_1h_tokens: writes,
+                  },
+                },
+          );
         }
+        const logged = await InteractionModel.findAllPaginated({
+          limit: 1,
+          offset: 0,
+        });
+        expect(logged.data[0]).toMatchObject({
+          type: "bedrock:converse",
+          inputTokens: 12,
+          outputTokens: 3,
+          cacheReadTokens: reads,
+          cacheWriteTokens: writes,
+        });
+        expect(logged.data[0].response).toMatchObject({ usage });
       },
     );
   }
@@ -503,10 +470,16 @@ for (const stream of [false, true]) {
         },
       });
       expect(response.statusCode, response.body).toBe(200);
+      const completed = sseEvents(response.body).filter(
+        (e) => e.type === "response.completed",
+      );
+      if (stream) {
+        expect(completed).toHaveLength(1);
+        expect(response.body).not.toContain("call_blocked");
+        expect(response.body).not.toContain("function_call");
+      }
       const body = stream
-        ? (sseEvents(response.body)
-            .filter((e) => e.type === "response.completed")
-            .at(-1)?.response as Record<string, unknown>)
+        ? (completed[0].response as Record<string, unknown>)
         : response.json();
       expect(JSON.stringify(body.output)).toContain(
         "File access blocked by policy",

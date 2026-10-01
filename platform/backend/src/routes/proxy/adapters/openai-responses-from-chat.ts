@@ -190,10 +190,6 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       });
     }
 
-    if (result.isFinal && !this.getTextSuffix) {
-      sseData += this.completeOutput();
-    }
-
     return {
       ...result,
       sseData: sseData || null,
@@ -262,9 +258,6 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
   formatCompleteTextSSE(text: string): string[] {
     this.replacedText = text;
-    // A terminal frame may have been emitted before the policy gate decided.
-    // Reissue completion so the client's final snapshot contains the refusal.
-    this.outputCompleted = false;
     this.inner.formatCompleteTextSSE(text);
     return [
       this.ensureOutputStarted(),
@@ -290,12 +283,6 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   }
 
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
-    // completeOutput() has already written a `response.completed` naming the
-    // calls the model made directly (it fires on the inner stream's final
-    // chunk, before the gate decides). The client keeps the LAST completed
-    // envelope, so the repair ends by re-issuing one that names the rewritten
-    // calls. Text keeps output index 0 (the message item), so the calls start
-    // at 1 — the same layout getRawToolCallEvents produces.
     this.inner.formatToolCallsSSE?.(toolCalls);
     const frames = formatResponsesFunctionCallFrames({
       toolCalls,
@@ -316,8 +303,10 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     return frames;
   }
 
+  // The handler calls this after the policy verdict, so blocked calls never
+  // appear in a terminal envelope and each response completes exactly once.
   formatEndSSE(): string {
-    if (!this.getTextSuffix || this.outputCompleted) {
+    if (this.outputCompleted) {
       return "data: [DONE]\n\n";
     }
     const suffix =
@@ -325,7 +314,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       this.state.toolCalls.length === 0 &&
       this.state.stopReason === "stop" &&
       this.state.text
-        ? this.getTextSuffix(this.state.text)
+        ? (this.getTextSuffix?.(this.state.text) ?? "")
         : "";
     const text = `${this.state.text}${suffix}`;
     const suffixDelta = suffix ? this.formatTextDeltaSSE(suffix) : "";

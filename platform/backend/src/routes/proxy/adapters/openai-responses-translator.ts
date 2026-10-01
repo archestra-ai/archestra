@@ -57,7 +57,7 @@ export function responsesToOpenaiChat(
   if (req.tools) {
     chatBody.tools = req.tools.flatMap((tool) => {
       if (tool.type !== "function" || !("name" in tool)) {
-        if (options?.preserveContentParts)
+        if (options?.preserveContentParts && "cache_control" in tool)
           throw new ApiError(
             400,
             "Bedrock Responses only supports function tools",
@@ -180,8 +180,7 @@ function responseInputToChatMessages(
   preserveContentParts = false,
 ): OpenAiRequest["messages"] {
   return input.flatMap((item): OpenAiRequest["messages"] => {
-    if (preserveContentParts && (!item || typeof item !== "object"))
-      throw new ApiError(400, "Unsupported Bedrock Responses input item");
+    if (!item || typeof item !== "object") return [];
     if (
       item.type === "message" ||
       item.role === "user" ||
@@ -252,8 +251,11 @@ function responseInputToChatMessages(
       ];
     }
 
-    if (preserveContentParts)
-      throw new ApiError(400, "Unsupported Bedrock Responses input item");
+    if (preserveContentParts && item.cache_control !== undefined)
+      throw new ApiError(
+        400,
+        "Unsupported Bedrock Responses input item with cache_control",
+      );
     return [];
   });
 }
@@ -261,8 +263,7 @@ function responseInputToChatMessages(
 function responseContentToChat(content: unknown): unknown {
   if (!Array.isArray(content)) return content;
   return content.map((part: LooseResponseItem) => {
-    if (!part || typeof part !== "object")
-      throw new ApiError(400, "Unsupported Bedrock Responses content part");
+    if (!part || typeof part !== "object") return part;
     const marker =
       part.cache_control === undefined
         ? {}

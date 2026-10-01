@@ -302,7 +302,6 @@ export type OpenAiChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -1883,7 +1882,6 @@ export type CerebrasChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -2416,7 +2414,6 @@ export type MistralChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -2829,7 +2826,6 @@ export type PerplexityChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -3243,7 +3239,6 @@ export type GroqChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -3656,7 +3651,6 @@ export type OpenrouterChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -5061,7 +5055,6 @@ export type DeepSeekChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -5475,7 +5468,6 @@ export type ArchestraChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -5938,7 +5930,6 @@ export type MinimaxChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -6348,7 +6339,6 @@ export type XaiChatCompletionRequestInput = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -6801,7 +6791,6 @@ export type OpenAiChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -8382,7 +8371,6 @@ export type CerebrasChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -8915,7 +8903,6 @@ export type MistralChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -9328,7 +9315,6 @@ export type PerplexityChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -9742,7 +9728,6 @@ export type GroqChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -10155,7 +10140,6 @@ export type OpenrouterChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -11560,7 +11544,6 @@ export type DeepSeekChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -11974,7 +11957,6 @@ export type ArchestraChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -12437,7 +12419,6 @@ export type MinimaxChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -12847,7 +12828,6 @@ export type XaiChatCompletionRequest = {
             }>;
         };
     } | {
-        cache_control?: unknown;
         type: 'function';
         function: {
             name: string;
@@ -44385,7 +44365,6 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 }>;
             };
         } | {
-            cache_control?: unknown;
             type: 'function';
             function: {
                 name: string;
@@ -44886,7 +44865,6 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 }>;
             };
         } | {
-            cache_control?: unknown;
             type: 'function';
             function: {
                 name: string;
@@ -51341,7 +51319,6 @@ export type GetInteractionsResponses = {
                         }>;
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'function';
                     function: {
                         name: string;
@@ -51686,7 +51663,6 @@ export type GetInteractionsResponses = {
                         }>;
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'function';
                     function: {
                         name: string;
@@ -52190,7 +52166,6 @@ export type GetInteractionsResponses = {
                         }>;
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'function';
                     function: {
                         name: string;
@@ -52535,7 +52510,6 @@ export type GetInteractionsResponses = {
                         }>;
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'function';
                     function: {
                         name: string;
@@ -53039,7 +53013,6 @@ export type GetInteractionsResponses = {
                         }>;
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'function';
                     function: {
                         name: string;
@@ -53384,7 +53357,6 @@ export type GetInteractionsResponses = {
                         }>;
                     };
                 } | {
-                    cache_control?: unknown;
                     type: 'function';
                     function: {
                         name: string;
@@ -58696,7 +58668,6 @@ export type GetInteractionResponses = {
                     }>;
                 };
             } | {
-                cache_control?: unknown;
                 type: 'function';
                 function: {
                     name: string;
@@ -59041,7 +59012,6 @@ export type GetInteractionResponses = {
                     }>;
                 };
             } | {
-                cache_control?: unknown;
                 type: 'function';
                 function: {
                     name: string;
@@ -59545,7 +59515,6 @@ export type GetInteractionResponses = {
                     }>;
                 };
             } | {
-                cache_control?: unknown;
                 type: 'function';
                 function: {
                     name: string;
@@ -59890,7 +59859,6 @@ export type GetInteractionResponses = {
                     }>;
                 };
             } | {
-                cache_control?: unknown;
                 type: 'function';
                 function: {
                     name: string;
@@ -60394,7 +60362,6 @@ export type GetInteractionResponses = {
                     }>;
                 };
             } | {
-                cache_control?: unknown;
                 type: 'function';
                 function: {
                     name: string;
@@ -60739,7 +60706,6 @@ export type GetInteractionResponses = {
                     }>;
                 };
             } | {
-                cache_control?: unknown;
                 type: 'function';
                 function: {
                     name: string;
@@ -65316,7 +65282,6 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 }>;
             };
         } | {
-            cache_control?: unknown;
             type: 'function';
             function: {
                 name: string;
@@ -65817,7 +65782,6 @@ export type KimiChatCompletionsWithAgentData = {
                 }>;
             };
         } | {
-            cache_control?: unknown;
             type: 'function';
             function: {
                 name: string;
@@ -80376,7 +80340,6 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 }>;
             };
         } | {
-            cache_control?: unknown;
             type: 'function';
             function: {
                 name: string;
@@ -80877,7 +80840,6 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 }>;
             };
         } | {
-            cache_control?: unknown;
             type: 'function';
             function: {
                 name: string;

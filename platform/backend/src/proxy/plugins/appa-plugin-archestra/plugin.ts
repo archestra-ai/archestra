@@ -1392,18 +1392,17 @@ async function approveChildReturnCarriers(params: {
   }
   // Records every verified crossing with the runtime. The runtime re-checks
   // each value against the return its fork bound, so a client-named spawn
-  // call cannot stand for a child it never opened. The approvals are
-  // independent; the runtime orders them on the session's own lock.
-  await Promise.all(
-    arrived.map((record) =>
-      approveSpawnReturn({
-        session: params.binding.session,
-        toolCallId: record.spawnCallId,
-        childId: record.childSessionId,
-        value: record.value,
-      }),
-    ),
-  );
+  // call cannot stand for a child it never opened. One at a time: the runtime
+  // runs one session's dispatches in order anyway, each would hold a pooled
+  // connection while it waits, and a failed approval must stop the rest.
+  for (const record of arrived) {
+    await approveSpawnReturn({
+      session: params.binding.session,
+      toolCallId: record.spawnCallId,
+      childId: record.childSessionId,
+      value: record.value,
+    });
+  }
   // Strips unverified text and metadata beside valid returns.
   // Reconstructs result content solely from crossed values.
   const updates: Record<string, string> = Object.create(null);

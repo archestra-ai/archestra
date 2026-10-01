@@ -17,6 +17,47 @@ describe("APPA child trajectory adapters", () => {
   const openCode = new AppaOpenCodeAdapter();
   const chat = new AppaChatAdapter();
 
+  test("reads a Claude Code teammate launch only from a spawn call's result", () => {
+    const receipt =
+      "Spawned successfully.\nagent_id: sched-tools@audit\nname: sched-tools";
+    const history = (callName: string) => ({
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_launch",
+              name: callName,
+              input: { name: "sched-tools", prompt: "Add the tools." },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_launch",
+              content: receipt,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(claudeCode.teammateLaunches(history("Agent"))).toEqual(
+      new Map([
+        [
+          "sched-tools",
+          { childNativeId: "sched-tools@audit", spawnCallId: "toolu_launch" },
+        ],
+      ]),
+    );
+    // Any other tool can print the same text: it launches nothing.
+    expect(claudeCode.teammateLaunches(history("Bash")).size).toBe(0);
+  });
+
   test("keeps Claude Code Skill in-session before a real child spawn", () => {
     expect(claudeCode.isSpawnTool("Skill")).toBe(false);
     expect(claudeCode.isSpawnTool("host/claude-code/Skill")).toBe(false);

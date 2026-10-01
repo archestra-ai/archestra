@@ -177,7 +177,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
 
   teammateLaunches(requestBody: unknown): Map<string, AppaTeammateLaunch> {
     const launches = new Map<string, AppaTeammateLaunch>();
-    for (const { text, callId } of toolResultTexts(requestBody)) {
+    for (const { text, callId } of spawnResultTexts(requestBody)) {
       if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) continue;
       const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
@@ -397,20 +397,32 @@ function argumentRecord(args: unknown): Record<string, unknown> | undefined {
   return asRecord(args) ?? (raw ? asRecord(parseJson(raw)) : undefined);
 }
 
-/** The text of every tool result in a Messages request, in order, with the call it answers. */
-function toolResultTexts(
+/**
+ * The text of every result of a spawn call in a Messages request, in order,
+ * with the call it answers. Any other tool can return text that reads like a
+ * launch receipt, so only a spawn call's result counts.
+ */
+function spawnResultTexts(
   requestBody: unknown,
 ): Array<{ text: string; callId: string }> {
   const results: Array<{ text: string; callId: string }> = [];
+  const spawnCalls = new Set<string>();
   const messages = asRecord(requestBody)?.messages;
   for (const message of Array.isArray(messages) ? messages : []) {
     const content = asRecord(message)?.content;
     for (const block of Array.isArray(content) ? content : []) {
       const record = asRecord(block);
+      const id = stringField(record?.id);
+      const name = stringField(record?.name);
+      if (record?.type === "tool_use" && id && name) {
+        if (CHILD_SPAWN_TOOLS.has(localToolName(name))) spawnCalls.add(id);
+        continue;
+      }
       if (record?.type !== "tool_result") continue;
-      const text = launchText(record.content);
       const callId = stringField(record.tool_use_id);
-      if (text && callId) results.push({ text, callId });
+      if (!callId || !spawnCalls.has(callId)) continue;
+      const text = launchText(record.content);
+      if (text) results.push({ text, callId });
     }
   }
   return results;

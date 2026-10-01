@@ -115,7 +115,7 @@ describe("mapProviderError - per-user provider auth required", () => {
     // subscription fetch wrapper and relayed by the xAI adapter's
     // extractInternalCode.
     const revokedMessage =
-      "Your xAI SuperSuperGrok sign-in has expired or been revoked. Reconnect your Grok account to continue.";
+      "Your xAI SuperGrok sign-in has expired or been revoked. Reconnect your Grok account to continue.";
     const result = mapProviderError(
       {
         name: "AI_APICallError",

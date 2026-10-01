@@ -282,7 +282,7 @@ export const xaiAdapterFactory: LLMProvider<
     ) {
       throw new ApiError(
         401,
-        "Your xAI SuperSuperGrok sign-in is unreadable. Reconnect your Grok account to keep using your subscription.",
+        "Your xAI SuperGrok sign-in is unreadable. Reconnect your Grok account to keep using your subscription.",
         ArchestraInternalErrorCode.ProviderAuthRequired,
       );
     }

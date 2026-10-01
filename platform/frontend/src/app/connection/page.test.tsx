@@ -187,7 +187,7 @@ describe("ConnectionPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides setup actions during revalidation without dropping selections or enabled inputs", () => {
+  it("keeps the flow visible during revalidation without dropping selections", () => {
     const query = {
       data: {
         connectionSkillsEnabled: true,
@@ -207,7 +207,10 @@ describe("ConnectionPage", () => {
 
     vi.mocked(useOrganization).mockReturnValue({ ...query, isFetching: true });
     rerender(<ConnectionPage />);
-    expect(screen.getByTestId("connection-flow")).not.toBeVisible();
+    expect(screen.getByTestId("connection-flow")).toBeVisible();
+    expect(
+      screen.queryByRole("status", { name: "Checking connection settings" }),
+    ).toBeNull();
     expect(connectionFlowMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         skillsEnabled: true,

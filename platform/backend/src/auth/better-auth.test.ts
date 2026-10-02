@@ -990,12 +990,11 @@ describe("handleBeforeHook", () => {
       await makeMember(restricted.id, org.id, { role: customRole.role });
 
       const ctx = updateMemberCtx(restricted, ADMIN_ROLE_NAME);
-      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
-      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+      const assignment = handleBeforeHook(ctx);
+      await expect(assignment).rejects.toThrow(APIError);
+      await expect(assignment).rejects.toMatchObject({
         body: {
-          message: expect.stringContaining(
-            "scoped permissions you cannot grant",
-          ),
+          message: expect.stringMatching(/log:admin.*auditLog:admin/),
         },
       });
     });
@@ -1112,7 +1111,7 @@ describe("handleBeforeHook", () => {
       expect(await handleBeforeHook(unknownRole)).toBe(unknownRole);
     });
 
-    test("a platform_admin cannot grant the full admin role — the customer-shaped restriction holds", async ({
+    test("a platform_admin cannot grant the full admin role", async ({
       makeOrganization,
       makeUser,
       makeMember,
@@ -1122,12 +1121,11 @@ describe("handleBeforeHook", () => {
       await makeMember(platformAdmin.id, org.id, { role: "platform_admin" });
 
       const escalate = updateMemberCtx(platformAdmin, ADMIN_ROLE_NAME);
-      await expect(handleBeforeHook(escalate)).rejects.toThrow(APIError);
-      // What admin holds beyond platform_admin is no longer a retired
-      // `log:admin` role action but the Full grants at `*` that replaced it,
-      // so the refusal now comes from the scoped-grant half of the gate.
-      await expect(handleBeforeHook(escalate)).rejects.toMatchObject({
-        body: { message: expect.stringContaining("scoped permissions") },
+      const assignment = handleBeforeHook(escalate);
+      await expect(assignment).rejects.toThrow(APIError);
+      // Platform administrators cannot grant access to other users' logs.
+      await expect(assignment).rejects.toMatchObject({
+        body: { message: expect.stringContaining("log:admin, auditLog:admin") },
       });
 
       // Managing users within their own permission set still works.

@@ -361,6 +361,8 @@ describe("platform_admin predefined role", () => {
       expect.arrayContaining([
         "member:impersonate",
         "openappaDiagnostics:admin",
+        "log:admin",
+        "auditLog:admin",
       ]),
     );
     // …while granting its own role or member stays possible.

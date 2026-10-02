@@ -183,14 +183,7 @@ export function ResourcePermissionsDialog({
     null,
   );
   const isMobile = useIsMobile();
-  const { data: canUpdateGlobal } = useHasPermissions({
-    accessPolicies: ["update"],
-  });
-  const policy = useResourcePermissions(resource, scope, open);
-  const canManage =
-    scope === "*"
-      ? !!canUpdateGlobal
-      : (policy.data?.effectiveActions.includes("manage-permissions") ?? false);
+  const [canManage, setCanManage] = useState(false);
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessDirty, setAccessDirty] = useState(false);
   const noun = scopedResourceNouns[resource];
@@ -253,6 +246,7 @@ export function ResourcePermissionsDialog({
           headerContainer: isMobile ? null : headerContainer,
           setAccessOpen,
           setAccessDirty,
+          setCanManage,
         }}
       >
         {open && (
@@ -349,6 +343,13 @@ function PermissionsEditor({
     policy.scope === "*"
       ? !!canUpdateGlobal
       : policy.effectiveActions.includes("manage-permissions");
+  // Only the open editor loads permissions. Keep the dialog shell query-free
+  // while letting it reserve space for the editor's Add access action.
+  const setDialogCanManage = dialog?.setCanManage;
+  useEffect(() => {
+    setDialogCanManage?.(canManage);
+    return () => setDialogCanManage?.(false);
+  }, [canManage, setDialogCanManage]);
   const presets = resourcePermissionPresetsFor(policy.resource);
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
@@ -1016,4 +1017,5 @@ const ResourcePermissionsDialogContext = createContext<{
   headerContainer: HTMLElement | null;
   setAccessOpen: (open: boolean) => void;
   setAccessDirty: (dirty: boolean) => void;
+  setCanManage: (canManage: boolean) => void;
 } | null>(null);

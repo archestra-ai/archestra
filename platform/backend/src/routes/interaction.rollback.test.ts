@@ -19,7 +19,6 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { openappaActor, scopedSessionId } from "@/openappa/actor";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { InsertInteraction, InteractionResponse, User } from "@/types";
 
 describe("interaction routes", () => {
@@ -1221,7 +1220,7 @@ describe("interaction routes", () => {
       ]);
     });
 
-    test("log:admin alone sees every row in the active organization", async ({
+    test("log:read plus log:admin sees every row in the active organization", async ({
       makeAgent,
       makeOrganization,
       makeUser,
@@ -1230,15 +1229,9 @@ describe("interaction routes", () => {
     }) => {
       const auditor = await makeUser();
       const allLogs = await makeCustomRole(organizationId, {
-        permission: { log: ["read"] },
+        permission: { log: ["read", "admin"] },
       });
-      // Every row is `read` on the log at `*`, which log:admin became.
-      await grantRoleEverywhere({
-        organizationId,
-        resource: "log",
-        roleId: allLogs.id,
-        actions: ["read"],
-      });
+
       await makeMember(auditor.id, organizationId, { role: allLogs.role });
       currentUser = auditor;
 

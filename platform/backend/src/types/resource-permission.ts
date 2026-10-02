@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
+  ManagedResourceSchema,
   PermissionSubjectSchema,
   ResourcePermissionActionSchema,
   ResourcePermissionGrantSchema,
   ResourcePermissionScopeSchema,
-  ScopedResourceSchema,
 } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -13,7 +13,7 @@ import { schema } from "@/database";
 export const ResourcePermissionPolicySchema = createSelectSchema(
   schema.resourcePermissionPoliciesTable,
   {
-    resource: ScopedResourceSchema,
+    resource: ManagedResourceSchema,
     scope: ResourcePermissionScopeSchema,
     grants: z.array(ResourcePermissionGrantSchema),
   },
@@ -29,7 +29,7 @@ export const UpdateResourcePermissionPolicySchema = z.object({
 });
 
 export const ResourcePermissionsResponseSchema = z.object({
-  resource: ScopedResourceSchema,
+  resource: ManagedResourceSchema,
   scope: ResourcePermissionScopeSchema,
   name: z.string(),
   revision: z.number().int().nonnegative(),

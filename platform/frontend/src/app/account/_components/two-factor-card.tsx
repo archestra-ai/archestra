@@ -21,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth/auth.query";
 import { useDisableTwoFactorMutation } from "@/lib/auth/two-factor.query";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
@@ -38,7 +39,7 @@ type PasswordFormValues = z.infer<typeof PasswordFormSchema>;
  */
 export function TwoFactorCard({ required = false }: { required?: boolean }) {
   const enterpriseCoreActive = useEnterpriseFeature("core");
-  const { data: session } = useSession();
+  const { data: session, isPending: isSessionPending } = useSession();
   const twoFactorEnabled = !!session?.user?.twoFactorEnabled;
   const mustEnroll = required && !twoFactorEnabled;
 
@@ -65,10 +66,14 @@ export function TwoFactorCard({ required = false }: { required?: boolean }) {
               : "Add an extra layer of security by requiring a one-time code at sign-in."
         }
         control={
-          <Button
-            variant={twoFactorEnabled ? "outline" : "default"}
-            onClick={() => {
-              if (twoFactorEnabled) {
+          <Switch
+            aria-label="Two-factor authentication"
+            checked={twoFactorEnabled}
+            disabled={
+              isSessionPending || isPasswordDialogOpen || isEnrollmentOpen
+            }
+            onCheckedChange={(enabled) => {
+              if (!enabled) {
                 // Disabling is still possible when required — the middleware
                 // will simply lock the account out again; better-auth offers
                 // no disable-block hook, so the card warns via copy.
@@ -80,9 +85,7 @@ export function TwoFactorCard({ required = false }: { required?: boolean }) {
               // there is no reason to leave the account page for it.
               setIsEnrollmentOpen(true);
             }}
-          >
-            {twoFactorEnabled ? "Disable 2FA" : "Enable 2FA"}
-          </Button>
+          />
         }
       />
       <TwoFactorPasswordDialog

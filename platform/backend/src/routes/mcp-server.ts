@@ -148,7 +148,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .enum(["active", "deleted"])
             .default("active")
             .describe(
-              "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default).",
+              "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires delete permission and is limited to connections you can uninstall.",
             ),
         }),
         response: constructResponseSchema(z.array(McpServerListEntrySchema)),
@@ -157,33 +157,60 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ user, headers, query, organizationId }, reply) => {
       const { assignmentScope, assignmentTeamIds, catalogId, status } = query;
 
-      // Soft-deleted installs are visible only to holders of the dedicated
-      // manage-deleted capability (admins by default): the listing is org-wide
-      // (it includes other users' personal installs), so the ordinary delete
-      // permission — which members hold for their own uninstalls — must not
-      // unlock it. It is a backend affordance for discovering restorable ids —
-      // there is no UI toggle this change.
       if (status === "deleted") {
-        const { success: canManageDeleted } = await hasPermission(
-          { mcpServerInstallation: ["manage-deleted"] },
+        const { success: canDelete } = await hasPermission(
+          { mcpServerInstallation: ["delete"] },
           headers,
         );
-        if (!canManageDeleted) {
+        if (!canDelete) {
           throw new ApiError(
             403,
             "You do not have permission to list deleted MCP servers.",
           );
         }
-        let deleted =
-          await McpServerModel.findDeletedForOrganization(organizationId);
-        if (catalogId) {
-          deleted = deleted.filter((s) => s.catalogId === catalogId);
+        const [deleted, admin, update, teams] = await Promise.all([
+          McpServerModel.findDeletedForOrganization(organizationId),
+          isMcpInstallationAdmin({ userId: user.id, organizationId }),
+          hasPermission({ mcpServerInstallation: ["update"] }, headers),
+          TeamModel.getUserTeamsForOrganization({
+            userId: user.id,
+            organizationId,
+          }),
+        ]);
+        const authorization = {
+          isAdmin: admin,
+          canUpdate: update.success,
+          teamIds: teams.map((team) => team.id),
+        };
+        const allowed = [];
+        for (const server of deleted) {
+          if (
+            server.serverType === "builtin" ||
+            (catalogId && server.catalogId !== catalogId)
+          )
+            continue;
+          try {
+            await assertScopedLifecycleAuthorization({
+              mcpServer: server,
+              userId: user.id,
+              organizationId,
+              headers,
+              action: "restore",
+              authorization,
+            });
+            allowed.push(server);
+          } catch (error) {
+            if (
+              error instanceof ApiError &&
+              [403, 404].includes(error.statusCode)
+            )
+              continue;
+            throw error;
+          }
         }
-        // An uninstalled connection reports no alerts, so it carries no mutes,
-        // and there is nothing left to authenticate against.
         return reply.send(
-          deleted.map((s) => ({
-            ...s,
+          allowed.map((server) => ({
+            ...server,
             alertMutes: [],
             canUseCredential: false,
           })),
@@ -1815,7 +1842,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id: mcpServerId }, organizationId }, reply) => {
+    async (
+      { params: { id: mcpServerId }, organizationId, user, headers },
+      reply,
+    ) => {
       const mcpServer = await McpServerModel.findDeletedByIdForOrganization(
         mcpServerId,
         organizationId,
@@ -1837,9 +1867,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Authorization is the route-level manage-deleted permission (admin-only
-      // by default): deleted-resource lifecycle is one org-scoped capability,
-      // not derived from per-scope ownership of the live resource.
+      await assertScopedLifecycleAuthorization({
+        mcpServer,
+        userId: user.id,
+        organizationId,
+        headers,
+        action: "restore",
+      });
 
       // A standalone server-restore requires its parent catalog to be active:
       // tools resolve through the catalog, and catalog reads filter notDeleted, so
@@ -3343,10 +3377,10 @@ async function assertLifecycleRoutePermission(params: {
 }
 
 /**
- * Gate the three destructive lifecycle actions (revoke / reauth / reinstall)
+ * Gate connection lifecycle actions (revoke / restore / reauth / reinstall)
  * on an already-fetched MCP server by its scope. Rules:
  *   - personal:
- *       - revoke: owner OR mcpServerInstallation:update
+ *       - revoke / restore: owner OR mcpServerInstallation:update
  *       - re-authenticate / reinstall: owner only (these replace the
  *         connection's secret, so they must not be available to editors)
  *   - team:     mcpServerInstallation:admin OR (mcpServerInstallation:update AND user-in-team)
@@ -3358,22 +3392,29 @@ async function assertScopedLifecycleAuthorization(params: {
     scope: "personal" | "team" | "org";
     ownerId: string | null;
     teamId: string | null;
+    deletedAt?: Date | null;
   };
   userId: string;
   organizationId: string;
   headers: IncomingHttpHeaders;
-  action: "revoke" | "re-authenticate" | "reinstall" | "reload tools for";
+  action:
+    | "revoke"
+    | "restore"
+    | "re-authenticate"
+    | "reinstall"
+    | "reload tools for";
+  authorization?: { isAdmin: boolean; canUpdate: boolean; teamIds: string[] };
 }): Promise<void> {
   const { mcpServer, userId, organizationId, headers, action } = params;
 
   switch (mcpServer.scope) {
     case "personal": {
       if (mcpServer.ownerId === userId) return;
-      if (action === "revoke") {
-        const { success: hasMcpServerUpdate } = await hasPermission(
-          { mcpServerInstallation: ["update"] },
-          headers,
-        );
+      if (action === "revoke" || action === "restore") {
+        const hasMcpServerUpdate =
+          params.authorization?.canUpdate ??
+          (await hasPermission({ mcpServerInstallation: ["update"] }, headers))
+            .success;
         if (hasMcpServerUpdate) return;
         throw new ApiError(
           403,
@@ -3390,11 +3431,20 @@ async function assertScopedLifecycleAuthorization(params: {
       // retained connection through its owner and catalog before granting access.
       if (
         !mcpServer.teamId &&
-        !(await findMcpServerInOrganization(mcpServer.id, organizationId))
+        !(mcpServer.deletedAt
+          ? await McpServerModel.findDeletedByIdForOrganization(
+              mcpServer.id,
+              organizationId,
+            )
+          : await findMcpServerInOrganization(mcpServer.id, organizationId))
       ) {
         throw new ApiError(404, "MCP server not found");
       }
-      if (await isMcpInstallationAdmin({ userId, organizationId })) return;
+      if (
+        params.authorization?.isAdmin ??
+        (await isMcpInstallationAdmin({ userId, organizationId }))
+      )
+        return;
 
       // Team deletion clears the FK but retains the connection. Installation
       // admins can still manage it; former team membership grants no access.
@@ -3405,17 +3455,19 @@ async function assertScopedLifecycleAuthorization(params: {
         );
       }
 
-      const { success: hasMcpServerUpdate } = await hasPermission(
-        { mcpServerInstallation: ["update"] },
-        headers,
-      );
+      const hasMcpServerUpdate =
+        params.authorization?.canUpdate ??
+        (await hasPermission({ mcpServerInstallation: ["update"] }, headers))
+          .success;
       if (!hasMcpServerUpdate) {
         throw new ApiError(
           403,
           `You don't have permission to ${action} team connections`,
         );
       }
-      const isMember = await TeamModel.isUserInTeam(mcpServer.teamId, userId);
+      const isMember = params.authorization
+        ? params.authorization.teamIds.includes(mcpServer.teamId)
+        : await TeamModel.isUserInTeam(mcpServer.teamId, userId);
       if (!isMember) {
         throw new ApiError(
           403,
@@ -3425,7 +3477,12 @@ async function assertScopedLifecycleAuthorization(params: {
       return;
     }
     case "org": {
-      if (!(await isMcpInstallationAdmin({ userId, organizationId }))) {
+      if (
+        !(
+          params.authorization?.isAdmin ??
+          (await isMcpInstallationAdmin({ userId, organizationId }))
+        )
+      ) {
         throw new ApiError(
           403,
           `Only mcpServerInstallation admins can ${action} organization-scoped connections`,

@@ -57,6 +57,7 @@ export default class ResourcePermissionTargetModel {
     organizationId: string;
     resource: ScopedResource;
     id: string;
+    includeDeleted?: boolean;
   }): Promise<Target | null> {
     if (params.resource === "agent" || params.resource === "mcpGateway") {
       const table = schema.agentsTable;
@@ -379,7 +380,9 @@ export default class ResourcePermissionTargetModel {
             eq(catalog.organizationId, params.organizationId),
             isNull(catalog.organizationId),
           ),
-          isNull(catalog.deletedAt),
+          params.resource === "mcpRegistry" && params.includeDeleted
+            ? undefined
+            : isNull(catalog.deletedAt),
         ),
       );
     if (!target) return null;

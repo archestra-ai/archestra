@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-10-01
+lastUpdated: 2026-10-02
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -20,6 +20,10 @@ Permissions in Archestra are defined using a `resource:action` format, where:
 
 For example, `agent:create` allows creating agents, `mcpGateway:update` allows updating MCP gateways, and `llmProxy:read` allows viewing the LLM Proxy.
 
+## Log Visibility
+
+The `log:read` permission shows your own LLM and MCP logs. Add `log:admin` to see every organization log. Audit events use `auditLog:read` and `auditLog:admin`. Guardrail consult logs use `openappaDiagnostics:read` and `openappaDiagnostics:admin`. Admin has organization-wide visibility by default. Log pages use these role actions instead of resource sharing policies.
+
 ## Predefined Roles
 
 The following roles are built into Archestra and cannot be modified or deleted:
@@ -34,7 +38,7 @@ The admin role has **all permissions** on every resource.
 
 Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, and impersonating users
 
-Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
+Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, `openappaDiagnostics:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
 
 ### Editor
 
@@ -142,7 +146,7 @@ Users and service accounts can have multiple organization roles. Their permissio
 
 Teams can also hold organization roles. Members inherit these grants from their own teams and every ancestor in the [team hierarchy](#team-hierarchies). Removing a role or membership removes its grants, unless another assignment provides the same permissions.
 
-The account permissions page shows each permission's sources when you hover over or focus its badge. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
+The account permissions page shows each permission's sources when you hover over or focus its granted action. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
 
 #### No privilege escalation
 
@@ -167,6 +171,8 @@ The following table lists all available permissions that can be assigned to cust
 | `ac:create` | Create new custom roles |
 | `ac:update` | Modify custom role permissions |
 | `ac:delete` | Delete custom roles |
+| `accessPolicies:read` | View access policies for all resource types |
+| `accessPolicies:update` | Edit access policies and grant access across all resource types |
 | `agent:read` | View and list agents |
 | `agent:create` | Create new agents |
 | `agent:update` | Modify agent configuration and settings |
@@ -185,6 +191,7 @@ The following table lists all available permissions that can be assigned to cust
 | `app:update` | Modify MCP Apps and their tools allowed by your resource grants |
 | `app:delete` | Delete MCP Apps |
 | `auditLog:read` | View audit log records of your own administrative actions |
+| `auditLog:admin` | View every audit event in your organization (also requires Read) |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
@@ -238,6 +245,7 @@ The following table lists all available permissions that can be assigned to cust
 | `llmVirtualKey:update` | Modify LLM virtual keys and their visibility |
 | `llmVirtualKey:delete` | Delete LLM virtual keys |
 | `log:read` | View your own LLM proxy and MCP tool call logs in the active organization |
+| `log:admin` | View every LLM and MCP log in your organization (also requires Read) |
 | `mcpGateway:read` | View and list MCP gateways |
 | `mcpGateway:create` | Create new MCP gateways |
 | `mcpGateway:update` | Modify MCP gateway configuration |
@@ -249,13 +257,11 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpRegistry:read` | Browse the MCP server registry |
 | `mcpRegistry:create` | Add servers to the MCP registry |
 | `mcpRegistry:update` | Modify MCP registry entries |
-| `mcpRegistry:delete` | Remove servers from the MCP registry |
-| `mcpRegistry:manage-deleted` | View and restore soft-deleted MCP registry entries |
+| `mcpRegistry:delete` | Remove, view deleted, and restore MCP registry entries within your access |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |
-| `mcpServerInstallation:delete` | Uninstall MCP servers |
-| `mcpServerInstallation:manage-deleted` | View and restore soft-deleted (uninstalled) MCP servers |
+| `mcpServerInstallation:delete` | Uninstall, view deleted, and restore MCP servers within your access |
 | `mcpSettings:read` | View MCP settings (online catalog availability) |
 | `mcpSettings:update` | Modify MCP settings |
 | `member:read` | View organization members and their roles |
@@ -392,7 +398,7 @@ Creation with `initialGrants` also records the creator's full access explicitly.
 
 ### Delegation And Concurrent Edits
 
-To change a policy, you need `manage-permissions` on that scope. You can grant only actions that you also hold on that same scope. Authority over one object does not authorize a wildcard grant. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
+Global policies require `accessPolicies:read` to view or `accessPolicies:update` to edit. Update also allows viewing the policy. These role permissions apply across resource types. Admin and Platform Admin receive both by default. Ordinary resource CRUD permissions do not authorize global policy administration. Individual object policies still require `manage-permissions` on that object. You can grant only actions you hold on that object. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
 
 Saving includes the policy revision. If someone else changes the policy first, the API returns `409` and the editor preserves your draft. Reload the latest policy before saving again. Changes to grants are recorded in the audit log. Unsaved permission edits are kept separate from ordinary configuration saves; use **Save permissions** to apply them.
 

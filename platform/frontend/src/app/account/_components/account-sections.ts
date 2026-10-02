@@ -4,7 +4,6 @@ import {
   MonitorSmartphone,
   PlugZap,
   ShieldCheck,
-  Ticket,
   User,
 } from "lucide-react";
 
@@ -34,18 +33,11 @@ export const accountSections = [
     label: "Connections",
     href: "/account/connections",
     Icon: PlugZap,
-    feature: "agentRuntime" as const,
   },
   {
-    id: "gateway-token",
-    label: "Gateway Token",
-    href: "/account/gateway-token",
-    Icon: Ticket,
-  },
-  {
-    id: "two-factor",
-    label: "Two-Factor",
-    href: "/account/two-factor",
+    id: "auth",
+    label: "Auth",
+    href: "/account/auth",
     Icon: ShieldCheck,
   },
   {
@@ -65,7 +57,7 @@ export type AccountSectionId = (typeof accountSections)[number]["id"];
  * the query param by redirecting to the route that replaced it.
  * `?highlight=personal-token` is the deep link the connection instructions and
  * token-management links use to pop the gateway-token dialog; it has to select
- * the gateway-token route or the card that owns the dialog never mounts and
+ * the Auth route or the card that owns the dialog never mounts and
  * the link silently does nothing.
  *
  * `?highlight=change-password` needs no mapping — both its button and its
@@ -78,8 +70,11 @@ export function resolveLegacyAccountHref({
   section: string | null;
   highlight: string | null;
 }): string | null {
+  if (section === "gateway-token" || section === "two-factor") {
+    return "/account/auth";
+  }
   const match = accountSections.find(({ id }) => id === section);
   if (match) return match.href;
-  if (highlight === "personal-token") return "/account/gateway-token";
+  if (highlight === "personal-token") return "/account/auth";
   return null;
 }

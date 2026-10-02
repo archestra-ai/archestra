@@ -3540,8 +3540,15 @@
     {
       "idx": 505,
       "version": "7",
-      "when": 1790978970429,
-      "tag": "0505_openappa-unenforced-records",
+      "when": 1790974534285,
+      "tag": "0505_simplify-role-permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 506,
+      "version": "7",
+      "when": 1790979396089,
+      "tag": "0506_openappa-unenforced-records",
       "breakpoints": true
     }
   ]

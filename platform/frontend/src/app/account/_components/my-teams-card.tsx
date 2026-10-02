@@ -17,10 +17,11 @@ export function MyTeamsCard() {
   // good list on screen rather than replacing it with an error panel.
   const { data: teams, isPending, isLoadingError, refetch } = useMyTeams();
 
+  if (!isPending && !isLoadingError && teams.length === 0) return null;
+
   return (
     <SettingsBlock
       title="My Teams"
-      description="Teams you belong to. Membership controls which resources you can access."
       control={null}
       // Kept to the same column width as the profile fields above it, so the
       // two sections read as one stacked list rather than a full-width table.
@@ -37,11 +38,6 @@ export function MyTeamsCard() {
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
         </div>
-      ) : teams.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          You are not in any teams yet. Teams you join or create from chat show
-          here.
-        </p>
       ) : (
         <ul className="divide-y overflow-hidden rounded-lg border">
           {teams.map((team) => (

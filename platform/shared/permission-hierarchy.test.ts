@@ -3,7 +3,7 @@ import { isPermissionActionGranted } from "./permission-hierarchy";
 
 describe("isPermissionActionGranted", () => {
   it("grants exactly the actions a role holds, with no implied actions", () => {
-    const grantedActions = ["read", "create", "update", "delete"] as const;
+    const grantedActions = ["read", "create", "delete"] as const;
     for (const requiredAction of grantedActions) {
       expect(
         isPermissionActionGranted({
@@ -17,7 +17,7 @@ describe("isPermissionActionGranted", () => {
       isPermissionActionGranted({
         resource: "mcpServerInstallation",
         grantedActions: [...grantedActions],
-        requiredAction: "manage-deleted",
+        requiredAction: "update",
       }),
     ).toBe(false);
   });

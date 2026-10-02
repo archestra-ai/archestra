@@ -1,48 +1,47 @@
 "use client";
 
 import { Plug, RefreshCw, Unplug } from "lucide-react";
-import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useAccountConnections } from "@/app/account/_components/use-account-connections";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
 import { RuntimeCredentialRowContent } from "@/components/runtime-credential-row-content";
-import { SettingsBlock } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
-import { useInternalAgents } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type RuntimeCredentialDefinition,
   useDeleteRuntimeCredentialConnection,
-  useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 
 export default function AccountConnectionsPage() {
-  const runtimeEnabled = useFeature("agentRuntime");
+  const router = useRouter();
   const byosEnabled = useFeature("byosEnabled");
-  const definitions = useRuntimeCredentials();
-  const agents = useInternalAgents({ enabled: runtimeEnabled === true });
-  const claudeAgent = agents.data?.find(
-    (agent) => agent.runtime?.command?.[0] === "archestra-claude-code",
-  );
+  const {
+    definitions,
+    agents,
+    personalDefinitions,
+    claudeAgent,
+    isError,
+    isApplicable,
+  } = useAccountConnections();
   const [connecting, setConnecting] =
     useState<RuntimeCredentialDefinition | null>(null);
   const [disconnecting, setDisconnecting] =
     useState<RuntimeCredentialDefinition | null>(null);
   const disconnect = useDeleteRuntimeCredentialConnection();
-  const personalDefinitions = (definitions.data ?? []).filter(
-    (definition) => definition.allowPersonal,
-  );
+  useEffect(() => {
+    if (isApplicable === false) router.replace("/account");
+  }, [isApplicable, router]);
+
+  if (isApplicable !== true && !isError) return null;
 
   return (
     <>
-      <SettingsBlock
-        title="Personal credentials"
-        description="Connect a credential once to reuse it with your agents and MCP connections. Values stay private to you."
-        control={null}
-      >
-        {definitions.isError || agents.isError ? (
+      <div>
+        {isError ? (
           <QueryLoadError
             title="Couldn't load Agent connections"
             onRetry={() => {
@@ -96,24 +95,9 @@ export default function AccountConnectionsPage() {
                 </div>
               </div>
             ))}
-            {!definitions.isPending &&
-              !agents.isPending &&
-              !claudeAgent &&
-              personalDefinitions.length === 0 && (
-                <p className="p-5 text-sm text-muted-foreground">
-                  An administrator can add a personal credential in{" "}
-                  <Link
-                    href="/settings/credentials"
-                    className="underline underline-offset-4 hover:text-foreground"
-                  >
-                    Credentials
-                  </Link>
-                  . Then connect it here.
-                </p>
-              )}
           </div>
         )}
-      </SettingsBlock>
+      </div>
 
       {connecting && (
         <RuntimeCredentialConnectionDialog

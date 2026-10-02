@@ -8,10 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { RoleOptionLabel } from "@/components/role-type-icon";
-import {
-  SettingsBlock,
-  SettingsSaveBar,
-} from "@/components/settings/settings-block";
+import { SettingsSaveBar } from "@/components/settings/settings-block";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Form,
@@ -50,16 +47,9 @@ export function ProfileCard() {
   const image = session?.user?.image ?? null;
 
   return (
-    <SettingsBlock title="Profile">
-      <div className="max-w-xl">
-        <ProfileForm
-          name={name}
-          email={email}
-          image={image}
-          role={role ?? ""}
-        />
-      </div>
-    </SettingsBlock>
+    <div className="max-w-xl">
+      <ProfileForm name={name} email={email} image={image} role={role ?? ""} />
+    </div>
   );
 }
 
@@ -164,18 +154,16 @@ function ProfileForm({
 
 function ProfileSkeleton() {
   return (
-    <SettingsBlock title="Profile">
-      <div className="max-w-xl space-y-5">
-        <div className="flex items-center gap-3">
-          <Skeleton className="size-12 shrink-0 rounded-full" />
-          <div className="grid min-w-0 flex-1 gap-2">
-            <Skeleton className="h-4 w-16" />
-            <Skeleton className="h-9 w-full" />
-          </div>
+    <div className="max-w-xl space-y-5">
+      <div className="flex items-center gap-3">
+        <Skeleton className="size-12 shrink-0 rounded-full" />
+        <div className="grid min-w-0 flex-1 gap-2">
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-9 w-full" />
         </div>
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-16 w-full" />
       </div>
-    </SettingsBlock>
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-16 w-full" />
+    </div>
   );
 }

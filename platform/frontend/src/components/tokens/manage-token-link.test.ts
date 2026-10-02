@@ -11,7 +11,7 @@ describe("getManageTokenLink", () => {
       }),
     ).toEqual({
       label: "Manage your personal token",
-      href: "/account/gateway-token?highlight=personal-token",
+      href: "/account/auth?highlight=personal-token",
     });
   });
 
@@ -50,7 +50,7 @@ describe("getManageTokenLink", () => {
       }),
     ).toEqual({
       label: "Manage your tokens",
-      href: "/account/gateway-token?highlight=personal-token",
+      href: "/account/auth?highlight=personal-token",
     });
   });
 });

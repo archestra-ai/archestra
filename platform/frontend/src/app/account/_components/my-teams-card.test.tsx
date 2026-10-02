@@ -50,14 +50,14 @@ describe("MyTeamsCard", () => {
     expect(design).toHaveTextContent("1 member");
   });
 
-  it("shows an empty state when the user has no teams", () => {
+  it("hides the section when the user has no teams", () => {
     mockMyTeams({ data: [] });
 
     render(<MyTeamsCard />);
 
     expect(
-      screen.getByText(/You are not in any teams yet/),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "My Teams" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers a retry when the teams fail to load", async () => {

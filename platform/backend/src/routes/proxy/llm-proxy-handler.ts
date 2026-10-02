@@ -1871,8 +1871,8 @@ export async function handleLLMProxy<
       };
       // The facts that bind a child trajectory. Read without preparing the
       // request for enforcement, which changes the body and refuses tool
-      // shapes that OpenAPPA cannot govern.
-      const lineageRequest: AppaTrustedContext["request"] = {
+      // shapes that OpenAPPA cannot govern. Built only for an OpenAPPA session.
+      const lineageRequest = (): AppaTrustedContext["request"] => ({
         tools: undefined,
         session: appaIdentity,
         customTools: new Set(),
@@ -1884,7 +1884,7 @@ export async function handleLLMProxy<
         ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
           ? { childTrajectoryReceipts }
           : {}),
-      };
+      });
       if (
         openappaSession &&
         (await startedUnenforced(
@@ -1896,7 +1896,7 @@ export async function handleLLMProxy<
               session: openappaSession,
               profileId: resolvedAgent.id,
               toolIdentity,
-              request: lineageRequest,
+              request: lineageRequest(),
               claims: appaClaims,
               ...(isInternalChat ? { chatSource: source } : {}),
             },
@@ -1972,7 +1972,7 @@ export async function handleLLMProxy<
           session: observedSession,
           profileId: resolvedAgent.id,
           toolIdentity,
-          request: lineageRequest,
+          request: lineageRequest(),
           claims: appaClaims,
           compaction: clientCompaction && !isInternalChat,
           enforcement: "inactive",
@@ -4043,11 +4043,21 @@ function observedAppaSession(params: {
           }),
     });
   } catch (error) {
-    // Enforcement is off, so a request without a usable session id goes on.
-    logger.debug(
-      { error: error instanceof Error ? error.message : String(error) },
-      "OpenAPPA does not record a request without a usable session id while Guardrails enforcement is off",
-    );
+    // Enforcement is off, so the request goes on either way. A request
+    // without a usable session id is expected; anything else is not.
+    const details = {
+      error: error instanceof Error ? error.message : String(error),
+    };
+    if (error instanceof ApiError)
+      logger.debug(
+        details,
+        "OpenAPPA does not record a request without a usable session id while Guardrails enforcement is off",
+      );
+    else
+      logger.warn(
+        details,
+        "OpenAPPA could not read the session of a request while Guardrails enforcement is off",
+      );
     return undefined;
   }
 }

@@ -5616,6 +5616,173 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             String(event.tool_call_id).endsWith(id),
         );
 
+      // The reported session (T-1591): the lead runs governed, enforcement
+      // turns off, the lead launches a teammate (after a failed first spawn),
+      // trades messages with it and resumes it, and enforcement turns on again
+      // for the lead's next turn. The reporter also believed the session had
+      // started while enforcement was off, so both starts are replayed.
+      test.for([
+        ["governed before enforcement turned off", true],
+        ["started while enforcement was off", false],
+      ] as const)("the reported session goes on after enforcement turns on again (%s)", async ([
+        _start,
+        governedFirst,
+      ]) => {
+        const teammate = `sched-tools@${team}`;
+        const opened = [
+          { role: "user", content: "Check the scheduled agents on staging" },
+        ];
+        if (governedFirst) {
+          reply("get_weather", { location: "SF" });
+          const governed = await send(undefined, opened);
+          expect(governed.statusCode, governed.body).toBe(200);
+          expect(events.some((event) => event.event === "session_start")).toBe(
+            true,
+          );
+        }
+        await GuardrailsDeploymentModel.setEnabled(false);
+
+        const worktreeSpawn = {
+          name: "sched-tools",
+          description: "Add schedule-trigger MCP tools",
+          prompt: "Add the tools.",
+          isolation: "worktree",
+        };
+        const teammateSpawn = {
+          name: "sched-tools",
+          description: "Add schedule-trigger MCP tools",
+          prompt: "Add the tools in a manual worktree.",
+        };
+        let history: unknown[] = [
+          ...opened,
+          { role: "assistant", content: "The Dependabot trigger is stuck." },
+          {
+            role: "user",
+            content:
+              "Add the missing schedule trigger tools on a separate branch. Spin up a subagent for it.",
+          },
+        ];
+        replyWith("toolu_worktree", "Agent", worktreeSpawn);
+        expect((await send(undefined, history)).statusCode).toBe(200);
+        history = [
+          ...history,
+          toolUse("toolu_worktree", "Agent", worktreeSpawn),
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_worktree",
+                is_error: true,
+                content:
+                  '<tool_use_error>Error: Failed to resolve base branch "HEAD": git rev-parse failed</tool_use_error>',
+              },
+            ],
+          },
+        ];
+        replyWith("toolu_teammate", "Agent", teammateSpawn);
+        expect((await send(undefined, history)).statusCode).toBe(200);
+        history = [
+          ...history,
+          toolUse("toolu_teammate", "Agent", teammateSpawn),
+          toolResult("toolu_teammate", [
+            { type: "text", text: launchReceipt(teammate, "sched-tools") },
+          ]),
+        ];
+
+        // The teammate starts, works, and reports while enforcement is off.
+        const teammateOpening = [
+          {
+            role: "user",
+            content: `<teammate-message teammate_id="team-lead" summary="Add schedule-trigger MCP tools">\nAdd the tools in a manual worktree.\n</teammate-message>`,
+          },
+        ];
+        replyWith("toolu_report", "SendMessage", {
+          to: "team-lead",
+          message: "The tools are written. Now the tests.",
+        });
+        expect((await send(teammate, teammateOpening)).statusCode).toBe(200);
+
+        // It fails mid-task, and the lead resumes it.
+        const failed = teammateMessage(
+          "sched-tools",
+          JSON.stringify({
+            type: "idle_notification",
+            from: "sched-tools",
+            timestamp: "2026-09-29T10:12:00.000Z",
+            idleReason: "failed",
+            summary: "API Error: Overloaded",
+          }),
+        );
+        history = [
+          ...history,
+          { role: "assistant", content: "Subagent is running." },
+          {
+            role: "user",
+            content: toLead(
+              teammateMessage(
+                "sched-tools",
+                "The tools are written. Now the tests.",
+              ),
+              failed,
+            ),
+          },
+        ];
+        const resume = {
+          to: "sched-tools",
+          message: "Re-read your files, then finish the tests.",
+        };
+        replyWith("toolu_resume", "SendMessage", resume);
+        expect((await send(undefined, history)).statusCode).toBe(200);
+        history = [
+          ...history,
+          toolUse("toolu_resume", "SendMessage", resume),
+          toolResult("toolu_resume", "Message queued for sched-tools."),
+          { role: "assistant", content: "Resumed the subagent." },
+        ];
+
+        // Enforcement turns on again: the lead's next turns, and the teammate.
+        await GuardrailsDeploymentModel.setEnabled(true);
+        answerText();
+        events.length = 0;
+        history = [
+          ...history,
+          {
+            role: "user",
+            content:
+              "where is the schedule trigger mcp tools subagent at, did it create pr?",
+          },
+          { role: "assistant", content: "Checking." },
+          { role: "user", content: "hello?" },
+        ];
+        const lead = await send(undefined, history);
+
+        expect(lead.statusCode, lead.body).toBe(200);
+        expect(lead.body).not.toContain("unverified child completion");
+        expect(forwarded()).toContain("The tools are written. Now the tests.");
+        expect(forwarded()).toContain("API Error: Overloaded");
+        expect(forwarded()).toContain("Failed to resolve base branch");
+        expect(forwarded()).toContain(`agent_id: ${teammate}`);
+        expect(forwarded()).not.toContain("[appa]");
+        expect(events.filter((event) => event.event === "tool_result")).toEqual(
+          [],
+        );
+
+        const resumed = await send(teammate, [
+          ...teammateOpening,
+          { role: "assistant", content: "Writing the tests." },
+          {
+            role: "user",
+            content: `<teammate-message teammate_id="team-lead">\n${resume.message}\n</teammate-message>`,
+          },
+        ]);
+        expect(resumed.statusCode, resumed.body).toBe(200);
+        expect(forwarded()).toContain(resume.message);
+        expect(
+          events.filter((event) => String(event.session_id).includes(teammate)),
+        ).toEqual([]);
+      });
+
       test("a lead and a teammate that started while it was off stay out of OpenAPPA", async () => {
         await GuardrailsDeploymentModel.setEnabled(false);
         answerText();

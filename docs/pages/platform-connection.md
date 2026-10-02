@@ -10,7 +10,7 @@ lastUpdated: 2026-10-02
 
 ![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-Select your client on the Connection page. Claude Code, Cursor, Codex, Copilot CLI, and OpenCode show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
+Select your client on the Connection page. Claude Code, Cursor, Codex, Copilot CLI, and OpenCode list what the connection adds, then show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
 
 Claude Desktop, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 

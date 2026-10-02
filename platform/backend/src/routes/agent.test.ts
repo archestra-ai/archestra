@@ -614,6 +614,60 @@ describe("agent routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
+    test.for([
+      "agent",
+      "mcp_gateway",
+    ] as const)("defaults new Manual %s to progressive loading and preserves explicit choices", async (agentType) => {
+      for (const toolExposureMode of [
+        undefined,
+        "full",
+        "search_and_run_only",
+      ] as const) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Manual ${agentType} ${crypto.randomUUID().slice(0, 8)}`,
+            agentType,
+            accessAllTools: false,
+            ...(toolExposureMode ? { toolExposureMode } : {}),
+          },
+        });
+        expect(response.statusCode).toBe(200);
+        const agent = response.json();
+        expect(agent.accessAllTools).toBe(false);
+        expect(agent.toolExposureMode).toBe(
+          toolExposureMode ?? "search_and_run_only",
+        );
+
+        // Unrelated edits must not reset a deliberate Manual-mode opt-out.
+        const updated = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { description: "Updated description" },
+        });
+        expect(updated.statusCode).toBe(200);
+        expect(updated.json().toolExposureMode).toBe(agent.toolExposureMode);
+
+        const disabled = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { toolExposureMode: "full" },
+        });
+        expect(disabled.statusCode).toBe(200);
+        expect(disabled.json().toolExposureMode).toBe("full");
+
+        // All mode still requires the search/run surface, even with an opt-out.
+        const all = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { accessAllTools: true, toolExposureMode: "full" },
+        });
+        expect(all.statusCode).toBe(200);
+        expect(all.json().toolExposureMode).toBe("search_and_run_only");
+      }
+    });
+
     test("should create an agent with load-tools-when-needed exposure", async () => {
       const response = await app.inject({
         method: "POST",

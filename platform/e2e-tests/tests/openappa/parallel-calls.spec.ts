@@ -847,7 +847,12 @@ async function setupGovernedChat(params: {
     request,
     method: "put",
     urlSuffix: `/api/agents/${agentId}`,
-    data: { llmApiKeyId: apiKeyId, modelId: runtimeModel.dbId },
+    // These policies and WireMock turns exercise directly advertised calls.
+    data: {
+      llmApiKeyId: apiKeyId,
+      modelId: runtimeModel.dbId,
+      toolExposureMode: "full",
+    },
   });
 
   const toolsResponse = await makeApiRequest({

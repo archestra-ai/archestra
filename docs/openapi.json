@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.30"
+    "version": "1.4.0-rc.31"
   },
   "components": {
     "schemas": {
@@ -4067,14 +4067,21 @@
                     "type": "string",
                     "enum": [
                       "summarized",
-                      "omitted"
+                      "omitted",
+                      "updates"
                     ]
+                  },
+                  "block_binding": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {}
                   }
                 },
                 "required": [
                   "type",
                   "budget_tokens"
-                ]
+                ],
+                "additionalProperties": {}
               },
               {
                 "type": "object",
@@ -4088,7 +4095,23 @@
                 },
                 "required": [
                   "type"
-                ]
+                ],
+                "additionalProperties": {}
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "between_tools"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": {}
               },
               {
                 "type": "object",
@@ -4104,13 +4127,32 @@
                     "type": "string",
                     "enum": [
                       "summarized",
-                      "omitted"
+                      "omitted",
+                      "updates"
                     ]
+                  },
+                  "block_binding": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {}
                   }
                 },
                 "required": [
                   "type"
-                ]
+                ],
+                "additionalProperties": {}
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": {}
               }
             ]
           },
@@ -24708,15 +24750,21 @@
                     "type": "string",
                     "enum": [
                       "summarized",
-                      "omitted"
+                      "omitted",
+                      "updates"
                     ]
+                  },
+                  "block_binding": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {}
                   }
                 },
                 "required": [
                   "type",
                   "budget_tokens"
                 ],
-                "additionalProperties": false
+                "additionalProperties": {}
               },
               {
                 "type": "object",
@@ -24731,7 +24779,22 @@
                 "required": [
                   "type"
                 ],
-                "additionalProperties": false
+                "additionalProperties": {}
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "between_tools"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": {}
               },
               {
                 "type": "object",
@@ -24747,14 +24810,32 @@
                     "type": "string",
                     "enum": [
                       "summarized",
-                      "omitted"
+                      "omitted",
+                      "updates"
                     ]
+                  },
+                  "block_binding": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {}
                   }
                 },
                 "required": [
                   "type"
                 ],
-                "additionalProperties": false
+                "additionalProperties": {}
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": {}
               }
             ]
           },
@@ -119620,14 +119701,21 @@
                             "type": "string",
                             "enum": [
                               "summarized",
-                              "omitted"
+                              "omitted",
+                              "updates"
                             ]
+                          },
+                          "block_binding": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
                           "type",
                           "budget_tokens"
-                        ]
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "object",
@@ -119641,7 +119729,23 @@
                         },
                         "required": [
                           "type"
-                        ]
+                        ],
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "between_tools"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "object",
@@ -119657,13 +119761,32 @@
                             "type": "string",
                             "enum": [
                               "summarized",
-                              "omitted"
+                              "omitted",
+                              "updates"
                             ]
+                          },
+                          "block_binding": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
                           "type"
-                        ]
+                        ],
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
                       }
                     ]
                   },
@@ -121219,14 +121342,21 @@
                             "type": "string",
                             "enum": [
                               "summarized",
-                              "omitted"
+                              "omitted",
+                              "updates"
                             ]
+                          },
+                          "block_binding": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
                           "type",
                           "budget_tokens"
-                        ]
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "object",
@@ -121240,7 +121370,23 @@
                         },
                         "required": [
                           "type"
-                        ]
+                        ],
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "between_tools"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "object",
@@ -121256,13 +121402,32 @@
                             "type": "string",
                             "enum": [
                               "summarized",
-                              "omitted"
+                              "omitted",
+                              "updates"
                             ]
+                          },
+                          "block_binding": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
                           "type"
-                        ]
+                        ],
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
                       }
                     ]
                   },
@@ -122828,14 +122993,21 @@
                             "type": "string",
                             "enum": [
                               "summarized",
-                              "omitted"
+                              "omitted",
+                              "updates"
                             ]
+                          },
+                          "block_binding": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
                           "type",
                           "budget_tokens"
-                        ]
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "object",
@@ -122849,7 +123021,23 @@
                         },
                         "required": [
                           "type"
-                        ]
+                        ],
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "between_tools"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "object",
@@ -122865,13 +123053,32 @@
                             "type": "string",
                             "enum": [
                               "summarized",
-                              "omitted"
+                              "omitted",
+                              "updates"
                             ]
+                          },
+                          "block_binding": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
                           "type"
-                        ]
+                        ],
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
                       }
                     ]
                   },
@@ -124192,14 +124399,21 @@
                             "type": "string",
                             "enum": [
                               "summarized",
-                              "omitted"
+                              "omitted",
+                              "updates"
                             ]
+                          },
+                          "block_binding": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
                           "type",
                           "budget_tokens"
-                        ]
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "object",
@@ -124213,7 +124427,23 @@
                         },
                         "required": [
                           "type"
-                        ]
+                        ],
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "between_tools"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "object",
@@ -124229,13 +124459,32 @@
                             "type": "string",
                             "enum": [
                               "summarized",
-                              "omitted"
+                              "omitted",
+                              "updates"
                             ]
+                          },
+                          "block_binding": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
                           "type"
-                        ]
+                        ],
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
                       }
                     ]
                   },
@@ -179942,15 +180191,21 @@
                                                 "type": "string",
                                                 "enum": [
                                                   "summarized",
-                                                  "omitted"
+                                                  "omitted",
+                                                  "updates"
                                                 ]
+                                              },
+                                              "block_binding": {
+                                                "nullable": true,
+                                                "type": "object",
+                                                "additionalProperties": {}
                                               }
                                             },
                                             "required": [
                                               "type",
                                               "budget_tokens"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
                                           },
                                           {
                                             "type": "object",
@@ -179965,7 +180220,22 @@
                                             "required": [
                                               "type"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "between_tools"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "type"
+                                            ],
+                                            "additionalProperties": {}
                                           },
                                           {
                                             "type": "object",
@@ -179981,14 +180251,32 @@
                                                 "type": "string",
                                                 "enum": [
                                                   "summarized",
-                                                  "omitted"
+                                                  "omitted",
+                                                  "updates"
                                                 ]
+                                              },
+                                              "block_binding": {
+                                                "nullable": true,
+                                                "type": "object",
+                                                "additionalProperties": {}
                                               }
                                             },
                                             "required": [
                                               "type"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type"
+                                            ],
+                                            "additionalProperties": {}
                                           }
                                         ]
                                       },
@@ -181313,15 +181601,21 @@
                                                 "type": "string",
                                                 "enum": [
                                                   "summarized",
-                                                  "omitted"
+                                                  "omitted",
+                                                  "updates"
                                                 ]
+                                              },
+                                              "block_binding": {
+                                                "nullable": true,
+                                                "type": "object",
+                                                "additionalProperties": {}
                                               }
                                             },
                                             "required": [
                                               "type",
                                               "budget_tokens"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
                                           },
                                           {
                                             "type": "object",
@@ -181336,7 +181630,22 @@
                                             "required": [
                                               "type"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "between_tools"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "type"
+                                            ],
+                                            "additionalProperties": {}
                                           },
                                           {
                                             "type": "object",
@@ -181352,14 +181661,32 @@
                                                 "type": "string",
                                                 "enum": [
                                                   "summarized",
-                                                  "omitted"
+                                                  "omitted",
+                                                  "updates"
                                                 ]
+                                              },
+                                              "block_binding": {
+                                                "nullable": true,
+                                                "type": "object",
+                                                "additionalProperties": {}
                                               }
                                             },
                                             "required": [
                                               "type"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type"
+                                            ],
+                                            "additionalProperties": {}
                                           }
                                         ]
                                       },
@@ -215875,15 +216202,21 @@
                                           "type": "string",
                                           "enum": [
                                             "summarized",
-                                            "omitted"
+                                            "omitted",
+                                            "updates"
                                           ]
+                                        },
+                                        "block_binding": {
+                                          "nullable": true,
+                                          "type": "object",
+                                          "additionalProperties": {}
                                         }
                                       },
                                       "required": [
                                         "type",
                                         "budget_tokens"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
                                     },
                                     {
                                       "type": "object",
@@ -215898,7 +216231,22 @@
                                       "required": [
                                         "type"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "between_tools"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "type"
+                                      ],
+                                      "additionalProperties": {}
                                     },
                                     {
                                       "type": "object",
@@ -215914,14 +216262,32 @@
                                           "type": "string",
                                           "enum": [
                                             "summarized",
-                                            "omitted"
+                                            "omitted",
+                                            "updates"
                                           ]
+                                        },
+                                        "block_binding": {
+                                          "nullable": true,
+                                          "type": "object",
+                                          "additionalProperties": {}
                                         }
                                       },
                                       "required": [
                                         "type"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type"
+                                      ],
+                                      "additionalProperties": {}
                                     }
                                   ]
                                 },
@@ -217246,15 +217612,21 @@
                                           "type": "string",
                                           "enum": [
                                             "summarized",
-                                            "omitted"
+                                            "omitted",
+                                            "updates"
                                           ]
+                                        },
+                                        "block_binding": {
+                                          "nullable": true,
+                                          "type": "object",
+                                          "additionalProperties": {}
                                         }
                                       },
                                       "required": [
                                         "type",
                                         "budget_tokens"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
                                     },
                                     {
                                       "type": "object",
@@ -217269,7 +217641,22 @@
                                       "required": [
                                         "type"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "between_tools"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "type"
+                                      ],
+                                      "additionalProperties": {}
                                     },
                                     {
                                       "type": "object",
@@ -217285,14 +217672,32 @@
                                           "type": "string",
                                           "enum": [
                                             "summarized",
-                                            "omitted"
+                                            "omitted",
+                                            "updates"
                                           ]
+                                        },
+                                        "block_binding": {
+                                          "nullable": true,
+                                          "type": "object",
+                                          "additionalProperties": {}
                                         }
                                       },
                                       "required": [
                                         "type"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type"
+                                      ],
+                                      "additionalProperties": {}
                                     }
                                   ]
                                 },

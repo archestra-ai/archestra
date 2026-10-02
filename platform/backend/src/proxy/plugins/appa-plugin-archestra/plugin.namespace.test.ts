@@ -3,11 +3,14 @@ import config from "@/config";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaPluginArchestra } from "./plugin";
 import { APPA_PLUGIN_TRUSTED_CONTEXT } from "./types";
 
 describe("AppaPluginArchestra namespace controls", () => {
+  setupTestCacheManager();
+
   beforeEach(async () => {
     config.openappa.enabled = true;
     await GuardrailsDeploymentModel.setEnabled(true);
@@ -143,6 +146,61 @@ describe("AppaPluginArchestra namespace controls", () => {
       prepared?.decision === "allow" ? prepared.toolCalls : [foreign];
 
     expect(calls).toEqual([foreign]);
+  });
+
+  test("in a proxy-only session, gives a question id only to the client's own question tool", async () => {
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = "test-offer-signing-secret-32chars";
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = {
+      ...namespaceContext(),
+      headers: { originator: "codex_exec" },
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    const request = trusted.request as Record<string, unknown>;
+    // A proxy-only session declares none of the APPA tools.
+    delete request.tools;
+    request.declaredTools = [
+      { name: "request_user_input" },
+      { name: "request_user_input", namespace: "mcp__other" },
+    ];
+    const question = {
+      id: "call_question",
+      name: "request_user_input",
+      arguments: "{}",
+    };
+    // An MCP tool with the same name: the runtime rules on this call, so its
+    // result must not skip the result check.
+    const lookalike = {
+      id: "call_lookalike",
+      name: "request_user_input",
+      namespace: "mcp__other",
+      arguments: "{}",
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      const prepared = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [question, lookalike],
+      });
+
+      if (prepared?.decision !== "allow")
+        throw new Error("expected prepared calls");
+      expect(prepared.toolCalls).toEqual([
+        {
+          ...question,
+          wireId: expect.stringMatching(
+            /^call_aq1_[A-Za-z0-9_-]{16}_[A-Za-z0-9_-]{22}$/,
+          ),
+        },
+        lookalike,
+      ]);
+    } finally {
+      config.openappa.offerSigningSecret = priorSecret;
+    }
   });
 });
 

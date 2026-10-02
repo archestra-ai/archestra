@@ -118,13 +118,10 @@ class OpenAppaUnenforcedModel {
         and(
           eq(calls.organizationId, params.organizationId),
           inArray(calls.sessionId, [...params.sessionIds]),
+          // An empty list matches nothing: `inArray` turns it into `false`.
           or(
-            toolCallIds.length > 0
-              ? inArray(calls.toolCallId, toolCallIds)
-              : undefined,
-            childNativeIds.length > 0
-              ? inArray(calls.childNativeId, childNativeIds)
-              : undefined,
+            inArray(calls.toolCallId, toolCallIds),
+            inArray(calls.childNativeId, childNativeIds),
           ),
         ),
       );
@@ -151,7 +148,7 @@ async function deleteInBatches(
     const removed = await db
       .delete(table)
       .where(inArray(sql`ctid`, expired))
-      .returning({ createdAt: table.createdAt });
+      .returning({ ctid: sql`ctid` });
     total += removed.length;
     if (removed.length < batchSize) break;
   }

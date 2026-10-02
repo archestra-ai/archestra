@@ -30,7 +30,6 @@ import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
 import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { OpenAppaIcon } from "@/components/openappa-icon";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -48,11 +47,9 @@ import {
   SHORTCUT_NEW_ENCRYPTED_CHAT,
 } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useOpenappaStatus } from "@/lib/chat/chat.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -210,15 +207,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
   const providerCatalog = useModelProviderCatalog();
-  const { data: statusData, isError: statusReadFailed } = useOpenappaStatus(
-    runtimeMode ? undefined : conversationId,
-  );
-  const openappaStatus = statusReadFailed ? null : statusData;
-  const { data: guardrailsDeployment } = useGuardrailsDeployment();
-  const openappaEnabled = useFeature("openappaEnabled") === true;
-  const showOpenappaStatus =
-    openappaEnabled && guardrailsDeployment?.active === true;
-
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
     useModelSelectorDisplay({ conversationId });
@@ -381,8 +369,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         )}
       {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
       {isNarrow &&
-        (!showOpenappaStatus &&
-        showDefaultLogo &&
+        (showDefaultLogo &&
         logoProvider &&
         !subscriptionConnectRequired &&
         (modelSource === "agent" || modelSource === "organization") ? (
@@ -557,9 +544,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       </button>
                     </ContextWindowDialog>
                   </div>
-                )}
-                {showOpenappaStatus && (
-                  <OpenappaStatusDisplay status={openappaStatus} inPopover />
                 )}
               </div>
             </PopoverContent>
@@ -863,10 +847,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         </>
       )}
 
-      {!isNarrow && showOpenappaStatus && (
-        <OpenappaStatusDisplay status={openappaStatus} />
-      )}
-
       {/* Apps Hackathon session recorder — a distinct cluster in the composer.
           It records the whole chat (from scratch, even before the first message)
           and opens the replay. Renders nothing when the feature is disabled. */}
@@ -876,48 +856,3 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 });
 
 export { ChatPromptInputTools };
-
-function OpenappaStatusDisplay({
-  status,
-  inPopover = false,
-}: {
-  status: { trust: string; audience: string } | null | undefined;
-  inPopover?: boolean;
-}) {
-  const statusLabel = status
-    ? `Trust: ${status.trust}; audience: ${status.audience}`
-    : "Trust and audience status unavailable";
-
-  const content = (
-    <output
-      aria-label={statusLabel}
-      className="flex max-w-64 items-start gap-2 text-sm text-muted-foreground [overflow-wrap:anywhere]"
-    >
-      <OpenAppaIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <span className="flex min-w-0 flex-col gap-1">
-        <span>{`Trust: ${status?.trust ?? "unavailable"}`}</span>
-        <span>{`Audience: ${status?.audience ?? "unavailable"}`}</span>
-      </span>
-    </output>
-  );
-
-  if (inPopover) return content;
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="OpenAPPA status"
-        >
-          <OpenAppaIcon aria-hidden="true" className="size-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-auto p-3">
-        {content}
-      </PopoverContent>
-    </Popover>
-  );
-}

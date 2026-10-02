@@ -336,13 +336,15 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     expect(status.audience).not.toBe("");
 
     await goToPage(page, `/chat/${conversationId}`);
-    await page.getByRole("button", { name: "OpenAPPA status" }).click();
     const badge = page.getByRole("status", {
       name: `Trust: ${status.trust}; audience: ${status.audience}`,
     });
     await expect(badge).toBeVisible();
     await expect(badge).toContainText(status.trust);
     await expect(badge).toContainText(status.audience);
+    await expect(
+      page.getByRole("button", { name: "OpenAPPA status" }),
+    ).toHaveCount(0);
   } finally {
     for (const mappingId of wireMockMappingIds) {
       await request

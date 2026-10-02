@@ -20,6 +20,7 @@ import {
   resolveEffectiveId,
   resolveInitialClientId,
 } from "./connection-flow.utils";
+import { ConnectionPreview } from "./connection-preview";
 import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
@@ -266,9 +267,21 @@ export function ConnectionFlow({
 
       <div inert={isRevalidating} className="contents">
         {client && promptClient && (
-          <WizardStep n={2} title={`Connect ${client.label}`} last>
-            <ConnectWithAi client={client} />
-          </WizardStep>
+          <>
+            <WizardStep n={2} title="Review the setup">
+              <ConnectionPreview
+                client={client}
+                gateway={canReadMcpGateway ? (selectedMcp ?? null) : null}
+                proxyAvailable={
+                  llmProxyEnabled && canReadLlmProxy === true && !!llmProxyId
+                }
+                skillsEnabled={skillsEnabled}
+              />
+            </WizardStep>
+            <WizardStep n={3} title={`Connect ${client.label}`} last>
+              <ConnectWithAi client={client} />
+            </WizardStep>
+          </>
         )}
 
         {/* Steps 2-3 (script clients) — review, then run the command */}

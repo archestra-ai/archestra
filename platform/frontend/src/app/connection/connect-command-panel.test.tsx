@@ -313,6 +313,9 @@ describe("ConnectCommandPanel", () => {
         expect(
           screen.getByRole("heading", { name: `Connect ${label}` }),
         ).toBeVisible();
+        expect(
+          screen.getByRole("heading", { name: "Review the setup" }),
+        ).toBeVisible();
         const prompt = `Read ${window.location.origin}/connect.md?client=${selectedClient.id} and connect ${label}.`;
         expect(
           screen.getByText(
@@ -331,6 +334,9 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.getByRole("heading", { name: "Install the connection" }),
       ).toBeVisible();
+      expect(
+        screen.queryByRole("heading", { name: "Review the setup" }),
+      ).toBeNull();
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenCalledWith(
           expect.objectContaining({ clientId: "claude-desktop" }),
@@ -342,8 +348,8 @@ describe("ConnectCommandPanel", () => {
       );
       expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
       expect(
-        screen.queryByRole("heading", { name: "Review the setup" }),
-      ).toBeNull();
+        screen.getByRole("heading", { name: "Review the setup" }),
+      ).toBeVisible();
     } finally {
       view.unmount();
       queryClient.clear();
@@ -519,7 +525,7 @@ describe("ConnectCommandPanel", () => {
     }
   });
 
-  it("keeps approval compact while customized choices reach the approved setup", async () => {
+  it("reviews the setup on the approval page and approves the changed choices", async () => {
     const decisions: unknown[] = [];
     const server = setupServer(
       http.get("http://localhost:9000/api/client-connections/demo", () =>
@@ -573,14 +579,20 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.queryByRole("heading", { name: "Connect Claude Code" }),
       ).toBeNull();
-      expect(screen.queryByText("for tools")).toBeNull();
+      // The approval page lists what gets connected before the user approves.
+      expect(
+        screen.getByRole("heading", { name: "Review the setup" }),
+      ).toBeVisible();
+      expect(screen.getByText("for tools", { exact: false })).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Customize setup" }),
+      ).toBeNull();
       expect(screen.queryByText(COMMAND)).toBeNull();
       expect(screen.queryByTestId("connect-regenerate-command")).toBeNull();
-      expect(screen.queryByTestId("connect-change-skills")).toBeNull();
       expect(
         screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
       ).toBeNull();
-      await user.click(screen.getByRole("button", { name: "Customize setup" }));
+      await user.click(screen.getByTestId("connect-change-skills"));
       await user.click(
         screen.getByRole("checkbox", { name: "Install shared skills" }),
       );
@@ -589,9 +601,7 @@ describe("ConnectCommandPanel", () => {
           expect.objectContaining({ skills: undefined }),
         ),
       );
-      await user.click(
-        screen.getByRole("button", { name: "Done customizing" }),
-      );
+      await user.click(screen.getByTestId("connect-change-skills"));
       expect(
         screen.queryByRole("checkbox", { name: "Install shared skills" }),
       ).toBeNull();

@@ -135,7 +135,7 @@ export function isScriptClient(
  */
 const CONNECT_SKILLS_DEFER_MS = 750;
 
-function useConnectSkills(enabled: boolean): {
+export function useConnectSkills(enabled: boolean): {
   eligible: boolean;
   skills: ConnectSkill[];
   loading: boolean;
@@ -205,8 +205,12 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
-  const showSetupSummary = !connectRequest && client.id !== "claude-desktop";
-  const setupStep = showSetupSummary ? 3 : 2;
+  // Claude Desktop keeps its options under "Customize setup"; every other
+  // client reviews the setup, including on the browser approval page.
+  const showSetupSummary = client.id !== "claude-desktop";
+  // The approval page has no "Choose your app" step, so its steps start at 1.
+  const reviewStep = connectRequest ? 1 : 2;
+  const setupStep = showSetupSummary ? reviewStep + 1 : 2;
   const requestedPlatform = searchParams.get("platform");
   const {
     eligible: skillsEligible,
@@ -932,14 +936,14 @@ export function ConnectCommandPanel({
     return (
       <>
         <WizardStep
-          n={2}
+          n={reviewStep}
           title={showSetupSummary ? "Review the setup" : "Nothing to connect"}
           last={!skillsStepAvailable}
         >
           <NothingToConnectPanel />
         </WizardStep>
         {skillsStepAvailable && (
-          <WizardStep n={3} title="Install shared skills" last>
+          <WizardStep n={reviewStep + 1} title="Install shared skills" last>
             <SkillsMarketplaceStep client={client} />
           </WizardStep>
         )}
@@ -950,7 +954,7 @@ export function ConnectCommandPanel({
   return (
     <>
       {showSetupSummary && (
-        <ConnectionSection compact={false} n={2} title="Review the setup">
+        <WizardStep n={reviewStep} title="Review the setup">
           <ul className="grid gap-2">
             {gateway && (
               <SetupSummaryRow
@@ -1137,11 +1141,11 @@ export function ConnectCommandPanel({
               </span>
             </SetupSummaryRow>
           </ul>
-        </ConnectionSection>
+        </WizardStep>
       )}
 
       <ConnectionSection
-        compact={!!connectRequest}
+        compact={!!connectRequest && !showSetupSummary}
         n={setupStep}
         title={
           connectRequest
@@ -1539,7 +1543,7 @@ function ProviderKeyGate({
 }
 
 /** Bold, underlined link to the underlying resource (gateway/proxy/skills). */
-function ResourceLink({
+export function ResourceLink({
   href,
   children,
 }: {
@@ -1559,7 +1563,7 @@ function ResourceLink({
 const SKILL_NAME_PREVIEW_LIMIT = 6;
 
 /** Names the skills the command will install, truncated past the limit. */
-function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
+export function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
   const shown = skills.slice(0, SKILL_NAME_PREVIEW_LIMIT);
   const more = skills.length - shown.length;
   return (

@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class ClaudeAuthTest(unittest.TestCase):
-    def test_subscription_token_transport(self):
+    def test_subscription_model_and_token_transport(self):
         token = "sk-ant-oat01-" + "example" * 8
         with tempfile.TemporaryDirectory() as directory:
             env = {
@@ -36,7 +36,7 @@ class ClaudeAuthTest(unittest.TestCase):
                 )
                 # Test the installed CLI's wire format directly, including
                 # the headers the Agent-scoped proxy needs for attribution.
-                process = subprocess.Popen(["claude", "--print", "--model", "claude-sonnet-4-6", "--tools", "", "--setting-sources", "", "Reply OK"], env=env, cwd=directory, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                process = subprocess.Popen(["claude", "--print", "--model", "claude-sonnet-5-5", "--tools", "", "--setting-sources", "", "Reply OK"], env=env, cwd=directory, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 try:
                     server.received.wait(25)
                 finally:
@@ -47,6 +47,7 @@ class ClaudeAuthTest(unittest.TestCase):
                         process.kill()
                         process.wait()
                 self.assertTrue(server.requests, "No subscription inference reached the local server")
+                self.assertIn("claude-sonnet-5-5", server.models)
                 for request in server.requests:
                     self.assertEqual(request.get("authorization"), f"Bearer {token}")
                     self.assertNotIn("x-api-key", request)
@@ -140,6 +141,7 @@ class ClaudeAuthTest(unittest.TestCase):
 class CaptureServer(ThreadingHTTPServer):
     def __init__(self):
         self.requests = []
+        self.models = []
         self.received = threading.Event()
         super().__init__(("127.0.0.1", 0), CaptureHandler)
 
@@ -169,6 +171,7 @@ class CaptureHandler(BaseHTTPRequestHandler):
                 )
             return
         if "/messages" in self.path or "/model/" in self.path:
+            self.server.models.append(json.loads(body).get("model"))
             self.server.requests.append(
                 {key.lower(): value for key, value in self.headers.items()}
             )

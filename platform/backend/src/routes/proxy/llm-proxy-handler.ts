@@ -1035,6 +1035,7 @@ export async function handleLLMProxy<
         tokenValue: rawApiKey,
         expectedProvider: providerName,
         expectedOrganizationId: resolvedAgent.organizationId,
+        requestedModel: requestAdapter.getModel(),
       });
       await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
@@ -1891,6 +1892,7 @@ export async function handleLLMProxy<
           request: appaRequest,
           claims: appaClaims,
           compaction: clientCompaction && !isInternalChat,
+          enforcement: "active",
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
       }

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.28"
+    "version": "1.4.0-rc.29"
   },
   "components": {
     "schemas": {
@@ -1085,7 +1085,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -5539,7 +5540,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -7386,7 +7388,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -8653,7 +8656,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -9927,7 +9931,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -11194,7 +11199,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -16030,7 +16036,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -17298,7 +17305,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -20057,7 +20065,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -21587,7 +21596,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -26231,7 +26241,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -28163,7 +28174,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -29487,7 +29499,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -30818,7 +30831,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -32142,7 +32156,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -37169,7 +37184,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -38493,7 +38509,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -41379,7 +41396,8 @@
               "low",
               "medium",
               "high",
-              "xhigh"
+              "xhigh",
+              "max"
             ]
           },
           "stream": {
@@ -79409,6 +79427,13 @@
                       "sha256": {
                         "type": "string",
                         "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "location": {
+                        "type": "string",
+                        "enum": [
+                          "workspace",
+                          "attachments"
+                        ]
                       }
                     },
                     "required": [
@@ -159375,7 +159400,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -160919,7 +160945,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -165248,10 +165275,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaSettings:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:read`: View OpenAPPA enforcement settings and GitHub sync"
       },
       "put": {
         "operationId": "updateGuardrailsDeployment",
@@ -165548,10 +165575,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organization:update"
+            "openappaSettings:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organization:update`: No description available"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync"
       }
     },
     "/api/guardrails-policy/annotators/noop": {
@@ -166177,10 +166204,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       },
       "put": {
         "operationId": "updateGuardrailsPolicy",
@@ -166491,10 +166518,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:update"
+            "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/guardrails-policy/validate": {
@@ -166790,10 +166817,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:update"
+            "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/health": {
@@ -190874,7 +190901,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -191968,7 +191996,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -193905,7 +193934,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -194999,7 +195029,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -196931,7 +196962,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -198025,7 +198057,8 @@
                                           "low",
                                           "medium",
                                           "high",
-                                          "xhigh"
+                                          "xhigh",
+                                          "max"
                                         ]
                                       },
                                       "stream": {
@@ -226771,7 +226804,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -227865,7 +227899,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -229802,7 +229837,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -230896,7 +230932,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -232828,7 +232865,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -233922,7 +233960,8 @@
                                     "low",
                                     "medium",
                                     "high",
-                                    "xhigh"
+                                    "xhigh",
+                                    "max"
                                   ]
                                 },
                                 "stream": {
@@ -252961,7 +253000,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -254510,7 +254550,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -310320,7 +310361,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -311869,7 +311911,8 @@
                       "low",
                       "medium",
                       "high",
-                      "xhigh"
+                      "xhigh",
+                      "max"
                     ]
                   },
                   "stream": {
@@ -327172,10 +327215,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       }
     },
     "/api/openappa/policy-declarations": {
@@ -327619,10 +327662,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       }
     },
     "/api/openappa/battery-policy-source": {
@@ -327903,10 +327946,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       }
     },
     "/api/openappa/effective-policy": {
@@ -328201,10 +328244,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       }
     },
     "/api/openappa/battery-matches": {
@@ -328584,10 +328627,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       }
     },
     "/api/openappa/battery-installs": {
@@ -328982,10 +329025,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:update"
+            "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/battery-installs/{id}": {
@@ -329384,10 +329427,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:update"
+            "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       },
       "delete": {
         "operationId": "deleteOpenappaBatteryInstall",
@@ -329661,10 +329704,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:update"
+            "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/battery-includes/{name}": {
@@ -329941,10 +329984,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:update"
+            "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/battery-packages/{name}": {
@@ -330303,10 +330346,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:update"
+            "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/battery-packages/{contentHash}": {
@@ -330581,10 +330624,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:update"
+            "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/coverage/entities": {
@@ -330768,7 +330811,7 @@
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
                               },
-                              "builtInFallback": {
+                              "notCovered": {
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
@@ -330779,7 +330822,7 @@
                               "battery",
                               "notEnforced",
                               "catchAll",
-                              "builtInFallback"
+                              "notCovered"
                             ],
                             "additionalProperties": false
                           },
@@ -331085,10 +331128,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       }
     },
     "/api/openappa/coverage/tools": {
@@ -331156,7 +331199,7 @@
                 "battery",
                 "root",
                 "catchall",
-                "built_in"
+                "not_covered"
               ]
             },
             "in": "query",
@@ -331239,10 +331282,10 @@
                           "policySource": {
                             "type": "string",
                             "enum": [
-                              "built_in",
-                              "fallback",
                               "root",
-                              "battery"
+                              "battery",
+                              "catchall",
+                              "not_covered"
                             ]
                           },
                           "rule": {
@@ -331253,7 +331296,8 @@
                                 "type": "string",
                                 "enum": [
                                   "root",
-                                  "battery"
+                                  "battery",
+                                  "catchall"
                                 ]
                               },
                               "battery": {
@@ -331715,10 +331759,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       }
     },
     "/api/openappa/coverage/summary": {
@@ -331758,7 +331802,7 @@
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
                         },
-                        "builtInFallback": {
+                        "notCovered": {
                           "type": "integer",
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
@@ -331774,7 +331818,7 @@
                         "battery",
                         "notEnforced",
                         "catchAll",
-                        "builtInFallback",
+                        "notCovered",
                         "tools"
                       ],
                       "additionalProperties": false
@@ -332114,10 +332158,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       }
     },
     "/api/openappa/external-consults": {
@@ -332126,7 +332170,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization",
+        "description": "Export the external consults Guardrails recorded in the active organization, newest first. `openappaDiagnostics:read` returns the consults of the caller's own sessions. `openappaDiagnostics:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs",
         "parameters": [
           {
             "schema": {
@@ -332668,7 +332712,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "log:read"
+            "openappaDiagnostics:read"
           ]
         }
       }
@@ -333045,10 +333089,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:read"
+            "openappaSettings:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:read`: View OpenAPPA enforcement settings and GitHub sync"
       },
       "put": {
         "operationId": "configureAppaGithubSync",
@@ -333479,10 +333523,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organization:update"
+            "openappaSettings:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organization:update`: No description available"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync"
       },
       "patch": {
         "operationId": "updateAppaGithubSync",
@@ -333920,10 +333964,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organization:update"
+            "openappaSettings:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organization:update`: No description available"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync"
       }
     },
     "/api/openappa/github-sync/repository": {
@@ -334340,10 +334384,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organization:update"
+            "openappaSettings:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organization:update`: No description available"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync"
       }
     },
     "/api/openappa/github-sync/accept-held": {
@@ -334760,10 +334804,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "toolPolicy:update"
+            "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/helpers/{installId}/{externalName}": {
@@ -335164,6 +335208,36 @@
                           },
                           "hasArchive": {
                             "type": "boolean"
+                          },
+                          "caller": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
+                              },
+                              "name": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "email": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "email"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -335179,7 +335253,8 @@
                           "reportFailed",
                           "resolvedAt",
                           "resolvedBy",
-                          "hasArchive"
+                          "hasArchive",
+                          "caller"
                         ],
                         "additionalProperties": false
                       }
@@ -335449,10 +335524,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "log:read"
+            "openappaDiagnostics:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs"
       }
     },
     "/api/openappa/yells/summary": {
@@ -335713,10 +335788,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "log:read"
+            "openappaDiagnostics:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs"
       }
     },
     "/api/openappa/yells/{id}": {
@@ -335791,6 +335866,36 @@
                     },
                     "hasArchive": {
                       "type": "boolean"
+                    },
+                    "caller": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -335806,7 +335911,8 @@
                     "reportFailed",
                     "resolvedAt",
                     "resolvedBy",
-                    "hasArchive"
+                    "hasArchive",
+                    "caller"
                   ],
                   "additionalProperties": false
                 }
@@ -336045,10 +336151,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "log:read"
+            "openappaDiagnostics:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs"
       },
       "patch": {
         "operationId": "updateOpenAppaYell",
@@ -336139,6 +336245,36 @@
                     },
                     "hasArchive": {
                       "type": "boolean"
+                    },
+                    "caller": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -336154,7 +336290,8 @@
                     "reportFailed",
                     "resolvedAt",
                     "resolvedBy",
-                    "hasArchive"
+                    "hasArchive",
+                    "caller"
                   ],
                   "additionalProperties": false
                 }
@@ -336393,11 +336530,11 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "log:read",
-            "toolPolicy:update"
+            "openappaDiagnostics:read",
+            "openappaDiagnostics:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n`toolPolicy:update`: Modify tools, tool configuration, and security policies"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs\n`openappaDiagnostics:update`: Resolve and reopen organization yells"
       }
     },
     "/api/openappa/yells/{id}/archive": {
@@ -336426,10 +336563,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "log:read"
+            "openappaDiagnostics:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs"
       }
     },
     "/v1/openrouter/chat/completions": {
@@ -337085,7 +337222,8 @@
                                   "execute",
                                   "manage",
                                   "manage-deleted",
-                                  "impersonate"
+                                  "impersonate",
+                                  "admin"
                                 ]
                               }
                             }
@@ -337442,7 +337580,8 @@
                           "execute",
                           "manage",
                           "manage-deleted",
-                          "impersonate"
+                          "impersonate",
+                          "admin"
                         ]
                       }
                     }
@@ -337497,7 +337636,8 @@
                             "execute",
                             "manage",
                             "manage-deleted",
-                            "impersonate"
+                            "impersonate",
+                            "admin"
                           ]
                         }
                       }
@@ -337842,7 +337982,8 @@
                             "execute",
                             "manage",
                             "manage-deleted",
-                            "impersonate"
+                            "impersonate",
+                            "admin"
                           ]
                         }
                       }
@@ -338151,7 +338292,8 @@
                           "execute",
                           "manage",
                           "manage-deleted",
-                          "impersonate"
+                          "impersonate",
+                          "admin"
                         ]
                       }
                     }
@@ -338228,7 +338370,8 @@
                             "execute",
                             "manage",
                             "manage-deleted",
-                            "impersonate"
+                            "impersonate",
+                            "admin"
                           ]
                         }
                       }
@@ -415197,7 +415340,8 @@
                               "execute",
                               "manage",
                               "manage-deleted",
-                              "impersonate"
+                              "impersonate",
+                              "admin"
                             ]
                           }
                         }
@@ -415479,7 +415623,8 @@
                         "execute",
                         "manage",
                         "manage-deleted",
-                        "impersonate"
+                        "impersonate",
+                        "admin"
                       ]
                     }
                   }

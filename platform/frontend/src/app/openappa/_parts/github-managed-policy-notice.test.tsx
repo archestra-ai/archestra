@@ -3,13 +3,36 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  test,
+  vi,
+} from "vitest";
+import { authClient } from "@/lib/clients/auth/auth-client";
+import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
 import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
+
+vi.mock("@/lib/clients/auth/auth-client");
 
 const server = setupServer();
 beforeAll(() => {
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   server.listen({ onUnhandledRequest: "error" });
+});
+beforeEach(() => {
+  vi.mocked(authClient.getSession).mockResolvedValue({
+    data: makeSession(),
+    error: null,
+  } as Awaited<ReturnType<typeof authClient.getSession>>);
+  server.use(
+    http.get("http://localhost:9000/api/user/permissions", () =>
+      HttpResponse.json(makeUserPermissions()),
+    ),
+  );
 });
 afterEach(() => {
   cleanup();

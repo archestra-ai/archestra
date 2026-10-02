@@ -159,6 +159,7 @@ function BatteriesContent({ summary }: { summary: CoverageSummary }) {
           <ReachableCoverage
             total={totals.tools}
             custom={totals.root}
+            catchAll={totals.catchAll}
             battery={totals.battery}
             fixable={unenforced}
             installable={added}
@@ -283,17 +284,19 @@ function StatTile({
 function ReachableCoverage({
   total,
   custom,
+  catchAll,
   battery,
   fixable,
   installable,
 }: {
   total: number;
   custom: number;
+  catchAll: number;
   battery: number;
   fixable: number;
   installable: number;
 }) {
-  const today = custom + battery;
+  const today = custom + battery + catchAll;
   const segments = [
     { key: "custom", label: "Custom rule", count: custom, fill: color("root") },
     {
@@ -301,6 +304,12 @@ function ReachableCoverage({
       label: "Battery rule",
       count: battery,
       fill: ACTIVE_COLOR,
+    },
+    {
+      key: "catchAll",
+      label: "Catch-all rule",
+      count: catchAll,
+      fill: color("catchAll"),
     },
     {
       key: "fixable",
@@ -358,7 +367,9 @@ function ReachableCoverage({
                 />
                 <dt>{segment.label}</dt>
                 <dd className="ml-auto pl-3 tabular-nums">
-                  {segment.key === "custom" || segment.key === "battery"
+                  {segment.key === "custom" ||
+                  segment.key === "battery" ||
+                  segment.key === "catchAll"
                     ? tools(segment.count)
                     : `+${tools(segment.count)}`}
                 </dd>

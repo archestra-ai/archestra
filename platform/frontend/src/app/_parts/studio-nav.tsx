@@ -164,6 +164,7 @@ export const contentNavGroups: NavGroup[] = [
         // Named for what the reader does there, not for the engine behind it.
         title: "Guardrails",
         url: "/openappa",
+        permissionUrls: ["/openappa", "/openappa/yells"],
         icon: OpenAppaIcon,
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
         beta: true,

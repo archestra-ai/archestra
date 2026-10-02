@@ -46,13 +46,19 @@ vi.mock("@/components/proxy-auth-provider-key-fields", () => ({
   ProviderKeyAccessFields: ({
     onProviderApiKeyIdsChange,
   }: {
-    onProviderApiKeyIdsChange: (value: Record<string, string>) => void;
+    onProviderApiKeyIdsChange: (
+      value: Array<{ provider: string; providerApiKeyId: string }>,
+    ) => void;
   }) => (
     <section>
       <h3>Provider Keys</h3>
       <button
         type="button"
-        onClick={() => onProviderApiKeyIdsChange({ openai: "provider-key-1" })}
+        onClick={() =>
+          onProviderApiKeyIdsChange([
+            { provider: "openai", providerApiKeyId: "provider-key-1" },
+          ])
+        }
       >
         Map provider key
       </button>
@@ -159,9 +165,10 @@ describe("CreateVirtualKeyDialog", () => {
         .compareDocumentPosition(screen.getByText("Provider Keys")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Permissions" }));
-    expect(screen.getByText("Permissions", { selector: "h3" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "General" }));
+    // Sharing is set from the saved key's Permissions tab, not on create.
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Map provider key" }));
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -171,7 +178,6 @@ describe("CreateVirtualKeyDialog", () => {
         name: "Self Admin's virtual key (2)",
         keyType: "standard",
         expiresAt: undefined,
-        initialGrants: [],
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: "provider-key-1" },
         ],

@@ -4451,7 +4451,7 @@ export const groqChatCompletionsWithAgent = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaSettings:read`: View OpenAPPA enforcement settings and GitHub sync
  */
 export const getGuardrailsDeployment = <ThrowOnError extends boolean = false>(options?: Options<GetGuardrailsDeploymentData, ThrowOnError>) => (options?.client ?? client).get<GetGuardrailsDeploymentResponses, GetGuardrailsDeploymentErrors, ThrowOnError>({ url: '/api/guardrails-deployment', ...options });
 
@@ -4462,7 +4462,7 @@ export const getGuardrailsDeployment = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `organization:update`: No description available
+ * `openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync
  */
 export const updateGuardrailsDeployment = <ThrowOnError extends boolean = false>(options: Options<UpdateGuardrailsDeploymentData, ThrowOnError>) => (options.client ?? client).put<UpdateGuardrailsDeploymentResponses, UpdateGuardrailsDeploymentErrors, ThrowOnError>({
     url: '/api/guardrails-deployment',
@@ -4498,7 +4498,7 @@ export const annotateGuardrailsTool = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getGuardrailsPolicy = <ThrowOnError extends boolean = false>(options?: Options<GetGuardrailsPolicyData, ThrowOnError>) => (options?.client ?? client).get<GetGuardrailsPolicyResponses, GetGuardrailsPolicyErrors, ThrowOnError>({ url: '/api/guardrails-policy', ...options });
 
@@ -4509,7 +4509,7 @@ export const getGuardrailsPolicy = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const updateGuardrailsPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateGuardrailsPolicyData, ThrowOnError>) => (options.client ?? client).put<UpdateGuardrailsPolicyResponses, UpdateGuardrailsPolicyErrors, ThrowOnError>({
     url: '/api/guardrails-policy',
@@ -4527,7 +4527,7 @@ export const updateGuardrailsPolicy = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const validateGuardrailsPolicy = <ThrowOnError extends boolean = false>(options: Options<ValidateGuardrailsPolicyData, ThrowOnError>) => (options.client ?? client).post<ValidateGuardrailsPolicyResponses, ValidateGuardrailsPolicyErrors, ThrowOnError>({
     url: '/api/guardrails-policy/validate',
@@ -7867,7 +7867,7 @@ export const openaiCodexDeviceAuthPoll = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaBatteries = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaBatteriesData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaBatteriesResponses, GetOpenappaBatteriesErrors, ThrowOnError>({ url: '/api/openappa/batteries', ...options });
 
@@ -7878,7 +7878,7 @@ export const getOpenappaBatteries = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaPolicyDeclarations = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaPolicyDeclarationsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaPolicyDeclarationsResponses, GetOpenappaPolicyDeclarationsErrors, ThrowOnError>({ url: '/api/openappa/policy-declarations', ...options });
 
@@ -7889,7 +7889,7 @@ export const getOpenappaPolicyDeclarations = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaBatteryPolicySource = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaBatteryPolicySourceData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaBatteryPolicySourceResponses, GetOpenappaBatteryPolicySourceErrors, ThrowOnError>({ url: '/api/openappa/battery-policy-source', ...options });
 
@@ -7900,7 +7900,7 @@ export const getOpenappaBatteryPolicySource = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaEffectivePolicy = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaEffectivePolicyData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaEffectivePolicyResponses, GetOpenappaEffectivePolicyErrors, ThrowOnError>({ url: '/api/openappa/effective-policy', ...options });
 
@@ -7911,7 +7911,7 @@ export const getOpenappaEffectivePolicy = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaBatteryMatches = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaBatteryMatchesData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaBatteryMatchesResponses, GetOpenappaBatteryMatchesErrors, ThrowOnError>({ url: '/api/openappa/battery-matches', ...options });
 
@@ -7922,7 +7922,7 @@ export const getOpenappaBatteryMatches = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const createOpenappaBatteryInstall = <ThrowOnError extends boolean = false>(options: Options<CreateOpenappaBatteryInstallData, ThrowOnError>) => (options.client ?? client).post<CreateOpenappaBatteryInstallResponses, CreateOpenappaBatteryInstallErrors, ThrowOnError>({
     url: '/api/openappa/battery-installs',
@@ -7940,7 +7940,7 @@ export const createOpenappaBatteryInstall = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const deleteOpenappaBatteryInstall = <ThrowOnError extends boolean = false>(options: Options<DeleteOpenappaBatteryInstallData, ThrowOnError>) => (options.client ?? client).delete<DeleteOpenappaBatteryInstallResponses, DeleteOpenappaBatteryInstallErrors, ThrowOnError>({ url: '/api/openappa/battery-installs/{id}', ...options });
 
@@ -7951,7 +7951,7 @@ export const deleteOpenappaBatteryInstall = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const updateOpenappaBatteryInstall = <ThrowOnError extends boolean = false>(options: Options<UpdateOpenappaBatteryInstallData, ThrowOnError>) => (options.client ?? client).patch<UpdateOpenappaBatteryInstallResponses, UpdateOpenappaBatteryInstallErrors, ThrowOnError>({
     url: '/api/openappa/battery-installs/{id}',
@@ -7969,7 +7969,7 @@ export const updateOpenappaBatteryInstall = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const deleteOpenappaBatteryInclude = <ThrowOnError extends boolean = false>(options: Options<DeleteOpenappaBatteryIncludeData, ThrowOnError>) => (options.client ?? client).delete<DeleteOpenappaBatteryIncludeResponses, DeleteOpenappaBatteryIncludeErrors, ThrowOnError>({ url: '/api/openappa/battery-includes/{name}', ...options });
 
@@ -7980,7 +7980,7 @@ export const deleteOpenappaBatteryInclude = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const uploadOpenappaBatteryPackage = <ThrowOnError extends boolean = false>(options: Options<UploadOpenappaBatteryPackageData, ThrowOnError>) => (options.client ?? client).put<UploadOpenappaBatteryPackageResponses, UploadOpenappaBatteryPackageErrors, ThrowOnError>({
     url: '/api/openappa/battery-packages/{name}',
@@ -7998,7 +7998,7 @@ export const uploadOpenappaBatteryPackage = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const deleteOpenappaBatteryPackage = <ThrowOnError extends boolean = false>(options: Options<DeleteOpenappaBatteryPackageData, ThrowOnError>) => (options.client ?? client).delete<DeleteOpenappaBatteryPackageResponses, DeleteOpenappaBatteryPackageErrors, ThrowOnError>({ url: '/api/openappa/battery-packages/{contentHash}', ...options });
 
@@ -8009,7 +8009,7 @@ export const deleteOpenappaBatteryPackage = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaCoverageEntities = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaCoverageEntitiesData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaCoverageEntitiesResponses, GetOpenappaCoverageEntitiesErrors, ThrowOnError>({ url: '/api/openappa/coverage/entities', ...options });
 
@@ -8020,7 +8020,7 @@ export const getOpenappaCoverageEntities = <ThrowOnError extends boolean = false
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaCoverageTools = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaCoverageToolsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaCoverageToolsResponses, GetOpenappaCoverageToolsErrors, ThrowOnError>({ url: '/api/openappa/coverage/tools', ...options });
 
@@ -8031,12 +8031,12 @@ export const getOpenappaCoverageTools = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaCoverageSummary = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaCoverageSummaryData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaCoverageSummaryResponses, GetOpenappaCoverageSummaryErrors, ThrowOnError>({ url: '/api/openappa/coverage/summary', ...options });
 
 /**
- * Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.
+ * Export the external consults Guardrails recorded in the active organization, newest first. `openappaDiagnostics:read` returns the consults of the caller's own sessions. `openappaDiagnostics:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.
  *
  * Authentication:
  *
@@ -8044,7 +8044,7 @@ export const getOpenappaCoverageSummary = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const getOpenappaExternalConsults = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaExternalConsultsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaExternalConsultsResponses, GetOpenappaExternalConsultsErrors, ThrowOnError>({ url: '/api/openappa/external-consults', ...options });
 
@@ -8055,7 +8055,7 @@ export const getOpenappaExternalConsults = <ThrowOnError extends boolean = false
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaSettings:read`: View OpenAPPA enforcement settings and GitHub sync
  */
 export const getAppaGithubSync = <ThrowOnError extends boolean = false>(options?: Options<GetAppaGithubSyncData, ThrowOnError>) => (options?.client ?? client).get<GetAppaGithubSyncResponses, GetAppaGithubSyncErrors, ThrowOnError>({ url: '/api/openappa/github-sync', ...options });
 
@@ -8066,7 +8066,7 @@ export const getAppaGithubSync = <ThrowOnError extends boolean = false>(options?
  *
  * Authorization:
  *
- * `organization:update`: No description available
+ * `openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync
  */
 export const updateAppaGithubSync = <ThrowOnError extends boolean = false>(options: Options<UpdateAppaGithubSyncData, ThrowOnError>) => (options.client ?? client).patch<UpdateAppaGithubSyncResponses, UpdateAppaGithubSyncErrors, ThrowOnError>({
     url: '/api/openappa/github-sync',
@@ -8084,7 +8084,7 @@ export const updateAppaGithubSync = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `organization:update`: No description available
+ * `openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync
  */
 export const configureAppaGithubSync = <ThrowOnError extends boolean = false>(options: Options<ConfigureAppaGithubSyncData, ThrowOnError>) => (options.client ?? client).put<ConfigureAppaGithubSyncResponses, ConfigureAppaGithubSyncErrors, ThrowOnError>({
     url: '/api/openappa/github-sync',
@@ -8102,7 +8102,7 @@ export const configureAppaGithubSync = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `organization:update`: No description available
+ * `openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync
  */
 export const createAppaGithubRepository = <ThrowOnError extends boolean = false>(options: Options<CreateAppaGithubRepositoryData, ThrowOnError>) => (options.client ?? client).post<CreateAppaGithubRepositoryResponses, CreateAppaGithubRepositoryErrors, ThrowOnError>({
     url: '/api/openappa/github-sync/repository',
@@ -8120,7 +8120,7 @@ export const createAppaGithubRepository = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const acceptHeldAppaGithubPull = <ThrowOnError extends boolean = false>(options?: Options<AcceptHeldAppaGithubPullData, ThrowOnError>) => (options?.client ?? client).post<AcceptHeldAppaGithubPullResponses, AcceptHeldAppaGithubPullErrors, ThrowOnError>({ url: '/api/openappa/github-sync/accept-held', ...options });
 
@@ -8149,7 +8149,7 @@ export const consultOpenappaBatteryHelper = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const getOpenAppaYells = <ThrowOnError extends boolean = false>(options?: Options<GetOpenAppaYellsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenAppaYellsResponses, GetOpenAppaYellsErrors, ThrowOnError>({ url: '/api/openappa/yells', ...options });
 
@@ -8160,7 +8160,7 @@ export const getOpenAppaYells = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const getOpenAppaYellsSummary = <ThrowOnError extends boolean = false>(options?: Options<GetOpenAppaYellsSummaryData, ThrowOnError>) => (options?.client ?? client).get<GetOpenAppaYellsSummaryResponses, GetOpenAppaYellsSummaryErrors, ThrowOnError>({ url: '/api/openappa/yells/summary', ...options });
 
@@ -8171,7 +8171,7 @@ export const getOpenAppaYellsSummary = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const getOpenAppaYell = <ThrowOnError extends boolean = false>(options: Options<GetOpenAppaYellData, ThrowOnError>) => (options.client ?? client).get<GetOpenAppaYellResponses, GetOpenAppaYellErrors, ThrowOnError>({ url: '/api/openappa/yells/{id}', ...options });
 
@@ -8182,8 +8182,8 @@ export const getOpenAppaYell = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
+ * `openappaDiagnostics:update`: Resolve and reopen organization yells
  */
 export const updateOpenAppaYell = <ThrowOnError extends boolean = false>(options: Options<UpdateOpenAppaYellData, ThrowOnError>) => (options.client ?? client).patch<UpdateOpenAppaYellResponses, UpdateOpenAppaYellErrors, ThrowOnError>({
     url: '/api/openappa/yells/{id}',
@@ -8201,7 +8201,7 @@ export const updateOpenAppaYell = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const downloadOpenAppaYell = <ThrowOnError extends boolean = false>(options: Options<DownloadOpenAppaYellData, ThrowOnError>) => (options.client ?? client).get<DownloadOpenAppaYellResponses, unknown, ThrowOnError>({ url: '/api/openappa/yells/{id}/archive', ...options });
 

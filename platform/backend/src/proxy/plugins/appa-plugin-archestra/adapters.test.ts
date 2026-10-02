@@ -17,6 +17,74 @@ describe("APPA child trajectory adapters", () => {
   const openCode = new AppaOpenCodeAdapter();
   const chat = new AppaChatAdapter();
 
+  test("reads a Claude Code teammate launch only from its spawn call's own result", () => {
+    const receipt =
+      "Spawned successfully.\nagent_id: sched-tools@audit\nname: sched-tools";
+    const call = (name: string, input: Record<string, unknown>) => ({
+      type: "tool_use",
+      id: "toolu_launch",
+      name,
+      input,
+    });
+    const result = (extra: Record<string, unknown> = {}) => ({
+      type: "tool_result",
+      tool_use_id: "toolu_launch",
+      content: receipt,
+      ...extra,
+    });
+    const spawn = call("Agent", { name: "sched-tools", prompt: "Add tools." });
+    const launches = (messages: unknown[]) =>
+      claudeCode.teammateLaunches({ messages });
+
+    expect(
+      launches([
+        { role: "assistant", content: [spawn] },
+        { role: "user", content: [result()] },
+      ]),
+    ).toEqual(
+      new Map([
+        [
+          "sched-tools",
+          { childNativeId: "sched-tools@audit", spawnCallId: "toolu_launch" },
+        ],
+      ]),
+    );
+    // Text that only reads like a receipt launches nothing.
+    for (const messages of [
+      // another tool printed it
+      [
+        { role: "assistant", content: [call("Bash", { command: "echo" })] },
+        { role: "user", content: [result()] },
+      ],
+      // a spawn call the model did not make
+      [
+        { role: "user", content: [spawn] },
+        { role: "user", content: [result()] },
+      ],
+      // a failed launch
+      [
+        { role: "assistant", content: [spawn] },
+        { role: "user", content: [result({ is_error: true })] },
+      ],
+      // a spawn under another name
+      [
+        {
+          role: "assistant",
+          content: [call("Agent", { name: "other", prompt: "Add tools." })],
+        },
+        { role: "user", content: [result()] },
+      ],
+      // a second result for a call that already has one
+      [
+        { role: "assistant", content: [spawn] },
+        { role: "user", content: [result({ is_error: true })] },
+        { role: "user", content: [result()] },
+      ],
+    ]) {
+      expect(launches(messages).size).toBe(0);
+    }
+  });
+
   test("keeps Claude Code Skill in-session before a real child spawn", () => {
     expect(claudeCode.isSpawnTool("Skill")).toBe(false);
     expect(claudeCode.isSpawnTool("host/claude-code/Skill")).toBe(false);
@@ -658,6 +726,7 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         source: "marker",
         nativeParentId: "s1",
         spawnCallId: "spawn-call",
+        spawnPromptDigest: expect.any(String),
       },
     });
     expect(claudeCode.nativeSpawnParentId?.(authentic, "s1")).toBe("s1");
@@ -1003,7 +1072,12 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     ).toEqual({
       sessionId: "s1:a1:g1",
       parentId: "s1:a1",
-      lineage: { source: "marker", nativeParentId: "s1", childNativeId: "g1" },
+      lineage: {
+        source: "marker",
+        nativeParentId: "s1",
+        childNativeId: "g1",
+        spawnPromptDigest: expect.any(String),
+      },
     });
 
     // Codex reports only the immediate parent's thread.
@@ -1209,6 +1283,7 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         source: "marker",
         nativeParentId: "s1",
         spawnCallId: "spawn-call",
+        spawnPromptDigest: expect.any(String),
       },
     });
 

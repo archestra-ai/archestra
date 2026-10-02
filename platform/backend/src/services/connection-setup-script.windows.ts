@@ -17,6 +17,7 @@ import {
   claudeCodeAppaPermissionRules,
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
+  codexConnectionVerificationOptions,
   copilotAttributionHeadersValue,
   legacyServerNames,
   opencodeOAuthNextStep,
@@ -319,7 +320,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.mcp || ctx.proxy) {
         steps.push(
-          `Verification command: & (Join-Path $env:USERPROFILE ${psq(`${CODEX_GUARD_CLIENT.psScriptRelpath}.verify.ps1`)}) -CodexPath (Get-Command codex -CommandType Application | Select-Object -First 1).Source -OptionsBase64 ${psq(Buffer.from(JSON.stringify({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName })).toString("base64"))}`,
+          `Verification command: & (Join-Path $env:USERPROFILE ${psq(`${CODEX_GUARD_CLIENT.psScriptRelpath}.verify.ps1`)}) -CodexPath (Get-Command codex -CommandType Application | Select-Object -First 1).Source -OptionsBase64 ${psq(Buffer.from(JSON.stringify(codexConnectionVerificationOptions({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName, toolPrefix: ctx.toolPrefix }))).toString("base64"))}`,
         );
       }
       if (ctx.proxy) {

@@ -1225,6 +1225,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       clientId: setup.clientId,
       platform: setup.platform,
       appName,
+      toolPrefix: archestraMcpBranding.toolPrefix,
       mcp,
       proxy,
       runtimeHandoffInstructions:

@@ -17,10 +17,7 @@ import {
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
-import {
-  type ProviderApiKeyMap,
-  providerApiKeyMapToArray,
-} from "@/components/provider-key-mappings-field";
+import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
@@ -71,9 +68,8 @@ export function CreateOAuthClientDialog({
   const [name, setName] = useState("");
   const [grantType, setGrantType] = useState<GrantType>("client_credentials");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
-  const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
-    {},
-  );
+  const [providerApiKeyIds, setProviderApiKeyIds] =
+    useState<ProviderApiKeyMappings>([]);
   const [redirectUrisText, setRedirectUrisText] = useState("");
   const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
     [],
@@ -90,7 +86,7 @@ export function CreateOAuthClientDialog({
       setName("");
       setGrantType("client_credentials");
       setSelectedGatewayIds(defaultAllowedGatewayIds ?? []);
-      setProviderApiKeyIds({});
+      setProviderApiKeyIds([]);
       setRedirectUrisText("");
       setInitialGrants([]);
       setLabels([]);
@@ -98,7 +94,6 @@ export function CreateOAuthClientDialog({
   }, [open, fixedClientType, defaultClientType, defaultAllowedGatewayIds]);
 
   const isMcp = clientType === "mcp";
-  const mappedProviderApiKeys = providerApiKeyMapToArray(providerApiKeyIds);
   const redirectUris = parseRedirectUris(redirectUrisText);
   const isAuthorizationCode = grantType === "authorization_code";
   const canSubmit =
@@ -107,7 +102,7 @@ export function CreateOAuthClientDialog({
       ? redirectUris.length > 0
       : isMcp
         ? selectedGatewayIds.length > 0
-        : mappedProviderApiKeys.length > 0);
+        : providerApiKeyIds.length > 0);
 
   return (
     <TabbedDialogShell
@@ -162,7 +157,7 @@ export function CreateOAuthClientDialog({
               ...shared,
               ...(isAuthorizationCode
                 ? { redirectUris }
-                : { providerApiKeys: mappedProviderApiKeys }),
+                : { providerApiKeys: providerApiKeyIds }),
             },
           });
         }

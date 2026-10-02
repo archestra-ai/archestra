@@ -126,7 +126,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.28" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.29" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -1358,7 +1358,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.x.ai/v1`
   - Use this to point to your own proxy or other custom endpoints
 
-- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the SuperSuperGrok sign-in. Its OIDC discovery document supplies the device and token endpoints.
+- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the SuperGrok sign-in. Its OIDC discovery document supplies the device and token endpoints.
   - Default: `https://auth.x.ai`
 - **`ARCHESTRA_XAI_SUBSCRIPTION_VERIFICATION_ORIGIN`** - Allowed browser origin for the device-flow verification page. Responses pointing elsewhere are rejected.
   - Default: `https://accounts.x.ai`
@@ -2147,6 +2147,8 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 Child lineage and return proofs are self-contained signed tokens. Proxy replicas verify them with the same signing key. They need no extra database tables. The proxy preserves signed context across compaction and client handoffs and removes transport proofs before provider dispatch. Short started and finished codes are display markers, not authentication tokens.
 
 Policies are stored in PostgreSQL and changed through the configuration agent on the OpenAPPA Overview tab. Container policy paths are no longer used. On upgrade, bring the existing policy into a configuration session or configure GitHub sync with the current policy file. Local revisions apply to new conversations; existing conversations keep their original policy. With GitHub sync, changes take effect after a pull request is merged and synced.
+
+Tool coverage counts custom rules, battery rules, and catch-all rules using an annotator other than `noop`. A `noop` catch-all adds no restrictions and counts as not covered. Tools without a matching rule also count as not covered. Coverage describes the policy; the enforcement switch controls whether checks run.
 
 `ARCHESTRA_BETA` does not enable OpenAPPA. Restart the backend after changing the feature flag.
 

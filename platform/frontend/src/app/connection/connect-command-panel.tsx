@@ -33,6 +33,11 @@ import { TerminalCard } from "@/components/terminal-surface";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -200,7 +205,8 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
-  const compact = !!connectRequest && !customizing;
+  const showSetupSummary = !connectRequest && client.id !== "claude-desktop";
+  const setupStep = showSetupSummary ? 3 : 2;
   const requestedPlatform = searchParams.get("platform");
   const {
     eligible: skillsEligible,
@@ -925,7 +931,11 @@ export function ConnectCommandPanel({
     // marketplace URL, so a caller who can read them still has something to do.
     return (
       <>
-        <WizardStep n={2} title="Review the setup" last={!skillsStepAvailable}>
+        <WizardStep
+          n={2}
+          title={showSetupSummary ? "Review the setup" : "Nothing to connect"}
+          last={!skillsStepAvailable}
+        >
           <NothingToConnectPanel />
         </WizardStep>
         {skillsStepAvailable && (
@@ -939,219 +949,200 @@ export function ConnectCommandPanel({
 
   return (
     <>
-      <ConnectionSection
-        compact={!!connectRequest}
-        n={2}
-        title={connectRequest ? `Connect ${client.label}` : "Review the setup"}
-      >
-        <ul className="grid gap-2">
-          {gateway && (
-            <SetupSummaryRow
-              compact={compact}
-              editable={!!gatewayEditor}
-              isEditing={editing === "gateway"}
-              onToggle={() => toggleEdit("gateway")}
-              editor={gatewayEditor}
-              changeTestId="connect-change-gateway"
-              detail={<GatewayServersSummary gatewayId={gateway.id} />}
-            >
-              Connect{" "}
-              <ResourceLink href="/mcp/gateways">{gateway.name}</ResourceLink>{" "}
-              for tools
-            </SetupSummaryRow>
-          )}
-          {hasProxy && (
-            <SetupSummaryRow
-              compact={compact}
-              done={proxyActive && client.id !== "cursor"}
-              editable
-              isEditing={editing === "proxy"}
-              onToggle={() => toggleEdit("proxy")}
-              editor={proxyEditor}
-              changeTestId="connect-change-proxy"
-            >
-              {!provider ? (
-                noVirtualKeyMessage
-              ) : client.id === "cursor" ? (
-                <span>
-                  Prepare {providerCatalog.label(provider)} proxy settings for
-                  Cursor; finish setup in Cursor Settings
-                </span>
-              ) : effectiveProxyAuth === "virtual-key" ? (
-                <>
-                  Route{" "}
-                  <span className="font-medium text-foreground">
-                    {providerCatalog.label(provider)}
-                  </span>{" "}
-                  through{" "}
-                  <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
-                  using{" "}
-                  <span className="font-medium text-foreground">
-                    a virtual key
+      {showSetupSummary && (
+        <ConnectionSection compact={false} n={2} title="Review the setup">
+          <ul className="grid gap-2">
+            {gateway && (
+              <SetupSummaryRow
+                editable={!!gatewayEditor}
+                isEditing={editing === "gateway"}
+                onToggle={() => toggleEdit("gateway")}
+                editor={gatewayEditor}
+                changeTestId="connect-change-gateway"
+                detail={<GatewayServersSummary gatewayId={gateway.id} />}
+              >
+                Connect{" "}
+                <ResourceLink href="/mcp/gateways">{gateway.name}</ResourceLink>{" "}
+                for tools
+              </SetupSummaryRow>
+            )}
+            {hasProxy && (
+              <SetupSummaryRow
+                done={proxyActive && client.id !== "cursor"}
+                editable
+                isEditing={editing === "proxy"}
+                onToggle={() => toggleEdit("proxy")}
+                editor={proxyEditor}
+                changeTestId="connect-change-proxy"
+              >
+                {!provider ? (
+                  noVirtualKeyMessage
+                ) : client.id === "cursor" ? (
+                  <span>
+                    Prepare {providerCatalog.label(provider)} proxy settings for
+                    Cursor; finish setup in Cursor Settings
                   </span>
-                </>
-              ) : openCodeProviderPassthrough ? (
-                <span>
-                  Route supported OpenCode providers through{" "}
-                  <span className="font-medium text-foreground">
-                    the LLM Proxy
-                  </span>{" "}
-                  using their existing local credentials
+                ) : effectiveProxyAuth === "virtual-key" ? (
+                  <>
+                    Route{" "}
+                    <span className="font-medium text-foreground">
+                      {providerCatalog.label(provider)}
+                    </span>{" "}
+                    through{" "}
+                    <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
+                    using{" "}
+                    <span className="font-medium text-foreground">
+                      a virtual key
+                    </span>
+                  </>
+                ) : openCodeProviderPassthrough ? (
+                  <span>
+                    Route supported OpenCode providers through{" "}
+                    <span className="font-medium text-foreground">
+                      the LLM Proxy
+                    </span>{" "}
+                    using their existing local credentials
+                  </span>
+                ) : (
+                  <span>
+                    Passthrough to{" "}
+                    <span className="font-medium text-foreground">
+                      {providerCatalog.label(provider)}
+                    </span>{" "}
+                    through{" "}
+                    <span className="font-medium text-foreground">
+                      the LLM Proxy
+                    </span>{" "}
+                    using{" "}
+                    <span className="font-medium text-foreground">
+                      {client.id === "claude-desktop"
+                        ? "your Claude subscription"
+                        : "your provider key"}
+                    </span>
+                  </span>
+                )}
+              </SetupSummaryRow>
+            )}
+            {supportsModelChoice && proxyActive && provider && (
+              <SetupSummaryRow
+                done
+                editable
+                isEditing={editing === "model"}
+                onToggle={() => toggleEdit("model")}
+                editor={modelEditor}
+                changeTestId="connect-change-model"
+              >
+                Run <span>{client.label}</span> with{" "}
+                <span className="font-medium text-foreground">
+                  {effectiveModel}
                 </span>
-              ) : (
-                <span>
-                  Passthrough to{" "}
-                  <span className="font-medium text-foreground">
-                    {providerCatalog.label(provider)}
-                  </span>{" "}
-                  through{" "}
-                  <span className="font-medium text-foreground">
-                    the LLM Proxy
-                  </span>{" "}
-                  using{" "}
-                  <span className="font-medium text-foreground">
+              </SetupSummaryRow>
+            )}
+            {skillsEligible && (
+              <SetupSummaryRow
+                done={includeSkills}
+                editable
+                isEditing={editing === "skills"}
+                onToggle={() => toggleEdit("skills")}
+                editor={skillsEditor}
+                changeTestId="connect-change-skills"
+                detail={
+                  includeSkills ? (
+                    <SkillNamesLine skills={selectedSkills} />
+                  ) : undefined
+                }
+              >
+                {includeSkills ? (
+                  <>
+                    <span>Install </span>
+                    <ResourceLink href="/skills">
+                      <span>
+                        <span>{allSkills.length} shared skill</span>
+                        {allSkills.length === 1 ? null : <span>s</span>}
+                      </span>
+                    </ResourceLink>
+                  </>
+                ) : (
+                  <span>Shared skills not installed</span>
+                )}
+              </SetupSummaryRow>
+            )}
+            {pluginsEnabled && plugins.length > 0 && (
+              <SetupSummaryRow
+                done={selectedPlugins.length > 0 && client.id !== "cursor"}
+                editable={!!pluginsEditor}
+                isEditing={editing === "plugins"}
+                onToggle={() => toggleEdit("plugins")}
+                editor={pluginsEditor}
+                changeTestId="connect-change-plugins"
+                detail={
+                  <PluginsDetail
+                    plugins={selectedPlugins}
+                    incompatiblePlugins={incompatiblePlugins}
+                    clientId={client.id as ScriptClientId}
+                    platform={platform}
+                  />
+                }
+              >
+                {compatiblePlugins.length === 0 ? (
+                  <span>
+                    No compatible plugins for{" "}
                     {client.id === "claude-desktop"
-                      ? "your Claude subscription"
-                      : "your provider key"}
+                      ? "macOS"
+                      : platformLabels[platform]}
                   </span>
-                </span>
-              )}
-            </SetupSummaryRow>
-          )}
-          {supportsModelChoice && proxyActive && provider && (
+                ) : selectedPlugins.length === 0 ? (
+                  <span>Plugins not installed</span>
+                ) : client.id === "cursor" ? (
+                  <span>
+                    Install{" "}
+                    <ResourceLink href="/plugins">
+                      {pluginCountLabel}
+                    </ResourceLink>{" "}
+                    manually
+                  </span>
+                ) : (
+                  <span>
+                    Install{" "}
+                    <ResourceLink href="/plugins">
+                      {pluginCountLabel}
+                    </ResourceLink>
+                  </span>
+                )}
+              </SetupSummaryRow>
+            )}
+            {showEndpoint && (
+              <SetupSummaryRow
+                editable
+                isEditing={editing === "endpoint"}
+                onToggle={() => toggleEdit("endpoint")}
+                editor={endpointEditor}
+                changeTestId="connect-change-endpoint"
+              >
+                Reach the gateway and proxy at{" "}
+                <span className="font-medium text-foreground">{baseUrl}</span>
+              </SetupSummaryRow>
+            )}
             <SetupSummaryRow
-              compact={compact}
-              done
               editable
-              isEditing={editing === "model"}
-              onToggle={() => toggleEdit("model")}
-              editor={modelEditor}
-              changeTestId="connect-change-model"
+              isEditing={editing === "platform"}
+              onToggle={() => toggleEdit("platform")}
+              editor={platformEditor}
+              changeTestId="connect-change-platform"
             >
-              Run <span>{client.label}</span> with{" "}
-              <span className="font-medium text-foreground">
-                {effectiveModel}
+              Run on{" "}
+              <span className="inline-flex items-center gap-1.5 align-middle font-medium text-foreground">
+                <OsLogos platform={platform} />
+                {platformLabels[platform]}
               </span>
             </SetupSummaryRow>
-          )}
-          {skillsEligible && (
-            <SetupSummaryRow
-              compact={compact}
-              done={includeSkills}
-              editable
-              isEditing={editing === "skills"}
-              onToggle={() => toggleEdit("skills")}
-              editor={skillsEditor}
-              changeTestId="connect-change-skills"
-              detail={
-                includeSkills ? (
-                  <SkillNamesLine skills={selectedSkills} />
-                ) : undefined
-              }
-            >
-              {includeSkills ? (
-                <>
-                  <span>Install </span>
-                  <ResourceLink href="/skills">
-                    <span>
-                      <span>{allSkills.length} shared skill</span>
-                      {allSkills.length === 1 ? null : <span>s</span>}
-                    </span>
-                  </ResourceLink>
-                </>
-              ) : (
-                <span>Shared skills not installed</span>
-              )}
-            </SetupSummaryRow>
-          )}
-          {pluginsEnabled && plugins.length > 0 && (
-            <SetupSummaryRow
-              compact={compact}
-              done={selectedPlugins.length > 0 && client.id !== "cursor"}
-              editable={!!pluginsEditor}
-              isEditing={editing === "plugins"}
-              onToggle={() => toggleEdit("plugins")}
-              editor={pluginsEditor}
-              changeTestId="connect-change-plugins"
-              detail={
-                <PluginsDetail
-                  plugins={selectedPlugins}
-                  incompatiblePlugins={incompatiblePlugins}
-                  clientId={client.id as ScriptClientId}
-                  platform={platform}
-                />
-              }
-            >
-              {compatiblePlugins.length === 0 ? (
-                <span>
-                  No compatible plugins for{" "}
-                  {client.id === "claude-desktop"
-                    ? "macOS"
-                    : platformLabels[platform]}
-                </span>
-              ) : selectedPlugins.length === 0 ? (
-                <span>Plugins not installed</span>
-              ) : client.id === "cursor" ? (
-                <span>
-                  Install{" "}
-                  <ResourceLink href="/plugins">
-                    {pluginCountLabel}
-                  </ResourceLink>{" "}
-                  manually
-                </span>
-              ) : (
-                <span>
-                  Install{" "}
-                  <ResourceLink href="/plugins">
-                    {pluginCountLabel}
-                  </ResourceLink>
-                </span>
-              )}
-            </SetupSummaryRow>
-          )}
-          {showEndpoint && (
-            <SetupSummaryRow
-              compact={compact}
-              editable
-              isEditing={editing === "endpoint"}
-              onToggle={() => toggleEdit("endpoint")}
-              editor={endpointEditor}
-              changeTestId="connect-change-endpoint"
-            >
-              Reach the gateway and proxy at{" "}
-              <span className="font-medium text-foreground">{baseUrl}</span>
-            </SetupSummaryRow>
-          )}
-          <SetupSummaryRow
-            compact={compact}
-            editable
-            isEditing={editing === "platform"}
-            onToggle={() => toggleEdit("platform")}
-            editor={platformEditor}
-            changeTestId="connect-change-platform"
-          >
-            Run on{" "}
-            <span className="inline-flex items-center gap-1.5 align-middle font-medium text-foreground">
-              <OsLogos platform={platform} />
-              {platformLabels[platform]}
-            </span>
-          </SetupSummaryRow>
-        </ul>
-        {connectRequest && (
-          <Button
-            variant="link"
-            className="mt-3 h-auto cursor-pointer p-0 underline underline-offset-4"
-            aria-expanded={customizing}
-            onClick={() => setCustomizing(!customizing)}
-          >
-            <span>{customizing ? "Done customizing" : "Customize setup"}</span>
-          </Button>
-        )}
-      </ConnectionSection>
+          </ul>
+        </ConnectionSection>
+      )}
 
       <ConnectionSection
         compact={!!connectRequest}
-        n={3}
+        n={setupStep}
         title={
           connectRequest
             ? "Approve the connection"
@@ -1161,6 +1152,33 @@ export function ConnectCommandPanel({
         }
         last={!showOAuthStep && !showDesktopGatewayStep}
       >
+        {!showSetupSummary && (
+          <Collapsible
+            open={customizing}
+            onOpenChange={setCustomizing}
+            className="mb-4"
+          >
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="link"
+                className="h-auto p-0 underline underline-offset-4"
+              >
+                <span>
+                  {customizing ? "Done customizing" : "Customize setup"}
+                </span>
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3 grid max-w-lg gap-4">
+              {gatewayEditor}
+              {proxyEditor}
+              {proxyActive && modelEditor}
+              {skillsEligible && skillsEditor}
+              {pluginsEnabled && pluginsEditor}
+              {showEndpoint && endpointEditor}
+              {platformEditor}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
         <div className="flex flex-col gap-3">
           {client.id === "claude-desktop" && (
             <p className="text-sm text-muted-foreground">
@@ -1383,13 +1401,17 @@ export function ConnectCommandPanel({
       </ConnectionSection>
 
       {showDesktopGatewayStep && (
-        <WizardStep n={4} title="Enable your gateway in Claude Desktop" last>
+        <WizardStep
+          n={setupStep + 1}
+          title="Enable your gateway in Claude Desktop"
+          last
+        >
           <ClaudeDesktopGatewaySteps gatewayName={oauthServerName} />
         </WizardStep>
       )}
 
       {showOAuthStep && (
-        <WizardStep n={4} title={FINISH_OAUTH_FLOW_TITLE} last>
+        <WizardStep n={setupStep + 1} title={FINISH_OAUTH_FLOW_TITLE} last>
           <div className="flex flex-col gap-3 text-sm text-muted-foreground">
             <p>
               The script only registers the gateway — the gateway grants tool

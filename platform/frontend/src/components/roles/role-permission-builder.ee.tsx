@@ -42,6 +42,7 @@ const actionLabels: Record<Action, string> = {
   manage: "Manage",
   "manage-deleted": "Manage Deleted",
   impersonate: "Impersonate",
+  admin: "Admin",
 };
 
 const UNGRANTABLE_PERMISSION_TOOLTIP =

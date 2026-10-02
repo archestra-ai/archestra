@@ -16,6 +16,7 @@ import {
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import { ARCHESTRA_TOOL_PREFIX } from "@archestra/shared/archestra-mcp-server";
 import type {
   ConnectionSetupClientId,
   ConnectionSetupPlatform,
@@ -134,6 +135,11 @@ export interface SetupScriptContext {
   platform: ConnectionSetupPlatform;
   /** White-label product name for user-facing messaging. */
   appName: string;
+  /**
+   * Trusted built-in tool prefix from deployment branding. Independent of
+   * `mcp.serverName`; the canonical prefix is omitted from printed options.
+   */
+  toolPrefix?: string;
   mcp: SetupScriptMcpSection | null;
   proxy: SetupScriptProxySection | null;
   skills: SetupScriptSkillsSection | null;
@@ -157,6 +163,21 @@ export function buildSetupCommand(params: {
   }
   // single quotes: nothing in the URL may expand in the user's shell.
   return `curl -fsSL ${sh(url)} | bash`;
+}
+
+export function codexConnectionVerificationOptions(params: {
+  server?: string;
+  provider?: string;
+  toolPrefix?: string;
+}): { server?: string; provider?: string; toolPrefix?: string } {
+  const options: { server?: string; provider?: string; toolPrefix?: string } =
+    {};
+  if (params.server) options.server = params.server;
+  if (params.provider) options.provider = params.provider;
+  if (params.toolPrefix && params.toolPrefix !== ARCHESTRA_TOOL_PREFIX) {
+    options.toolPrefix = params.toolPrefix;
+  }
+  return options;
 }
 
 /** Strips the /v1 suffix the connection base URLs carry. */
@@ -492,7 +513,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.mcp || ctx.proxy) {
         steps.push(
-          `Verification command: node "$HOME/${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs" --verify "$(command -v codex)" ${sh(Buffer.from(JSON.stringify({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName })).toString("base64"))}`,
+          `Verification command: node "$HOME/${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs" --verify "$(command -v codex)" ${sh(Buffer.from(JSON.stringify(codexConnectionVerificationOptions({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName, toolPrefix: ctx.toolPrefix }))).toString("base64"))}`,
         );
       }
       if (ctx.proxy) {

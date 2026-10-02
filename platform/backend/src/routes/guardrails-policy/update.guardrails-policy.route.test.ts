@@ -20,6 +20,7 @@ import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { initialPolicy } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-policy.routes";
 
 const content =
@@ -48,6 +49,7 @@ describe("guardrails policy authoring", () => {
       app = createFastifyInstance();
       await app.register(authPlugin);
       registerAuditLogHook(app);
+      registerRoutePermissions(app);
       await app.register(routes);
     },
   );
@@ -357,7 +359,7 @@ describe("guardrails policy authoring", () => {
   }) => {
     const author = await makeUser();
     const role = await makeCustomRole(orgId, {
-      permission: { toolPolicy: ["read", "update"] },
+      permission: { openappaPolicy: ["read", "update"] },
     });
     await makeMember(author.id, orgId, { role: role.role });
     await GuardrailsDeploymentModel.setEnabled(false);
@@ -382,7 +384,7 @@ describe("guardrails policy authoring", () => {
   }) => {
     const author = await makeUser();
     const role = await makeCustomRole(orgId, {
-      permission: { toolPolicy: ["read", "update"] },
+      permission: { openappaPolicy: ["read", "update"] },
     });
     await makeMember(author.id, orgId, { role: role.role });
     const session = await makeSession(author.id, {

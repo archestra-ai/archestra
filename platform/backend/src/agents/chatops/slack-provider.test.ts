@@ -819,7 +819,8 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
     );
     expect(first).not.toBeNull();
 
-    // A mute command gates the thread and confirms once.
+    // A mute command gates the thread. The :mute: reaction is the only
+    // acknowledgement — no confirmation message is posted.
     const mute = await provider.parseWebhookNotification(
       makeEventPayload(
         {},
@@ -834,7 +835,7 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
       {},
     );
     expect(mute).toBeNull();
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
 
     // Later un-mentioned messages stay quiet despite answer-all.
     const afterMute = await provider.parseWebhookNotification(
@@ -911,8 +912,8 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
     );
     expect(first).not.toBeNull();
 
-    // The literal shortcode text — not a reaction — gates the thread and
-    // confirms once, same as the bare "mute" command.
+    // The literal shortcode text — not a reaction — gates the thread the same
+    // as the bare "mute" command, with no confirmation message posted.
     const mute = await provider.parseWebhookNotification(
       makeEventPayload(
         {},
@@ -927,7 +928,7 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
       {},
     );
     expect(mute).toBeNull();
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
 
     // Later un-mentioned messages stay quiet despite answer-all.
     const afterMute = await provider.parseWebhookNotification(
@@ -971,7 +972,7 @@ describe("SlackProvider.parseWebhookNotification — thread mute command", () =>
     return { provider, postMessage };
   }
 
-  test("'@bot mute' in an active thread mutes it: returns null, posts a notice, and gates later replies", async () => {
+  test("'@bot mute' in an active thread mutes it: returns null and gates later replies", async () => {
     const { provider, postMessage } = createProviderWithPostMessage();
     const channel = "C_MUTE_MENTION";
     const threadTs = "6666666666.000001";
@@ -986,7 +987,9 @@ describe("SlackProvider.parseWebhookNotification — thread mute command", () =>
     );
     expect(mention).not.toBeNull();
 
-    // "@bot mute" → muted. Nothing is handed to the agent.
+    // "@bot mute" → muted. Nothing is handed to the agent, and no
+    // confirmation message is posted (the :mute: reaction is the only
+    // acknowledgement).
     const mute = await provider.parseWebhookNotification(
       makeEventPayload(
         {},
@@ -995,10 +998,7 @@ describe("SlackProvider.parseWebhookNotification — thread mute command", () =>
       {},
     );
     expect(mute).toBeNull();
-    expect(postMessage).toHaveBeenCalledTimes(1);
-    expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ channel, thread_ts: threadTs }),
-    );
+    expect(postMessage).not.toHaveBeenCalled();
 
     // A subsequent un-mentioned reply in the thread is gated again.
     const afterMute = await provider.parseWebhookNotification(
@@ -1044,7 +1044,7 @@ describe("SlackProvider.parseWebhookNotification — thread mute command", () =>
       {},
     );
     expect(mute).toBeNull();
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
   });
 
   test("'mute' in an inactive, un-mentioned thread is just a gated message — no mute notice", async () => {
@@ -1149,7 +1149,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
   // reactionPayload deliberately carries no `item_user`: the field is optional
   // on reaction_added and Slack does not populate it for every app-authored
   // message, so muting must not depend on it.
-  test("🔇 on a bot reply in an active thread mutes it and posts the notice", async () => {
+  test("🔇 on a bot reply in an active thread mutes it with no confirmation message", async () => {
     const { provider, postMessage, replies } = createReactionProvider();
     await markChannelThreadActive({
       provider: "slack",
@@ -1166,7 +1166,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     expect(replies).toHaveBeenCalledWith(
       expect.objectContaining({ channel: CHANNEL, ts: BOT_REPLY_TS }),
     );
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
     expect(
       await cacheManager.get(
         `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
@@ -1186,7 +1186,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
       reactionPayload("shushing_face"),
       {},
     );
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
   });
 
   test("🔇 on a teammate's message mutes the thread it belongs to", async () => {
@@ -1206,7 +1206,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
       {},
     );
     expect(result).toBeNull();
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
     expect(
       await cacheManager.get(
         `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
@@ -1249,7 +1249,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
       {},
     );
     expect(replies).not.toHaveBeenCalled();
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
   });
 
   test("a non-mute reaction is ignored", async () => {
@@ -1263,24 +1263,24 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
-  test("🔇 in an answer-all channel confirms the mute", async () => {
-    // An answer-all thread has no activation to clear, so the mute is invisible
-    // unless the confirmation keys off the mute marker instead — and a mute
-    // nobody can see is indistinguishable from one that was ignored.
+  test("🔇 in an answer-all channel mutes it with no confirmation message", async () => {
+    // An answer-all thread has no activation to clear, so the mute relies on
+    // the mute marker instead of an activation flag — the 🔇 reaction itself
+    // is the only acknowledgement, same as elsewhere.
     const { provider, postMessage } = createReactionProvider();
     await enableAnswerAll();
 
     await provider.parseWebhookNotification(reactionPayload("mute"), {});
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
   });
 
-  test("a repeated 🔇 in an answer-all channel confirms only once", async () => {
+  test("a repeated 🔇 in an answer-all channel still posts no notice", async () => {
     const { provider, postMessage } = createReactionProvider();
     await enableAnswerAll();
 
     await provider.parseWebhookNotification(reactionPayload("mute"), {});
     await provider.parseWebhookNotification(reactionPayload("mute"), {});
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
   });
 
   test("mute reaction on an inactive thread posts no notice (transition rule)", async () => {

@@ -23,7 +23,11 @@ export interface OpenAiStreamUsage {
    * the way this codebase does (`prompt_tokens - cached_tokens`, see the openai
    * adapter's `getUsageTokens`) attributes the whole prompt to full-price input.
    */
-  prompt_tokens_details?: { cached_tokens: number };
+  prompt_tokens_details?: {
+    cached_tokens: number;
+    cache_write_tokens?: number;
+    cache_write_1h_tokens?: number;
+  };
 }
 
 /**

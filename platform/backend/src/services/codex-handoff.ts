@@ -28,8 +28,14 @@ function verificationDiagnostic(value) {
         .replace(/(https?:\/\/[^\s?]+)\?[^\s]+/gi, '$1?[redacted]');
     }).join('\n').trim().slice(-2048);
 }
+const verificationShortNames = ['whoami', 'get_guardrails_policy', 'list_skills'];
+const canonicalToolPrefix = 'archestra__';
+function verificationProbeNames(options) {
+  const prefix = options.toolPrefix || canonicalToolPrefix;
+  return verificationShortNames.map(shortName => prefix + shortName);
+}
 async function verifyConnection(binary, options) {
-  if (!options || typeof options !== 'object' || !(options.server || options.provider) || ['server', 'provider'].some(key => options[key] !== undefined && (typeof options[key] !== 'string' || !options[key] || options[key].length > 512))) {
+  if (!options || typeof options !== 'object' || !(options.server || options.provider) || ['server', 'provider'].some(key => options[key] !== undefined && (typeof options[key] !== 'string' || !options[key] || options[key].length > 512)) || (options.toolPrefix !== undefined && (typeof options.toolPrefix !== 'string' || !options.toolPrefix || options.toolPrefix.length > 512 || !/^[a-z0-9]+(?:_[a-z0-9]+)*__$/.test(options.toolPrefix)))) {
     throw new Error('Invalid Codex verification options.');
   }
   const target = codexEntry(binary);
@@ -162,7 +168,7 @@ async function verifyConnection(binary, options) {
       } while (!server && cursor);
       if (!server) throw new Error('Codex did not discover the selected MCP gateway.');
       const tools = Object.values(server.tools || {});
-      const probe = ['archestra__whoami', 'archestra__get_guardrails_policy', 'archestra__list_skills']
+      const probe = verificationProbeNames(options)
         .map(name => tools.find(tool => tool.name === name && !tool.inputSchema?.required?.length))
         .find(Boolean);
       if (!probe) throw new Error('The selected gateway has no supported read-only verification tool.');

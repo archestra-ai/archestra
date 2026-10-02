@@ -103,7 +103,8 @@ for (const viewport of [
         url: "/api/user/permissions",
         body: {
           ...permissions,
-          organization: ["read", "update"],
+          openappaSettings: ["read", "update"],
+          openappaPolicy: ["read", "update"],
           credential: ["read"],
         },
       });

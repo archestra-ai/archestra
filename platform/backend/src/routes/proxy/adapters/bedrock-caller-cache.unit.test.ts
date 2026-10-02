@@ -1,0 +1,363 @@
+import { describe, expect, test } from "vitest";
+import type { OpenAi } from "@/types";
+import {
+  converseResponseToOpenai,
+  createConverseToOpenaiSseEncoder,
+  openaiToConverse,
+} from "./bedrock-openai-translator";
+import {
+  chatCompletionToResponses,
+  responsesToOpenaiChat,
+} from "./openai-responses-translator";
+import { fromResponsesUsage, type toResponsesUsage } from "./responses-usage";
+
+const model = "us.anthropic.claude-sonnet-4-6";
+const marker = { type: "ephemeral" };
+const checkpoint = { cachePoint: { type: "default" } };
+const ctx = {
+  chatcmplId: "chatcmpl_test",
+  createdUnix: 1,
+  requestedModel: model,
+  includeUsageInStream: true,
+};
+function translate(
+  messages: unknown[],
+  overrides: Record<string, unknown> = {},
+) {
+  return openaiToConverse({
+    model,
+    messages,
+    ...overrides,
+  } as OpenAi.Types.ChatCompletionsRequest).converseBody;
+}
+
+describe("explicit Bedrock caller caching", () => {
+  test.each([
+    { input: [{ type: "reasoning", summary: [] }] },
+    { input: [{ role: "user", content: [null, { type: "input_audio" }] }] },
+    { input: "question", tools: [{ type: "web_search" }] },
+  ])("keeps legacy handling of unmarked unsupported Responses fields: %j", (body) => {
+    const { chatBody } = responsesToOpenaiChat(
+      { model, ...body } as unknown as OpenAi.Types.ResponsesRequest,
+      { preserveContentParts: true },
+    );
+    expect(() => openaiToConverse(chatBody)).not.toThrow();
+    expect(JSON.stringify(openaiToConverse(chatBody))).not.toContain(
+      "cachePoint",
+    );
+  });
+
+  test.each([
+    { input: [{ type: "reasoning", summary: [], cache_control: marker }] },
+    {
+      input: [
+        {
+          role: "user",
+          content: [{ type: "input_audio", cache_control: marker }],
+        },
+      ],
+    },
+  ])("rejects markers on unsupported Responses fields: %j", (body) => {
+    expect(() =>
+      openaiToConverse(
+        responsesToOpenaiChat(
+          { model, ...body } as unknown as OpenAi.Types.ResponsesRequest,
+          { preserveContentParts: true },
+        ).chatBody,
+      ),
+    ).toThrow(/Bedrock/);
+  });
+
+  test.each([
+    { content: "" },
+    { content: [{ type: "text", text: "" }] },
+  ])("unmarked empty assistant content $content produces only toolUse", ({
+    content,
+  }) => {
+    const body = translate([
+      { role: "user", content: "question" },
+      {
+        role: "assistant",
+        content,
+        tool_calls: [
+          {
+            type: "function",
+            id: "call_1",
+            function: { name: "read", arguments: "{}" },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "call_1", content: "result" },
+    ]);
+    expect(body.messages).toEqual([
+      { role: "user", content: [{ text: "question" }] },
+      {
+        role: "assistant",
+        content: [
+          { toolUse: { toolUseId: "call_1", name: "read", input: {} } },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            toolResult: { toolUseId: "call_1", content: [{ text: "result" }] },
+          },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain("cachePoint");
+  });
+
+  test("canonical base64 file bytes use the supported filename extension", () => {
+    expect(
+      translate([
+        {
+          role: "user",
+          content: [
+            {
+              type: "file",
+              file: { file_data: "e30=", filename: "reference.json" },
+            },
+          ],
+        },
+      ]).messages?.[0].content[1],
+    ).toEqual({
+      document: { format: "txt", name: "document", source: { bytes: "e30=" } },
+    });
+  });
+
+  test("tool-result part markers never widen the caller's requested boundary", () => {
+    expect(() =>
+      translate([
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: [
+            { type: "text", text: "first", cache_control: marker },
+            { type: "text", text: "second" },
+          ],
+        },
+      ]),
+    ).toThrow(/complete tool result/);
+    expect(
+      translate([
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: [{ type: "text", text: "result", cache_control: marker }],
+        },
+      ]).messages?.[0].content,
+    ).toEqual([
+      { toolResult: { toolUseId: "call_1", content: [{ text: "result" }] } },
+      checkpoint,
+    ]);
+  });
+
+  test("document-only input gains companion text before the document and checkpoint", () => {
+    expect(
+      translate([
+        {
+          role: "user",
+          content: [
+            {
+              type: "file",
+              file: { file_data: "data:application/pdf;base64,cGRm" },
+              cache_control: marker,
+            },
+          ],
+        },
+      ]).messages?.[0].content,
+    ).toEqual([
+      { text: "Please review the attached document." },
+      {
+        document: {
+          format: "pdf",
+          name: "document",
+          source: { bytes: "cGRm" },
+        },
+      },
+      checkpoint,
+    ]);
+  });
+
+  test.each([
+    { file_id: "file_1" },
+    { file_url: "https://example.test/file.pdf" },
+    { file_data: "data:application/zip;base64,e30=" },
+    {},
+  ])("rejects unresolved or unsupported file %j", (file) => {
+    expect(() =>
+      translate([{ role: "user", content: [{ type: "file", file }] }]),
+    ).toThrow(/Bedrock/);
+  });
+
+  test("places system, assistant and growing tool-result markers without changing tool IDs", () => {
+    const request = translate([
+      {
+        role: "system",
+        content: [
+          {
+            type: "text",
+            text: "stable",
+            cache_control: { ...marker, ttl: "1h" },
+          },
+        ],
+      },
+      { role: "user", content: "question" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "checking" }],
+        tool_calls: [
+          {
+            type: "function",
+            id: "call_1",
+            function: { name: "read", arguments: "{}" },
+          },
+        ],
+        cache_control: marker,
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_1",
+        content: "result".repeat(1000),
+        cache_control: marker,
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_2",
+        content: "second result",
+        cache_control: marker,
+      },
+    ]);
+    expect(request.system).toEqual([
+      { text: "stable" },
+      { cachePoint: { type: "default", ttl: "1h" } },
+    ]);
+    expect(request.messages?.[1].content).toEqual([
+      { text: "checking" },
+      { toolUse: { toolUseId: "call_1", name: "read", input: {} } },
+      checkpoint,
+    ]);
+    expect(request.messages?.[2].content).toEqual([
+      {
+        toolResult: {
+          toolUseId: "call_1",
+          content: [{ text: "result".repeat(1000) }],
+        },
+      },
+      checkpoint,
+      {
+        toolResult: {
+          toolUseId: "call_2",
+          content: [{ text: "second result" }],
+        },
+      },
+      checkpoint,
+    ]);
+  });
+
+  test("rejects malformed marker shapes", () => {
+    for (const cache_control of [
+      null,
+      { type: "default" },
+      { ...marker, ttl: 60 },
+    ])
+      expect(() =>
+        translate([{ role: "user", content: "x", cache_control }]),
+      ).toThrow(/cache_control/);
+  });
+});
+
+describe("Bedrock gross usage on each translated transport", () => {
+  test("splits mixed five-minute and one-hour cache writes without double counting", () => {
+    const response = converseResponseToOpenai(
+      {
+        output: {
+          message: { role: "assistant", content: [{ text: "answer" }] },
+        },
+        stopReason: "end_turn",
+        usage: {
+          inputTokens: 12,
+          outputTokens: 3,
+          totalTokens: 9015,
+          cacheReadInputTokens: 8000,
+          cacheWriteInputTokens: 1000,
+          cacheDetails: [
+            { ttl: "5m", inputTokens: 400 },
+            { ttl: "1h", inputTokens: 600 },
+          ],
+        },
+      },
+      ctx,
+    );
+    const wire = chatCompletionToResponses(response, {
+      responseId: "resp_test",
+      createdUnix: 1,
+      requestedModel: model,
+    }).usage as ReturnType<typeof toResponsesUsage>;
+    expect(wire).toMatchObject({
+      input_tokens: 9012,
+      total_tokens: 9015,
+      input_tokens_details: {
+        cached_tokens: 8000,
+        cache_write_tokens: 1000,
+        cache_write_1h_tokens: 600,
+      },
+    });
+    expect(fromResponsesUsage(wire)).toMatchObject({
+      inputTokens: 12,
+      cacheReadTokens: 8000,
+      cacheWriteTokens: 1000,
+      cacheWrite1hTokens: 600,
+    });
+  });
+
+  test.each([
+    [0, 0],
+    [9000, 0],
+    [0, 9000],
+    [8000, 1000],
+  ])("reads %i and writes %i", (reads, writes) => {
+    const native = {
+      inputTokens: 12,
+      outputTokens: 3,
+      totalTokens: 15 + reads + writes,
+      cacheReadInputTokens: reads,
+      cacheWriteInputTokens: writes,
+      cacheDetails: writes ? [{ ttl: "1h" as const, inputTokens: writes }] : [],
+    };
+    const response = converseResponseToOpenai(
+      {
+        output: {
+          message: { role: "assistant", content: [{ text: "answer" }] },
+        },
+        stopReason: "end_turn",
+        usage: native,
+      },
+      ctx,
+    );
+    const responses = chatCompletionToResponses(response, {
+      responseId: "resp_test",
+      createdUnix: 1,
+      requestedModel: model,
+    });
+    const wire = responses.usage as ReturnType<typeof toResponsesUsage>;
+    expect(wire.input_tokens).toBe(12 + reads + writes);
+    expect(wire.total_tokens).toBe(15 + reads + writes);
+    expect(wire.input_tokens_details.cached_tokens).toBe(reads);
+    expect(fromResponsesUsage(wire)).toMatchObject({
+      inputTokens: 12,
+      outputTokens: 3,
+      cacheReadTokens: reads,
+      cacheWriteTokens: writes,
+    });
+    const encoder = createConverseToOpenaiSseEncoder(ctx);
+    const event = encoder.encodeBedrockEvent({
+      metadata: { usage: native, metrics: { latencyMs: 1 } },
+    });
+    expect(
+      JSON.parse(new TextDecoder().decode(event ?? undefined).slice(6)).usage,
+    ).toEqual(response.usage);
+  });
+});

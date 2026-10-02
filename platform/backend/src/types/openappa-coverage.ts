@@ -14,8 +14,8 @@ import {
  * What kind of rule governs a tool, from its delta and requirements: a rule
  * that requires an attention mark is `approval`, one that requires anything
  * else is `write`, one that only narrows the labels (or defers to an
- * annotator) is `read`, one that does neither is `neutral`. A tool no rule
- * names is `unlisted`.
+ * annotator) is `read`, one that does neither is `neutral`. A tool using a noop catch-all
+ * or lacking a matching rule is `unlisted`.
  */
 export const CoverageKindSchema = z.enum([
   "read",
@@ -37,7 +37,7 @@ const CoverageAgentRefSchema = z.object({
 
 /** One `[[policy.tool]]` entry as the coverage parse read it. */
 export const CoverageRuleSchema = z.object({
-  source: z.enum(["root", "battery"]),
+  source: z.enum(["root", "battery", "catchall"]),
   /** The battery that declares the rule; null for a root rule. */
   battery: z.string().nullable(),
   /** The exact include entry that supplies a battery rule; null for a root rule. */
@@ -86,11 +86,11 @@ export const CoverageToolSchema = z.object({
   /** The MCP `readOnlyHint` annotation; null when the server gave none. */
   readOnly: z.boolean().nullable(),
   kind: CoverageKindSchema,
-  /** Built-in default fallback, user fallback, root rule, or battery rule. */
-  policySource: z.enum(["built_in", "fallback", "root", "battery"]),
-  /** The rule this row is judged by; null when the catch-all judges it. */
+  /** A specific rule, a non-noop catch-all, or no coverage. */
+  policySource: z.enum(["root", "battery", "catchall", "not_covered"]),
+  /** The matching rule, including a noop catch-all; null when no rule matches. */
   rule: CoverageRuleSchema.nullable(),
-  /** The root catch-all header line, when an unlisted tool uses one. */
+  /** The root catch-all header line, when this tool uses one. */
   fallbackLine: z.number().int().nullable(),
   unlisted: z.boolean(),
   enforced: z.boolean(),
@@ -100,16 +100,15 @@ export type CoverageTool = z.infer<typeof CoverageToolSchema>;
 
 /**
  * Tools counted by what judges them without a selector: an enforced root or
- * battery rule, a rule the runtime does not apply, or no rule, in which case
- * the policy's catch-all or, before any policy is saved, the built-in
- * fallback judges them. Every tool lands in exactly one bucket.
+ * battery rule, a non-noop catch-all, a rule the runtime does not apply,
+ * or no coverage (noop catch-all or no matching rule). Each tool is counted once.
  */
 export const CoverageRuleCountsSchema = z.object({
   root: z.number().int(),
   battery: z.number().int(),
   notEnforced: z.number().int(),
   catchAll: z.number().int(),
-  builtInFallback: z.number().int(),
+  notCovered: z.number().int(),
 });
 export type CoverageRuleCounts = z.infer<typeof CoverageRuleCountsSchema>;
 
@@ -122,9 +121,9 @@ export const CoverageEntitySchema = z.object({
   icon: z.string().nullable(),
   /** Assigned tools plus Auto-mode tools discoverable by this viewer. */
   toolCount: z.number().int(),
-  /** Tools with at least one active root or battery rule, including selector rules. */
+  /** Tools with an active specific or non-noop catch-all rule, including selectors. */
   governedCount: z.number().int(),
-  /** Tools with no unconditional rule, so some calls may use the catch-all. */
+  /** Tools without an unconditional specific rule, so calls may use the catch-all. */
   fallbackCount: z.number().int(),
   /** Assigned Archestra built-in tools, included in toolCount. */
   builtInCount: z.number().int(),
@@ -143,7 +142,7 @@ export const CoverageToolsQuerySchema = PaginationQuerySchema.extend({
   catalogId: z.uuid().optional(),
   /** Tools reachable through this agent or MCP gateway, including Auto mode discovery. */
   entityId: z.uuid().optional(),
-  governedBy: z.enum(["battery", "root", "catchall", "built_in"]).optional(),
+  governedBy: z.enum(["battery", "root", "catchall", "not_covered"]).optional(),
   /** Narrow battery rules to one included battery. */
   battery: z.string().trim().min(1).max(100).optional(),
   kind: CoverageKindFilterSchema.optional(),
@@ -210,14 +209,14 @@ export const CoverageSummarySchema = z.object({
     ),
     /**
      * Batteries not installed on visible servers they fit, that would give
-     * some of those servers' tools with no rule one, most tools first.
+     * some of those servers' uncovered tools a rule, most tools first.
      */
     available: z.array(
       z.object({
         name: z.string(),
         /** The names of the servers it fits. */
         servers: z.array(z.string()),
-        /** Tools with no rule it would judge once installed. */
+        /** Uncovered tools it would judge once installed. */
         tools: z.number().int(),
       }),
     ),
@@ -243,7 +242,7 @@ export const CoverageBatteryFitSchema = z.object({
   namespaces: z.array(z.string()),
   /** Credential variables `[credentials]` must bind to a runtime credential key before calls it routes run. */
   credentials: z.array(z.string()),
-  /** The server's tools no rule names today that the battery would judge. */
+  /** The server's uncovered tools that the battery would judge. */
   newlyCovered: z.number().int(),
   /** Every battery rule that names one of the server's tools. */
   rules: z.array(
@@ -255,8 +254,8 @@ export const CoverageBatteryFitSchema = z.object({
       delta: CoverageRuleSchema.shape.delta,
       requires: CoverageRuleSchema.shape.requires,
       annotator: z.string().nullable(),
-      /** What judges the tool today; null when only the catch-all does. A root rule keeps priority over the battery's. */
-      currentRule: z.enum(["root", "battery"]).nullable(),
+      /** What covers the tool today; null for noop or no matching rule. A root rule keeps priority over the battery's. */
+      currentRule: z.enum(["root", "battery", "catchall"]).nullable(),
     }),
   ),
 });

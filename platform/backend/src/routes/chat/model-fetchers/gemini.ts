@@ -19,29 +19,47 @@ export async function fetchGeminiModels(
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.gemini.baseUrl;
-  const url = joinBaseUrl(
-    baseUrl,
-    `/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`,
-  );
 
-  const response = await fetch(url, {
-    headers: extraHeaders ?? undefined,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    logger.error(
-      { status: response.status, error: errorText },
-      "Failed to fetch Gemini models",
+  // The catalog is paginated. Read every page, or models past the first page
+  // silently drop out of the selector once Google's list outgrows it.
+  const catalog: Gemini.Types.Model[] = [];
+  const seenPageTokens = new Set<string>();
+  let pageToken: string | undefined;
+  for (let page = 0; page < GEMINI_CATALOG_MAX_PAGES; page++) {
+    const url = joinBaseUrl(
+      baseUrl,
+      `/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=${GEMINI_CATALOG_PAGE_SIZE}${
+        pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""
+      }`,
     );
-    throw modelFetchError("Gemini models", response.status);
+
+    const response = await fetch(url, {
+      headers: extraHeaders ?? undefined,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(
+        { status: response.status, error: errorText },
+        "Failed to fetch Gemini models",
+      );
+      throw modelFetchError("Gemini models", response.status);
+    }
+
+    const data = (await response.json()) as {
+      models?: Gemini.Types.Model[];
+      nextPageToken?: string;
+    };
+    catalog.push(...(data.models ?? []));
+
+    pageToken = data.nextPageToken || undefined;
+    if (!pageToken || seenPageTokens.has(pageToken)) {
+      break;
+    }
+    seenPageTokens.add(pageToken);
   }
 
-  const data = (await response.json()) as {
-    models: Gemini.Types.Model[];
-  };
-
-  return data.models
+  return catalog
     .filter(
       (model) =>
         model.supportedGenerationMethods?.includes("generateContent") ||
@@ -116,6 +134,11 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
 
   return accessibleModels;
 }
+
+/** The Gemini API's largest accepted `models.list` page size. */
+const GEMINI_CATALOG_PAGE_SIZE = 1000;
+/** Stops a catalog whose page tokens never end from looping forever. */
+const GEMINI_CATALOG_MAX_PAGES = 20;
 
 const VERTEX_GEMINI_FALLBACK_MODEL_IDS = [
   "gemini-embedding-001",

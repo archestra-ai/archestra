@@ -179,7 +179,7 @@ describe("chat composer typing performance", () => {
     expect(renderCounts.apiKeySelector).toBe(apiKeySelectorRendersAfterMount);
   });
 
-  it("shows trust and audience when the OpenAPPA icon is opened", () => {
+  it("shows trust and audience as a static session readout", () => {
     statusState.data = { trust: "suspicious", audience: "internal" };
     render(
       <ArchestraPromptInput
@@ -192,7 +192,6 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
     const status = screen.getByRole("status", {
       name: "Trust: suspicious; audience: internal",
     });
@@ -216,7 +215,6 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
     const status = screen.getByRole("status", {
       name: "Trust: reviewed; audience: alice ∩ internal,@finance",
     });
@@ -224,7 +222,7 @@ describe("chat composer typing performance", () => {
     expect(status).toHaveTextContent("alice ∩ internal,@finance");
   });
 
-  it("keeps the status icons but hides retained labels when a refresh fails", () => {
+  it("hides retained labels when the selected session status read failed", () => {
     statusState.data = { trust: "trusted", audience: "public" };
     const { rerender } = render(
       <ArchestraPromptInput
@@ -236,12 +234,11 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
     expect(
       screen.getByRole("status", { name: "Trust: trusted; audience: public" }),
     ).toBeInTheDocument();
 
-    // TanStack Query retains the previous data after a failed refetch.
+    // The hook can expose retained data alongside an error for a session.
     statusState.isError = true;
     rerender(
       <ArchestraPromptInput
@@ -250,7 +247,7 @@ describe("chat composer typing performance", () => {
         selectedModel="gpt-4o"
         onModelChange={vi.fn()}
         agentId="agent-1"
-        conversationId="conv-1"
+        conversationId="conv-2"
       />,
     );
     const status = screen.getByRole("status", {
@@ -258,7 +255,6 @@ describe("chat composer typing performance", () => {
     });
     expect(status).not.toHaveTextContent("trusted");
     expect(status).not.toHaveTextContent("public");
-    expect(status.querySelectorAll("svg")).toHaveLength(1);
   });
 
   it("keeps the OpenAPPA icon before the status endpoint returns a label", () => {
@@ -272,14 +268,10 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
-    expect(
-      screen.getByRole("button", { name: "OpenAPPA status" }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "OpenAPPA status" }));
+    expect(screen.getByRole("status")).toBeInTheDocument();
     const status = screen.getByRole("status", {
       name: "Trust and audience status unavailable",
     });
-    expect(status.querySelectorAll("svg")).toHaveLength(1);
     expect(status).not.toHaveTextContent(/trusted|public/);
   });
 
@@ -296,9 +288,7 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
-    expect(
-      screen.queryByRole("button", { name: "OpenAPPA status" }),
-    ).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("hides the OpenAPPA icon when beta is disabled, even with stale active deployment data", () => {
@@ -317,12 +307,10 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    expect(
-      screen.queryByRole("button", { name: "OpenAPPA status" }),
-    ).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("shows trust and audience inside the narrow toolbar popup", () => {
+  it("keeps trust and audience visible above a narrow composer", () => {
     layoutState.isNarrow = true;
     statusState.data = { trust: "trusted", audience: "public" };
     render(
@@ -336,12 +324,44 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    expect(screen.queryByRole("status")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "More options" }));
     const status = screen.getByRole("status", {
       name: "Trust: trusted; audience: public",
     });
-    expect(status).toHaveTextContent("Trust: trusted");
-    expect(status).toHaveTextContent("Audience: public");
+    expect(status).toHaveTextContent("trust:trusted");
+    expect(status).toHaveTextContent("audience:public");
+  });
+  it("removes the session readout when navigating to a new chat", () => {
+    statusState.data = { trust: "trusted", audience: "public" };
+    const props = {
+      onSubmit: vi.fn(),
+      status: "ready" as const,
+      selectedModel: "gpt-4",
+      onModelChange: vi.fn(),
+      agentId: "agent-1",
+    };
+    const { rerender } = render(
+      <ArchestraPromptInput {...props} conversationId="conv-1" />,
+    );
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    rerender(<ArchestraPromptInput {...props} />);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    rerender(<ArchestraPromptInput {...props} conversationId="conv-2" />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("does not show a chat trajectory for a runtime session", () => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+        runtimeMode
+      />,
+    );
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

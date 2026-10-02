@@ -37,6 +37,7 @@ import {
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
+import { OpenappaSessionStatus } from "@/components/chat/openappa-session-status";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
@@ -1058,6 +1059,12 @@ const PromptInputContent = ({
           </span>
         </div>
       )}
+      {conversationId && !runtimeMode && (
+        <OpenappaSessionStatus
+          key={conversationId}
+          conversationId={conversationId}
+        />
+      )}
       <PromptInput
         globalDrop
         multiple
@@ -1066,6 +1073,7 @@ const PromptInputContent = ({
         maxFileSize={storageByteLimit}
         onError={handleFileError}
         className={cn(
+          "[&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-input",
           runtimeMode &&
             "[&_[data-slot=input-group]]:border-primary/50 [&_[data-slot=input-group]]:bg-primary/[0.025] [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-primary",
           encryptedChatActive &&

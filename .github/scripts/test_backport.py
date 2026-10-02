@@ -255,7 +255,7 @@ assert.equal(allowed('pull_request', {label:'not-backport release/1.3'}), false)
 """
         subprocess.run(["node", "-e", program, condition], check=True)
 
-    def test_expensive_checks_run_in_merge_queue_with_release_codegen_exception(self):
+    def test_expensive_checks_run_in_merge_queue_with_release_exceptions(self):
         workflow = Path(__file__).parents[1] / "workflows/on-pull-requests.yml"
         lines = workflow.read_text().splitlines()
         jobs = [
@@ -285,12 +285,16 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const conditions = JSON.parse(process.argv[1]);
 for (const [job, condition] of Object.entries(conditions)) {
-  for (const [login, ref, expected] of [
-    ['archestra-ci[bot]', 'backport/release-1.3/pr-42', false],
-    ['archestra-ci[bot]', 'release-please--branches--main', job === 'platform-lint-and-unit-tests'],
-    ['contributor', 'fix/example', false],
+  for (const [login, ref, headRepo, expected] of [
+    ['archestra-ci[bot]', 'backport/release-1.3/pr-42', 'archestra-ai/archestra', false],
+    ['archestra-ci[bot]', 'release-please--branches--main', 'archestra-ai/archestra', job === 'platform-lint-and-unit-tests'],
+    ['contributor', 'fix/example', 'archestra-ai/archestra', false],
+    ['openappa-archestra-updater[bot]', 'chore/openappa-v1.2.4', 'archestra-ai/archestra', job === 'openappa-native-tests'],
+    ['openappa-archestra-updater[bot]', 'chore/openappa-v1.2.4', 'contributor/fork', false],
+    ['contributor', 'chore/openappa-v1.2.4', 'archestra-ai/archestra', false],
+    ['openappa-archestra-updater[bot]', 'other/change', 'archestra-ai/archestra', false],
   ]) {
-    const context = {github: {event_name: 'pull_request', event: {pull_request: {user: {login}, head: {ref}}}},
+    const context = {github: {event_name: 'pull_request', repository: 'archestra-ai/archestra', event: {pull_request: {user: {login}, head: {ref, repo: {full_name: headRepo}}}}},
       startsWith: (value, prefix) => value.startsWith(prefix), always: () => true};
     assert.equal(vm.runInNewContext(condition, context), expected, job);
   }

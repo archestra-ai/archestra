@@ -23,12 +23,25 @@ flowchart LR
 
 ## Build and run
 
-Cargo fetches the OpenAPPA runtime pinned to commit `05c04872` from its main
-branch. This includes the checked status read from OpenAPPA PR #509 and the
-wildcard fallback fix from PR #515. A sibling checkout is not required. Update
-the manifest revision and lockfile when adopting a newer runtime commit.
-The lockfile also selects `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
-restart the backend after updating; production uses the normal Archestra image build.
+Cargo fetches the OpenAPPA runtime at the full commit pinned in `Cargo.toml`.
+`../Cargo.lock` resolves that same source and its transitive dependencies.
+A sibling checkout is not required.
+
+OpenAPPA's release workflow proposes stable release updates in draft PRs on
+`chore/openappa-v*` branches. Each PR identifies the source release and commit,
+updates all four direct Git revisions, and regenerates the workspace lockfile.
+The updater checks compilation before opening a PR and records failures on the
+draft for maintainers to repair. The **OpenAPPA Native Tests**
+job runs the real runtime and PostgreSQL ledger tests on these PRs before review.
+After a newer update PR opens, the updater closes older PRs it created and keeps
+their branches. It does not close unrelated dependency work.
+
+A human must review the changes, mark the draft ready, and approve/merge it
+through the normal repository process. The updater does not approve, enable
+auto-merge, enqueue, or merge its PRs. See OpenAPPA's
+[`docs/archestra-release-updates.md`](https://github.com/archestra-ai/OpenAPPA/blob/main/docs/archestra-release-updates.md)
+for app setup and retry instructions. Rebuild the native addon and restart the
+backend after updating; production uses the normal Archestra image build.
 
 From `archestra/platform`:
 

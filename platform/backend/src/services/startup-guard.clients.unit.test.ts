@@ -1040,7 +1040,7 @@ describe("Copilot CLI disconnect reports what it could not remove", () => {
   });
 });
 
-describe("windows disconnect verification (string pins — no PS runtime in CI)", () => {
+describe("Windows disconnect verification structure", () => {
   test("claude: reads the JSON configs the CLI edits, honoring CLAUDE_CONFIG_DIR", () => {
     const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
     expect(script).toContain("function Test-ArchDisconnected");
@@ -1097,6 +1097,48 @@ function claudeLedger(
 ): string {
   return JSON.stringify(body);
 }
+
+const INVALID_CLAUDE_PERMISSION_FILES = [
+  {
+    name: "invalid settings JSON",
+    settings: "{ this is not json",
+    ledger: claudeLedger(),
+  },
+  {
+    name: "invalid ledger JSON",
+    settings: claudeSettings(),
+    ledger: "{ this is not json",
+  },
+  {
+    name: "ledger root is an array",
+    settings: claudeSettings(),
+    ledger: JSON.stringify(["prod_gateway"]),
+  },
+  {
+    name: "target ledger value is not a string array",
+    settings: claudeSettings(),
+    ledger: JSON.stringify({
+      prod_gateway: "mcp__prod_gateway__archestra__yell",
+      other_gateway: OTHER_ALLOW,
+    }),
+  },
+  {
+    name: "allow is not a string array",
+    settings: JSON.stringify({
+      permissions: { allow: "Read", deny: ["WebFetch"] },
+      env: { USER_OWNED_KEY: "keep-me" },
+    }),
+    ledger: claudeLedger(),
+  },
+  {
+    name: "permissions is not an object",
+    settings: JSON.stringify({
+      permissions: ["Read"],
+      env: { USER_OWNED_KEY: "keep-me" },
+    }),
+    ledger: claudeLedger(),
+  },
+];
 
 function expectOwnedRulesRemoved(
   raw: string,
@@ -1251,47 +1293,9 @@ describe("Claude APPA permission cleanup on MCP disconnect", () => {
     expectOtherLedgerKept(files[LEDGER_REL] ?? "");
   });
 
-  test.each([
-    {
-      name: "invalid settings JSON",
-      settings: "{ this is not json",
-      ledger: claudeLedger(),
-    },
-    {
-      name: "invalid ledger JSON",
-      settings: claudeSettings(),
-      ledger: "{ this is not json",
-    },
-    {
-      name: "ledger root is an array",
-      settings: claudeSettings(),
-      ledger: JSON.stringify(["prod_gateway"]),
-    },
-    {
-      name: "target ledger value is not a string array",
-      settings: claudeSettings(),
-      ledger: JSON.stringify({
-        prod_gateway: "mcp__prod_gateway__archestra__yell",
-        other_gateway: OTHER_ALLOW,
-      }),
-    },
-    {
-      name: "allow is not a string array",
-      settings: JSON.stringify({
-        permissions: { allow: "Read", deny: ["WebFetch"] },
-        env: { USER_OWNED_KEY: "keep-me" },
-      }),
-      ledger: claudeLedger(),
-    },
-    {
-      name: "permissions is not an object",
-      settings: JSON.stringify({
-        permissions: ["Read"],
-        env: { USER_OWNED_KEY: "keep-me" },
-      }),
-      ledger: claudeLedger(),
-    },
-  ])("$name does not clobber settings or the ledger", async ({
+  test.each(
+    INVALID_CLAUDE_PERMISSION_FILES,
+  )("$name does not clobber settings or the ledger", async ({
     settings,
     ledger,
   }) => {
@@ -1612,16 +1616,21 @@ ConvertTo-ArchClaudeJson ([psobject]::AsPSObject($value))`,
       );
     });
 
-    test("drops the ledger entry when settings are missing and does not clobber invalid JSON", async () => {
+    test("drops the ledger entry when settings are missing", async () => {
       const missing = await runWindowsMcpCleanup({
         files: { [LEDGER_REL]: claudeLedger() },
         readFiles: [SETTINGS_REL, LEDGER_REL],
       });
       expect(missing[SETTINGS_REL]).toBeNull();
       expectOtherLedgerKept(missing[LEDGER_REL] ?? "");
+    });
 
-      const settings = "{ this is not json";
-      const ledger = claudeLedger();
+    test.each(
+      INVALID_CLAUDE_PERMISSION_FILES,
+    )("$name does not clobber settings or the ledger", async ({
+      settings,
+      ledger,
+    }) => {
       const invalid = await runWindowsMcpCleanup({
         files: { [SETTINGS_REL]: settings, [LEDGER_REL]: ledger },
         readFiles: [SETTINGS_REL, LEDGER_REL],

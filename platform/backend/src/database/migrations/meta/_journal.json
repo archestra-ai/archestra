@@ -3526,8 +3526,15 @@
     {
       "idx": 503,
       "version": "7",
-      "when": 1790917208256,
-      "tag": "0503_knowledge-chunk-source-spans",
+      "when": 1790943572257,
+      "tag": "0503_rename-locked-chat-to-encrypted-chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 504,
+      "version": "7",
+      "when": 1790945148808,
+      "tag": "0504_famous_shriek",
       "breakpoints": true
     }
   ]

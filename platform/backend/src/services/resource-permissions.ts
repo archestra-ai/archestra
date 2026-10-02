@@ -369,7 +369,7 @@ export class ResourcePermissions {
         id: params.scope,
       });
       if (target?.enabled === false)
-        throw new ApiError(400, "Locked chats cannot be shared");
+        throw new ApiError(400, "Encrypted chats cannot be shared");
     }
     await ResourcePermissions.assertAdvisorStaysOrganizationWide(params);
     const effective = await ResourcePermissions.getEffective(params);

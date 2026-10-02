@@ -607,12 +607,12 @@ async function dispatchTool({
         abortSignal: signal,
         // A detached call outlives the synchronous timeout by design.
         ...(detachable ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
-        // LockedChat: the persisted mcp_tool_calls row is encrypted under the
+        // EncryptedChat: the persisted mcp_tool_calls row is encrypted under the
         // conversation key, or redacted when there is none to encrypt under.
         ...(context.suppressContentLogging
           ? {
               suppressContentLogging: true,
-              lockedChatAudit: context.lockedChatAudit,
+              encryptedChatAudit: context.encryptedChatAudit,
             }
           : {}),
       },

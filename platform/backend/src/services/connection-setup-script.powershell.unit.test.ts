@@ -29,6 +29,14 @@ const powershellAvailable =
   process.platform !== "win32" &&
   spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"]).status === 0;
 
+if (
+  process.env.CI === "true" &&
+  process.platform !== "win32" &&
+  !powershellAvailable
+) {
+  throw new Error("CI requires a working PowerShell runtime for these tests");
+}
+
 describe.skipIf(!powershellAvailable)(
   "PowerShell Claude proxy transitions",
   () => {
@@ -310,6 +318,7 @@ if (args[0] === "app-server") {
             appName: "Archestra",
             mcp: {
               serverName: "test_gateway",
+              toolPrefix: "archestra__",
               url: `http://127.0.0.1:${address.port}/v1/mcp/test-gateway`,
             },
             proxy: null,
@@ -388,6 +397,7 @@ exit 0
             env: {
               HOME: home,
               USERPROFILE: home,
+              CLAUDE_CONFIG_DIR: "",
               CODEX_HOME: path.join(home, "custom codex"),
               PATH: `${bin}:${process.env.PATH}`,
               NO_COLOR: "1",

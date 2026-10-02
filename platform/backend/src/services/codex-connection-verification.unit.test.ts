@@ -223,6 +223,7 @@ createInterface({ input: process.stdin }).on('line', line => {
         platform: windows ? "windows" : "linux",
         mcp: {
           serverName: "selected-gateway",
+          toolPrefix: "archestra__",
           url: "https://example.test/v1/mcp/gateway",
         },
         toolPrefix:
@@ -459,6 +460,7 @@ test("printed verification options use the branding prefix, not the client serve
     clientId: "codex" as const,
     mcp: {
       serverName: "renamed_gateway",
+      toolPrefix,
       url: "https://example.test/v1/mcp/gateway",
     },
     proxy: null,

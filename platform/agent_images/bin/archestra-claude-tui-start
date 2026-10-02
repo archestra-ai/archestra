@@ -17,6 +17,20 @@ import sys
 import time
 
 
+def gateway_state(menu: str) -> str:
+    gateway = next(
+        (line for line in menu.splitlines() if re.search(r"(?:^|\s)archestra(?:\s|$)", line)),
+        "",
+    )
+    # Claude 2.1.285 uses status icons instead of words. A tool count alone is
+    # not readiness: failed or connecting clients can retain a cached count.
+    if "\u2718" in gateway or re.search(r"\bfailed\b", gateway, re.IGNORECASE):
+        return "failed"
+    if re.search(r"(?:\bconnected\b|\u2714).*\b[1-9]\d* tools?\b", gateway):
+        return "ready"
+    return "pending"
+
+
 def main() -> int:
     pane = os.environ.get("TMUX_PANE")
     child = None
@@ -41,11 +55,11 @@ def main() -> int:
                 next_probe = time.monotonic() + 0.5
             if opened and "Manage MCP servers" in screen:
                 menu = screen.split("Manage MCP servers", 1)[1]
-                gateway = next((line for line in menu.splitlines() if "archestra" in line), "")
-                if re.search(r"\bconnected\b.*\b[1-9]\d* tools?\b", gateway):
+                state = gateway_state(menu)
+                if state == "ready":
                     ready = True
                     break
-                if "failed" in gateway.lower():
+                if state == "failed":
                     break
                 # The resumed TUI can keep the menu's initial connecting
                 # snapshot. Reopen it to observe the native live state.

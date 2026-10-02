@@ -32,14 +32,14 @@ describe("promote a chat attachment into the knowledge repository", () => {
     orgId: string;
     body?: string;
     originalName?: string;
-    lockedChat?: boolean;
+    encryptedChat?: boolean;
   }) {
     const [conversation] = await db
       .insert(schema.conversationsTable)
       .values({
         userId: params.ownerId,
         organizationId: params.orgId,
-        ...(params.lockedChat ? { lockedChat: true } : {}),
+        ...(params.encryptedChat ? { encryptedChat: true } : {}),
       })
       .returning();
 
@@ -152,20 +152,20 @@ describe("promote a chat attachment into the knowledge repository", () => {
     expect(content.body).toContain("Backups are encrypted at rest.");
   });
 
-  test("refuses an attachment from a locked chat", async () => {
+  test("refuses an attachment from an encrypted chat", async () => {
     // Promoting would write the opened bytes into a repository document other
     // members can read and the indexer can quote back — the plaintext copy the
     // chat's encryption exists to prevent.
     const { attachment } = await makeAttachment({
       ownerId: user.id,
       orgId: organizationId,
-      lockedChat: true,
+      encryptedChat: true,
     });
 
     const response = await promote({ attachmentId: attachment.id });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("locked chat");
+    expect(response.json().error.message).toContain("encrypted chat");
 
     const stored = await db
       .select()

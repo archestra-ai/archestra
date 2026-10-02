@@ -9,7 +9,7 @@ import {
 import { forwardRef, type ReactElement } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LOCKED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
+import { ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
@@ -32,7 +32,7 @@ const {
   mockControllerState: { value: "", files: [] as { url: string }[] },
   mockFeatureState: {
     chatSecretScanEnabled: false,
-    lockedChatEnabled: false,
+    encryptedChatEnabled: false,
     chatAttachmentStorageBytesLimit: undefined as number | undefined,
     apiBodyLimitBytes: undefined as number | undefined,
     sandboxArtifactBytesLimit: undefined as number | undefined,
@@ -41,9 +41,9 @@ const {
     agent: null as { sandboxAvailable: boolean } | null,
   },
   // What useConversation resolves to — lets tests exercise an existing
-  // locked chat (vs the new-chat toggle).
+  // encrypted chat (vs the new-chat toggle).
   mockConversationState: {
-    conversation: null as { lockedChat?: boolean } | null,
+    conversation: null as { encryptedChat?: boolean } | null,
   },
   // The upload policy the composer hands to the file picker: the byte cap it
   // enforces and the per-file check it runs. Captured so tests can exercise
@@ -418,8 +418,8 @@ describe("ArchestraPromptInput", () => {
       if (flag === "chatSecretScanEnabled") {
         return mockFeatureState.chatSecretScanEnabled;
       }
-      if (flag === "lockedChatEnabled") {
-        return mockFeatureState.lockedChatEnabled;
+      if (flag === "encryptedChatEnabled") {
+        return mockFeatureState.encryptedChatEnabled;
       }
       if (flag === "chatAttachmentStorageBytesLimit") {
         return mockFeatureState.chatAttachmentStorageBytesLimit;
@@ -448,7 +448,7 @@ describe("ArchestraPromptInput", () => {
     mockControllerState.value = "";
     mockControllerState.files = [];
     mockFeatureState.chatSecretScanEnabled = false;
-    mockFeatureState.lockedChatEnabled = false;
+    mockFeatureState.encryptedChatEnabled = false;
     mockProfileState.agent = null;
     mockToolbarState.isNarrow = false;
     mockConversationState.conversation = null;
@@ -1025,25 +1025,25 @@ describe("ArchestraPromptInput", () => {
     });
   });
 
-  describe("locked-chat composer", () => {
+  describe("encrypted-chat composer", () => {
     it("keeps the attach button usable and shows the explainer drawer while the new-chat toggle is on", () => {
       render(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          lockedChat
-          onLockedChatChange={vi.fn()}
+          encryptedChat
+          onEncryptedChatChange={vi.fn()}
         />,
       );
 
       // The drawer carries the copy that used to live in the toggle tooltip.
       // It says the chat is encrypted here, not that anything is unavailable.
-      const notice = screen.getByTestId(E2eTestId.LockedChatNotice);
+      const notice = screen.getByTestId(E2eTestId.EncryptedChatNotice);
       expect(notice).toHaveTextContent(
-        /Locked chat — encrypted with a key that stays in this browser/,
+        /Use this mode for highly sensitive work\. This chat is private from the team running .+: your messages are encrypted with a key stored in this browser/,
       );
 
-      // Uploads work in a locked chat — the bytes are sealed under the chat's
+      // Uploads work in an encrypted chat — the bytes are sealed under the chat's
       // own key — so the attach button is the ordinary, usable one.
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
@@ -1053,26 +1053,59 @@ describe("ArchestraPromptInput", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("renders no drawer and a normal attach button when locked chat is off", () => {
+    it("tells the user the chosen LLM provider still sees an encrypted chat", () => {
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          encryptedChat
+          onEncryptedChatChange={vi.fn()}
+          currentProvider="anthropic"
+        />,
+      );
+
+      // Encryption keeps the deployment's operators out, not the provider the
+      // conversation is sent to — the notice must not overpromise.
+      expect(
+        screen.getByTestId(E2eTestId.EncryptedChatNotice),
+      ).toHaveTextContent(
+        /Keep in mind that Anthropic, your LLM provider, still sees the conversation\./,
+      );
+
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          encryptedChat
+          onEncryptedChatChange={vi.fn()}
+          currentProvider={undefined}
+        />,
+      );
+      expect(
+        screen.getByTestId(E2eTestId.EncryptedChatNotice),
+      ).toHaveTextContent(
+        /Keep in mind that your LLM provider still sees the conversation\./,
+      );
+    });
+
+    it("renders no drawer and a normal attach button when encrypted chat is off", () => {
       render(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          lockedChat={false}
-          onLockedChatChange={vi.fn()}
+          encryptedChat={false}
+          onEncryptedChatChange={vi.fn()}
         />,
       );
 
       expect(
-        screen.queryByTestId(E2eTestId.LockedChatNotice),
+        screen.queryByTestId(E2eTestId.EncryptedChatNotice),
       ).not.toBeInTheDocument();
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
     });
 
-    it("keeps the drawer and a usable attach button on an existing locked chat", () => {
-      mockConversationState.conversation = { lockedChat: true };
+    it("keeps the drawer and a usable attach button on an existing encrypted chat", () => {
+      mockConversationState.conversation = { encryptedChat: true };
 
       render(
         <ArchestraPromptInput
@@ -1083,7 +1116,7 @@ describe("ArchestraPromptInput", () => {
       );
 
       expect(
-        screen.getByTestId(E2eTestId.LockedChatNotice),
+        screen.getByTestId(E2eTestId.EncryptedChatNotice),
       ).toBeInTheDocument();
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
@@ -1093,21 +1126,21 @@ describe("ArchestraPromptInput", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("toggles locked chat from the composer button, whose tooltip is just the name", () => {
-      mockFeatureState.lockedChatEnabled = true;
-      const onLockedChatChange = vi.fn();
+    it("toggles encrypted chat from the composer button, whose tooltip is just the name", () => {
+      mockFeatureState.encryptedChatEnabled = true;
+      const onEncryptedChatChange = vi.fn();
 
       render(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          lockedChat={false}
-          onLockedChatChange={onLockedChatChange}
+          encryptedChat={false}
+          onEncryptedChatChange={onEncryptedChatChange}
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "Locked chat" }));
-      expect(onLockedChatChange).toHaveBeenCalledWith(true);
+      fireEvent.click(screen.getByRole("button", { name: "Encrypted chat" }));
+      expect(onEncryptedChatChange).toHaveBeenCalledWith(true);
 
       // The long explanation moved to the drawer; the hover stays succinct —
       // just the name plus the global shortcut.
@@ -1115,26 +1148,77 @@ describe("ArchestraPromptInput", () => {
         screen
           .getAllByTestId("tooltip-content")
           .some((tooltip) =>
-            tooltip.textContent?.trim().startsWith("Locked chat"),
+            tooltip.textContent?.trim().startsWith("Encrypted chat"),
           ),
       ).toBe(true);
     });
 
+    it("keeps the lock visible when encrypted chats are off and explains how to enable them", async () => {
+      mockFeatureState.encryptedChatEnabled = false;
+      const onEncryptedChatChange = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          encryptedChat={false}
+          onEncryptedChatChange={onEncryptedChatChange}
+        />,
+      );
+
+      // No toggle to arm — the lock is a pointer to the feature instead.
+      expect(
+        screen.queryByTestId(E2eTestId.EncryptedChatToggle),
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTestId(E2eTestId.EncryptedChatSetupHint));
+
+      expect(
+        await screen.findByText("ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /Learn how to enable it/ }),
+      ).toHaveAttribute(
+        "href",
+        expect.stringContaining("platform-chat#key-escrow"),
+      );
+      expect(onEncryptedChatChange).not.toHaveBeenCalled();
+    });
+
+    it("shows neither the toggle nor the setup hint while the config is loading", () => {
+      (
+        mockFeatureState as { encryptedChatEnabled: boolean | undefined }
+      ).encryptedChatEnabled = undefined;
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          encryptedChat={false}
+          onEncryptedChatChange={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId(E2eTestId.EncryptedChatToggle),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId(E2eTestId.EncryptedChatSetupHint),
+      ).not.toBeInTheDocument();
+    });
+
     it("claims the Alt+I handshake event and toggles the draft off and back on", () => {
-      mockFeatureState.lockedChatEnabled = true;
-      const onLockedChatChange = vi.fn();
+      mockFeatureState.encryptedChatEnabled = true;
+      const onEncryptedChatChange = vi.fn();
 
       const { rerender } = render(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          lockedChat
-          onLockedChatChange={onLockedChatChange}
+          encryptedChat
+          onEncryptedChatChange={onEncryptedChatChange}
         />,
       );
 
       // Armed draft + shortcut: claimed (no navigation) and toggled off.
-      const disarm = new Event(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, {
+      const disarm = new Event(ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT, {
         cancelable: true,
       });
       let unclaimed: boolean | undefined;
@@ -1142,48 +1226,48 @@ describe("ArchestraPromptInput", () => {
         unclaimed = window.dispatchEvent(disarm);
       });
       expect(unclaimed).toBe(false);
-      expect(onLockedChatChange).toHaveBeenLastCalledWith(false);
+      expect(onEncryptedChatChange).toHaveBeenLastCalledWith(false);
 
       // Shortcut again on the disarmed composer: toggled back on.
       rerender(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          lockedChat={false}
-          onLockedChatChange={onLockedChatChange}
+          encryptedChat={false}
+          onEncryptedChatChange={onEncryptedChatChange}
         />,
       );
       act(() => {
         window.dispatchEvent(
-          new Event(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+          new Event(ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
         );
       });
-      expect(onLockedChatChange).toHaveBeenLastCalledWith(true);
+      expect(onEncryptedChatChange).toHaveBeenLastCalledWith(true);
     });
 
     it("leaves the handshake event unclaimed while chatting in a conversation", () => {
-      mockFeatureState.lockedChatEnabled = true;
-      const onLockedChatChange = vi.fn();
+      mockFeatureState.encryptedChatEnabled = true;
+      const onEncryptedChatChange = vi.fn();
 
       render(
         <ArchestraPromptInput
           {...defaultProps}
           conversationId="conversation-1"
           allowFileUploads={true}
-          onLockedChatChange={onLockedChatChange}
+          onEncryptedChatChange={onEncryptedChatChange}
         />,
       );
 
       let unclaimed: boolean | undefined;
       act(() => {
         unclaimed = window.dispatchEvent(
-          new Event(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+          new Event(ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
         );
       });
 
       // Unclaimed → the global handler proceeds to navigate to a fresh draft.
       expect(unclaimed).toBe(true);
-      expect(onLockedChatChange).not.toHaveBeenCalled();
+      expect(onEncryptedChatChange).not.toHaveBeenCalled();
     });
   });
 

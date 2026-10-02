@@ -91,7 +91,7 @@ export async function startActiveLlmSpan<T>(params: {
   promptMessages?: unknown;
   /**
    * Suppress prompt/completion content capture for this span even when
-   * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (locked chat sessions). Metadata
+   * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (encrypted chat sessions). Metadata
    * attributes (model, usage, cost) are unaffected.
    */
   suppressContent?: boolean;

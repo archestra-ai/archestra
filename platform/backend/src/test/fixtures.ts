@@ -982,7 +982,7 @@ async function makeConversation(
       | "modelId"
       | "chatApiKeyId"
       | "thinkingEffort"
-      | "lockedChat"
+      | "encryptedChat"
     >
   > = {},
 ) {

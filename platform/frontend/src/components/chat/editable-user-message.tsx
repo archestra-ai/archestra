@@ -44,13 +44,13 @@ interface EditableUserMessageProps {
   attachments?: FileAttachment[];
   /**
    * The conversation these attachments belong to. Needed to open them in a
-   * locked chat, where the bytes only come back to a request bearing that
+   * encrypted chat, where the bytes only come back to a request bearing that
    * conversation's key.
    */
   conversationId?: string;
   /**
    * Whether an attachment on this message may be copied into a knowledge base.
-   * False in a locked chat, where the backend refuses it — copying would write
+   * False in an encrypted chat, where the backend refuses it — copying would write
    * a plaintext copy others can read. Decided by the caller, which already
    * knows the conversation, so a transcript of N messages does not open N
    * subscriptions to it.

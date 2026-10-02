@@ -1554,6 +1554,53 @@ describe("chat active run config", () => {
   });
 });
 
+describe("encrypted chat escrow config", () => {
+  const originalEnv = process.env;
+  const ENV_NAMES = [
+    "ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY",
+    "ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY",
+    "ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY",
+  ];
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    process.env.ARCHESTRA_DATABASE_URL =
+      "postgresql://archestra:pass@localhost:5432/archestra";
+    // Empty rather than deleted: config loads a local .env, and dotenv does
+    // not override a variable that is already set.
+    for (const name of ENV_NAMES) process.env[name] = "";
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test.each(ENV_NAMES)("reads the escrow key from %s", async (name) => {
+    process.env[name] = " pem-value ";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.encryptedChat.escrowPublicKey).toBe("pem-value");
+  });
+
+  test("prefers the current name over the legacy ones", async () => {
+    process.env.ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY = "current";
+    process.env.ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY = "locked";
+    process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY = "incognito";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.encryptedChat.escrowPublicKey).toBe("current");
+  });
+
+  test("is unset when no name is configured", async () => {
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.encryptedChat.escrowPublicKey).toBeUndefined();
+  });
+});
+
 describe("Agent Runtime catalog images", () => {
   beforeEach(() => {
     vi.resetModules();

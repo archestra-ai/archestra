@@ -320,6 +320,7 @@ describe("buildStartupGuardContext", () => {
       appName: "Archestra",
       mcp: {
         serverName: "prod_gateway",
+        toolPrefix: "archestra__",
         url: "https://archestra.example.com/v1/mcp/prod-gateway",
       },
       proxy: {

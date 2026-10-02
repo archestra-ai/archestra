@@ -49,6 +49,7 @@ test.each([
           },
     mcp: {
       serverName: "test-gateway",
+      toolPrefix: "archestra__",
       url: "https://proxy.example/v1/mcp/test",
     },
     skills: null,

@@ -28,7 +28,7 @@ const KB_EMBEDDING = {
   response: { object: "list", data: [], model: "text-embedding-3-small" },
 };
 
-describe("LogDetail locked-chat content", () => {
+describe("LogDetail encrypted-chat content", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stubNavigation();
@@ -52,23 +52,25 @@ describe("LogDetail locked-chat content", () => {
   it("explains encrypted content instead of rendering the marker", async () => {
     renderInteraction({
       ...KB_EMBEDDING,
-      request: { __lockedChatSealed: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60" },
-      response: { __lockedChatSealed: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60" },
+      request: {
+        __encryptedChatSealed: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60",
+      },
+      response: {
+        __encryptedChatSealed: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60",
+      },
     });
 
     // Only the response accordion is open by default; the raw marker must
     // never reach the JSON block.
-    expect(
-      await screen.findByText("Encrypted locked-chat content"),
-    ).toBeVisible();
-    expect(screen.queryByText(/__lockedChatSealed/)).not.toBeInTheDocument();
+    expect(await screen.findByText("Encrypted chat content")).toBeVisible();
+    expect(screen.queryByText(/__encryptedChatSealed/)).not.toBeInTheDocument();
   });
 
   it("says content was never stored when it was redacted", async () => {
     renderInteraction({
       ...KB_EMBEDDING,
-      request: { __redacted: "locked_chat" },
-      response: { __redacted: "locked_chat" },
+      request: { __redacted: "encrypted_chat" },
+      response: { __redacted: "encrypted_chat" },
     });
 
     expect(await screen.findByText("Content not stored")).toBeVisible();

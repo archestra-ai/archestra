@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import {
   ATTACHMENT_CONTENT_URL_PREFIX,
-  getLockedChatKey,
-  LOCKED_CHAT_KEY_HEADER,
-} from "@/lib/chat/locked-chat";
+  ENCRYPTED_CHAT_KEY_HEADER,
+  getEncryptedChatKey,
+} from "@/lib/chat/encrypted-chat";
 
 /**
  * Resolving an attachment byte URL for the DOM.
  *
- * A locked chat's attachment bytes are sealed under a key this browser holds
+ * An encrypted chat's attachment bytes are sealed under a key this browser holds
  * and sends in a request header — and a header is exactly what the browser
  * will not send for you. `<img src>`, `<a download>` and `<iframe src>` issue
  * their own bare GETs, which reach the byte endpoint without the key and get a
@@ -39,7 +39,7 @@ export function useAttachmentContentUrl(
 ): { url: string | null; failed: boolean } {
   // Read at render, not in the effect, so a chat with no stored key never
   // schedules a fetch at all.
-  const key = lockedChatKeyFor(url, conversationId);
+  const key = encryptedChatKeyFor(url, conversationId);
 
   const [resolved, setResolved] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -87,7 +87,7 @@ export async function resolveSealedAttachmentUrl(
   url: string,
   conversationId: string | null | undefined,
 ): Promise<string | null> {
-  const key = lockedChatKeyFor(url, conversationId);
+  const key = encryptedChatKeyFor(url, conversationId);
   return key ? await fetchSealedObjectUrl(url, key) : null;
 }
 
@@ -98,7 +98,7 @@ export async function resolveSealedAttachmentUrl(
  * chat attachment, there is no conversation, or this browser holds no key for
  * it (an ordinary chat — the common case).
  */
-function lockedChatKeyFor(
+function encryptedChatKeyFor(
   url: string | undefined,
   conversationId: string | null | undefined,
 ): string | null {
@@ -108,12 +108,12 @@ function lockedChatKeyFor(
   ) {
     return null;
   }
-  return conversationId ? getLockedChatKey(conversationId) : null;
+  return conversationId ? getEncryptedChatKey(conversationId) : null;
 }
 
 async function fetchSealedObjectUrl(url: string, key: string): Promise<string> {
   const response = await fetch(url, {
-    headers: { [LOCKED_CHAT_KEY_HEADER]: key },
+    headers: { [ENCRYPTED_CHAT_KEY_HEADER]: key },
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return URL.createObjectURL(await response.blob());

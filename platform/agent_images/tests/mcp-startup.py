@@ -79,9 +79,12 @@ class Handler(BaseHTTPRequestHandler):
             self.server.list_started.set()
             if self.server.failure == "timeout":
                 self.server.discovery_failed.set()
+            if self.server.failure == "empty":
+                self.server.discovery_failed.set()
+                self.server.release.set()
             if not self.server.release.wait(45):
                 return
-            result = {"tools": [{"name": name, "description": "Synthetic startup test tool", "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}} for name in TOOLS]}
+            result = {"tools": [{"name": name, "description": "Synthetic startup test tool", "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}} for name in ([] if self.server.failure == "empty" else TOOLS)]}
             self.server.catalog_sent = True
             print(f"{CLIENT}: gateway catalog released", flush=True)
         elif method == "tools/call":
@@ -166,11 +169,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def respond(self, body, content_type="application/json", status=200):
         data = b"" if body is None else body if isinstance(body, bytes) else json.dumps(body).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
         try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
             self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError):
             pass
@@ -199,6 +202,10 @@ class StartupTest(unittest.TestCase):
         for method in ("initialize", "tools/list"):
             with self.subTest(method=method):
                 self.run_client("one_shot", failure=method)
+
+    if CLIENT == "claude-code":
+        def test_empty_gateway_catalog(self):
+            self.run_client("one_shot", failure="empty")
 
     if CLIENT != "hermes":
         def test_plain_cli(self):
@@ -242,10 +249,13 @@ class StartupTest(unittest.TestCase):
 
     def run_turn(self, root, home, runtime, env, server, mode, plain, failure, hold, idle=False):
         turn_prefix = env["ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX"]
+        # A previous daemon can still be shutting down when a resumed turn
+        # starts. Keep native session storage, but use a fresh socket per turn.
+        tmux_socket = f"{root.name}-{Path(turn_prefix).name}"
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(home)
-            os.execvpe("tmux", ["tmux", "-L", root.name, "new-session", "-s", "agent", "-x", "180", "-y", "50", "/bin/bash", str(BIN / ("archestra-" + CLIENT))], env)
+            os.execvpe("tmux", ["tmux", "-L", tmux_socket, "new-session", "-s", "agent", "-x", "180", "-y", "50", "/bin/bash", str(BIN / ("archestra-" + CLIENT))], env)
         fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 50, 180, 0, 0))
         output = bytearray()
         status = None
@@ -267,7 +277,7 @@ class StartupTest(unittest.TestCase):
                     self.fail("Idle resume submitted inference without a prompt")
                 if failure and server.requests:
                     self.fail("Inference ran after required gateway discovery failed: " + repr(server.requests[:1]))
-                if failure and server.discovery_failed.is_set() and time.monotonic() - started > (40 if failure == "timeout" else 12):
+                if failure and server.discovery_failed.is_set() and time.monotonic() - started > (40 if failure in ("timeout", "empty") else 12):
                     break
                 if server.list_started.is_set() and not server.release.is_set():
                     held_since = held_since or time.monotonic()
@@ -289,6 +299,7 @@ class StartupTest(unittest.TestCase):
             if failure:
                 self.assertTrue(server.discovery_failed.is_set(), details)
                 self.assertFalse(server.requests, details)
+                self.assertTrue(Path(turn_prefix + ".failure").exists(), details)
                 envelope = json.loads(Path(turn_prefix + ".failure").read_text())
                 self.assertIn(envelope["code"], ("mcp_startup", "codex_startup"))
                 self.assertNotIn("synthetic-token", envelope["message"])
@@ -330,6 +341,18 @@ class StartupTest(unittest.TestCase):
                 self.assertIsNone(status, "Interactive client exited")
             print(f"{CLIENT} {mode} plain={plain}: barrier, all recovery tools executed, transcript, exit OK", flush=True)
         finally:
+            # A retained TUI has a separate foreground process group. Killing
+            # only tmux leaves that client writing into the temporary home.
+            pane = subprocess.run(["tmux", "-L", tmux_socket, "display-message", "-p", "-t", "agent:0.0", "#{pane_pid}"], env=env, capture_output=True, text=True)
+            if pane.returncode == 0:
+                foreground = subprocess.run(["ps", "-o", "tpgid=", "-p", pane.stdout.strip()], capture_output=True, text=True)
+                if foreground.returncode == 0:
+                    group = int(foreground.stdout.strip() or "-1")
+                    if group > 0 and group != os.getpgrp():
+                        try:
+                            os.killpg(group, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
             server.release.set()
             if status is None:
                 try:
@@ -338,7 +361,7 @@ class StartupTest(unittest.TestCase):
                 except ProcessLookupError:
                     pass
             os.close(fd)
-            subprocess.run(["tmux", "-L", root.name, "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            subprocess.run(["tmux", "-L", tmux_socket, "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
 if __name__ == "__main__":

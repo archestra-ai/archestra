@@ -234,7 +234,7 @@ const interactionsTable = pgTable(
     /**
      * Non-null marks this row's five content columns (request, processedRequest,
      * response, dualLlmAnalyses, unsafeContextBoundary) as encrypted under an
-     * locked chat's browser-held key rather than the server key, and
+     * encrypted chat's browser-held key rather than the server key, and
      * names the conversation whose escrow record recovers it. Readers MUST
      * consult this before decrypting: a server-key decrypt of these envelopes
      * throws.
@@ -243,7 +243,7 @@ const interactionsTable = pgTable(
      * retention — and no index: reads test it per row, and break-glass rides
      * the existing sessionId index.
      */
-    lockedChatConversationId: uuid("locked_chat_conversation_id"),
+    encryptedChatConversationId: uuid("encrypted_chat_conversation_id"),
     type: varchar("type").$type<SupportedProviderDiscriminator>().notNull(),
     model: varchar("model"),
     /**

@@ -13,8 +13,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useAttachmentContentUrl } from "@/lib/chat/encrypted-chat-attachment";
 import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
-import { useAttachmentContentUrl } from "@/lib/chat/locked-chat-attachment";
 import { useUpdateFileContent } from "@/lib/skills-sandbox/use-update-file-content";
 
 /** Anything previewable: a display name, a MIME type, and a byte endpoint. */
@@ -55,7 +55,7 @@ export function FilePreview({
   onExitEdit?: () => void;
   /**
    * The conversation this file is being previewed from, when there is one. A
-   * locked chat's attachment only serves its bytes to a request bearing the
+   * encrypted chat's attachment only serves its bytes to a request bearing the
    * conversation key, so the URL is resolved through it once below and every
    * renderer beneath sees an ordinary (`blob:`) URL.
    */
@@ -483,7 +483,7 @@ function FileTextPreview({
 
 /**
  * Download-only fallback. `contentUrl` is the resolved URL (a `blob:` in a
- * locked chat), so the download link works wherever the preview would have.
+ * encrypted chat), so the download link works wherever the preview would have.
  */
 function UnsupportedPreview({
   name,

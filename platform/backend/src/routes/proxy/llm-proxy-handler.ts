@@ -43,9 +43,9 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
-  LOCKED_CHAT_KEY_HEADER,
-  parseLockedChatDekHeader,
-} from "@/content-encryption/locked-chat";
+  ENCRYPTED_CHAT_KEY_HEADER,
+  parseEncryptedChatDekHeader,
+} from "@/content-encryption/encrypted-chat";
 import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
@@ -148,6 +148,10 @@ import {
   type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
 import {
+  connectionProxySetupContext,
+  verifyConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
+import {
   nativeSetupClientFromProvenance,
   resolveConnectionSetupScope,
 } from "@/services/connection-setup-scope";
@@ -204,12 +208,12 @@ import {
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
 import * as utils from "./utils";
-import type { SessionSource } from "./utils/headers/session-id";
 import {
-  type LockedChatAuditDisposition,
-  redactLockedChatInteraction,
-  resolveLockedChatAuditContext,
-} from "./utils/locked-chat-session";
+  type EncryptedChatAuditDisposition,
+  redactEncryptedChatInteraction,
+  resolveEncryptedChatAuditContext,
+} from "./utils/encrypted-chat-session";
+import type { SessionSource } from "./utils/headers/session-id";
 
 const {
   observability: {
@@ -247,9 +251,9 @@ export interface LLMProxyContext<TRequest> {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   /**
-   * Locked chat session: span content capture is suppressed and persisted
+   * Encrypted chat session: span content capture is suppressed and persisted
    * content is either encrypted or redacted (usage/cost metadata untouched).
-   * True whenever `locked-chat.kind !== "none"`.
+   * True whenever `encrypted-chat.kind !== "none"`.
    */
   suppressContent: boolean;
   /**
@@ -257,7 +261,7 @@ export interface LLMProxyContext<TRequest> {
    * carries the validated conversation key; `redact` is the fail-closed
    * fallback. Resolved once per request so every write site agrees.
    */
-  lockedChat: LockedChatAuditDisposition;
+  encryptedChat: EncryptedChatAuditDisposition;
   /**
    * Caller environment an advisor consultation bills to, resolved from the
    * loopback-gated delegation header and re-validated against the executing
@@ -1198,13 +1202,13 @@ export async function handleLLMProxy<
         : "provider_key";
   }
 
-  // Locked chat sessions: interaction rows keep all usage/cost/session
+  // Encrypted chat sessions: interaction rows keep all usage/cost/session
   // metadata, but their content-bearing fields are encrypted under the
   // conversation's browser-held key (or redacted if that cannot be done
   // safely), and span content capture is suppressed either way. Resolved once
   // up front (server-derived, fail closed) so the catch below and both stream
   // handlers agree on it.
-  const lockedChat = await resolveLockedChatAuditContext({
+  const encryptedChat = await resolveEncryptedChatAuditContext({
     source,
     // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
     // from forwarded headers, and this seam must only ever match the
@@ -1212,17 +1216,17 @@ export async function handleLLMProxy<
     requestIp: request.socket.remoteAddress,
     sessionId,
     userId,
-    dek: readLockedChatDek(request),
+    dek: readEncryptedChatDek(request),
   });
-  // Content never reaches spans or logs for a locked-chat session, whether it
+  // Content never reaches spans or logs for an encrypted-chat session, whether it
   // ends up encrypted or redacted.
-  const suppressContent = lockedChat.kind !== "none";
+  const suppressContent = encryptedChat.kind !== "none";
   const { active: appaActive, unsupportedClientAction } =
     await getGuardrailsDeployment();
   if (appaActive && suppressContent) {
     throw new ApiError(
       409,
-      "OpenAPPA does not yet support encrypted policy storage for locked chats",
+      "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
     );
   }
 
@@ -1555,7 +1559,27 @@ export async function handleLLMProxy<
     let childCompactionContext: string | undefined;
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
-    let connectionSetupBypass = false;
+    const approvedProxySetupContext = connectionProxySetupContext(request.raw);
+    const approvedProxySetup =
+      !!approvedProxySetupContext &&
+      [virtualKeyId, passthroughVirtualKeyId].some(
+        (keyId) =>
+          !!keyId &&
+          verifyConnectionProxySetupContext({
+            token: approvedProxySetupContext,
+            organizationId: resolvedAgent.organizationId,
+            virtualApiKeyId: keyId,
+            proxyAgentId: resolvedAgent.id,
+            secret: config.auth.secret,
+          }),
+      );
+    let connectionSetupBypass = appaActive && approvedProxySetup;
+    if (connectionSetupBypass) {
+      logger.info(
+        { profileId: resolvedAgent.id, proof: "approved-installer" },
+        "Connection setup APPA bypass active",
+      );
+    }
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
@@ -1610,6 +1634,7 @@ export async function handleLLMProxy<
         isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
       const unsupportedClient =
         appaActive &&
+        !connectionSetupBypass &&
         !isInternalChat &&
         !delegatedRun &&
         headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
@@ -1623,7 +1648,12 @@ export async function handleLLMProxy<
           "This client cannot use Guardrails. Send X-Appa-Session-ID to use guardrails, or ask an administrator to choose Bypass on the Guardrails Overview tab.",
         );
       }
-      if (appaActive && !delegatedRun && !unsupportedClient) {
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        !delegatedRun &&
+        !unsupportedClient
+      ) {
         const callerId = appaUserId
           ? `user:${appaUserId}`
           : authenticatedApp
@@ -2161,7 +2191,7 @@ export async function handleLLMProxy<
       dualLlmAnalyses,
       unsafeContextBoundary,
       suppressContent,
-      lockedChat,
+      encryptedChat,
       delegationBillingEnvironmentId,
       appId: attributedAppId,
       externalAgentId,
@@ -2255,7 +2285,7 @@ export async function handleLLMProxy<
       };
       await persistProxyInteraction(
         record,
-        lockedChat,
+        encryptedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -2361,7 +2391,7 @@ async function handleStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    lockedChat,
+    encryptedChat,
     delegationBillingEnvironmentId,
     appId,
     externalAgentId,
@@ -2543,7 +2573,7 @@ async function handleStreaming<
       };
       await persistProxyInteraction(
         record,
-        lockedChat,
+        encryptedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -2742,7 +2772,7 @@ async function handleStreaming<
           ]);
         }
 
-        // Capture streamed completion content (suppressed for locked chats)
+        // Capture streamed completion content (suppressed for encrypted chats)
         if (captureContent && !suppressContent && state.text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
             [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
@@ -3159,7 +3189,7 @@ async function handleStreaming<
         });
         await persistProxyInteraction(
           record,
-          lockedChat,
+          encryptedChat,
           delegationBillingEnvironmentId,
         );
       } catch (interactionError) {
@@ -3211,7 +3241,7 @@ async function handleNonStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    lockedChat,
+    encryptedChat,
     delegationBillingEnvironmentId,
     appId,
     externalAgentId,
@@ -3384,7 +3414,7 @@ async function handleNonStreaming<
         adapter.getFinishReasons(),
       );
 
-      // Capture completion content (suppressed for locked chats)
+      // Capture completion content (suppressed for encrypted chats)
       if (captureContent && !suppressContent) {
         const text = adapter.getText?.();
         if (text) {
@@ -3598,7 +3628,7 @@ async function handleNonStreaming<
       });
       await persistProxyInteraction(
         refusalRecord,
-        lockedChat,
+        encryptedChat,
         delegationBillingEnvironmentId,
       );
 
@@ -3744,7 +3774,7 @@ async function handleNonStreaming<
     });
     await persistProxyInteraction(
       record,
-      lockedChat,
+      encryptedChat,
       delegationBillingEnvironmentId,
     );
   } catch (interactionError) {
@@ -4132,7 +4162,7 @@ function extractDurationStatusCode(error: unknown): string {
 
 /**
  * The single funnel every proxy interaction write goes through, so all five
- * sites treat locked-chat identically.
+ * sites treat encrypted-chat identically.
  *
  * - `encrypt`: store the full record, keyed to the conversation's browser-held
  *   DEK (recoverable offline via that conversation's escrow record).
@@ -4142,12 +4172,14 @@ function extractDurationStatusCode(error: unknown): string {
  */
 async function persistProxyInteraction(
   record: InsertInteraction,
-  lockedChat: LockedChatAuditDisposition,
+  encryptedChat: EncryptedChatAuditDisposition,
   environmentIdOverride?: string,
 ): Promise<void> {
   await InteractionModel.create(
-    lockedChat.kind === "redact" ? redactLockedChatInteraction(record) : record,
-    lockedChat.kind === "encrypt" ? lockedChat.audit : null,
+    encryptedChat.kind === "redact"
+      ? redactEncryptedChatInteraction(record)
+      : record,
+    encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
     environmentIdOverride ? { environmentIdOverride } : undefined,
   );
 }
@@ -4281,16 +4313,16 @@ async function resolveAttributedAppId(
 }
 
 /**
- * Read the locked chat key off the request. A malformed header is
+ * Read the encrypted chat key off the request. A malformed header is
  * treated as absent (the resolver then fails closed to redaction) rather than
  * failing the LLM call — the proxy's job is to serve the request; losing the
  * key costs audit fidelity, not the user's turn.
  */
-function readLockedChatDek(request: FastifyRequest): Buffer | null {
-  const raw = request.headers[LOCKED_CHAT_KEY_HEADER];
+function readEncryptedChatDek(request: FastifyRequest): Buffer | null {
+  const raw = request.headers[ENCRYPTED_CHAT_KEY_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   try {
-    return parseLockedChatDekHeader(value);
+    return parseEncryptedChatDekHeader(value);
   } catch {
     return null;
   }

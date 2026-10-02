@@ -434,6 +434,80 @@ describe("POST /api/llm-virtual-keys", () => {
     );
   });
 
+  test("POST /api/llm-virtual-keys maps several endpoints of a self-hosted provider", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    grantEverywhere(["llmVirtualKey"]);
+
+    // Each OpenAI-compatible key is its own server with its own models, so a
+    // key that reaches both servers needs both mapped.
+    const [glmKey, deepseekKey] = await Promise.all(
+      ["GLM gateway", "DeepSeek gateway"].map(async (name) =>
+        makeLlmProviderApiKey(
+          organizationId,
+          (await makeSecret({ secret: { apiKey: `sk-${name}` } })).id,
+          { provider: "vllm", name },
+        ),
+      ),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "two-endpoint-router-key",
+        providerApiKeys: [
+          { provider: "vllm", providerApiKeyId: glmKey.id },
+          { provider: "vllm", providerApiKeyId: deepseekKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().providerApiKeys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "vllm",
+          providerApiKeyId: glmKey.id,
+          providerApiKeyName: "GLM gateway",
+        }),
+        expect.objectContaining({
+          provider: "vllm",
+          providerApiKeyId: deepseekKey.id,
+          providerApiKeyName: "DeepSeek gateway",
+        }),
+      ]),
+    );
+    expect(response.json().providerApiKeys).toHaveLength(2);
+  });
+
+  test("POST /api/llm-virtual-keys rejects the same provider key mapped twice", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    grantEverywhere(["llmVirtualKey"]);
+    const secret = await makeSecret({ secret: { apiKey: "sk-vllm" } });
+    const vllmKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "vllm",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "repeated-key",
+        providerApiKeys: [
+          { provider: "vllm", providerApiKeyId: vllmKey.id },
+          { provider: "vllm", providerApiKeyId: vllmKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("is mapped more than once");
+  });
+
   test("POST /api/llm-virtual-keys rejects provider mismatches in model router mappings", async ({
     makeLlmProviderApiKey,
     makeSecret,

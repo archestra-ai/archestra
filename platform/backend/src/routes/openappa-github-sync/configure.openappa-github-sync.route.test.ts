@@ -24,6 +24,7 @@ import {
 } from "@/services/openappa-github-sync";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./openappa-github-sync.routes";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture, not a React hook
@@ -55,6 +56,7 @@ describe("APPA GitHub sync", () => {
       Object.assign(request, { user, organizationId });
     });
     registerAuditLogHook(app);
+    registerRoutePermissions(app);
     await app.register(routes);
     server.use(
       http.get(
@@ -714,13 +716,17 @@ describe("APPA GitHub sync", () => {
 
     const manager = await makeUser();
     const role = await makeCustomRole(organizationId, {
-      permission: { organization: ["update"], toolPolicy: ["read", "update"] },
+      permission: {
+        openappaSettings: ["update"],
+        openappaPolicy: ["read", "update"],
+      },
     });
     await makeMember(manager.id, organizationId, { role: role.role });
     const managerApp = createFastifyInstance();
     managerApp.addHook("onRequest", async (request) => {
       Object.assign(request, { user: manager, organizationId });
     });
+    registerRoutePermissions(managerApp);
     await managerApp.register(routes);
     try {
       expect(

@@ -557,6 +557,13 @@ export function AppSidebar() {
                   "text-destructive hover:text-destructive data-[active=true]:text-destructive",
               };
             }
+            if (
+              item.url === "/openappa" &&
+              permissionMap &&
+              !permissionMap["/openappa"]
+            ) {
+              return { ...item, url: "/openappa/yells" };
+            }
             if (item.url === "/llm/costs") {
               return { ...item, url: getCostsNavigationUrl(permissionMap) };
             }

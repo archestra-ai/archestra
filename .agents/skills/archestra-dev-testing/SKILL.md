@@ -45,12 +45,12 @@ ready, run the relevant checks locally from `platform/` with `pnpm` (including
 focused tests for changed behavior) and review the PR policy results. Use the
 `run-e2e` label when browser coverage is worth getting before queue entry.
 
-When the PR is ready, add it to the merge queue. If a queue check fails, read
-the failure, reproduce it locally, fix it, run the affected local checks, push
-the fix, and requeue. Keep the full failure picture from the queue run; do not
-blindly rerun until it passes. Release-please PRs are an exception: their
-platform lint/build job also runs before queue entry so generated release files
-can be committed.
+When asked to add a PR to the merge queue or repair queue CI, load
+[archestra-merge-queue](../archestra-merge-queue/SKILL.md) and follow it through
+merge or an actionable blocker. It covers queue identity, failure diagnosis,
+local reproduction, fixes, publication, and requeueing. Release-please PRs are
+an exception to queue-only validation: their platform lint/build job also runs
+before queue entry so generated release files can be committed.
 
 ## Pick the level
 

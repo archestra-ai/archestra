@@ -8,10 +8,7 @@ import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { formatExpiration } from "@/components/create-virtual-key-dialog";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
-import {
-  type ProviderApiKeyMap,
-  providerApiKeyMapToArray,
-} from "@/components/provider-key-mappings-field";
+import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
@@ -41,9 +38,8 @@ export function EditVirtualKeyDialog({
   const [name, setName] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
-    {},
-  );
+  const [providerApiKeyIds, setProviderApiKeyIds] =
+    useState<ProviderApiKeyMappings>([]);
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   // The permissions section keeps its edits in its own form. This dialog's
@@ -68,11 +64,8 @@ export function EditVirtualKeyDialog({
     const initialExpiresAt = virtualKey.expiresAt
       ? new Date(virtualKey.expiresAt)
       : null;
-    const initialProviderApiKeyIds = Object.fromEntries(
-      virtualKey.providerApiKeys.map((mapping) => [
-        mapping.provider,
-        mapping.providerApiKeyId,
-      ]),
+    const initialProviderApiKeyIds = virtualKey.providerApiKeys.map(
+      ({ provider, providerApiKeyId }) => ({ provider, providerApiKeyId }),
     );
     setName(virtualKey.name);
     setLabels(virtualKey.labels);
@@ -104,7 +97,7 @@ export function EditVirtualKeyDialog({
             name: name.trim(),
             keyType: "standard",
             expiresAt: expiresAt ?? undefined,
-            providerApiKeys: providerApiKeyMapToArray(providerApiKeyIds),
+            providerApiKeys: providerApiKeyIds,
             labels: finalLabels,
           },
     });
@@ -121,7 +114,7 @@ export function EditVirtualKeyDialog({
   ]);
 
   if (!virtualKey) return null;
-  const standardReady = providerApiKeyMapToArray(providerApiKeyIds).length > 0;
+  const standardReady = providerApiKeyIds.length > 0;
   const canSubmit =
     name.trim().length > 0 &&
     (isPassthrough || standardReady) &&

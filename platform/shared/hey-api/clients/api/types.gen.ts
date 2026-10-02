@@ -328,7 +328,7 @@ export type OpenAiChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -1890,7 +1890,7 @@ export type CerebrasChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -2404,7 +2404,7 @@ export type MistralChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -2798,7 +2798,7 @@ export type PerplexityChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -3193,7 +3193,7 @@ export type GroqChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -3587,7 +3587,7 @@ export type OpenrouterChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -4973,7 +4973,7 @@ export type DeepSeekChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -5368,7 +5368,7 @@ export type ArchestraChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -6200,7 +6200,7 @@ export type XaiChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -6634,7 +6634,7 @@ export type OpenAiChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -8196,7 +8196,7 @@ export type CerebrasChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -8710,7 +8710,7 @@ export type MistralChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9104,7 +9104,7 @@ export type PerplexityChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9499,7 +9499,7 @@ export type GroqChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9893,7 +9893,7 @@ export type OpenrouterChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -11279,7 +11279,7 @@ export type DeepSeekChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -11674,7 +11674,7 @@ export type ArchestraChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -12506,7 +12506,7 @@ export type XaiChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -22249,6 +22249,7 @@ export type StartAgentWorkspaceTransferData = {
         path: string;
         size: number;
         sha256: string;
+        location?: 'workspace' | 'attachments';
     };
     path: {
         taskId: string;
@@ -44001,7 +44002,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -44483,7 +44484,7 @@ export type GithubCopilotChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -50911,7 +50912,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -51237,7 +51238,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -51722,7 +51723,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52048,7 +52049,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52533,7 +52534,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52859,7 +52860,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -58144,7 +58145,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -58470,7 +58471,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -58955,7 +58956,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -59281,7 +59282,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -59766,7 +59767,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -60092,7 +60093,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -64650,7 +64651,7 @@ export type KimiChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -65132,7 +65133,7 @@ export type KimiChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -79672,7 +79673,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -80154,7 +80155,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -86921,6 +86922,12 @@ export type GetOpenAppaYellsResponses = {
             resolvedAt: string | null;
             resolvedBy: string | null;
             hasArchive: boolean;
+            caller: {
+                id: string;
+                type?: 'user' | 'service_account';
+                name: string | null;
+                email: string | null;
+            } | null;
         }>;
         pagination: {
             limit: number;
@@ -87107,6 +87114,12 @@ export type GetOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -87206,6 +87219,12 @@ export type UpdateOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -87499,7 +87518,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -87523,7 +87542,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
     };
     path?: never;
@@ -87607,7 +87626,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87793,7 +87812,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87808,7 +87827,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
     };
     path: {
@@ -87897,7 +87916,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -108084,7 +108103,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
         };
     }>;
 };
@@ -108168,7 +108187,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
     };
 };
 

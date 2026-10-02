@@ -477,10 +477,6 @@ vi.mock("@/components/agent-labels", () => ({
   ProfileLabels: () => null,
 }));
 
-vi.mock("@/components/agent-badge", () => ({
-  AgentBadge: () => null,
-}));
-
 vi.mock("@/components/agent-icon-picker", () => ({
   AgentIconPicker: () => null,
 }));

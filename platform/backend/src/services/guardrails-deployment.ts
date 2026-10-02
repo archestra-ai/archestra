@@ -9,11 +9,23 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
 import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
 
+export type GuardrailsV2Activation = "active" | "inactive";
+
+/**
+ * One read of the admin switch for every channel.
+ * A failed read throws. Callers must not treat that as the switch being off.
+ */
+export async function readGuardrailsV2Activation(
+  readEnabled: () => Promise<boolean> = () =>
+    GuardrailsDeploymentModel.isEnabled(),
+): Promise<GuardrailsV2Activation> {
+  if (!config.openappa.enabled) return "inactive";
+  return (await readEnabled()) ? "active" : "inactive";
+}
+
 /** Read shared state at request boundaries so all replicas see the same switch. */
 export async function isGuardrailsV2Active(): Promise<boolean> {
-  return (
-    config.openappa.enabled && (await GuardrailsDeploymentModel.isEnabled())
-  );
+  return (await readGuardrailsV2Activation()) === "active";
 }
 export async function getGuardrailsDeployment() {
   const { enabled, unsupportedClientAction } =

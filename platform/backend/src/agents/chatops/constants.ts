@@ -74,34 +74,6 @@ export const CHATOPS_CHANNEL_AUTO_REPLY = {
 };
 
 /**
- * A randomized confirmation that a thread was muted (see channel-activation),
- * posted by both providers. The lead-in varies for a bit of personality; the
- * reassurance about how to un-mute is appended consistently so users always
- * know how to bring the bot back. Plain text (no provider-specific markup) so
- * it renders identically in Slack and MS Teams.
- */
-export function buildThreadMutedNotice(): string {
-  const leadIn =
-    THREAD_MUTED_LEAD_INS[
-      Math.floor(Math.random() * THREAD_MUTED_LEAD_INS.length)
-    ];
-  return `🔇 ${leadIn} — @mention me to bring me back.`;
-}
-
-const THREAD_MUTED_LEAD_INS = [
-  "Got it, going quiet for now",
-  "Say no more, I'll zip it",
-  "Understood, standing down",
-  "Cool, I'll stop chiming in",
-  "On it, muting myself",
-  "Roger that, I'll hush up",
-  "Fair enough, I'll button it",
-  "Heard you loud and clear, stepping back",
-  "No problem, I'll keep to myself",
-  "Done, I'll sit this thread out",
-] as const;
-
-/**
  * A subtle one-time footer hint, appended to the bot's FIRST reply in a channel
  * thread (see claimThreadMuteHint), teaching users the off switch for sticky
  * auto-reply without the verbosity of the /help command. Plain text (no

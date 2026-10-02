@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { DispatchPolicy } from "@archestra/openappa-rs";
 import {
   APPA_PARENT_HEADER,
@@ -29,7 +30,10 @@ import { openappaFailure } from "@/openappa/failure";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  type GuardrailsV2Activation,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type { DeclaredToolSpelling } from "./wire";
 
@@ -177,6 +181,22 @@ type ChildEndOutcome =
     };
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
+const capturedActivation = new AsyncLocalStorage<GuardrailsV2Activation>();
+
+/** Keep one request's activation decision through later runtime calls. */
+export function withCapturedGuardrailsActivation<T>(
+  activation: GuardrailsV2Activation,
+  run: () => Promise<T>,
+): Promise<T> {
+  return capturedActivation.run(activation, run);
+}
+
+/** The rest of this request phase keeps the activation captured at its start. */
+export function enterCapturedGuardrailsActivation(
+  activation: GuardrailsV2Activation,
+): void {
+  capturedActivation.enterWith(activation);
+}
 export function openappaYellEnabled(): boolean {
   return config.openappa.enabled && config.openappa.yellEnabled;
 }
@@ -305,6 +325,9 @@ export function isAppaChatSource(
 
 async function binding() {
   if (!openappaEnabled()) {
+    throw new Error("OpenAPPA is disabled");
+  }
+  if (capturedActivation.getStore() === "inactive") {
     throw new Error("OpenAPPA is disabled");
   }
   // A composed document names the helper bridge bearer as a `token_env` the
@@ -1103,6 +1126,31 @@ export async function approveSpawnReturn(params: {
   }
 }
 
+/**
+ * A parent addresses a child it started, as a lead does when it sends its
+ * teammate a message. The runtime flows the parent's current label into the
+ * child before the child reads the message, and retains the message so the
+ * child's side can verify it arrived from this parent.
+ */
+export async function addressChild(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  childSessionId: string;
+  value: string;
+}): Promise<{ addressed: true } | { addressed: false; feedback: string }> {
+  const decision = await dispatch(params.session, {
+    event: "child_address",
+    operation_id: params.operationId,
+    spawned_id: params.childSessionId,
+    output: params.value,
+  });
+  // A child that ended, or one the runtime never forked, cannot take the
+  // parent's label, so the message must not reach it. The parent's model is
+  // told why; the rest of its turn stands.
+  if (decision.decision === "ack") return { addressed: true };
+  return { addressed: false, feedback: decisionMessage(decision) };
+}
+
 function runtimeToolResult(decision: NativeDecision): CallToolResult {
   if (decision.decision !== "mcp_result")
     return {
@@ -1223,13 +1271,16 @@ export type AppaChildReturnRecord = {
  * Loads the child returns a parent's family durably crossed, from the retained
  * ChildEnd operations in PostgreSQL. This is the authority the parent side
  * verifies arriving completions against.
+ *
+ * The deployment switch is not read here. The request that verifies the
+ * returns read it at its boundary; a switch turned off mid-request must not
+ * empty the records and refuse returns the runtime did retain.
  */
 export async function loadChildReturns(params: {
   organizationId: string;
   parentSessionId: string;
 }): Promise<AppaChildReturnRecord[]> {
   try {
-    if (!(await isGuardrailsV2Active())) return [];
     const module = await binding();
     const records = await module.loadChildReturns(
       params.organizationId,
@@ -1245,6 +1296,33 @@ export async function loadChildReturns(params: {
     logger.warn(
       { err: error, parentSessionId: params.parentSessionId },
       "Failed to load OpenAPPA child returns",
+    );
+    throw openappaFailure(error);
+  }
+}
+
+/**
+ * Loads the messages a child's parent addressed to it, from the retained
+ * ChildAddress operations in PostgreSQL. This is the authority the child side
+ * verifies arriving messages against.
+ *
+ * The deployment switch is not read here, for the reason `loadChildReturns`
+ * gives.
+ */
+export async function loadChildAddresses(params: {
+  organizationId: string;
+  childSessionId: string;
+}): Promise<Array<{ parentSessionId: string; value: string }>> {
+  try {
+    const module = await binding();
+    return await module.loadChildAddresses(
+      params.organizationId,
+      params.childSessionId,
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, childSessionId: params.childSessionId },
+      "Failed to load OpenAPPA child addresses",
     );
     throw openappaFailure(error);
   }
@@ -1268,7 +1346,11 @@ export async function loadOfferReview(params: {
   arguments?: string;
 } | null> {
   try {
-    if (!(await isGuardrailsV2Active())) return null;
+    if (
+      capturedActivation.getStore() !== "active" &&
+      !(await isGuardrailsV2Active())
+    )
+      return null;
     const module = await binding();
     const result = await module.loadOfferReview(
       params.organizationId,

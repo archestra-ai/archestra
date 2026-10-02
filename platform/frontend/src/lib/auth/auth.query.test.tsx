@@ -428,3 +428,33 @@ describe("usePermissionMap", () => {
     expect(result.current?.canCreate).toBe(false);
   });
 });
+
+it("reports only unmet actions while honoring a grant on the requested resource", async () => {
+  vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+    data: { chat: ["read"], openappaDiagnostics: ["read", "admin"] },
+    error: undefined,
+    request: new Request("http://localhost"),
+    response: new Response(),
+  } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+  vi.mocked(archestraApiSdk.getScopedCapabilities).mockResolvedValue({
+    data: [{ resource: "agent", action: "read", scope: "config-agent" }],
+  } as Awaited<ReturnType<typeof archestraApiSdk.getScopedCapabilities>>);
+  const { result } = renderHook(
+    () =>
+      useHasPermissions(
+        {
+          chat: ["read", "create"],
+          agent: ["read", "update"],
+          openappaDiagnostics: ["read"],
+        },
+        "config-agent",
+      ),
+    { wrapper: createWrapper() },
+  );
+  await waitFor(() => expect(result.current.isPending).toBe(false));
+  expect(result.current.data).toBe(false);
+  expect(result.current.missingPermissions).toEqual({
+    chat: ["create"],
+    agent: ["update"],
+  });
+});

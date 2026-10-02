@@ -37,9 +37,11 @@ import { cn } from "@/lib/utils/tailwind";
 export function CreatedByCell({
   createdBy,
   className,
+  showServiceAccountBadge = true,
 }: {
   createdBy: CreatedBy | null | undefined;
   className?: string;
+  showServiceAccountBadge?: boolean;
 }) {
   if (!createdBy) {
     return null;
@@ -68,7 +70,7 @@ export function CreatedByCell({
             </AvatarFallback>
           </Avatar>
           <span className="min-w-0 truncate">{label}</span>
-          {isServiceAccount && (
+          {isServiceAccount && showServiceAccountBadge && (
             <Badge
               variant="outline"
               className="h-4 shrink-0 rounded px-1 py-0 text-[10px] font-normal leading-none text-muted-foreground"

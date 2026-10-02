@@ -15,7 +15,10 @@ import {
 } from "@/components/exec/exec-terminal";
 import type { ExecSessionProgress } from "@/components/exec/exec-terminal-progress";
 import { useProfile } from "@/lib/agent.query";
-import { useMyAgentRun } from "@/lib/agent-runtime.query";
+import {
+  useMyAgentRun,
+  useUploadAgentRunTerminalFiles,
+} from "@/lib/agent-runtime.query";
 import websocketService from "@/lib/websocket/websocket";
 
 /** Shared tmux terminal for Agent detail and Chat run sessions. */
@@ -45,6 +48,7 @@ export function AgentRunTerminal({
     () => createAgentRunTransport(taskId),
     [taskId],
   );
+  const uploadFiles = useUploadAgentRunTerminalFiles(taskId);
 
   return (
     <ExecTerminal
@@ -63,6 +67,7 @@ export function AgentRunTerminal({
       showDisconnectedStatus={showDisconnectedStatus}
       initialProgress={run?.startupProgress ?? DEFAULT_STARTUP_PROGRESS}
       progressStartedAt={parseStartedAt(run?.startedAt)}
+      onDropFiles={uploadFiles.mutateAsync}
       onCommandChange={onCommandChange}
       onError={onError}
       onClosed={onClosed}

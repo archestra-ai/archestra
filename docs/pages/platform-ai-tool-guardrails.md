@@ -3,7 +3,7 @@ title: Guardrails
 category: LLM Proxy
 order: 5
 description: Enable and operate OpenAPPA tool guardrails in Archestra
-lastUpdated: 2026-09-30
+lastUpdated: 2026-10-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,6 +35,18 @@ This alone doesn't protect anything — tool calls run unchecked until you turn 
 On a fresh install, the page asks you to create a policy. A chat drafts one from your tools. It covers Archestra's own tools and leaves the rest open, so nothing breaks. Review it and approve — enforcement turns on. The chat then guides you through GitHub sync.
 
 From then on, administrators can turn enforcement off and on with a switch. The policy stays as it is. Ask about the policy explains what it does.
+
+Turning enforcement on also applies to sessions that are already running. If a subagent in such a session finished while enforcement was off, the proxy refuses the session's later requests. Start a new session to continue — or rewind the conversation to before the subagent ran.
+
+## Subagents and Teammates
+
+A subagent's answer reaches its session only through a return check. Before the subagent starts, the session declares what the answer may carry.
+
+Claude Code teammates pass the same check. A teammate's message to its lead crosses the check, and the lead takes on the message's restrictions. A lead's message carries the lead's restrictions to the teammate. After the lead reads a private report, for example, the teammate it messages cannot post the report publicly either.
+
+The model reads a message only if it passed the check on its way. Any other message is withheld, and the model reads a notice in its place. This holds for messages from other sessions too. It also holds for messages from before enforcement turned on — even ones the model already read. Claude Code's own team notices, such as a teammate going idle, carry no agent text. They pass as they are.
+
+A teammate that started while enforcement was off cannot be checked. OpenAPPA refuses its requests and does not send it messages. Start a new teammate, under a new name, to continue its work. OpenAPPA checks each teammate from its own spawn, so it refuses a second teammate under a name the session already used.
 
 ## Client Support Matrix
 

@@ -1,4 +1,6 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import config from "@/config";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
 import { AppaCodexAdapter } from "./adapters/codex";
@@ -6,6 +8,11 @@ import { AppaPluginArchestra } from "./plugin";
 import { APPA_PLUGIN_TRUSTED_CONTEXT } from "./types";
 
 describe("AppaPluginArchestra namespace controls", () => {
+  beforeEach(async () => {
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(true);
+  });
+
   test("stamps and bypasses only the declared control namespace", async () => {
     const plugin = new AppaPluginArchestra([]);
     const context = namespaceContext();

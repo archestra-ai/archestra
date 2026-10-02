@@ -118,15 +118,27 @@ describe("createFastifyInstance", () => {
         error.shouldRetry = false;
         throw error;
       });
+      // SDKs retry a 409 by default, so a refused conversation needs it too.
+      app.get("/test-refused-history", async () => {
+        const error = new ApiError(409, "History refused");
+        error.shouldRetry = false;
+        throw error;
+      });
       app.get("/test-plain-500", async () => {
         throw new ApiError(500, "Unexpected");
       });
 
       const refused = await app.inject({ method: "GET", url: "/test-refused" });
+      const history = await app.inject({
+        method: "GET",
+        url: "/test-refused-history",
+      });
       const plain = await app.inject({ method: "GET", url: "/test-plain-500" });
 
       expect(refused.statusCode).toBe(500);
       expect(refused.headers["x-should-retry"]).toBe("false");
+      expect(history.statusCode).toBe(409);
+      expect(history.headers["x-should-retry"]).toBe("false");
       // Without guidance the header is absent and clients keep their own rules.
       expect(plain.headers["x-should-retry"]).toBeUndefined();
     });

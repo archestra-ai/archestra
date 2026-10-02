@@ -53,7 +53,12 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 export function OverviewSetupCards() {
   const { enabled, isFresh } = useOpenAppaSetupState();
   const sync = useAppaGithubSync();
-  const { data: canReadYells } = useHasPermissions({ log: ["read"] });
+  const { data: canReadYells } = useHasPermissions({
+    openappaDiagnostics: ["read"],
+  });
+  const { data: canReadSettings } = useHasPermissions({
+    openappaSettings: ["read"],
+  });
   if (isFresh === undefined) return null;
   if (isFresh) return <PolicyStep />;
   const source = sync.data?.source;
@@ -72,8 +77,8 @@ export function OverviewSetupCards() {
           canReadYells ? "xl:grid-cols-3" : "lg:grid-cols-2",
         )}
       >
-        <EnforcementCard next={next === "enforcement"} />
-        <GithubSyncCard next={next === "github"} />
+        {canReadSettings && <EnforcementCard next={next === "enforcement"} />}
+        {canReadSettings && <GithubSyncCard next={next === "github"} />}
         {canReadYells && <YellsCard />}
       </div>
     </div>
@@ -86,7 +91,7 @@ export function OverviewSetupCards() {
  * guardrail is for, and the button.
  */
 function PolicyStep() {
-  const { data: canEdit } = useHasPermissions({ toolPolicy: ["update"] });
+  const { data: canEdit } = useHasPermissions({ openappaPolicy: ["update"] });
   return (
     <section className="mx-auto flex max-w-xl flex-col items-center px-2 py-10 text-center sm:py-16">
       {/* A flat disc rather than a blurred glow: the mark is pixel art with
@@ -130,7 +135,9 @@ function EnforcementCard({ next }: { next: boolean }) {
   const { enabled } = useOpenAppaSetupState();
   const deployment = useGuardrailsDeployment();
   const update = useUpdateGuardrailsDeployment();
-  const { data: canManage } = useHasPermissions({ organization: ["update"] });
+  const { data: canManage } = useHasPermissions({
+    openappaSettings: ["update"],
+  });
   const appName = useAppName();
   return (
     <StatusCard
@@ -189,7 +196,9 @@ function EnforcementCard({ next }: { next: boolean }) {
 
 function GithubSyncCard({ next }: { next: boolean }) {
   const sync = useAppaGithubSync();
-  const { data: canManage } = useHasPermissions({ organization: ["update"] });
+  const { data: canManage } = useHasPermissions({
+    openappaSettings: ["update"],
+  });
   const appName = useAppName();
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);

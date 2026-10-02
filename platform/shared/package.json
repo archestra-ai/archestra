@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.4.0-rc.28",
+  "version": "1.4.0-rc.29",
   "description": "",
   "type": "module",
   "private": true,
@@ -15,6 +15,7 @@
     "./connection-setup": "./connection-setup.ts",
     "./citation-quotes": "./citation-quotes.ts",
     "./e2e-test-ids": "./e2e-test-ids.ts",
+    "./gemini-models": "./gemini-models.ts",
     "./handlebars-expressions": "./handlebars-expressions.ts",
     "./interactions/client": "./interactions/client.ts",
     "./interactions/session-source": "./interactions/session-source.ts",

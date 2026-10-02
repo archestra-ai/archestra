@@ -52,6 +52,13 @@ const agent = makeAgent({
   modelId: "test-model",
   llmApiKeyId: "test-llm-key",
 });
+const otherAgent = makeAgent({
+  id: "research-agent",
+  name: "Research Agent",
+  scope: "org",
+  modelId: "test-model",
+  llmApiKeyId: "test-llm-key",
+});
 const conversation = {
   id: "configuration-conversation",
   origin: "user",
@@ -69,6 +76,13 @@ const createBodies: unknown[] = [];
 const sent: UIMessage[] = [];
 
 const server = setupServer(
+  http.get("/api/teams", () =>
+    HttpResponse.json({ data: [], pagination: { total: 0 } }),
+  ),
+  http.get("/api/environments", () => HttpResponse.json([])),
+  http.get("/api/chat/conversations/:id/openappa-status", () =>
+    HttpResponse.json(null),
+  ),
   http.get("/health", () => HttpResponse.json({ status: "ok" })),
   http.get("/api/llm-provider-api-keys/available", () => HttpResponse.json([])),
   http.get("/api/agents/:id/tools", () => HttpResponse.json([])),
@@ -126,6 +140,8 @@ const server = setupServer(
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  localStorage.clear();
+  sessionStorage.clear();
   createBodies.length = 0;
   sent.length = 0;
   archestraApiClient.setConfig({ baseUrl: window.location.origin });
@@ -199,9 +215,9 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   ).toBeInTheDocument();
   expect(
     screen.getByRole("combobox", {
-      name: "OpenAPPA Configuration Agent (locked)",
+      name: "OpenAPPA Configuration Agent",
     }),
-  ).toBeDisabled();
+  ).toBeEnabled();
 
   await user.type(
     await screen.findByPlaceholderText("Ask a follow-up..."),
@@ -213,19 +229,35 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   });
 });
 
-test("a new OpenAPPA configuration chat keeps its agent selected", async () => {
+test.each([
+  "plain chat",
+  "configuration launch",
+])("a new %s lets the user switch away from the configuration agent", async (launch) => {
+  const user = userEvent.setup();
   vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams({ agentId: agent.id }) as unknown as ReturnType<
-      typeof useSearchParams
-    >,
+    new URLSearchParams(
+      launch === "configuration launch" ? { agentId: agent.id } : {},
+    ) as unknown as ReturnType<typeof useSearchParams>,
+  );
+  server.use(
+    http.get("/api/agents/all", () => HttpResponse.json([agent, otherAgent])),
+    http.get(`/api/agents/${otherAgent.id}`, () =>
+      HttpResponse.json(otherAgent),
+    ),
   );
   renderChat();
 
-  expect(
+  await user.click(
     await screen.findByRole("combobox", {
-      name: "OpenAPPA Configuration Agent (locked)",
+      name: "OpenAPPA Configuration Agent",
     }),
-  ).toBeDisabled();
+  );
+  await user.click(
+    await screen.findByRole("option", { name: /Research Agent/ }),
+  );
+  expect(
+    await screen.findByRole("combobox", { name: "Research Agent" }),
+  ).toBeEnabled();
   expect(createBodies).toHaveLength(0);
 });
 
@@ -258,7 +290,21 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
   );
+  const updates: unknown[] = [];
   server.use(
+    http.get("/api/agents/all", () => HttpResponse.json([agent, otherAgent])),
+    http.get(`/api/agents/${otherAgent.id}`, () =>
+      HttpResponse.json(otherAgent),
+    ),
+    http.patch("/api/chat/conversations/:id", async ({ request }) => {
+      const body = (await request.json()) as { agentId?: string };
+      if (body.agentId) updates.push(body);
+      return HttpResponse.json({
+        ...conversation,
+        ...body,
+        agent: body.agentId === otherAgent.id ? otherAgent : agent,
+      });
+    }),
     http.get("/api/chat/conversations/:id", () =>
       HttpResponse.json({
         ...conversation,
@@ -286,6 +332,17 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   expect(sent[0]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
+  await user.click(
+    screen.getByRole("combobox", { name: "OpenAPPA Configuration Agent" }),
+  );
+  await user.click(
+    await screen.findByRole("option", { name: /Research Agent/ }),
+  );
+  await waitFor(() =>
+    expect(updates).toEqual([
+      expect.objectContaining({ agentId: otherAgent.id }),
+    ]),
+  );
 });
 
 function renderChat(routeConversationId?: string) {

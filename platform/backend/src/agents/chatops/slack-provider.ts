@@ -55,7 +55,6 @@ import {
   muteChannelThreadAndNotify,
 } from "./channel-activation";
 import {
-  buildThreadMutedNotice,
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -350,8 +349,9 @@ class SlackProvider implements ChatOpsProvider {
         botMentioned: hasBotMention,
         text: cleanedText,
         botDisplayName: this.botDisplayName,
-        postMutedNotice: () =>
-          this.postThreadMutedNotice(event.channel, threadTs),
+        // The :mute: reaction (see isMuteReaction) is the only acknowledgement;
+        // no confirmation message is posted.
+        postMutedNotice: async () => {},
         resolveAnswerAllWorkspaceId: async () => body.team_id || null,
       });
       if (!proceed) return null;
@@ -1516,7 +1516,7 @@ class SlackProvider implements ChatOpsProvider {
           channelId,
           workspaceId,
         }),
-      postMutedNotice: () => this.postThreadMutedNotice(channelId, threadTs),
+      postMutedNotice: async () => {},
     });
   }
 
@@ -1625,26 +1625,6 @@ class SlackProvider implements ChatOpsProvider {
       );
     } catch {
       return false;
-    }
-  }
-
-  /** Confirm a thread was muted, threaded under the message that muted it. */
-  private async postThreadMutedNotice(
-    channelId: string,
-    threadTs: string,
-  ): Promise<void> {
-    if (!this.client) return;
-    try {
-      await this.client.chat.postMessage({
-        channel: channelId,
-        text: buildThreadMutedNotice(),
-        thread_ts: threadTs,
-      });
-    } catch (error) {
-      logger.warn(
-        { error: errorMessage(error) },
-        "[SlackProvider] Failed to post thread-muted notice",
-      );
     }
   }
 

@@ -238,6 +238,19 @@ export function childReturnMarkersConfigured(): boolean {
   return markerKey() !== undefined;
 }
 
+/**
+ * The text without the display marker that follows a crossed child return.
+ * The marker carries no authority, so text that is not a well-formed carrier
+ * comes back unchanged.
+ */
+export function withoutChildReturnMarker(value: string): string {
+  try {
+    return stripMarker(value, DEFAULT_CONTEXT).value;
+  } catch {
+    return value;
+  }
+}
+
 // === Marker parsing ===
 
 type WalkContext = {

@@ -68,20 +68,22 @@ export function mintDelegationMarker(params: {
 }
 
 /**
- * Returns true if this server signed `marker` for a spawn from `spawnerNativeId`
- * for this organization, caller, and prompt text.
+ * Returns what `marker` binds when this server signed it for a spawn from
+ * `spawnerNativeId` for this organization, caller, and prompt text, and
+ * undefined otherwise. It names the prompt by the digest of the text the
+ * marker closes; a line pushed as an item of its own binds no prompt.
  */
-export function verifyDelegationMarker(params: {
+export function verifyDelegatedPrompt(params: {
   marker: AppaDelegationMarker;
   organizationId: string;
   callerId: string | undefined;
   spawnerNativeId: string;
-}): boolean {
+}): { promptDigest?: string } | undefined {
   const key = delegationKey();
-  if (!key) return false;
+  if (!key) return undefined;
   const token = parseMarkerToken(params.marker.token);
-  if (!token) return false;
-  if (params.marker.spawnCallId !== token.spawnCallId) return false;
+  if (!token) return undefined;
+  if (params.marker.spawnCallId !== token.spawnCallId) return undefined;
   const actual = Buffer.from(token.tag, "utf8");
   // A line pushed as an item of its own closes no text, but a client may
   // still join it to the text before it.
@@ -101,9 +103,14 @@ export function verifyDelegationMarker(params: {
       "utf8",
     );
     if (actual.length === expected.length && timingSafeEqual(actual, expected))
-      return true;
+      return promptDigest === EMPTY_PROMPT_DIGEST ? {} : { promptDigest };
   }
-  return false;
+  return undefined;
+}
+
+/** Whether `text` is the prompt a verified marker bound by `promptDigest`. */
+export function isDelegatedPrompt(text: string, promptDigest: string): boolean {
+  return digestOf(text) === promptDigest;
 }
 
 /** Matches exactly one marker line: the only text a finalizer can append to a call. */
@@ -126,7 +133,9 @@ export function isDelegationMarkerItem(value: unknown): boolean {
 /**
  * Collects markers from opening user/agent task messages in wire order.
  * Ignores system messages, tool results, and client notifications.
- * Only accepts a marker line at the end of the text.
+ * Only accepts a marker line at the end of the text, or at the end of the
+ * body of the teammate envelope that ends it: Claude Code hands a teammate
+ * its prompt as a message from its lead.
  */
 export function collectDelegationMarkers(params: {
   family: AppaWireFamily;
@@ -210,6 +219,10 @@ export function stripDelegationMarkers(params: {
 
 const MARKER_PREFIX = "[appa] delegated trajectory ";
 const REMOVED_DELEGATION_TEXT = "[delegation metadata removed]";
+/** Claude Code's envelope for a message between a lead and its teammate. */
+const TEAMMATE_ENVELOPE_OPEN =
+  /<teammate-message(?:[ \t]+[A-Za-z_-]+="[^"]*")*>\n/g;
+const TEAMMATE_ENVELOPE_CLOSE = "\n</teammate-message>";
 const NONCE_BYTES = 8;
 const TAG_HEX_LENGTH = 24;
 const DELEGATION_KEY_LABEL = "archestra.appa.delegation.v1";
@@ -269,7 +282,7 @@ const EMPTY_PROMPT_DIGEST = digestOf("");
 
 function trailingMarker(text: string): AppaDelegationMarker | undefined {
   if (!text.includes(MARKER_PREFIX)) return undefined;
-  const trimmed = text.trimEnd();
+  const trimmed = closingBody(text.trimEnd()).trimEnd();
   const lineStart = trimmed.lastIndexOf("\n") + 1;
   const match = MARKER_LINE.exec(trimmed.slice(lineStart));
   if (!match) return undefined;
@@ -281,6 +294,25 @@ function trailingMarker(text: string): AppaDelegationMarker | undefined {
     promptDigest: digestOf(trimmed.slice(0, lineStart)),
     ...(token.spawnCallId ? { spawnCallId: token.spawnCallId } : {}),
   };
+}
+
+/**
+ * The text a marker may end: the text itself, or the body of the teammate
+ * envelope that ends it. Claude Code escapes an envelope's own tags inside
+ * its body, so the last opening tag starts the last envelope.
+ */
+function closingBody(text: string): string {
+  if (!text.endsWith(TEAMMATE_ENVELOPE_CLOSE)) return text;
+  let body: string | undefined;
+  for (const match of text.matchAll(TEAMMATE_ENVELOPE_OPEN)) {
+    body = text.slice(
+      (match.index ?? 0) + match[0].length,
+      text.length - TEAMMATE_ENVELOPE_CLOSE.length,
+    );
+  }
+  return body === undefined || body.includes(TEAMMATE_ENVELOPE_CLOSE)
+    ? text
+    : body;
 }
 
 function parseMarkerToken(

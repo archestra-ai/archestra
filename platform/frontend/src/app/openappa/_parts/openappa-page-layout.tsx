@@ -13,7 +13,12 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { data: canReadYells } = useHasPermissions({ log: ["read"] });
+  const { data: canReadYells } = useHasPermissions({
+    openappaDiagnostics: ["read"],
+  });
+  const { data: canReadPolicy } = useHasPermissions({
+    openappaPolicy: ["read"],
+  });
   const appName = useAppName();
   const { isFresh } = useOpenAppaSetupState();
   const page =
@@ -69,9 +74,13 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
         firstStepOnly
           ? []
           : [
-              { label: "Overview", href: "/openappa" },
-              { label: "Batteries", href: "/openappa/batteries" },
-              { label: "Policy", href: "/openappa/policy" },
+              ...(canReadPolicy
+                ? [
+                    { label: "Overview", href: "/openappa" },
+                    { label: "Batteries", href: "/openappa/batteries" },
+                    { label: "Policy", href: "/openappa/policy" },
+                  ]
+                : []),
               ...(canReadYells
                 ? [{ label: "Yells", href: "/openappa/yells" }]
                 : []),

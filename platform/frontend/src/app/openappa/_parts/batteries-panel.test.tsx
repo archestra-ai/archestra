@@ -396,7 +396,7 @@ test("a held pull naming only dropped batteries is accepted with policy permissi
       reasons: ["drops_batteries"],
     },
   });
-  grantOnly("organization", "toolPolicy");
+  grantOnly("openappaPolicy");
   server.use(
     http.post(`${baseUrl}/api/openappa/github-sync/accept-held`, () => {
       accepted = true;
@@ -427,7 +427,7 @@ test("a held pull that moves credentials needs the credential permission", async
       reasons: ["drops_batteries", "changes_credentials"],
     },
   });
-  grantOnly("organization", "toolPolicy");
+  grantOnly("openappaPolicy");
   show();
   await entry("github");
   expect(

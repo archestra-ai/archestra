@@ -1456,8 +1456,8 @@ describe("AgentModel.update evicts cached chat MCP clients", () => {
     makeUser,
   }) => {
     const user = await makeUser();
-    // makeAgent defaults to full mode + accessAllTools=false.
-    const agent = await makeAgent();
+    // Exercise an actual change from an explicit Manual-mode opt-out.
+    const agent = await makeAgent({ toolExposureMode: "full" });
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     const mockClient = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };

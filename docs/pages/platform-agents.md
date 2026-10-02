@@ -83,9 +83,9 @@ Exclusions are stored per agent and have no effect in **Custom** mode. Cloning a
 
 ## Load Tools When Needed
 
-By default, an agent exposes every assigned tool through MCP `tools/list`.
+New agents enable **Progressive tool loading** by default. Existing Manual-mode agents enable it on upgrade. You can turn it off in **Manual** mode to expose every assigned tool through MCP `tools/list`.
 
-For larger toolsets, turn on **Progressive tool loading**. This keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
+Progressive loading keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
 
 - `search_tools` can still discover them
 - `run_tool` can still execute them

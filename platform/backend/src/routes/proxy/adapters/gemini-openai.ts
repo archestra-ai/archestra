@@ -127,11 +127,7 @@ class GeminiOpenaiResponseAdapter
           message: { role: "assistant", content: contentMessage },
         },
       ],
-      usage: {
-        prompt_tokens: usage.inputTokens,
-        completion_tokens: usage.outputTokens,
-        total_tokens: usage.inputTokens + usage.outputTokens,
-      },
+      usage: geminiUsageViewToOpenai(usage),
     };
     return response as unknown as GeminiResponse;
   }

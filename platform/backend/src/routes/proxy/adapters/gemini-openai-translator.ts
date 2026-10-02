@@ -6,6 +6,7 @@ import {
 import { ApiError } from "@archestra/shared/types";
 import type { Gemini, OpenAi, UsageView } from "@/types";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
+import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import {
   type NormalizedContentPart,
   normalizeOpenAiContentParts,
@@ -285,8 +286,8 @@ function openaiEffortToGeminiThinkingConfig(
  * The accumulator normalizes `inputTokens` to *uncached* input and keeps the
  * cache and thinking counts alongside, so the gross figures OpenAI's wire
  * format expects are reassembled here: `prompt_tokens` adds the cache reads
- * back, and `total_tokens` adds the thinking tokens that Gemini counts in
- * `totalTokenCount` but not in `candidatesTokenCount`.
+ * back, and `completion_tokens` includes the thinking tokens Gemini reports
+ * separately from `candidatesTokenCount`. The details expose that subset.
  *
  * Reading the accumulator rather than the streamed adapter's rebuilt response
  * is deliberate: that rebuild reports `promptTokenCount` net of cache, so it
@@ -294,19 +295,20 @@ function openaiEffortToGeminiThinkingConfig(
  */
 export function geminiUsageViewToOpenai(
   usage: UsageView | null | undefined,
-):
-  | { prompt_tokens: number; completion_tokens: number; total_tokens: number }
-  | undefined {
+): OpenAiStreamUsage | undefined {
   if (!usage) {
     return undefined;
   }
   const promptTokens = usage.inputTokens + (usage.cacheReadTokens ?? 0);
-  const completionTokens = usage.outputTokens;
+  const reasoningTokens = usage.reasoningTokens ?? 0;
+  const completionTokens = usage.outputTokens + reasoningTokens;
   return {
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
-    total_tokens:
-      promptTokens + completionTokens + (usage.reasoningTokens ?? 0),
+    total_tokens: promptTokens + completionTokens,
+    ...(reasoningTokens > 0
+      ? { completion_tokens_details: { reasoning_tokens: reasoningTokens } }
+      : {}),
   };
 }
 
@@ -321,19 +323,22 @@ export function geminiUsageViewToOpenai(
  * since `totalTokenCount` also counts thinking tokens — than the non-streaming
  * reply for the identical request on the same route.
  */
-export function geminiUsageToOpenai(response: GeminiResponse): {
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-} {
+export function geminiUsageToOpenai(
+  response: GeminiResponse,
+): OpenAiStreamUsage {
   const promptTokens = response.usageMetadata?.promptTokenCount ?? 0;
-  const completionTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+  const reasoningTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+  const completionTokens =
+    (response.usageMetadata?.candidatesTokenCount ?? 0) + reasoningTokens;
   return {
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
     total_tokens:
       response.usageMetadata?.totalTokenCount ??
       promptTokens + completionTokens,
+    ...(reasoningTokens > 0
+      ? { completion_tokens_details: { reasoning_tokens: reasoningTokens } }
+      : {}),
   };
 }
 

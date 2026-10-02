@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useScopedCapabilities } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 
 /**
  * Secondary list actions, with the same permission editor for every resource.
@@ -33,24 +33,22 @@ export function ResourceListActions({
   alsoResources?: Array<{ resource: ScopedResource; label: string }>;
   children?: ReactNode;
 }) {
-  const capabilities = useScopedCapabilities();
+  const { data: canReadGlobal } = useHasPermissions({
+    globalPermissions: ["read"],
+  });
+  const { data: canUpdateGlobal } = useHasPermissions({
+    globalPermissions: ["update"],
+  });
   const [opened, setOpened] = useState<ScopedResource | null>(null);
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
   // A deep link opens the first kind, as it always has.
   const linked = params.get("permissions") === "all";
-  const canView = (kind: ScopedResource) =>
-    capabilities.data?.some(
-      (grant) =>
-        grant.resource === kind &&
-        grant.scope === "*" &&
-        grant.action === "read",
-    ) ?? false;
   const kinds = [
     { resource, label: label ?? "Permissions" },
     ...alsoResources,
-  ].filter((kind) => canView(kind.resource));
+  ].filter(() => canReadGlobal || canUpdateGlobal);
   const onOpenChange = (open: boolean) => {
     if (!open) setOpened(null);
     if (!open && linked) {

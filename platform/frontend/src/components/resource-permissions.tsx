@@ -58,6 +58,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   type ResourcePermissions as Policy,
@@ -182,12 +183,14 @@ export function ResourcePermissionsDialog({
     null,
   );
   const isMobile = useIsMobile();
+  const { data: canUpdateGlobal } = useHasPermissions({
+    globalPermissions: ["update"],
+  });
+  const policy = useResourcePermissions(resource, scope, open);
   const canManage =
-    useResourcePermissions(
-      resource,
-      scope,
-      open,
-    ).data?.effectiveActions.includes("manage-permissions") ?? false;
+    scope === "*"
+      ? !!canUpdateGlobal
+      : (policy.data?.effectiveActions.includes("manage-permissions") ?? false);
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessDirty, setAccessDirty] = useState(false);
   const noun = scopedResourceNouns[resource];
@@ -338,21 +341,14 @@ function PermissionsEditor({
     dialog?.setAccessOpen(open);
   };
   const [allPermissionsOpen, setAllPermissionsOpen] = useState(false);
-  // "Edit in permissions for all X" writes the organization-wide policy, so
-  // the viewer's authority there decides whether the way in is offered. The
-  // query is the same one that dialog uses, so it is already cached.
-  const organizationPolicy = useResourcePermissions(
-    policy.resource,
-    "*",
-    policy.scope !== "*",
-  );
-  const canEditAll =
+  const { data: canUpdateGlobal } = useHasPermissions({
+    globalPermissions: ["update"],
+  });
+  const canEditAll = !!canUpdateGlobal;
+  const canManage =
     policy.scope === "*"
-      ? policy.effectiveActions.includes("manage-permissions")
-      : (organizationPolicy.data?.effectiveActions.includes(
-          "manage-permissions",
-        ) ?? false);
-  const canManage = policy.effectiveActions.includes("manage-permissions");
+      ? !!canUpdateGlobal
+      : policy.effectiveActions.includes("manage-permissions");
   const presets = resourcePermissionPresetsFor(policy.resource);
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");

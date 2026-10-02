@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useResourcePermissions } from "@/lib/resource-permissions.query";
 
 export type InitialPermissionGrant = ResourcePermissionGrant & { name: string };
@@ -59,13 +60,21 @@ export function InitialResourcePermissions({
   // Organization-wide grants already reach this object the moment it exists.
   // The edit form shows them, so the create form has to as well, or the
   // author believes only the owner can see what they are about to make.
-  const organizationPolicy = useResourcePermissions(resource, "*");
+  const { data: canReadGlobal } = useHasPermissions({
+    globalPermissions: ["read"],
+  });
+  const { data: canUpdateGlobal } = useHasPermissions({
+    globalPermissions: ["update"],
+  });
+  const organizationPolicy = useResourcePermissions(
+    resource,
+    "*",
+    !!(canReadGlobal || canUpdateGlobal),
+  );
   const inherited = organizationPolicy.data?.grants ?? [];
   // Only offer the way in when the viewer could actually save there. The
   // organization-wide policy reports what this viewer may do with it.
-  const canEditAll =
-    organizationPolicy.data?.effectiveActions.includes("manage-permissions") ??
-    false;
+  const canEditAll = !!canUpdateGlobal;
   return (
     <PermissionsPanel embedded standalone={standalone}>
       <div className="flex items-start justify-between gap-3">

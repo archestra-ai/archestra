@@ -177,6 +177,23 @@ describe("scoped page discovery", () => {
       }),
     ).toBe(false);
   });
+  it("ignores retired log capabilities when deciding page access", () => {
+    expect(
+      hasPagePermissions({
+        userPermissions: {},
+        required: { log: ["read"] },
+        capabilities: [
+          {
+            organizationId: "org",
+            resource: "log",
+            scope: "*",
+            action: "read",
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("still requires every other page permission", () => {
     const required: Permissions = { mcpRegistry: ["read"], team: ["read"] };
     expect(

@@ -73,8 +73,8 @@ describe("access-control", () => {
       expect(permissionDescriptions["auditLog:read"].length).toBeGreaterThan(0);
     });
 
-    test("auditLog only exposes the read action", () => {
-      expect(allAvailableActions.auditLog).toEqual(["read"]);
+    test("auditLog exposes own and organization-wide visibility", () => {
+      expect(allAvailableActions.auditLog).toEqual(["read", "admin"]);
     });
   });
 
@@ -314,14 +314,13 @@ describe("buildForbiddenErrorMessage", () => {
   });
 });
 
-describe("own-vs-all log split (log/auditLog read vs a grant at *)", () => {
-  // Seeing every member's rows is `read` on the resource at `*`, a grant; the
-  // role action only covers the caller's own rows.
-  test("read is the only role action on both resources", () => {
-    expect(allAvailableActions.log).toEqual(["read"]);
-    expect(allAvailableActions.auditLog).toEqual(["read"]);
-    expect(permissionDescriptions["log:admin"]).toBeUndefined();
-    expect(permissionDescriptions["auditLog:admin"]).toBeUndefined();
+describe("own-vs-all log split (Read and Admin role actions)", () => {
+  // Read covers own rows; Admin expands organization-wide visibility.
+  test("Read and Admin are the only role actions on both resources", () => {
+    expect(allAvailableActions.log).toEqual(["read", "admin"]);
+    expect(allAvailableActions.auditLog).toEqual(["read", "admin"]);
+    expect(permissionDescriptions["log:admin"]).toBeDefined();
+    expect(permissionDescriptions["auditLog:admin"]).toBeDefined();
   });
 
   test("editor sees only own logs; member has neither log resource", () => {

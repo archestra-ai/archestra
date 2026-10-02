@@ -5,6 +5,7 @@ import {
   hasScopedPermission,
   isBuiltInCatalogId,
   isResourcePermissionPreset,
+  ManagedResourceSchema,
   ORGANIZATION_WIDE_RESOURCES,
   type PermissionSubject,
   PredefinedRoleNameSchema,
@@ -46,7 +47,11 @@ export class ResourcePermissions {
     const policies =
       await ResourcePermissionPolicyModel.findForSubjects(params);
     const keys = new Set(params.subjects.map(subjectKey));
+    const canManageGlobal =
+      await ResourcePermissions.canManageGlobalPolicy(params);
     for (const policy of policies) {
+      if (!ManagedResourceSchema.safeParse(policy.resource).success) continue;
+      if (policy.scope === "*" && canManageGlobal) continue;
       const requested = policy.grants
         .filter((grant) => keys.has(subjectKey(grant.subject)))
         .flatMap((grant) =>
@@ -106,7 +111,7 @@ export class ResourcePermissions {
   static async resolveAll(params: {
     organizationId: string;
     userId: string;
-  }): Promise<ScopedPermission[]> {
+  }): Promise<ManagedScopedPermission[]> {
     const subjects = await ResourcePermissions.getSubjects(params);
     const policies = await ResourcePermissionPolicyModel.findForSubjects({
       ...params,
@@ -254,12 +259,14 @@ export class ResourcePermissions {
 
   static async searchSubjects(params: PermissionContext & { query: string }) {
     const effective = await ResourcePermissions.getEffective(params);
-    if (
-      !hasScopedPermission({
-        grants: effective.grants,
-        required: { ...params, action: "manage-permissions" },
-      })
-    )
+    const canManage =
+      params.scope === "*"
+        ? await ResourcePermissions.canManageGlobalPolicy(params)
+        : hasScopedPermission({
+            grants: effective.grants,
+            required: { ...params, action: "manage-permissions" },
+          });
+    if (!canManage)
       throw new ApiError(
         403,
         "You do not have permission to manage access to this resource",
@@ -270,6 +277,8 @@ export class ResourcePermissions {
   static async getEffective(
     params: PermissionContext & { includeDeleted?: boolean },
   ) {
+    if (!ManagedResourceSchema.safeParse(params.resource).success)
+      throw new ApiError(400, "Logs use Read and Admin role permissions");
     if (!ResourcePermissionScopeSchema.safeParse(params.scope).success)
       throw new ApiError(400, "Invalid permission scope");
     if (
@@ -310,16 +319,18 @@ export class ResourcePermissions {
 
   static async getPolicy(params: PermissionContext) {
     const effective = await ResourcePermissions.getEffective(params);
-    if (
-      !hasScopedPermission({
-        grants: effective.grants,
-        required: { ...params, action: "read" },
-      }) &&
-      !hasScopedPermission({
-        grants: effective.grants,
-        required: { ...params, action: "manage-permissions" },
-      })
-    )
+    const canView =
+      params.scope === "*"
+        ? await ResourcePermissions.canViewGlobalPolicy(params)
+        : hasScopedPermission({
+            grants: effective.grants,
+            required: { ...params, action: "read" },
+          }) ||
+          hasScopedPermission({
+            grants: effective.grants,
+            required: { ...params, action: "manage-permissions" },
+          });
+    if (!canView)
       throw new ApiError(
         403,
         "You do not have permission to view this resource's permissions",
@@ -332,7 +343,7 @@ export class ResourcePermissions {
       scope: params.scope,
     });
     return {
-      resource: params.resource,
+      resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
       name: effective.target?.name ?? "All resources",
       revision: policy?.revision ?? 0,
@@ -403,7 +414,7 @@ export class ResourcePermissions {
     }
     const updated = await ResourcePermissions.getEffective(params);
     return {
-      resource: params.resource,
+      resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
       name: effective.target?.name ?? "All resources",
       revision: policy.revision,
@@ -440,6 +451,7 @@ export class ResourcePermissions {
   static async resolve(
     context: PermissionContext,
   ): Promise<ScopedPermission[]> {
+    if (!ManagedResourceSchema.safeParse(context.resource).success) return [];
     const params = await ResourcePermissions.grantContext(context);
     const subjects = await ResourcePermissions.getSubjects(params);
     if (subjects.length === 0) return [];
@@ -530,20 +542,23 @@ export class ResourcePermissions {
           action,
         })),
     );
-    if (
-      !hasScopedPermission({
-        grants: params.authority,
-        required: {
-          ...params,
-          scope: params.scope,
-          action: "manage-permissions",
-        },
-      }) ||
-      !canDelegateScopedPermissions({ grants: params.authority, requested })
-    ) {
+    // Global policy administration is an explicit organization role action.
+    // It does not grant access to the underlying resources, and scoped
+    // manage-permissions never substitutes for it on a wildcard policy.
+    const canManage =
+      params.scope === "*"
+        ? await ResourcePermissions.canManageGlobalPolicy(params)
+        : hasScopedPermission({
+            grants: params.authority,
+            required: { ...params, action: "manage-permissions" },
+          }) &&
+          canDelegateScopedPermissions({ grants: params.authority, requested });
+    if (!canManage) {
       throw new ApiError(
         403,
-        "You can only grant permissions you hold on this resource",
+        params.scope === "*"
+          ? "You need globalPermissions:update to edit global permissions"
+          : "You can only grant permissions you hold on this resource",
       );
     }
     if (!enterpriseTier.isCoreActive()) {
@@ -622,6 +637,26 @@ export class ResourcePermissions {
       },
       nextTarget: { ...target, scope: next.audience, teamIds: next.teamIds },
     });
+  }
+
+  private static async canViewGlobalPolicy(params: {
+    userId: string;
+    organizationId: string;
+  }) {
+    const permissions = await getPermissionsForUserContext(params);
+    return (
+      permissions.globalPermissions?.some(
+        (action) => action === "read" || action === "update",
+      ) ?? false
+    );
+  }
+
+  private static async canManageGlobalPolicy(params: {
+    userId: string;
+    organizationId: string;
+  }) {
+    const permissions = await getPermissionsForUserContext(params);
+    return permissions.globalPermissions?.includes("update") ?? false;
   }
 
   /**
@@ -734,6 +769,10 @@ export class ResourcePermissions {
   }
 }
 
+type ManagedScopedPermission = ScopedPermission & {
+  resource: Exclude<ScopedResource, "log" | "auditLog">;
+};
+
 type PermissionContext = {
   userId: string;
   organizationId: string;
@@ -772,15 +811,19 @@ function expandScopedGrants(params: {
     ReturnType<typeof ResourcePermissionPolicyModel.findForSubjects>
   >;
   subjectKeys: Set<string>;
-}): ScopedPermission[] {
+}): ManagedScopedPermission[] {
   return params.policies.flatMap((policy) => {
-    if (!ResourcePermissionScopeSchema.safeParse(policy.scope).success)
+    const resource = ManagedResourceSchema.safeParse(policy.resource);
+    if (
+      !resource.success ||
+      !ResourcePermissionScopeSchema.safeParse(policy.scope).success
+    )
       return [];
     return policy.grants.flatMap((grant) =>
       params.subjectKeys.has(subjectKey(grant.subject))
         ? grant.actions.map((action) => ({
             organizationId: policy.organizationId,
-            resource: policy.resource,
+            resource: resource.data,
             scope: policy.scope,
             action,
           }))

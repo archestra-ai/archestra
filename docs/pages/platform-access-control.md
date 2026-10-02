@@ -20,6 +20,10 @@ Permissions in Archestra are defined using a `resource:action` format, where:
 
 For example, `agent:create` allows creating agents, `mcpGateway:update` allows updating MCP gateways, and `llmProxy:read` allows viewing the LLM Proxy.
 
+## Log Visibility
+
+The `log:read` permission shows your own LLM and MCP logs. Add `log:admin` to see every organization log. Audit events use `auditLog:read` and `auditLog:admin`. Guardrail consult logs use `openappaDiagnostics:read` and `openappaDiagnostics:admin`. Admin has organization-wide visibility by default. Log pages use these role actions instead of resource sharing policies.
+
 ## Predefined Roles
 
 The following roles are built into Archestra and cannot be modified or deleted:
@@ -34,7 +38,7 @@ The admin role has **all permissions** on every resource.
 
 Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, and impersonating users
 
-Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
+Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, `openappaDiagnostics:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
 
 ### Editor
 
@@ -185,6 +189,7 @@ The following table lists all available permissions that can be assigned to cust
 | `app:update` | Modify MCP Apps and their tools allowed by your resource grants |
 | `app:delete` | Delete MCP Apps |
 | `auditLog:read` | View audit log records of your own administrative actions |
+| `auditLog:admin` | View every audit event in your organization (also requires Read) |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
@@ -201,6 +206,8 @@ The following table lists all available permissions that can be assigned to cust
 | `environment:update` | Modify deployment environments, including the org default environment |
 | `environment:delete` | Delete deployment environments |
 | `file:manage` | List, read, write, and delete files in chats and projects |
+| `globalPermissions:read` | View global permission policies for all resource types |
+| `globalPermissions:update` | Edit global permission policies and grant access across all resource types |
 | `identityProvider:read` | View identity provider configurations (SSO) |
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |
@@ -238,6 +245,7 @@ The following table lists all available permissions that can be assigned to cust
 | `llmVirtualKey:update` | Modify LLM virtual keys and their visibility |
 | `llmVirtualKey:delete` | Delete LLM virtual keys |
 | `log:read` | View your own LLM proxy and MCP tool call logs in the active organization |
+| `log:admin` | View every LLM and MCP log in your organization (also requires Read) |
 | `mcpGateway:read` | View and list MCP gateways |
 | `mcpGateway:create` | Create new MCP gateways |
 | `mcpGateway:update` | Modify MCP gateway configuration |
@@ -390,7 +398,7 @@ Creation with `initialGrants` also records the creator's full access explicitly.
 
 ### Delegation And Concurrent Edits
 
-To change a policy, you need `manage-permissions` on that scope. You can grant only actions that you also hold on that same scope. Authority over one object does not authorize a wildcard grant. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
+Global policies require `globalPermissions:read` to view or `globalPermissions:update` to edit. Update also allows viewing the policy. These role permissions apply across resource types. Admin and Platform Admin receive both by default. Ordinary resource CRUD permissions do not authorize global policy administration. Individual object policies still require `manage-permissions` on that object. You can grant only actions you hold on that object. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
 
 Saving includes the policy revision. If someone else changes the policy first, the API returns `409` and the editor preserves your draft. Reload the latest policy before saving again. Changes to grants are recorded in the audit log. Unsaved permission edits are kept separate from ordinary configuration saves; use **Save permissions** to apply them.
 

@@ -83,6 +83,7 @@ export const resources = [
   "apiKey",
   "serviceAccount",
   "auditLog",
+  "globalPermissions",
   "simpleView",
   "chatAgentPicker",
   "chatProviderSettings",
@@ -129,6 +130,7 @@ export const resourceLabels: Record<Resource, string> = {
   apiKey: "API Keys",
   serviceAccount: "Service Accounts",
   auditLog: "Audit Log",
+  globalPermissions: "Global Permissions",
   organizationSettings: "Organization Settings",
   llmSettings: "LLM Settings",
   mcpSettings: "MCP Settings",
@@ -189,8 +191,9 @@ export const resourceDescriptions: Record<Resource, string> = {
   secret: "Secrets manager configuration and connectivity",
   apiKey: "User API keys for programmatic access",
   serviceAccount: "Service accounts and tokens for programmatic access",
-  auditLog:
-    "Organization-wide audit trail of administrative actions and auth events",
+  auditLog: "Audit events, with separate own and organization-wide visibility",
+  globalPermissions:
+    "View and edit organization-wide permission policies for every resource type",
   organizationSettings:
     "Organization settings (appearance, authentication, etc)",
   knowledgeSource:
@@ -260,6 +263,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "chatExpandToolCalls",
   ],
   Administration: [
+    "globalPermissions",
     "member",
     "ac",
     "team",

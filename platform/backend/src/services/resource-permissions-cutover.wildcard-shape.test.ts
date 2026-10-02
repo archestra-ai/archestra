@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
@@ -108,7 +110,7 @@ describe("wildcard policy shape", () => {
     });
   }
 
-  test("log authority converts asymmetrically: only the built-in admin may delegate it", async ({
+  test("log role actions survive startup without recreating scoped policies", async ({
     makeOrganization,
     makeCustomRole,
   }) => {
@@ -116,33 +118,23 @@ describe("wildcard policy shape", () => {
     const role = await makeCustomRole(org.id, {
       permission: { log: ["read", "admin"], auditLog: ["read", "admin"] },
     });
-
     await runScopedResourcePermissionCutover();
-
     for (const resource of ["log", "auditLog"] as const) {
-      const grants =
-        (
-          await ResourcePermissionPolicyModel.find({
-            organizationId: org.id,
-            resource,
-            scope: "*",
-          })
-        )?.grants ?? [];
-      // Logs are read-only for everyone, and `platform_admin` never held the
-      // two log actions at all, so it gets no grant here.
-      expect(grants).toHaveLength(2);
-      expect(grants).toEqual(
-        expect.arrayContaining([
-          {
-            subject: { type: "role", id: "admin" },
-            actions: ["manage-permissions", "read"],
-          },
-          { subject: { type: "role", id: role.id }, actions: ["read"] },
-        ]),
-      );
       expect(
-        grants.some((grant) => grant.subject.id === "platform_admin"),
-      ).toBe(false);
+        await ResourcePermissionPolicyModel.find({
+          organizationId: org.id,
+          resource,
+          scope: "*",
+        }),
+      ).toBeNull();
     }
+    const [stored] = await db
+      .select()
+      .from(schema.organizationRolesTable)
+      .where(eq(schema.organizationRolesTable.id, role.id));
+    expect(JSON.parse(stored.permission)).toEqual({
+      log: ["read", "admin"],
+      auditLog: ["read", "admin"],
+    });
   });
 });

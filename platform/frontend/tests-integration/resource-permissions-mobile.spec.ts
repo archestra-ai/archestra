@@ -67,6 +67,11 @@ for (const viewport of [
       url: "/api/resource-permissions/mcpRegistry/:scope",
       body: { ...policy, effectiveActions: ["read"] },
     });
+    await mswControl.use({
+      method: "get",
+      url: "/api/user/permissions",
+      body: { mcpRegistry: ["read"], globalPermissions: ["read"] },
+    });
     await page.goto("/mcp/registry?permissions=all");
     const dialog = page.getByRole("dialog", { name: title, exact: true });
     await expect(

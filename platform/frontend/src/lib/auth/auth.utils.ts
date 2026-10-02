@@ -1,6 +1,7 @@
 import {
   type Action,
   isPermissionActionGranted,
+  ManagedResourceSchema,
   type Permissions,
   type Resource,
   resourceLabels,
@@ -80,6 +81,7 @@ export function hasPagePermissions(params: {
       (action) =>
         hasPermissions(params.userPermissions, { [resource]: [action] }) ||
         (action === "read" &&
+          ManagedResourceSchema.safeParse(resource).success &&
           params.capabilities.some(
             (grant) => grant.resource === resource && grant.action === "read",
           )),

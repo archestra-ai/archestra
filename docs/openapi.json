@@ -430180,9 +430180,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
-                "scheduledTask",
-                "log",
-                "auditLog"
+                "scheduledTask"
               ]
             },
             "in": "path",
@@ -430603,9 +430601,7 @@
                           "llmOauthClient",
                           "environment",
                           "serviceAccount",
-                          "scheduledTask",
-                          "log",
-                          "auditLog"
+                          "scheduledTask"
                         ]
                       },
                       "scope": {
@@ -430922,9 +430918,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
-                "scheduledTask",
-                "log",
-                "auditLog"
+                "scheduledTask"
               ]
             },
             "in": "path",
@@ -431354,9 +431348,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
-                "scheduledTask",
-                "log",
-                "auditLog"
+                "scheduledTask"
               ]
             },
             "in": "path",
@@ -431414,9 +431406,7 @@
                         "llmOauthClient",
                         "environment",
                         "serviceAccount",
-                        "scheduledTask",
-                        "log",
-                        "auditLog"
+                        "scheduledTask"
                       ]
                     },
                     "scope": {
@@ -432179,9 +432169,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
-                "scheduledTask",
-                "log",
-                "auditLog"
+                "scheduledTask"
               ]
             },
             "in": "path",
@@ -432239,9 +432227,7 @@
                         "llmOauthClient",
                         "environment",
                         "serviceAccount",
-                        "scheduledTask",
-                        "log",
-                        "auditLog"
+                        "scheduledTask"
                       ]
                     },
                     "scope": {

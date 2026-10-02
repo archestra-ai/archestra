@@ -1,8 +1,8 @@
 import {
   archestraApiSdk,
+  ManagedResourceSchema,
   type Permissions,
   ResourcePermissionActionSchema,
-  ScopedResourceSchema,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { hasPagePermissions, hasPermissions } from "@/lib/auth/auth.utils";
@@ -84,7 +84,7 @@ export function useHasPermissions(
   for (const [resource, actions] of Object.entries(permissionsToCheck)) {
     const missingActions = actions.filter((action) =>
       scopedCheck &&
-      ScopedResourceSchema.safeParse(resource).success &&
+      ManagedResourceSchema.safeParse(resource).success &&
       ResourcePermissionActionSchema.safeParse(action).success
         ? !capabilities.data?.some(
             (grant) =>

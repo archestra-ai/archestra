@@ -67,10 +67,15 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-function renderEditor(onParentSubmit?: () => void) {
+function renderEditor(onParentSubmit?: () => void, canManageGlobal = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
+  client.setQueryData(
+    ["auth", "userPermissions"],
+    canManageGlobal ? { globalPermissions: ["read", "update"] } : {},
+  );
   const editor = (
     <ResourcePermissions
       resource="mcpRegistry"
@@ -213,7 +218,7 @@ it("opens the shared all-resource editor from an inherited permission source", a
       },
     ),
   );
-  renderEditor();
+  renderEditor(undefined, true);
   const user = userEvent.setup();
   await user.click(
     await screen.findByRole("button", {

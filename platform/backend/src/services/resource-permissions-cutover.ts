@@ -652,15 +652,13 @@ WITH holders AS (
   FROM organization o
   CROSS JOIN (VALUES
     ('project'), ('plugin'), ('llmVirtualKey'), ('llmProviderApiKey'),
-    ('knowledgeSource'), ('scheduledTask'), ('log'), ('auditLog'),
+    ('knowledgeSource'), ('scheduledTask'),
     ('mcpOauthClient'), ('llmOauthClient')
   ) AS source(role_action)
   JOIN LATERAL (
     -- The built-in roles keep their permissions in code, not in this table,
-    -- so they are named rather than queried. Only \`admin\` held the two log
-    -- actions; \`platform_admin\` held the rest alongside it.
-    SELECT unnest(CASE WHEN source.role_action IN ('log', 'auditLog')
-      THEN ARRAY['admin'] ELSE ARRAY['admin', 'platform_admin'] END) AS id
+    -- so they are named rather than queried.
+    SELECT unnest(ARRAY['admin', 'platform_admin']) AS id
     UNION
     SELECT roles.id FROM organization_role roles
     WHERE roles.organization_id = o.id
@@ -668,14 +666,9 @@ WITH holders AS (
   ) grantee ON true
 ), targeted AS (
   SELECT h.organization_id, mapped.resource, h.role_id,
-    -- Log viewers keep read-only access. The built-in admin also needs to
-    -- delegate that access now that the old role action has been retired.
+    -- Preserve the ordinary action gates alongside the widened scope.
     ARRAY(
-      SELECT action FROM unnest(CASE
-        WHEN mapped.resource IN ('log', 'auditLog') AND h.role_id = 'admin'
-          THEN ARRAY['read', 'manage-permissions']
-        WHEN mapped.resource IN ('log', 'auditLog') THEN ARRAY['read']
-        ELSE ARRAY['read', 'use', 'update', 'delete', 'manage-permissions'] END) action
+      SELECT action FROM unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) action
       WHERE h.role_id IN ('admin', 'platform_admin') OR EXISTS (
         -- The old admin flag widened scope, while the ordinary role actions
         -- still gated CRUD. Preserve both halves for custom roles.
@@ -927,7 +920,7 @@ WITH converted AS (
       WHEN resource IN (
         'agent', 'mcpGateway', 'mcpRegistry', 'skill', 'app',
         'project', 'plugin', 'llmVirtualKey', 'llmProviderApiKey',
-        'knowledgeSource', 'scheduledTask', 'log', 'auditLog',
+        'knowledgeSource', 'scheduledTask',
         'mcpServerInstallation', 'mcpOauthClient', 'llmOauthClient'
       ) THEN
         COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)

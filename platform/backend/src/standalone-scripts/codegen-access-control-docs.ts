@@ -39,7 +39,7 @@ function generatePredefinedRolesSections(): string {
     } else if (role === PLATFORM_ADMIN_ROLE_NAME) {
       section +=
         "Platform Admin holds **all permissions except** `log:admin`, " +
-        "`auditLog:admin`, and `member:impersonate` — so holders run the " +
+        "`auditLog:admin`, `openappaDiagnostics:admin`, and `member:impersonate` — so holders run the " +
         "platform (users, roles, settings, resources) while other members' " +
         "LLM/MCP logs, the org-wide audit trail, and impersonation stay out " +
         "of reach. They keep `log:read` and `auditLog:read`, which show " +
@@ -181,7 +181,7 @@ Creation with \`initialGrants\` also records the creator's full access explicitl
 
 ### Delegation And Concurrent Edits
 
-To change a policy, you need \`manage-permissions\` on that scope. You can grant only actions that you also hold on that same scope. Authority over one object does not authorize a wildcard grant. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
+Global policies require \`globalPermissions:read\` to view or \`globalPermissions:update\` to edit. Update also allows viewing the policy. These role permissions apply across resource types. Admin and Platform Admin receive both by default. Ordinary resource CRUD permissions do not authorize global policy administration. Individual object policies still require \`manage-permissions\` on that object. You can grant only actions you hold on that object. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
 
 Saving includes the policy revision. If someone else changes the policy first, the API returns \`409\` and the editor preserves your draft. Reload the latest policy before saving again. Changes to grants are recorded in the audit log. Unsaved permission edits are kept separate from ordinary configuration saves; use **Save permissions** to apply them.
 
@@ -351,6 +351,10 @@ Permissions in Archestra are defined using a \`resource:action\` format, where:
 - **Action**: The operation being performed (\`create\`, \`read\`, \`update\`, \`delete\`, \`admin\`)
 
 For example, \`agent:create\` allows creating agents, \`mcpGateway:update\` allows updating MCP gateways, and \`llmProxy:read\` allows viewing the LLM Proxy.
+
+## Log Visibility
+
+The \`log:read\` permission shows your own LLM and MCP logs. Add \`log:admin\` to see every organization log. Audit events use \`auditLog:read\` and \`auditLog:admin\`. Guardrail consult logs use \`openappaDiagnostics:read\` and \`openappaDiagnostics:admin\`. Admin has organization-wide visibility by default. Log pages use these role actions instead of resource sharing policies.
 
 ## Predefined Roles
 

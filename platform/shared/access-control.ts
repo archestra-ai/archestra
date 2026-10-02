@@ -72,12 +72,13 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
   file: ["manage"],
-  log: ["read"],
+  log: ["read", "admin"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
   serviceAccount: ["read", "create", "update", "delete"],
-  auditLog: ["read"],
+  auditLog: ["read", "admin"],
+  globalPermissions: ["read", "update"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
@@ -152,6 +153,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   serviceAccount: [],
   auditLog: [],
+  globalPermissions: [],
   agentSettings: [],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
@@ -232,6 +234,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   serviceAccount: [],
   auditLog: [],
+  globalPermissions: [],
   agentSettings: [],
   llmSettings: [],
   mcpSettings: [],
@@ -540,6 +543,14 @@ export const permissionDescriptions: Record<string, string> = {
   "serviceAccount:update": "Modify service accounts",
   "serviceAccount:delete": "Delete service accounts",
   "auditLog:read": "View audit log records of your own administrative actions",
+  "auditLog:admin":
+    "View every audit event in your organization (also requires Read)",
+  "log:admin":
+    "View every LLM and MCP log in your organization (also requires Read)",
+  "globalPermissions:read":
+    "View global permission policies for all resource types",
+  "globalPermissions:update":
+    "Edit global permission policies and grant access across all resource types",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
@@ -2105,7 +2116,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/logs": { log: ["read"] },
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
-  "/consults/logs": { log: ["read"] },
+  "/consults/logs": { openappaDiagnostics: ["read"] },
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },

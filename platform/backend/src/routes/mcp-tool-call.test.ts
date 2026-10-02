@@ -12,7 +12,6 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import McpToolCallModel from "@/models/mcp-tool-call";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
 describe("mcp-tool-call routes", () => {
@@ -107,22 +106,16 @@ describe("mcp-tool-call routes", () => {
     expect(response.json().data[0].id).toBe(ownRowId);
   });
 
-  test("log:admin alone lists every tool call in the active organization", async ({
+  test("log:read plus log:admin lists every tool call in the active organization", async ({
     makeCustomRole,
     makeMember,
     makeUser,
   }) => {
     const auditor = await makeUser();
     const allLogs = await makeCustomRole(organizationId, {
-      permission: { log: ["read"] },
+      permission: { log: ["read", "admin"] },
     });
-    // Every row is `read` on the log at `*`, which log:admin became.
-    await grantRoleEverywhere({
-      organizationId,
-      resource: "log",
-      roleId: allLogs.id,
-      actions: ["read"],
-    });
+
     await makeMember(auditor.id, organizationId, { role: allLogs.role });
     currentUser = auditor;
 
@@ -158,15 +151,9 @@ describe("mcp-tool-call routes", () => {
     });
     const auditor = await makeUser();
     const allLogs = await makeCustomRole(organizationId, {
-      permission: { log: ["read"] },
+      permission: { log: ["read", "admin"] },
     });
-    // Every row is `read` on the log at `*`, which log:admin became.
-    await grantRoleEverywhere({
-      organizationId,
-      resource: "log",
-      roleId: allLogs.id,
-      actions: ["read"],
-    });
+
     await makeMember(auditor.id, organizationId, { role: allLogs.role });
     currentUser = auditor;
 

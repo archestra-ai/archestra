@@ -1,13 +1,18 @@
+import { RouteId } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { InternalMcpCatalogModel } from "@/models";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { InternalMcpCatalogModel, ServiceAccountModel } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
 
-import { hasPermission } from "@/auth";
+import { betterAuth, hasPermission } from "@/auth";
+import { authPlugin } from "@/auth/fastify-plugin/plugin";
+import { hasPermission as checkPermissions } from "@/auth/utils";
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -38,9 +43,19 @@ describe("internal MCP catalog deployment YAML permission", () => {
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    // Route-level permissions are enforced by the auth plugin, which these
-    // tests do not register; the in-handler YAML check is what is under test.
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    // Stub session identity only; exercise the real middleware, DB role
+    // composition, endpoint map and field-level checks.
+    mockHasPermission.mockImplementation(checkPermissions);
+    vi.mocked(betterAuth.api.getSession).mockImplementation(
+      async () =>
+        ({
+          response: {
+            user: currentUser,
+            session: { activeOrganizationId: organizationId },
+          },
+          headers: new Headers(),
+        }) as never,
+    );
 
     organizationId = (await makeOrganization()).id;
     admin = await makeUser();
@@ -51,10 +66,10 @@ describe("internal MCP catalog deployment YAML permission", () => {
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: User }).user = currentUser;
-      (request as typeof request & { organizationId: string }).organizationId =
-        organizationId;
+      request.headers.cookie = "test-session";
     });
+    await app.register(authPlugin);
+    registerAuditLogHook(app);
     const { default: routes } = await import("./internal-mcp-catalog");
     await app.register(routes);
   });
@@ -102,7 +117,7 @@ describe("internal MCP catalog deployment YAML permission", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
   });
 
   test("an editor cannot change stored YAML, and the rejected update writes nothing", async ({
@@ -215,7 +230,7 @@ describe("internal MCP catalog deployment YAML permission", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     const persisted = await InternalMcpCatalogModel.findById(catalog.id);
     expect(persisted?.description).toBe("Edited by an editor");
     expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
@@ -236,7 +251,7 @@ describe("internal MCP catalog deployment YAML permission", () => {
       payload: { deploymentSpecYaml: DEPLOYMENT_YAML },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     const persisted = await InternalMcpCatalogModel.findById(catalog.id);
     expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
   });
@@ -277,5 +292,243 @@ describe("internal MCP catalog deployment YAML permission", () => {
     expect(persisted?.deploymentSpecYaml ?? null).toBe(
       expectedStatus === 200 ? DEPLOYMENT_YAML : null,
     );
+  });
+  test.for([
+    { role: "admin", read: true, update: true },
+    { role: "platform_admin", read: true, update: true },
+    { role: "editor", read: false, update: false },
+    { role: "member", read: false, update: false },
+    { role: "custom-read", read: true, update: false },
+    { role: "custom-update", read: false, update: true },
+  ])("$role has the expected YAML endpoint access", async ({
+    role,
+    read,
+    update,
+  }, { makeUser, makeMember, makeCustomRole, makeInternalMcpCatalog }) => {
+    const user = await makeUser();
+    const roleName = role.startsWith("custom-")
+      ? (
+          await makeCustomRole(organizationId, {
+            permission: {
+              mcpRegistry: ["read", "create", "update"],
+              mcpAdvancedSettings: [read ? "read" : "update"],
+            },
+          })
+        ).role
+      : role;
+    await makeMember(user.id, organizationId, { role: roleName });
+    currentUser = user;
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: user.id,
+      serverType: "local",
+      localConfig: { command: "node", arguments: ["server.js"] },
+      deploymentSpecYaml: DEPLOYMENT_YAML,
+    });
+    const get = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+    });
+    expect(get.statusCode, get.body).toBe(200);
+    expect(get.json().deploymentSpecYaml).toBe(read ? DEPLOYMENT_YAML : null);
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog",
+    });
+    expect(list.statusCode).toBe(200);
+    expect(
+      list.json().find((item: { id: string }) => item.id === catalog.id)
+        .deploymentSpecYaml,
+    ).toBe(read ? DEPLOYMENT_YAML : null);
+    const preview = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${catalog.id}/deployment-yaml-preview`,
+    });
+    expect(preview.statusCode).toBe(read ? 200 : 403);
+    const validate = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog/validate-deployment-yaml",
+      payload: { yaml: DEPLOYMENT_YAML },
+    });
+    expect(validate.statusCode).toBe(read ? 200 : 403);
+    const reset = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/reset-deployment-yaml`,
+    });
+    expect(reset.statusCode).toBe(read && update ? 200 : 403);
+  });
+
+  test("an editor cannot add, replace or remove Kubernetes Secret references", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const original = [
+      { type: "secret" as const, name: "trusted-runtime", prefix: "" },
+    ];
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: editor.id,
+      serverType: "local",
+      localConfig: { command: "node", arguments: [], envFrom: original },
+    });
+    currentUser = editor;
+    for (const envFrom of [
+      [],
+      [{ type: "secret", name: "platform-secret", prefix: "" }],
+    ]) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: { localConfig: { command: "node", arguments: [], envFrom } },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(
+        (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+          ?.envFrom,
+      ).toEqual(original);
+    }
+    const unchanged = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        description: "ordinary edit",
+        localConfig: { command: "node", arguments: [], envFrom: original },
+      },
+    });
+    expect(unchanged.statusCode).toBe(200);
+  });
+  test("combining editor and a custom advanced role grants both capabilities", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeInternalMcpCatalog,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: { mcpAdvancedSettings: ["read", "update"] },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: `editor,${role.role}` });
+    currentUser = user;
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: user.id,
+      serverType: "local",
+      localConfig: { command: "node", arguments: [] },
+    });
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: { deploymentSpecYaml: DEPLOYMENT_YAML },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      limit: 20,
+      offset: 0,
+    });
+    const write = audit.data.find(
+      (row) => row.resourceId === catalog.id && row.outcome === "success",
+    );
+    expect(write?.before?.hasDeploymentSpecYaml).toBe(false);
+    expect(write?.after?.hasDeploymentSpecYaml).toBe(true);
+    expect(write?.after?.deploymentSpecYamlHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(write)).not.toContain(DEPLOYMENT_YAML);
+  });
+
+  test.for([
+    "editor",
+    "admin",
+  ])("a %s service-account token gets its actual YAML permissions", async (role, {
+    makeServiceAccount,
+    makeInternalMcpCatalog,
+  }) => {
+    const account = await makeServiceAccount(organizationId, { role });
+    const token = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId,
+      name: "rbac-check",
+    });
+    vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+      response: null,
+      headers: new Headers(),
+    } as never);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: admin.id,
+      serverType: "local",
+      deploymentSpecYaml: DEPLOYMENT_YAML,
+      localConfig: { command: "node", arguments: [] },
+    });
+    const headers = { authorization: token.token };
+    const preview = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${catalog.id}/deployment-yaml-preview`,
+      headers,
+    });
+    expect(preview.statusCode, preview.body).toBe(role === "admin" ? 200 : 403);
+    const write = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      headers,
+      payload: { deploymentSpecYaml: `${DEPLOYMENT_YAML}\n` },
+    });
+    expect(write.statusCode, write.body).toBe(role === "admin" ? 200 : 403);
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.deploymentSpecYaml,
+    ).toBe(role === "admin" ? `${DEPLOYMENT_YAML}\n` : DEPLOYMENT_YAML);
+  });
+  test("nested YAML responses are redacted without corrupting dates or shared payloads", async () => {
+    const payload = {
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      installations: [{ catalog: { deploymentSpecYaml: DEPLOYMENT_YAML } }],
+      audit: { before: { deploymentSpecYaml: DEPLOYMENT_YAML } },
+    };
+    app.get(
+      "/api/rbac-response-fixture",
+      { schema: { operationId: RouteId.GetInternalMcpCatalog } },
+      async () => payload,
+    );
+    currentUser = editor;
+    const denied = await app.inject("/api/rbac-response-fixture");
+    expect(denied.statusCode, denied.body).toBe(200);
+    expect(denied.json()).toEqual({
+      createdAt: "2026-01-01T00:00:00.000Z",
+      installations: [{ catalog: { deploymentSpecYaml: null } }],
+      audit: { before: { deploymentSpecYaml: null } },
+    });
+    currentUser = admin;
+    const allowed = await app.inject("/api/rbac-response-fixture");
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    expect(allowed.json().installations[0].catalog.deploymentSpecYaml).toBe(
+      DEPLOYMENT_YAML,
+    );
+    expect(payload.audit.before.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
+  });
+
+  test("clearing or replacing localConfig cannot remove protected references without permission", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: editor.id,
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        envFrom: [{ type: "secret", name: "trusted-runtime", prefix: "" }],
+      },
+    });
+    currentUser = editor;
+    for (const localConfig of [null, { command: "node" }]) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: { localConfig },
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    }
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.envFrom?.[0].name,
+    ).toBe("trusted-runtime");
   });
 });

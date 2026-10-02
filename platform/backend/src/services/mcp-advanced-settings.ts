@@ -1,4 +1,7 @@
+import { isDeepStrictEqual } from "node:util";
+import type { FastifyInstance } from "fastify";
 import { userHasPermission } from "@/auth/utils";
+import type { LocalConfig } from "@/types";
 import { ApiError } from "@/types";
 
 /**
@@ -15,9 +18,24 @@ export async function assertCanWriteMcpDeploymentYaml(params: {
   organizationId: string;
   requested: string | null | undefined;
   current?: string | null;
+  requestedLocalConfig?: Pick<LocalConfig, "envFrom" | "serviceAccount"> | null;
+  currentLocalConfig?: Pick<LocalConfig, "envFrom" | "serviceAccount"> | null;
 }): Promise<void> {
-  if (params.requested === undefined) return;
-  if ((params.requested || null) === (params.current || null)) return;
+  const yamlChanged =
+    params.requested !== undefined &&
+    (params.requested || null) !== (params.current || null);
+  const localConfig = params.requestedLocalConfig;
+  const envFromChanged =
+    localConfig !== undefined &&
+    !isDeepStrictEqual(
+      localConfig?.envFrom ?? [],
+      params.currentLocalConfig?.envFrom ?? [],
+    );
+  const serviceAccountChanged =
+    localConfig !== undefined &&
+    (localConfig?.serviceAccount?.trim() || "default") !==
+      (params.currentLocalConfig?.serviceAccount?.trim() || "default");
+  if (!yamlChanged && !envFromChanged && !serviceAccountChanged) return;
 
   const allowed = await userHasPermission(
     params.userId,
@@ -28,7 +46,49 @@ export async function assertCanWriteMcpDeploymentYaml(params: {
   if (!allowed) {
     throw new ApiError(
       403,
-      "Changing the Kubernetes deployment YAML requires the mcpAdvancedSettings:update permission.",
+      "Changing Kubernetes deployment YAML, Secret/ConfigMap references, or the service account requires the mcpAdvancedSettings:update permission.",
     );
   }
+}
+
+/** Redact stored YAML everywhere it occurs in an authenticated API response,
+ * including nested installed-server catalogs and audit snapshots. */
+export function registerMcpDeploymentYamlResponseFilter(
+  app: FastifyInstance,
+): void {
+  app.addHook("preSerialization", async (request, _reply, payload) => {
+    if (!containsDeploymentYaml(payload)) return payload;
+    const allowed =
+      request.user &&
+      request.organizationId &&
+      (await userHasPermission(
+        request.user.id,
+        request.organizationId,
+        "mcpAdvancedSettings",
+        "read",
+      ));
+    return allowed ? payload : redactDeploymentYaml(payload);
+  });
+}
+
+function containsDeploymentYaml(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(containsDeploymentYaml);
+  return Object.entries(value).some(
+    ([key, child]) =>
+      (key === "deploymentSpecYaml" && child != null) ||
+      containsDeploymentYaml(child),
+  );
+}
+
+function redactDeploymentYaml(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(redactDeploymentYaml);
+  if (Object.getPrototypeOf(value) !== Object.prototype) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      key === "deploymentSpecYaml" ? null : redactDeploymentYaml(child),
+    ]),
+  );
 }

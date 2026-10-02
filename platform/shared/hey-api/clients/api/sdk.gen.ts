@@ -5074,7 +5074,8 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `mcpAdvancedSettings:update`: Edit the Kubernetes deployment YAML of self-hosted MCP servers
+ * `mcpAdvancedSettings:read`: View the Kubernetes deployment YAML of self-hosted MCP servers
+ * `mcpAdvancedSettings:update`: Edit Kubernetes deployment YAML, Secret/ConfigMap references, and service accounts of self-hosted MCP servers
  * `mcpRegistry:update`: Modify MCP registry entries
  */
 export const resetDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ResetDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ResetDeploymentYamlResponses, ResetDeploymentYamlErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/reset-deployment-yaml', ...options });

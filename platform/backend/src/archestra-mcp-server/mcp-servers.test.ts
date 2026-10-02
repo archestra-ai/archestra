@@ -434,6 +434,86 @@ spec:
     ).toBeFalsy();
   });
 
+  test.for([
+    "create",
+    "edit",
+  ])("an editor cannot inject Secret references through the %s tool", async (operation, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+  }) => {
+    const { context, organizationId, userId } = await makeContext("editor", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: userId,
+      serverType: "local",
+    });
+    const result = await executeArchestraTool(
+      operation === "create" ? CREATE_TOOL : EDIT_TOOL,
+      {
+        ...(operation === "create"
+          ? {
+              name: "Secret Reference Attempt",
+              serverType: "local",
+              command: "node",
+            }
+          : { id: catalog.id }),
+        envFrom: [{ type: "secret", name: "platform-secret", prefix: "" }],
+      },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "mcpAdvancedSettings:update",
+    );
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.envFrom ?? [],
+    ).toEqual([]);
+    expect(
+      await InternalMcpCatalogModel.findRootByNameInOrg({
+        name: "Secret Reference Attempt",
+        organizationId,
+      }),
+    ).toBeFalsy();
+  });
+
+  test("even an admin cannot persist a disallowed service account through a catalog tool", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+  }) => {
+    const { context, organizationId } = await makeContext("admin", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+    });
+    const result = await executeArchestraTool(
+      EDIT_TOOL,
+      { id: catalog.id, serviceAccount: "archestra-platform" },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("not allowed");
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.serviceAccount,
+    ).toBeUndefined();
+  });
   test("an admin can set deployment YAML through edit_mcp_config", async ({
     makeAgent,
     makeInternalMcpCatalog,

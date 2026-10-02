@@ -24,6 +24,7 @@ import {
 } from "@/auth/mcp-catalog-permissions";
 import { userHasPermission } from "@/auth/utils";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import { assertMcpServiceAccountAllowed } from "@/k8s/mcp-server-runtime/runtime-policy";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -928,11 +929,19 @@ async function handleEditMcpConfig(
     }
 
     try {
+      if (args.serviceAccount !== undefined)
+        assertMcpServiceAccountAllowed(args.serviceAccount);
       await assertCanWriteMcpDeploymentYaml({
         userId: context.userId,
         organizationId,
         requested: args.deploymentSpecYaml,
+        requestedLocalConfig: {
+          envFrom: args.envFrom ?? existing.localConfig?.envFrom,
+          serviceAccount:
+            args.serviceAccount ?? existing.localConfig?.serviceAccount,
+        },
         current: existing.deploymentSpecYaml,
+        currentLocalConfig: existing.localConfig,
       });
     } catch (error) {
       return errorResult((error as Error).message);
@@ -1057,10 +1066,16 @@ async function handleCreateMcpServer(
     }
 
     try {
+      if (args.serviceAccount !== undefined)
+        assertMcpServiceAccountAllowed(args.serviceAccount);
       await assertCanWriteMcpDeploymentYaml({
         userId: context.userId,
         organizationId,
         requested: args.deploymentSpecYaml,
+        requestedLocalConfig: {
+          envFrom: args.envFrom,
+          serviceAccount: args.serviceAccount,
+        },
       });
     } catch (error) {
       return errorResult((error as Error).message);

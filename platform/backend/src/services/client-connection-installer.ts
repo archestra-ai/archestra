@@ -128,7 +128,7 @@ function spawnBrowser(command, args) {
     };
     const timer = setTimeout(() => {
       child.unref();
-      finish('ok');
+      finish('timeout');
     }, 5000);
     child.once('error', (error) => finish(classifySpawnError(error)));
     child.once('exit', (code) => finish(code === 0 ? 'ok' : 'exit'));

@@ -718,7 +718,7 @@ function installWithBrowser(params: {
   onSpawn: (
     command: string,
     args: string[],
-  ) => { errorCode?: string; exit?: number };
+  ) => { errorCode?: string; exit?: number; pending?: boolean };
   initExists?: boolean;
   fakeSetup?: boolean;
 }) {
@@ -777,6 +777,7 @@ function installWithBrowser(params: {
               const outcome = params.onSpawn(command, args);
               const child = Object.assign(new EventEmitter(), { unref() {} });
               queueMicrotask(() => {
+                if (outcome.pending) return;
                 if (outcome.errorCode) {
                   const error = new Error(
                     outcome.errorCode,
@@ -860,6 +861,20 @@ test("browser launch EACCES stops and still polls the same request", async () =>
     "Browser did not open. Use the approval URL above.",
   );
   expect(logs.join("\n")).not.toContain("A".repeat(43));
+});
+
+test("an unfinished browser launcher retains the manual fallback", async () => {
+  const { logs, done } = installWithBrowser({
+    platform: "linux",
+    env: {},
+    which: () => ({ status: 1, stdout: "" }),
+    onSpawn: () => ({ pending: true }),
+  });
+  await done;
+  expect(logs.join("\n")).toContain("Browser did not open");
+  expect(starts).toBe(1);
+  expect(polls).toBeGreaterThanOrEqual(1);
+  expect(downloads).toBe(1);
 });
 
 test.each([

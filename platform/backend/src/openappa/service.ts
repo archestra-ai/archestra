@@ -33,7 +33,6 @@ import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-na
 import {
   type GuardrailsV2Activation,
   isGuardrailsV2Active,
-  readGuardrailsV2Activation,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type { DeclaredToolSpelling } from "./wire";
@@ -328,15 +327,8 @@ async function binding() {
   if (!openappaEnabled()) {
     throw new Error("OpenAPPA is disabled");
   }
-  const captured = capturedActivation.getStore();
-  if (captured === "inactive") {
+  if (capturedActivation.getStore() === "inactive") {
     throw new Error("OpenAPPA is disabled");
-  }
-  if (captured !== "active") {
-    const activation = await readGuardrailsV2Activation();
-    if (activation !== "active") {
-      throw new Error("OpenAPPA is disabled");
-    }
   }
   // A composed document names the helper bridge bearer as a `token_env` the
   // addon resolves from this process's environment when it compiles the

@@ -380,6 +380,27 @@ describe("browser-approved client connection", () => {
     );
     expect((await decide(pending.id)).statusCode).toBe(410);
   });
+
+  test("a lost request does not promise that the same approval can be retried", async () => {
+    const pending = await start();
+    const fault = vi
+      .spyOn(cacheManager, "set")
+      .mockRejectedValue(new Error("cache write unavailable"));
+    const response = await decide(pending.id);
+    fault.mockRestore();
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.message).toBe(
+      "Connection request could not be restored. Stop the installer and start again.",
+    );
+    expect(response.body).not.toContain(pending.deviceCode);
+    expect(response.body).not.toContain(pending.id);
+    expect((await decide(pending.id)).statusCode).toBe(410);
+    expect(
+      await ConnectionSetupModel.findByToken(
+        `archestra_con_${pending.deviceCode}`,
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("client connection authentication boundary", () => {

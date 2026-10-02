@@ -207,7 +207,10 @@ async function restorePending(pending: Pending): Promise<void> {
       ttl,
     );
   } catch {
-    return;
+    throw new ApiError(
+      503,
+      "Connection request could not be restored. Stop the installer and start again.",
+    );
   }
 }
 

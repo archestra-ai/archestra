@@ -1749,12 +1749,15 @@ async function admitRelayArrivals(params: {
   let ranUnenforced: Promise<boolean> | undefined;
   // Only a sender that has nothing on record counts: a message from a sender
   // with a crossing may be the summary of a return the check withheld. A
-  // subagent's envelope names no sender any record carries, so it never counts.
+  // teammate's envelope, a teammate or an agent one, names it by the name it
+  // launched under. A subagent's envelope names no sender a launch carries, so
+  // it never counts.
   const sentUnenforced = async (arrival: AppaRelayArrival) => {
-    if (arrival.kind !== "teammate" && arrival.kind !== "coordinator")
-      return false;
+    if (arrival.kind === "session") return false;
     const launch =
-      arrival.kind === "teammate" ? launches?.get(arrival.from) : undefined;
+      arrival.kind === "teammate" || arrival.kind === "agent"
+        ? launches?.get(arrival.from)
+        : undefined;
     if (
       launch &&
       params.binding.unenforcedCalls.reasons.has(
@@ -1765,6 +1768,7 @@ async function admitRelayArrivals(params: {
         (record) => record.childNativeId === launch.childNativeId,
       );
     }
+    if (arrival.kind === "agent") return false;
     ranUnenforced ??= spawnRanUnenforced(params.binding);
     return (await ranUnenforced) && (await addresses()).length === 0;
   };

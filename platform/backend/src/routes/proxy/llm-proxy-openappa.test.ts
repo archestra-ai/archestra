@@ -5703,7 +5703,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         });
         expect((await send(teammate, teammateOpening)).statusCode).toBe(200);
 
-        // It fails mid-task, and the lead resumes it.
+        // It fails mid-task, and the lead resumes it. Claude Code 2.1.287
+        // hands the lead a teammate's message as an agent envelope, and its
+        // idle notice as a teammate envelope.
         const failed = teammateMessage(
           "sched-tools",
           JSON.stringify({
@@ -5711,7 +5713,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             from: "sched-tools",
             timestamp: "2026-09-29T10:12:00.000Z",
             idleReason: "failed",
-            summary: "API Error: Overloaded",
+            result: "API Error: Overloaded",
           }),
         );
         history = [
@@ -5724,6 +5726,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 "sched-tools",
                 "The tools are written. Now the tests.",
               ),
+              `<agent-message from="sched-tools">\nThe schedule trigger tools pass their tests.\n</agent-message>`,
               failed,
             ),
           },
@@ -5760,6 +5763,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(lead.statusCode, lead.body).toBe(200);
         expect(lead.body).not.toContain("unverified child completion");
         expect(forwarded()).toContain("The tools are written. Now the tests.");
+        expect(forwarded()).toContain(
+          "The schedule trigger tools pass their tests.",
+        );
         expect(forwarded()).toContain("API Error: Overloaded");
         expect(forwarded()).toContain("Failed to resolve base branch");
         expect(forwarded()).toContain(`agent_id: ${teammate}`);

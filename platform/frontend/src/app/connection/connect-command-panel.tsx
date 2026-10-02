@@ -205,10 +205,7 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
-  // Every client except Claude Desktop lists what gets connected. The approval
-  // page keeps its options under "Customize setup", so its list is read-only.
-  const showSetupSummary = client.id !== "claude-desktop";
-  const summaryEditable = !connectRequest;
+  const showSetupSummary = !connectRequest && client.id !== "claude-desktop";
   const setupStep = showSetupSummary ? 3 : 2;
   const requestedPlatform = searchParams.get("platform");
   const {
@@ -953,15 +950,11 @@ export function ConnectCommandPanel({
   return (
     <>
       {showSetupSummary && (
-        <ConnectionSection
-          compact={!!connectRequest}
-          n={2}
-          title="Review the setup"
-        >
+        <ConnectionSection compact={false} n={2} title="Review the setup">
           <ul className="grid gap-2">
             {gateway && (
               <SetupSummaryRow
-                editable={summaryEditable && !!gatewayEditor}
+                editable={!!gatewayEditor}
                 isEditing={editing === "gateway"}
                 onToggle={() => toggleEdit("gateway")}
                 editor={gatewayEditor}
@@ -976,7 +969,7 @@ export function ConnectCommandPanel({
             {hasProxy && (
               <SetupSummaryRow
                 done={proxyActive && client.id !== "cursor"}
-                editable={summaryEditable}
+                editable
                 isEditing={editing === "proxy"}
                 onToggle={() => toggleEdit("proxy")}
                 editor={proxyEditor}
@@ -1033,7 +1026,7 @@ export function ConnectCommandPanel({
             {supportsModelChoice && proxyActive && provider && (
               <SetupSummaryRow
                 done
-                editable={summaryEditable}
+                editable
                 isEditing={editing === "model"}
                 onToggle={() => toggleEdit("model")}
                 editor={modelEditor}
@@ -1048,7 +1041,7 @@ export function ConnectCommandPanel({
             {skillsEligible && (
               <SetupSummaryRow
                 done={includeSkills}
-                editable={summaryEditable}
+                editable
                 isEditing={editing === "skills"}
                 onToggle={() => toggleEdit("skills")}
                 editor={skillsEditor}
@@ -1077,7 +1070,7 @@ export function ConnectCommandPanel({
             {pluginsEnabled && plugins.length > 0 && (
               <SetupSummaryRow
                 done={selectedPlugins.length > 0 && client.id !== "cursor"}
-                editable={summaryEditable && !!pluginsEditor}
+                editable={!!pluginsEditor}
                 isEditing={editing === "plugins"}
                 onToggle={() => toggleEdit("plugins")}
                 editor={pluginsEditor}
@@ -1120,7 +1113,7 @@ export function ConnectCommandPanel({
             )}
             {showEndpoint && (
               <SetupSummaryRow
-                editable={summaryEditable}
+                editable
                 isEditing={editing === "endpoint"}
                 onToggle={() => toggleEdit("endpoint")}
                 editor={endpointEditor}
@@ -1131,7 +1124,7 @@ export function ConnectCommandPanel({
               </SetupSummaryRow>
             )}
             <SetupSummaryRow
-              editable={summaryEditable}
+              editable
               isEditing={editing === "platform"}
               onToggle={() => toggleEdit("platform")}
               editor={platformEditor}
@@ -1159,7 +1152,7 @@ export function ConnectCommandPanel({
         }
         last={!showOAuthStep && !showDesktopGatewayStep}
       >
-        {(!showSetupSummary || connectRequest) && (
+        {!showSetupSummary && (
           <Collapsible
             open={customizing}
             onOpenChange={setCustomizing}

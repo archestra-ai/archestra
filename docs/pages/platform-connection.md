@@ -32,7 +32,7 @@ The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.
 
 The agent downloads a public bootstrap installer and starts a connection request.
 Your browser opens a compact approval page for the requested client and operating system.
-It lists the gateway with its MCP servers and tools, the LLM Proxy, and shared skills, using your deployment’s defaults. **Customize setup** reveals the optional settings.
+The setup uses your deployment’s defaults. **Customize setup** reveals the optional settings.
 Sign in using your deployment's usual login or SSO.
 Review the configuration and confirm that the browser code matches your terminal.
 ![Browser approval with a matching terminal code](/docs/automated_screenshots/platform-connection_browser-approval.webp)

@@ -525,7 +525,7 @@ describe("ConnectCommandPanel", () => {
     }
   });
 
-  it("lists the setup on the approval page and approves the changed choices", async () => {
+  it("keeps approval compact while customized choices reach the approved setup", async () => {
     const decisions: unknown[] = [];
     const server = setupServer(
       http.get("http://localhost:9000/api/client-connections/demo", () =>
@@ -579,13 +579,10 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.queryByRole("heading", { name: "Connect Claude Code" }),
       ).toBeNull();
-      // The approval page lists what gets connected before the user approves;
-      // the list is read-only and options stay under "Customize setup".
-      expect(screen.getByText("for tools", { exact: false })).toBeVisible();
-      expect(screen.getByTestId("gateway-servers-summary")).toBeVisible();
-      expect(screen.queryByTestId("connect-change-skills")).toBeNull();
+      expect(screen.queryByText("for tools")).toBeNull();
       expect(screen.queryByText(COMMAND)).toBeNull();
       expect(screen.queryByTestId("connect-regenerate-command")).toBeNull();
+      expect(screen.queryByTestId("connect-change-skills")).toBeNull();
       expect(
         screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
       ).toBeNull();
@@ -598,7 +595,6 @@ describe("ConnectCommandPanel", () => {
           expect.objectContaining({ skills: undefined }),
         ),
       );
-      expect(screen.getByText("Shared skills not installed")).toBeVisible();
       await user.click(
         screen.getByRole("button", { name: "Done customizing" }),
       );

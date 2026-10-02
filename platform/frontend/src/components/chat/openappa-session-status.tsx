@@ -19,11 +19,9 @@ export const OpenappaSessionStatus = memo(function OpenappaSessionStatus({
   );
   // A failed refetch can retain cached data. Never present it as current.
   const status = isError ? null : data;
-  if (!enabled || !deployment?.active) return null;
+  if (!enabled || !deployment?.active || !status) return null;
 
-  const statusLabel = status
-    ? `Trust: ${status.trust}; audience: ${status.audience}`
-    : "Trust and audience status unavailable";
+  const statusLabel = `Trust: ${status.trust}; audience: ${status.audience}`;
 
   return (
     <div className="relative z-10 mx-3 -mb-px flex min-w-0 max-w-[calc(100%-1.5rem)]">
@@ -33,20 +31,14 @@ export const OpenappaSessionStatus = memo(function OpenappaSessionStatus({
           aria-label={statusLabel}
           className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-left font-mono text-[11px] leading-4 [overflow-wrap:anywhere]"
         >
-          {status ? (
-            <>
-              <span>
-                <span className="text-muted-foreground">trust:</span>
-                <span className="text-foreground">{status.trust}</span>
-              </span>
-              <span>
-                <span className="text-muted-foreground">audience:</span>
-                <span className="text-foreground">{status.audience}</span>
-              </span>
-            </>
-          ) : (
-            <span>Status unavailable</span>
-          )}
+          <span>
+            <span className="text-muted-foreground">trust:</span>
+            <span className="text-foreground">{status.trust}</span>
+          </span>
+          <span>
+            <span className="text-muted-foreground">audience:</span>
+            <span className="text-foreground">{status.audience}</span>
+          </span>
         </output>
       </div>
     </div>

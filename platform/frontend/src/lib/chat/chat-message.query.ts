@@ -1,7 +1,7 @@
 import { archestraApiSdk, type ChatMessageFeedback } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { callApi } from "@/lib/chat/api-call";
-import { lockedChatRequestHeaders } from "@/lib/chat/locked-chat";
+import { encryptedChatRequestHeaders } from "@/lib/chat/encrypted-chat";
 import { handleApiError, toApiError } from "@/lib/utils/api";
 
 const { updateChatMessage, setChatMessageFeedback } = archestraApiSdk;
@@ -32,9 +32,9 @@ export function useUpdateChatMessage(conversationId: string | undefined) {
           updateChatMessage({
             path: { id: messageId },
             body: { conversationId, partIndex, text, deleteSubsequentMessages },
-            // Locked chats require the browser-held key on every
+            // Encrypted chats require the browser-held key on every
             // request touching their content.
-            headers: lockedChatRequestHeaders(conversationId),
+            headers: encryptedChatRequestHeaders(conversationId),
           }),
         null,
       );
@@ -72,9 +72,9 @@ export function useSetChatMessageFeedback() {
       const { data, error } = await setChatMessageFeedback({
         path: { id: messageId },
         body: { conversationId, feedback },
-        // Locked chats require the browser-held key on every
+        // Encrypted chats require the browser-held key on every
         // request touching their content.
-        headers: lockedChatRequestHeaders(conversationId),
+        headers: encryptedChatRequestHeaders(conversationId),
       });
       if (error) {
         handleApiError(error);

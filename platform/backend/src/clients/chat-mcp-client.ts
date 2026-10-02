@@ -33,7 +33,7 @@ import {
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
@@ -847,7 +847,7 @@ export async function getChatMcpTools({
   taskBridge,
   repeatTracker,
   suppressContentLogging,
-  lockedChatAudit,
+  encryptedChatAudit,
   modelAcceptsImageToolResults,
 }: {
   agentName: string;
@@ -913,8 +913,8 @@ export async function getChatMcpTools({
    */
   repeatTracker?: ToolCallRepeatTracker;
   /**
-   * Locked chat: span content is suppressed and long calls never
-   * detach into durable tasks. Stable per scope key (the locked-chat flag is
+   * Encrypted chat: span content is suppressed and long calls never
+   * detach into durable tasks. Stable per scope key (the encrypted-chat flag is
    * immutable per conversation), so the cached tool context can safely retain
    * it.
    */
@@ -925,7 +925,7 @@ export async function getChatMcpTools({
    * has no escrow record. Stable per scope key for the same reason
    * `suppressContentLogging` is — escrow is settled at creation.
    */
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
   /**
    * Whether media returned by a tool may enter the selected model's context.
    * Omitted by headless/legacy callers to preserve their current behavior.
@@ -1080,7 +1080,7 @@ export async function getChatMcpTools({
       mcpGwToken,
       considerContextUntrusted,
       suppressContentLogging,
-      lockedChatAudit,
+      encryptedChatAudit,
       modelAcceptsImageToolResults: modelAcceptsImageToolResults ?? true,
       teams,
       userTeams,
@@ -1127,7 +1127,7 @@ export async function getChatMcpTools({
         ]);
 
         // Convert delegation tools to AI SDK Tool format.
-        // Locked chats exclude delegation entirely: a child-agent
+        // Encrypted chats exclude delegation entirely: a child-agent
         // run builds its own tool set and would log its tool calls with
         // content, outside the parent's suppression scope. Disable rather
         // than leak.

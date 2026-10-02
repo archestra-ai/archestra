@@ -4,10 +4,10 @@ import {
   type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
+  ENCRYPTED_CHAT_REDACTED_MARKER,
   getArchestraAppResourceUri,
   isPlaywrightCatalogItem,
   LINKED_IDP_SSO_MODE,
-  LOCKED_CHAT_REDACTED_MARKER,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
@@ -42,7 +42,7 @@ import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-re
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -445,29 +445,29 @@ interface ExecuteToolCallForOwnerOptions {
    */
   availableTool?: CatalogTool;
   /**
-   * Locked chat conversation: the persisted mcp_tool_calls row keeps the
+   * Encrypted chat conversation: the persisted mcp_tool_calls row keeps the
    * tool name but never stores plaintext arguments or result content.
    */
   suppressContentLogging?: boolean;
   /**
-   * Present only for a locked chat that has an escrow record: the
+   * Present only for an encrypted chat that has an escrow record: the
    * row's content is encrypted under the conversation key instead of being
    * thrown away. Without it a suppressed call falls back to redaction.
    */
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
 }
 
 /**
  * How one call's persisted `mcp_tool_calls` row must handle content, resolved
  * once from the caller's options and threaded down every persist path.
- * `undefined` means "not a locked-chat call, store normally".
+ * `undefined` means "not an encrypted-chat call, store normally".
  *
  * Deliberately a parameter rather than a call-id-keyed registry: ids come from
  * the model, and a collision between two conversations would encrypt one's
  * content under the other's key — unreadable by either escrow record.
  */
 type ToolCallContentDisposition =
-  | { kind: "encrypt"; audit: LockedChatAuditContext }
+  | { kind: "encrypt"; audit: EncryptedChatAuditContext }
   | { kind: "redact" };
 
 class McpClient {
@@ -608,7 +608,7 @@ class McpClient {
     // Decided once here and handed to every path that persists a row (success,
     // error, retry, cancellation), so a concurrent call on another
     // conversation can never influence how this one's content is stored.
-    const lockedChatContent = resolveContentDisposition(options);
+    const encryptedChatContent = resolveContentDisposition(options);
 
     // Derive auth info for logging. Until a credential resolves, the call is
     // one the platform is serving itself (it may never reach a server — an app
@@ -629,7 +629,7 @@ class McpClient {
       toolCall,
       owner,
       options?.availableTool,
-      lockedChatContent,
+      encryptedChatContent,
     );
     if ("error" in validationResult) {
       return validationResult.error;
@@ -649,7 +649,7 @@ class McpClient {
         error: "Playwright requires an authenticated caller identity",
         mcpServerName: catalogItem.name,
         authInfo,
-        lockedChatContent,
+        encryptedChatContent,
       });
     }
 
@@ -708,7 +708,7 @@ class McpClient {
         isError: false,
         ...(resourceUri ? { _meta: { ui: { resourceUri } } } : {}),
         authInfo,
-        lockedChatContent,
+        encryptedChatContent,
       });
     }
 
@@ -720,7 +720,7 @@ class McpClient {
         tokenAuth,
         catalogItem,
         authInfo,
-        lockedChatContent,
+        encryptedChatContent,
       });
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
@@ -749,7 +749,7 @@ class McpClient {
               toolCall,
               toolResult: this.buildCancelledResult(toolCall, authInfo),
               authInfo,
-              lockedChatContent,
+              encryptedChatContent,
             });
             throw error;
           }
@@ -768,7 +768,7 @@ class McpClient {
             error: agentMessage,
             mcpServerName,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
           });
         }
       }
@@ -787,7 +787,7 @@ class McpClient {
             "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
           mcpServerName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         });
       }
       // A catalog-level enterprise-managed config is authoritative: assignments
@@ -822,7 +822,7 @@ class McpClient {
           mcpServerName,
           authInfo,
           structuredError: authError,
-          lockedChatContent,
+          encryptedChatContent,
         });
       }
 
@@ -830,7 +830,7 @@ class McpClient {
         targetMcpServerId: targetMcpServerId,
         toolCall,
         owner,
-        lockedChatContent,
+        encryptedChatContent,
       });
       if ("error" in secretsResult) {
         return secretsResult.error;
@@ -951,7 +951,7 @@ class McpClient {
               catalogItem,
               targetMcpServerId,
               tokenAuth,
-              lockedChatContent,
+              encryptedChatContent,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1041,7 +1041,7 @@ class McpClient {
               isError: false,
               _meta: { resourceUri },
               authInfo,
-              lockedChatContent,
+              encryptedChatContent,
               structuredContent: {
                 contents: result.contents as unknown,
               },
@@ -1096,7 +1096,7 @@ class McpClient {
               catalogItem,
               targetMcpServerId,
               tokenAuth,
-              lockedChatContent,
+              encryptedChatContent,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1124,7 +1124,7 @@ class McpClient {
               mcpServerName,
               authInfo,
               structuredError: authError,
-              lockedChatContent,
+              encryptedChatContent,
             });
           }
 
@@ -1138,7 +1138,7 @@ class McpClient {
             isError: !!result.isError,
             _meta: result._meta,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
             structuredContent: result.structuredContent as
               | Record<string, unknown>
               | undefined,
@@ -1167,7 +1167,7 @@ class McpClient {
               toolCall,
               toolResult: this.buildCancelledResult(toolCall, authInfo),
               authInfo,
-              lockedChatContent,
+              encryptedChatContent,
             });
             throw error;
           }
@@ -1291,7 +1291,7 @@ class McpClient {
               catalogItem,
               targetMcpServerId,
               tokenAuth,
-              lockedChatContent,
+              encryptedChatContent,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1360,7 +1360,7 @@ class McpClient {
                   mcpServerName,
                   authInfo,
                   structuredError: assignmentError,
-                  lockedChatContent,
+                  encryptedChatContent,
                 });
               }
               const authError = await this.buildExpiredAuthMessage({
@@ -1377,7 +1377,7 @@ class McpClient {
                 mcpServerName,
                 authInfo,
                 structuredError: authError,
-                lockedChatContent,
+                encryptedChatContent,
               });
             }
             // No server resolved → "auth required" message with install link
@@ -1393,7 +1393,7 @@ class McpClient {
               mcpServerName,
               authInfo,
               structuredError: authError,
-              lockedChatContent,
+              encryptedChatContent,
             });
           }
 
@@ -1403,7 +1403,7 @@ class McpClient {
             error: errorMessage,
             mcpServerName,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
           });
         } finally {
           if (attemptClient) this.releaseClient(attemptClient);
@@ -1747,7 +1747,7 @@ class McpClient {
     toolCall: CommonToolCall,
     owner: ToolOwner,
     availableTool?: CatalogTool,
-    lockedChatContent?: ToolCallContentDisposition,
+    encryptedChatContent?: ToolCallContentDisposition,
   ): Promise<
     | {
         tool: McpToolAssignment;
@@ -1858,7 +1858,7 @@ class McpClient {
             message,
             toolName: toolCall.name,
           },
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1889,7 +1889,7 @@ class McpClient {
             message,
             toolName: toolCall.name,
           },
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1925,7 +1925,7 @@ class McpClient {
           owner,
           error: "Tool is missing catalogId",
           mcpServerName: tool.catalogName || "unknown",
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1939,7 +1939,7 @@ class McpClient {
           owner,
           error: `No catalog item found for tool catalog ID ${tool.catalogId}`,
           mcpServerName: tool.catalogName || "unknown",
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1953,13 +1953,13 @@ class McpClient {
     targetMcpServerId,
     toolCall,
     owner,
-    lockedChatContent,
+    encryptedChatContent,
     serverLookup,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
     owner: ToolOwner;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
     serverLookup?: ListingServerLookup;
   }): Promise<
     | {
@@ -1985,7 +1985,7 @@ class McpClient {
           owner,
           error: `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
           mcpServerName: "unknown",
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2053,7 +2053,7 @@ class McpClient {
     owner,
     catalogItem,
     authInfo,
-    lockedChatContent,
+    encryptedChatContent,
     serverLookup,
   }: {
     tool: McpToolAssignment;
@@ -2061,7 +2061,7 @@ class McpClient {
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
     // Identity of the caller, so a refusal here is recorded and rendered like
     // any other result rather than as an anonymous error.
     authInfo?: ToolCallAuthInfo;
@@ -2116,7 +2116,7 @@ class McpClient {
           error: "The browser runtime is not available for this Environment.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2152,7 +2152,7 @@ class McpClient {
             mcpServerName: fallbackName,
             authInfo,
             structuredError: reconnectError,
-            lockedChatContent,
+            encryptedChatContent,
           }),
         };
       }
@@ -2206,7 +2206,7 @@ class McpClient {
               "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
             mcpServerName: fallbackName,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
           }),
         };
       }
@@ -2229,7 +2229,7 @@ class McpClient {
             "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2242,7 +2242,7 @@ class McpClient {
             "Dynamic team credential is enabled but tool has no catalogId.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2322,7 +2322,7 @@ class McpClient {
             "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2384,7 +2384,7 @@ class McpClient {
         mcpServerName: fallbackName,
         authInfo,
         structuredError: authError,
-        lockedChatContent,
+        encryptedChatContent,
       }),
     };
   }
@@ -2948,7 +2948,7 @@ class McpClient {
     mcpServerName?: string;
     authInfo?: ToolCallAuthInfo;
     structuredError?: McpToolError;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -2957,7 +2957,7 @@ class McpClient {
       mcpServerName = "unknown",
       authInfo,
       structuredError,
-      lockedChatContent,
+      encryptedChatContent,
     } = opts;
     const normalizedError: McpToolError = structuredError ?? {
       type: "generic",
@@ -2985,7 +2985,7 @@ class McpClient {
       toolCall,
       toolResult: errorResult,
       authInfo,
-      lockedChatContent,
+      encryptedChatContent,
     });
     return errorResult;
   }
@@ -3002,7 +3002,7 @@ class McpClient {
     _meta?: Record<string, unknown>;
     authInfo?: ToolCallAuthInfo;
     structuredContent?: Record<string, unknown>;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -3013,7 +3013,7 @@ class McpClient {
       _meta,
       authInfo,
       structuredContent,
-      lockedChatContent,
+      encryptedChatContent,
     } = opts;
 
     // `archestraError`, the seeded-app-render marker and the executed-as
@@ -3044,7 +3044,7 @@ class McpClient {
       toolCall,
       toolResult,
       authInfo,
-      lockedChatContent,
+      encryptedChatContent,
     });
     return toolResult;
   }
@@ -3070,7 +3070,7 @@ class McpClient {
     enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential | null;
     toolCatalogId: string | null;
     toolCatalogName: string | null;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
     executeRetry: (
       getTransport: () => Promise<Transport>,
       secrets: Record<string, unknown>,
@@ -3091,7 +3091,7 @@ class McpClient {
       toolCatalogId,
       toolCatalogName,
       executeRetry,
-      lockedChatContent,
+      encryptedChatContent,
     } = params;
 
     logger.info(
@@ -3205,7 +3205,7 @@ class McpClient {
           error: authError.message,
           mcpServerName,
           structuredError: authError,
-          lockedChatContent,
+          encryptedChatContent,
         });
       }
 
@@ -3214,7 +3214,7 @@ class McpClient {
         owner,
         error: retryErrorMsg,
         mcpServerName,
-        lockedChatContent,
+        encryptedChatContent,
       });
     }
   }
@@ -3725,7 +3725,7 @@ class McpClient {
     toolCall: CommonToolCall;
     toolResult: CommonToolResult;
     authInfo?: ToolCallAuthInfo;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
   }): Promise<void> {
     const { owner, mcpServerName, toolCall, toolResult, authInfo } = params;
     // Skip high-frequency browser tool logging to prevent DB bloat
@@ -3734,27 +3734,27 @@ class McpClient {
       return;
     }
 
-    // Locked chat calls keep the tool name and owner/user metadata on the
+    // Encrypted chat calls keep the tool name and owner/user metadata on the
     // audit surface either way; what differs is the content. With an audit
     // context the real arguments and result are handed to the model, which
     // encrypts them under the conversation key (never encrypt here — that
     // would nest envelopes). Without one there is no key that could ever open
     // them, so the row is redacted instead.
-    const isLockedChat = params.lockedChatContent !== undefined;
+    const isEncryptedChat = params.encryptedChatContent !== undefined;
     const audit =
-      params.lockedChatContent?.kind === "encrypt"
-        ? params.lockedChatContent.audit
+      params.encryptedChatContent?.kind === "encrypt"
+        ? params.encryptedChatContent.audit
         : null;
-    const suppressContent = isLockedChat && audit === null;
+    const suppressContent = isEncryptedChat && audit === null;
     const storedToolCall: CommonToolCall = suppressContent
       ? {
           id: toolCall.id,
           name: toolCall.name,
-          arguments: LOCKED_CHAT_REDACTED_MARKER,
+          arguments: ENCRYPTED_CHAT_REDACTED_MARKER,
         }
       : toolCall;
     const storedToolResult: unknown = suppressContent
-      ? LOCKED_CHAT_REDACTED_MARKER
+      ? ENCRYPTED_CHAT_REDACTED_MARKER
       : toolResult;
 
     try {
@@ -3784,10 +3784,10 @@ class McpClient {
         toolName: toolCall.name,
       };
 
-      // The app log stays content-free for every locked-chat call, encrypted
+      // The app log stays content-free for every encrypted-chat call, encrypted
       // rows included: the row is protected at rest, the log line is not.
-      if (isLockedChat) {
-        logData.resultContent = "[redacted: locked chat]";
+      if (isEncryptedChat) {
+        logData.resultContent = "[redacted: encrypted chat]";
       } else if (toolResult.isError) {
         // Tool errors routinely echo request/response payloads — cap them
         // the same way as the success-path content preview.
@@ -5957,8 +5957,8 @@ function resolveContentDisposition(
   options?: ExecuteToolCallForOwnerOptions,
 ): ToolCallContentDisposition | undefined {
   if (!options?.suppressContentLogging) return undefined;
-  return options.lockedChatAudit
-    ? { kind: "encrypt", audit: options.lockedChatAudit }
+  return options.encryptedChatAudit
+    ? { kind: "encrypt", audit: options.encryptedChatAudit }
     : { kind: "redact" };
 }
 

@@ -950,7 +950,7 @@ FROM converted WHERE r.id = converted.id AND r.permission::jsonb IS DISTINCT FRO
 const SESSION_SHARING_CONVERSION = sql.raw(`
 WITH targets AS (
   SELECT c.organization_id, 'conversation' AS resource, c.id::text AS scope,
-    c.user_id AS owner_id, c.locked_chat AS locked, s.id AS share_id, s.visibility::text
+    c.user_id AS owner_id, c.encrypted_chat AS locked, s.id AS share_id, s.visibility::text
   FROM conversations c LEFT JOIN conversation_shares s
     ON s.conversation_id = c.id AND s.organization_id = c.organization_id
   UNION ALL

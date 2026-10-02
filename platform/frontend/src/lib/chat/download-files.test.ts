@@ -64,13 +64,13 @@ describe("downloadFiles", () => {
     expect(document.body.querySelector("a")).toBeNull();
   });
 
-  it("downloads a locked chat's attachment through its conversation key", async () => {
+  it("downloads an encrypted chat's attachment through its conversation key", async () => {
     // An anchor cannot send the key header, so a bare href would download the
     // endpoint's 400 body under the file's name. The bytes are fetched first
     // and handed over as a blob instead.
     const conversationId = "3f1c2d0e-0000-4000-8000-000000000001";
     localStorage.setItem(
-      conversationStorageKeys(conversationId).lockedChatKey,
+      conversationStorageKeys(conversationId).encryptedChatKey,
       "a".repeat(43),
     );
     // A hand-rolled response, not `new Response(new Blob(...))`: jsdom's Blob
@@ -100,7 +100,7 @@ describe("downloadFiles", () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       "/api/chat/attachments/b/content",
       expect.objectContaining({
-        headers: { "x-archestra-locked-chat-key": "a".repeat(43) },
+        headers: { "x-archestra-encrypted-chat-key": "a".repeat(43) },
       }),
     );
   });
@@ -109,7 +109,7 @@ describe("downloadFiles", () => {
     // Better to leave it out than to save the endpoint's error body as a file.
     const conversationId = "3f1c2d0e-0000-4000-8000-000000000002";
     localStorage.setItem(
-      conversationStorageKeys(conversationId).lockedChatKey,
+      conversationStorageKeys(conversationId).encryptedChatKey,
       "b".repeat(43),
     );
     vi.stubGlobal(

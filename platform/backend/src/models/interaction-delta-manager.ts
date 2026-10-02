@@ -525,19 +525,19 @@ class InteractionDeltaManager {
       WITH RECURSIVE chain AS (
         SELECT id, parent_id, thread_id, request_shared_prefix,
                processed_request_shared_prefix, request, processed_request,
-               locked_chat_conversation_id
+               encrypted_chat_conversation_id
         FROM interactions
         WHERE id IN (${seedList})
         UNION
         SELECT i.id, i.parent_id, i.thread_id, i.request_shared_prefix,
                i.processed_request_shared_prefix, i.request, i.processed_request,
-               i.locked_chat_conversation_id
+               i.encrypted_chat_conversation_id
         FROM interactions i
         JOIN chain c ON i.id = c.parent_id
       )
       SELECT id, parent_id, thread_id, request_shared_prefix,
              processed_request_shared_prefix, request, processed_request,
-             locked_chat_conversation_id
+             encrypted_chat_conversation_id
       FROM chain
     `);
 
@@ -545,7 +545,7 @@ class InteractionDeltaManager {
     for (const row of rows.rows) {
       // A chain may mix plaintext delta rows with rows the backfill has
       // already encrypted — resolve each row independently before folding.
-      // A locked-chat row cannot appear here (they are written
+      // An encrypted-chat row cannot appear here (they are written
       // delta-ineligible, so nothing links to them), but going through the
       // locked-safe reader keeps that a property of this code rather than an
       // assumption about a different file.

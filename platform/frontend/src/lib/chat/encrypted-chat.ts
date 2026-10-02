@@ -1,22 +1,22 @@
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 
 /**
- * Client-side helpers for locked chats.
+ * Client-side helpers for encrypted chats.
  *
- * A locked chat is encrypted under a per-conversation key (DEK)
+ * An encrypted chat is encrypted under a per-conversation key (DEK)
  * generated in the browser at creation time and kept ONLY in this browser's
  * localStorage — the server never stores it. Every request that touches the
  * conversation's content must carry the key in the
- * `x-archestra-locked-chat-key` header; without it the server returns a locked
+ * `x-archestra-encrypted-chat-key` header; without it the server returns a locked
  * tombstone view (`contentLocked: true`), and with a wrong key it returns 409.
  */
 
 /** Header carrying the conversation DEK (mirrors the backend constant). */
-export const LOCKED_CHAT_KEY_HEADER = "x-archestra-locked-chat-key";
+export const ENCRYPTED_CHAT_KEY_HEADER = "x-archestra-encrypted-chat-key";
 
 /**
  * Prefix of the chat-attachment byte endpoint. Bytes served from here are
- * sealed in a locked chat, so they are fetched with the key header rather than
+ * sealed in an encrypted chat, so they are fetched with the key header rather than
  * linked directly — see `useAttachmentContentUrl`.
  */
 export const ATTACHMENT_CONTENT_URL_PREFIX = "/api/chat/attachments/";
@@ -29,7 +29,7 @@ export const ATTACHMENT_CONTENT_URL_PREFIX = "/api/chat/attachments/";
  * src/lib/uuid.ts — is available in non-secure contexts too, so plain-HTTP
  * deployments (e.g. `http://<lan-ip>:3000`) work without a fallback.
  */
-export function generateLockedChatKey(): string {
+export function generateEncryptedChatKey(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   let binary = "";
   for (const byte of bytes) {
@@ -42,11 +42,14 @@ export function generateLockedChatKey(): string {
 }
 
 /** Persist a conversation's DEK in this browser (swept on chat deletion). */
-export function storeLockedChatKey(conversationId: string, key: string): void {
+export function storeEncryptedChatKey(
+  conversationId: string,
+  key: string,
+): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(
-      conversationStorageKeys(conversationId).lockedChatKey,
+      conversationStorageKeys(conversationId).encryptedChatKey,
       key,
     );
   } catch {
@@ -69,11 +72,11 @@ export function storeLockedChatKey(conversationId: string, key: string): void {
  * created before the rename, because this browser holds the only copy of its
  * key outside escrow.
  */
-export function getLockedChatKey(conversationId: string): string | null {
+export function getEncryptedChatKey(conversationId: string): string | null {
   if (typeof window === "undefined") return null;
   try {
     const keys = conversationStorageKeys(conversationId);
-    const storageKey = keys.lockedChatKey;
+    const storageKey = keys.encryptedChatKey;
     const value = localStorage.getItem(storageKey) ?? migrateLegacyKey(keys);
     if (value === null) return null;
     if (!/^[A-Za-z0-9_-]{43}$/.test(value)) {
@@ -90,26 +93,26 @@ export function getLockedChatKey(conversationId: string): string | null {
  * Headers to spread into any request touching the conversation's content
  * (chat stream, conversation GET, message edit, feedback). Returns undefined
  * when no key is stored — for a plain conversation that's the normal case,
- * and for a locked-chat one it lets the server answer with the tombstone.
+ * and for an encrypted-chat one it lets the server answer with the tombstone.
  */
-export function lockedChatRequestHeaders(
+export function encryptedChatRequestHeaders(
   conversationId: string | null | undefined,
 ): Record<string, string> | undefined {
   if (!conversationId) return undefined;
-  const key = getLockedChatKey(conversationId);
-  return key ? { [LOCKED_CHAT_KEY_HEADER]: key } : undefined;
+  const key = getEncryptedChatKey(conversationId);
+  return key ? { [ENCRYPTED_CHAT_KEY_HEADER]: key } : undefined;
 }
 
 /**
- * Actions the backend rejects for locked chats. Single source for the UI
+ * Actions the backend rejects for encrypted chats. Single source for the UI
  * affordances that must be hidden: sandbox `!` commands, share, fork,
  * create-project-from-chat, move-to-project, AI title generation, compaction,
  * and copying an attachment into a knowledge base.
  *
- * Attachments are deliberately NOT here — uploads work in a locked chat, sealed
+ * Attachments are deliberately NOT here — uploads work in an encrypted chat, sealed
  * under the conversation key.
  */
-export type LockedChatBlockedAction =
+export type EncryptedChatBlockedAction =
   | "sandboxCommands"
   | "share"
   | "fork"
@@ -120,23 +123,23 @@ export type LockedChatBlockedAction =
   | "saveToKnowledge";
 
 export type ConversationBlockedAction =
-  | LockedChatBlockedAction
+  | EncryptedChatBlockedAction
   | "rename"
   | "pin"
   | "export";
 
 /**
  * Whether an action is available for a conversation. All of the
- * {@link LockedChatBlockedAction}s are unavailable on locked chats
+ * {@link EncryptedChatBlockedAction}s are unavailable on encrypted chats
  * (the backend rejects them); the action parameter documents intent at the
  * call site and keeps the block list greppable.
  */
 export function isActionAvailableForConversation(
-  conversation: { lockedChat?: boolean } | null | undefined,
+  conversation: { encryptedChat?: boolean } | null | undefined,
   action: ConversationBlockedAction,
 ): boolean {
   return (
-    conversation?.lockedChat !== true ||
+    conversation?.encryptedChat !== true ||
     action === "rename" ||
     action === "pin" ||
     action === "export"
@@ -147,15 +150,20 @@ export function isActionAvailableForConversation(
 
 /**
  * Move a pre-rename key to the current storage key and return it, or null
- * when this browser has none. Returns the raw value: `getLockedChatKey`
+ * when this browser has none. Returns the raw value: `getEncryptedChatKey`
  * applies the same well-formedness check it applies to current-key reads.
  */
 function migrateLegacyKey(
   keys: ReturnType<typeof conversationStorageKeys>,
 ): string | null {
-  const legacy = localStorage.getItem(keys.legacyLockedChatKey);
-  if (legacy === null) return null;
-  localStorage.setItem(keys.lockedChatKey, legacy);
-  localStorage.removeItem(keys.legacyLockedChatKey);
-  return legacy;
+  for (const legacyKey of keys.legacyEncryptedChatKeys) {
+    const legacy = localStorage.getItem(legacyKey);
+    if (legacy === null) continue;
+    localStorage.setItem(keys.encryptedChatKey, legacy);
+    for (const staleKey of keys.legacyEncryptedChatKeys) {
+      localStorage.removeItem(staleKey);
+    }
+    return legacy;
+  }
+  return null;
 }

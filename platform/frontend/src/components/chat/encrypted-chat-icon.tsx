@@ -2,7 +2,7 @@ import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
- * The locked-chat mark: a lock. The single source for every locked-chat
+ * The encrypted-chat mark: a lock. The single source for every encrypted-chat
  * affordance (sidebar rows, composer toggle, search palette) so the visual
  * stays consistent. Inherits currentColor, so it needs no per-theme variants.
  *
@@ -11,11 +11,11 @@ import { cn } from "@/lib/utils/tailwind";
  * its lucide siblings, or it ends up a different size than the icons beside
  * it. A wrapper whose inner svg was sized with `size-full` did exactly that.
  */
-export function LockedChatIcon({ className }: { className?: string }) {
+export function EncryptedChatIcon({ className }: { className?: string }) {
   return (
     <Lock
       role="img"
-      aria-label="Locked chat"
+      aria-label="Encrypted chat"
       className={cn("shrink-0", className)}
     />
   );

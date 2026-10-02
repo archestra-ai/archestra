@@ -1,5 +1,5 @@
 /**
- * The two ways a locked chat's audit content can be unavailable to a
+ * The two ways an encrypted chat's audit content can be unavailable to a
  * reader, as stable shapes both the backend writer and the UI reader agree on.
  *
  * These are deliberately distinct, because they call for different words to
@@ -16,39 +16,43 @@
  * Collapsing them into one marker would either promise recoverability that
  * does not exist, or hide recoverability that does.
  *
- * "Sealed" rather than "locked" is deliberate: the feature itself is now
- * called a locked chat, so reusing the word for one of its two failure states
- * would name this type `LockedChatLockedContent`, which reads as a typo.
+ * "Sealed" rather than "locked" is deliberate: "locked" already names the
+ * UI's tombstone state (`contentLocked`), so reusing it here would blur the
+ * two failure states together.
  */
 
 /** Content that was never stored. Not recoverable. */
-export const LOCKED_CHAT_REDACTED_MARKER = {
-  __redacted: "locked_chat",
+export const ENCRYPTED_CHAT_REDACTED_MARKER = {
+  __redacted: "encrypted_chat",
 } as const;
 
 /**
- * The marker value written before the feature was renamed. Rows carrying it
- * are still on disk, so readers must recognize it; nothing writes it.
+ * Marker values written under the feature's former names ("locked chat", then
+ * "incognito"). Rows carrying them are still on disk, so readers must
+ * recognize them; nothing writes them.
  */
-const LEGACY_LOCKED_CHAT_REDACTED_VALUE = "incognito";
+const LEGACY_ENCRYPTED_CHAT_REDACTED_VALUES = [
+  "locked_chat",
+  "incognito",
+] as const;
 
 /**
  * Every `__redacted` value a stored row may carry, current spelling first.
  * Read schemas validate persisted content, so they have to admit the legacy
  * value as well — hence a shared list rather than a literal at each site.
  */
-export const LOCKED_CHAT_REDACTED_VALUES = [
-  LOCKED_CHAT_REDACTED_MARKER.__redacted,
-  LEGACY_LOCKED_CHAT_REDACTED_VALUE,
+export const ENCRYPTED_CHAT_REDACTED_VALUES = [
+  ENCRYPTED_CHAT_REDACTED_MARKER.__redacted,
+  ...LEGACY_ENCRYPTED_CHAT_REDACTED_VALUES,
 ] as const;
 
 /**
- * Admits both spellings, so it matches what a read schema produces for a
- * stored row — `WithoutLockedChatUnavailable` narrows by exact shape, and a
+ * Admits every spelling, so it matches what a read schema produces for a
+ * stored row — `WithoutEncryptedChatUnavailable` narrows by exact shape, and a
  * single-literal type here would no longer subtract that union member.
  */
-export type LockedChatRedactedContent = {
-  __redacted: (typeof LOCKED_CHAT_REDACTED_VALUES)[number];
+export type EncryptedChatRedactedContent = {
+  __redacted: (typeof ENCRYPTED_CHAT_REDACTED_VALUES)[number];
 };
 
 /**
@@ -56,42 +60,44 @@ export type LockedChatRedactedContent = {
  * conversation id so a break-glass operator knows which escrow record opens
  * it (mcp_tool_calls rows have no other conversation reference).
  */
-export type LockedChatSealedContent = {
-  __lockedChatSealed: string;
+export type EncryptedChatSealedContent = {
+  __encryptedChatSealed: string;
 };
 
-export function lockedChatSealedContent(
+export function encryptedChatSealedContent(
   conversationId: string,
-): LockedChatSealedContent {
-  return { __lockedChatSealed: conversationId };
+): EncryptedChatSealedContent {
+  return { __encryptedChatSealed: conversationId };
 }
 
-export function isLockedChatSealedContent(
+export function isEncryptedChatSealedContent(
   value: unknown,
-): value is LockedChatSealedContent {
+): value is EncryptedChatSealedContent {
   return (
     typeof value === "object" &&
     value !== null &&
-    typeof (value as LockedChatSealedContent).__lockedChatSealed === "string"
+    typeof (value as EncryptedChatSealedContent).__encryptedChatSealed ===
+      "string"
   );
 }
 
-export function isLockedChatRedactedContent(
+export function isEncryptedChatRedactedContent(
   value: unknown,
-): value is LockedChatRedactedContent {
+): value is EncryptedChatRedactedContent {
   if (typeof value !== "object" || value === null) return false;
-  const marker = (value as LockedChatRedactedContent).__redacted;
-  return (
-    marker === LOCKED_CHAT_REDACTED_MARKER.__redacted ||
-    marker === LEGACY_LOCKED_CHAT_REDACTED_VALUE
+  const marker = (value as EncryptedChatRedactedContent).__redacted;
+  return (ENCRYPTED_CHAT_REDACTED_VALUES as readonly unknown[]).includes(
+    marker,
   );
 }
 
 /** True for either unavailable-content shape. */
-export function isLockedChatUnavailableContent(
+export function isEncryptedChatUnavailableContent(
   value: unknown,
-): value is LockedChatSealedContent | LockedChatRedactedContent {
-  return isLockedChatSealedContent(value) || isLockedChatRedactedContent(value);
+): value is EncryptedChatSealedContent | EncryptedChatRedactedContent {
+  return (
+    isEncryptedChatSealedContent(value) || isEncryptedChatRedactedContent(value)
+  );
 }
 
 /**
@@ -102,7 +108,7 @@ export function isLockedChatUnavailableContent(
  * `DynamicInteraction` short-circuits before delegating — so they narrow with
  * this rather than each re-deriving the exclusion.
  */
-export type WithoutLockedChatUnavailable<T> = Exclude<
+export type WithoutEncryptedChatUnavailable<T> = Exclude<
   T,
-  LockedChatSealedContent | LockedChatRedactedContent
+  EncryptedChatSealedContent | EncryptedChatRedactedContent
 >;

@@ -38,8 +38,8 @@ vi.mock("@/lib/apps/use-app-access", async (importActual) => ({
   useAppAccess: vi.fn(),
 }));
 
-// The card reads the locked-chat flag to decide whether to offer "Open as
-// locked chat". Off here: these tests are about the card's ordinary actions.
+// The card reads the encrypted-chat flag to decide whether to offer "Open as
+// encrypted chat". Off here: these tests are about the card's ordinary actions.
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
 }));
@@ -212,8 +212,8 @@ describe("ExternalAppCard", () => {
     expect(openExternalMutate).toHaveBeenCalledWith({
       mcpServerId: "srv-1",
       resourceUri: "ui://pm/board.html",
-      // The ordinary open; "Open as locked chat" is the one that sends true.
-      lockedChat: false,
+      // The ordinary open; "Open as encrypted chat" is the one that sends true.
+      encryptedChat: false,
     });
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/chat/conv-1"));
     // A seeded render needs no opening prompt.

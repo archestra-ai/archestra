@@ -1,8 +1,8 @@
 /**
- * Contract under test — locked-chat content redaction of persisted MCP tool
+ * Contract under test — encrypted-chat content redaction of persisted MCP tool
  * calls (executeToolCallForOwner with suppressContentLogging):
  * - the mcp_tool_calls row keeps the audit surface (tool name, method,
- *   server name, owner) but stores { __redacted: "locked_chat" } in place of
+ *   server name, owner) but stores { __redacted: "encrypted_chat" } in place of
  *   both the arguments and the result — on the success path AND on an
  *   error-result path (unknown tool)
  * - the caller still receives the real tool result (redaction is at rest)
@@ -79,12 +79,12 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
 
 const TOOL_NAME = "github-mcp-server__list_repos";
 
-describe("McpClient locked-chat tool-call redaction", () => {
+describe("McpClient encrypted-chat tool-call redaction", () => {
   let agentId: string;
 
   beforeEach(async () => {
     // Force server-side content encryption at rest OFF so the raw
-    // mcp_tool_calls rows show the locked-chat redaction marker directly —
+    // mcp_tool_calls rows show the encrypted-chat redaction marker directly —
     // local .env files may set ARCHESTRA_CONTENT_ENCRYPTION_SECRET, which
     // would wrap the (already redacted) values in server-key envelopes.
     // The config mutation is auto-restored after every test.
@@ -94,7 +94,7 @@ describe("McpClient locked-chat tool-call redaction", () => {
     await mcpClient.disconnectAll();
 
     const agent = await AgentModel.create({
-      name: "LockedChat Test Agent",
+      name: "EncryptedChat Test Agent",
       scope: "org",
       teams: [],
     });
@@ -174,7 +174,7 @@ describe("McpClient locked-chat tool-call redaction", () => {
   test("suppressContentLogging persists a redacted row but keeps the audit metadata and the live result", async () => {
     const result = await mcpClient.executeToolCallForOwner(
       {
-        id: "call_locked_chat_success",
+        id: "call_encrypted_chat_success",
         name: TOOL_NAME,
         arguments: { owner: "octocat", query: "the secret arguments" },
       },
@@ -183,7 +183,7 @@ describe("McpClient locked-chat tool-call redaction", () => {
       { suppressContentLogging: true },
     );
 
-    // The caller (the locked chat turn) still gets the real result —
+    // The caller (the encrypted chat turn) still gets the real result —
     // redaction applies to the persisted log only.
     expect(result.isError).toBe(false);
     expect(result.content).toEqual([
@@ -196,11 +196,11 @@ describe("McpClient locked-chat tool-call redaction", () => {
     // Audit surface survives...
     expect(row.mcp_server_name).toBe("github-mcp-server");
     expect(row.method).toBe("tools/call");
-    expect(row.tool_call?.id).toBe("call_locked_chat_success");
+    expect(row.tool_call?.id).toBe("call_encrypted_chat_success");
     expect(row.tool_call?.name).toBe(TOOL_NAME);
     // ...content does not.
-    expect(row.tool_call?.arguments).toEqual({ __redacted: "locked_chat" });
-    expect(row.tool_result).toEqual({ __redacted: "locked_chat" });
+    expect(row.tool_call?.arguments).toEqual({ __redacted: "encrypted_chat" });
+    expect(row.tool_result).toEqual({ __redacted: "encrypted_chat" });
     expect(row.row_text).not.toContain("the secret arguments");
     expect(row.row_text).not.toContain("the secret tool result");
   });
@@ -208,7 +208,7 @@ describe("McpClient locked-chat tool-call redaction", () => {
   test("suppressContentLogging also redacts the error-result row for an unknown tool", async () => {
     const result = await mcpClient.executeToolCallForOwner(
       {
-        id: "call_locked_chat_unknown",
+        id: "call_encrypted_chat_unknown",
         name: "github-mcp-server__no_such_tool",
         arguments: { query: "the secret arguments" },
       },
@@ -220,8 +220,10 @@ describe("McpClient locked-chat tool-call redaction", () => {
 
     const rows = await persistedToolCalls();
     expect(rows).toHaveLength(1);
-    expect(rows[0].tool_call?.arguments).toEqual({ __redacted: "locked_chat" });
-    expect(rows[0].tool_result).toEqual({ __redacted: "locked_chat" });
+    expect(rows[0].tool_call?.arguments).toEqual({
+      __redacted: "encrypted_chat",
+    });
+    expect(rows[0].tool_result).toEqual({ __redacted: "encrypted_chat" });
     expect(rows[0].row_text).not.toContain("the secret arguments");
   });
 

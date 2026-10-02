@@ -57,9 +57,9 @@ import config, {
   shouldRunWebServer,
   shouldRunWorker,
 } from "@/config";
+import { verifyEncryptedChatConfig } from "@/content-encryption/encrypted-chat-escrow";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
-import { verifyLockedChatConfig } from "@/content-encryption/locked-chat-escrow";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
@@ -905,7 +905,7 @@ const startWebServer = async () => {
     // Fail-closed content-key verification, before any write could encrypt
     // (or silently plaintext) interaction/message content.
     await verifyContentEncryptionKey();
-    verifyLockedChatConfig();
+    verifyEncryptedChatConfig();
     // SPDX-SnippetEnd
 
     await seedRequiredStartingData();
@@ -1407,7 +1407,7 @@ const startWorker = async () => {
     // Workers write messages and interactions (scheduled runs, triggers), so
     // the content-key guard must hold here too.
     await verifyContentEncryptionKey();
-    verifyLockedChatConfig();
+    verifyEncryptedChatConfig();
     // SPDX-SnippetEnd
     cacheManager.start();
     await enterpriseTier.start();

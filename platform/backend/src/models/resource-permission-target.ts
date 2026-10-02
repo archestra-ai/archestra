@@ -127,7 +127,7 @@ export default class ResourcePermissionTargetModel {
             ? schema.conversationsTable.userId
             : schema.agentRunsTable.actorUserId,
           enabled: conversation
-            ? sql<boolean>`NOT ${schema.conversationsTable.lockedChat}`
+            ? sql<boolean>`NOT ${schema.conversationsTable.encryptedChat}`
             : sql<boolean>`true`,
         })
         .from(table)

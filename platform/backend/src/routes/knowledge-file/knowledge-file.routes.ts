@@ -403,15 +403,15 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "No access to the owning conversation");
       }
 
-      // A locked chat's attachment is sealed under a key only its browser
+      // An encrypted chat's attachment is sealed under a key only its browser
       // holds. Copying it into a knowledge repository would write the opened
       // bytes back out in plaintext, to a document other members can read and
       // an indexer can quote — undoing the one guarantee the chat makes. The
       // file stays reachable from the chat's own Files panel.
-      if (conversation.lockedChat) {
+      if (conversation.encryptedChat) {
         throw new ApiError(
           400,
-          "Files attached to a locked chat cannot be added to a knowledge base.",
+          "Files attached to an encrypted chat cannot be added to a knowledge base.",
         );
       }
 

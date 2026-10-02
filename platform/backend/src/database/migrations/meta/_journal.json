@@ -3522,6 +3522,13 @@
       "when": 1790887388929,
       "tag": "0502_short_rocket_racer",
       "breakpoints": true
+    },
+    {
+      "idx": 503,
+      "version": "7",
+      "when": 1790943572257,
+      "tag": "0503_rename-locked-chat-to-encrypted-chat",
+      "breakpoints": true
     }
   ]
 }

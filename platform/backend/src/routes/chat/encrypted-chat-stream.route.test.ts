@@ -1,5 +1,5 @@
 /**
- * Contract under test — the streaming half of locked chats
+ * Contract under test — the streaming half of encrypted chats
  * (POST /api/chat):
  * - the browser-held key header is required up front: a missing key is a 400
  *   and a wrong key a 409, both BEFORE any message row is written
@@ -22,7 +22,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-const KEY_HEADER = "x-archestra-locked-chat-key";
+const KEY_HEADER = "x-archestra-encrypted-chat-key";
 
 // Minimal slice of the stream-route.test.ts harness: the model boundary
 // ("ai" + llm-client), the MCP tool boundary, and the side channels the
@@ -105,13 +105,13 @@ vi.mock("./context-compaction", async (importOriginal) => {
   };
 });
 
-// Escrow is the locked-chat enablement switch, so these tests need a key. The
+// Escrow is the encrypted-chat enablement switch, so these tests need a key. The
 // db sink requires no license, which is the posture asserted below.
 const ESCROW_PEM = generateKeyPairSync("rsa", {
   modulusLength: 2048,
 }).publicKey.export({ type: "spki", format: "pem" }) as string;
 
-describe("POST /api/chat (locked chat)", () => {
+describe("POST /api/chat (encrypted chat)", () => {
   let app: FastifyInstanceWithZod;
   let currentUser: User;
   let organizationId: string;
@@ -123,10 +123,10 @@ describe("POST /api/chat (locked chat)", () => {
   let executionPromise: Promise<void> | undefined;
 
   beforeEach(async ({ makeAgent, makeMember, makeOrganization, makeUser }) => {
-    // Unlicensed posture: escrow enables locked-chat and its db sink needs no
+    // Unlicensed posture: escrow enables encrypted-chat and its db sink needs no
     // enterprise license, so streaming must work with the key and no license.
     config.enterpriseFeatures.core = false;
-    config.lockedChat.escrowPublicKey = ESCROW_PEM;
+    config.encryptedChat.escrowPublicKey = ESCROW_PEM;
     // Force server-side content encryption at rest OFF (a local .env may set
     // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): the envelope these tests assert on
     // must be the browser-DEK one — with a server key active, a broken DEK
@@ -247,12 +247,12 @@ describe("POST /api/chat (locked chat)", () => {
     return { [KEY_HEADER]: key.toString("base64url") };
   }
 
-  async function createLockedChatConversation(): Promise<string> {
+  async function createEncryptedChatConversation(): Promise<string> {
     const response = await app.inject({
       method: "POST",
       url: "/api/chat/conversations",
       headers: dekHeader(),
-      payload: { agentId, lockedChat: true },
+      payload: { agentId, encryptedChat: true },
     });
     expect(response.statusCode).toBe(200);
     return response.json().id as string;
@@ -275,11 +275,11 @@ describe("POST /api/chat (locked chat)", () => {
   const userMessage = {
     id: "msg-user-1",
     role: "user",
-    parts: [{ type: "text", text: "the locked-chat question" }],
+    parts: [{ type: "text", text: "the encrypted-chat question" }],
   };
 
   test("persists every message as an envelope and decrypts them back with the key", async () => {
-    const conversationId = await createLockedChatConversation();
+    const conversationId = await createEncryptedChatConversation();
 
     const response = await app.inject({
       method: "POST",
@@ -304,7 +304,7 @@ describe("POST /api/chat (locked chat)", () => {
         {
           id: "msg-assistant-1",
           role: "assistant",
-          parts: [{ type: "text", text: "the locked-chat answer" }],
+          parts: [{ type: "text", text: "the encrypted-chat answer" }],
         },
       ],
     });
@@ -313,8 +313,8 @@ describe("POST /api/chat (locked chat)", () => {
     expect(rows).toHaveLength(2);
     for (const row of rows) {
       expect(row.is_envelope).toBe(true);
-      expect(row.content_text).not.toContain("the locked-chat question");
-      expect(row.content_text).not.toContain("the locked-chat answer");
+      expect(row.content_text).not.toContain("the encrypted-chat question");
+      expect(row.content_text).not.toContain("the encrypted-chat answer");
     }
 
     // The same key opens the transcript back through the GET route.
@@ -330,13 +330,13 @@ describe("POST /api/chat (locked chat)", () => {
       }>
     ).map((message) => message.parts[0]?.text);
     expect(texts).toEqual([
-      "the locked-chat question",
-      "the locked-chat answer",
+      "the encrypted-chat question",
+      "the encrypted-chat answer",
     ]);
   });
 
   test("rejects a missing key with 400 before any message row is written", async () => {
-    const conversationId = await createLockedChatConversation();
+    const conversationId = await createEncryptedChatConversation();
 
     const response = await app.inject({
       method: "POST",
@@ -350,7 +350,7 @@ describe("POST /api/chat (locked chat)", () => {
   });
 
   test("rejects a wrong 32-byte key with 409 before any message row is written", async () => {
-    const conversationId = await createLockedChatConversation();
+    const conversationId = await createEncryptedChatConversation();
 
     const response = await app.inject({
       method: "POST",

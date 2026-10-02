@@ -1163,7 +1163,11 @@ test("Cursor prints literal instructions for manual User Rules without editing p
         clientId: "cursor",
         platform: "linux",
         appName: "Test Platform",
-        mcp: { serverName: "gateway", url: "https://example.com/mcp" },
+        mcp: {
+          serverName: "gateway",
+          toolPrefix: "archestra__",
+          url: "https://example.com/mcp",
+        },
         proxy: null,
         skills: null,
         runtimeHandoffInstructions: instructions,

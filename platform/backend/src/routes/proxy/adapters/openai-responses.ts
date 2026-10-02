@@ -729,6 +729,7 @@ class OpenAiResponsesStreamAdapter
     outputIndex: number;
     contentIndex: number;
   } | null = null;
+  private firstTextDelta: OpenAiResponsesStreamAdapter["lastTextDelta"] = null;
   private textByPart = new Map<string, string>();
   /**
    * Calls the model made as custom tool calls, by call id. The completed
@@ -836,6 +837,7 @@ class OpenAiResponsesStreamAdapter
         outputIndex: chunk.output_index,
         contentIndex: chunk.content_index,
       };
+      this.firstTextDelta ??= this.lastTextDelta;
       let prefixSse = "";
       let outbound = chunk;
       if (!this.textPrefixIssued && this.getTextSuffix) {
@@ -854,7 +856,10 @@ class OpenAiResponsesStreamAdapter
       };
     }
 
-    if (this.getTextSuffix && this.isLastTextTerminalEvent(chunk)) {
+    if (
+      this.getTextSuffix &&
+      this.isTextTerminalEvent(chunk, this.lastTextDelta)
+    ) {
       this.pendingTextTerminalEvents.push(chunk);
       return {
         sseData: null,
@@ -1352,37 +1357,41 @@ class OpenAiResponsesStreamAdapter
     return `${params.itemId}\u0000${params.outputIndex}\u0000${params.contentIndex}`;
   }
 
-  private isLastTextTerminalEvent(chunk: OpenAiResponsesStreamChunk): boolean {
-    const lastTextDelta = this.lastTextDelta;
-    if (!lastTextDelta) return false;
+  private isTextTerminalEvent(
+    chunk: OpenAiResponsesStreamChunk,
+    textDelta: OpenAiResponsesStreamAdapter["lastTextDelta"],
+  ): boolean {
+    if (!textDelta) return false;
     if (chunk.type === "response.output_text.done") {
       return (
-        chunk.item_id === lastTextDelta.itemId &&
-        chunk.output_index === lastTextDelta.outputIndex &&
-        chunk.content_index === lastTextDelta.contentIndex
+        chunk.item_id === textDelta.itemId &&
+        chunk.output_index === textDelta.outputIndex &&
+        chunk.content_index === textDelta.contentIndex
       );
     }
     if (chunk.type === "response.content_part.done") {
       return (
-        chunk.item_id === lastTextDelta.itemId &&
-        chunk.output_index === lastTextDelta.outputIndex &&
-        chunk.content_index === lastTextDelta.contentIndex &&
+        chunk.item_id === textDelta.itemId &&
+        chunk.output_index === textDelta.outputIndex &&
+        chunk.content_index === textDelta.contentIndex &&
         chunk.part.type === "output_text"
       );
     }
     return (
       chunk.type === "response.output_item.done" &&
-      chunk.output_index === lastTextDelta.outputIndex &&
+      chunk.output_index === textDelta.outputIndex &&
       chunk.item.type === "message" &&
-      chunk.item.id === lastTextDelta.itemId &&
-      chunk.item.content[lastTextDelta.contentIndex]?.type === "output_text"
+      chunk.item.id === textDelta.itemId &&
+      chunk.item.content[textDelta.contentIndex]?.type === "output_text"
     );
   }
 
   private drainPendingTextTerminalEvents(): string {
+    // Completed snapshots must carry the receipt only where its delta was sent.
     const events = this.pendingTextTerminalEvents.map((event) =>
       toSse(
-        this.issuedPrefix
+        this.issuedPrefix &&
+          this.isTextTerminalEvent(event, this.firstTextDelta)
           ? prependPrefixToTerminalEvent(event, this.issuedPrefix)
           : event,
       ),

@@ -3543,13 +3543,6 @@
       "when": 1790974534285,
       "tag": "0505_simplify-role-permissions",
       "breakpoints": true
-    },
-    {
-      "idx": 505,
-      "version": "7",
-      "when": 1790965652859,
-      "tag": "0505_restore-log-role-actions",
-      "breakpoints": true
     }
   ]
 }

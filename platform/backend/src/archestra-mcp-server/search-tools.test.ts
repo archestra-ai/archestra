@@ -14,8 +14,11 @@ import {
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
+import { vi } from "vitest";
 import config from "@/config";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
@@ -164,6 +167,7 @@ describe("search_tools", () => {
   }) => {
     const previous = config.openappa.enabled;
     config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(true);
     try {
       const org = await makeOrganization();
       const user = await makeUser();
@@ -194,6 +198,85 @@ describe("search_tools", () => {
         true,
       );
     } finally {
+      config.openappa.enabled = previous;
+    }
+  });
+
+  test("search hides remedy tools while the deployment switch is off and still finds policy tools", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previous = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(false);
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      const remedies = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "get_remedy_plans execute_remedy_plan", limit: 10 },
+        context,
+      );
+      const remedyNames = (
+        remedies.structuredContent as SearchToolsStructuredContent
+      ).tools.map((tool) => tool.toolName);
+      expect(
+        remedyNames.some((name) => name.endsWith("get_remedy_plans")),
+      ).toBe(false);
+      expect(
+        remedyNames.some((name) => name.endsWith("execute_remedy_plan")),
+      ).toBe(false);
+      const policy = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "get_guardrails_policy", limit: 10 },
+        context,
+      );
+      const policyNames = (
+        policy.structuredContent as SearchToolsStructuredContent
+      ).tools.map((tool) => tool.toolName);
+      expect(
+        policyNames.some((name) => name.endsWith("get_guardrails_policy")),
+      ).toBe(true);
+    } finally {
+      config.openappa.enabled = previous;
+    }
+  });
+
+  test("a thrown switch read fails search instead of hiding remedy tools", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const previous = config.openappa.enabled;
+    config.openappa.enabled = true;
+    const read = vi
+      .spyOn(guardrailsDeployment, "isGuardrailsV2Active")
+      .mockRejectedValue(new Error("deployment row unavailable"));
+    try {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      await expect(
+        executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query: "get_guardrails_policy", limit: 5 },
+          {
+            agent: { id: agent.id, name: agent.name },
+            agentId: agent.id,
+            organizationId: org.id,
+          },
+        ),
+      ).rejects.toThrow("deployment row unavailable");
+    } finally {
+      read.mockRestore();
       config.openappa.enabled = previous;
     }
   });

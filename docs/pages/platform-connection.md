@@ -44,6 +44,8 @@ The installer uses the same configuration defaults and permissions as the Connec
 It runs the existing setup script after approval.
 Your coding client may ask permission before running downloaded code.
 
+Keep the original installer running while you approve its browser request. Temporary status errors do not require another installer or approval link. Codex continues reading the same terminal session until installation finishes. Gateway OAuth is a separate authentication step, not another setup request.
+
 ### Completing the Connection
 
 Browser approval authorizes installation. MCP gateway authentication remains the client's native OAuth flow.
@@ -53,6 +55,8 @@ Verify that the gateway can list tools before considering the connection complet
 For OpenCode, the connection agent checks `opencode mcp list` after installation. If the gateway is already connected, it skips OAuth. Otherwise, it starts the gateway's native OAuth sign-in. After the agent finishes, save your work and close OpenCode normally. Start a new session in a fresh terminal. An in-session process restart can terminate the agent before it finishes.
 
 For Codex, the connection agent runs the installer's verification command. Windows uses a native PowerShell launcher. macOS and Linux use Node. Both start a fresh native client with your configured model, approvals, and sandbox. They call a read-only gateway tool and check inference through the selected proxy. The gateway check does not ask a model to run a shell command.
+
+Verification uses the deployment's tool prefix, including full white-label names. It does not infer that prefix from the MCP server's display name.
 
 If the operating system blocks startup, Codex can request approval for that one verification command. Your configured sandbox and approval settings stay unchanged. The verifier never approves permission requests automatically. Installation and OAuth alone do not prove the connection works.
 

@@ -47,6 +47,7 @@ import {
   cancelCalls,
   endChild,
   endTurn,
+  enterCapturedGuardrailsActivation,
   evaluateHostedToolCalls,
   evaluateToolCalls,
   loadChildAddresses,
@@ -55,6 +56,7 @@ import {
   type OpenAppaSession,
   processProxyResults,
   sharedPolicy,
+  withCapturedGuardrailsActivation,
 } from "@/openappa/service";
 import {
   parseTrajectoryStamp,
@@ -81,6 +83,7 @@ import type {
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
+import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
 import {
@@ -153,6 +156,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     this.bindings.delete(context.resources);
     const trustedContext = getTrustedContext(context.resources);
     if (!trustedContext) return;
+    const enforcement = await enforcementFor(trustedContext);
+    if (enforcement !== "active") return;
     // Copy trusted context before adapter inspection to isolate plugin state.
     const chat = trustedContext.chatSource !== undefined;
     const binding: AppaPluginBinding = {
@@ -207,6 +212,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
+    enterCapturedGuardrailsActivation("active");
     const childResultUpdates: Record<string, string> = Object.create(null);
     const results = context.toolResults.map((result) => {
       const content = binding.adapter?.normalizeChildLaunchResult?.(result);
@@ -338,6 +344,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
     const binding = this.bindings.get(context.resources);
+    if (binding) enterCapturedGuardrailsActivation("active");
     binding?.adapter?.stripCarrierMetadata(context.request);
     // A compaction summarizes the history, so an unchecked message would
     // survive into the summary: messages are admitted before either turn.
@@ -435,6 +442,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     const tools = binding?.request.tools;
     if (!binding || !tools) return;
+    enterCapturedGuardrailsActivation("active");
     // Restore before host validation; finalization may only append the child
     // receipt, never change the arguments the other policies already checked.
     let incomingToolCalls = restoreAuthorizedSpawnRetry({
@@ -632,15 +640,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     const tools = binding?.request.tools;
     if (!binding || !tools) return;
+    enterCapturedGuardrailsActivation("active");
     const calls = [...context.hostedToolCalls];
-    const decisions = await evaluateHostedToolCalls(
-      this.governedSession(binding),
-      calls,
-      {
+    const decisions = await withCapturedGuardrailsActivation("active", () =>
+      evaluateHostedToolCalls(this.governedSession(binding), calls, {
         ...this.resolution(binding),
         control: tools.control,
         lineage: binding.child?.lineage,
-      },
+      }),
     );
     const held = calls.flatMap((call, index) => {
       const decision = decisions[index];
@@ -681,6 +688,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
+    enterCapturedGuardrailsActivation("active");
     if (binding.compaction && context.toolCalls.length > 0) {
       throw new ApiError(
         503,
@@ -756,36 +764,39 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     );
     const policy = sharedPolicy(session.organization_id);
     const decisions = rest.length
-      ? await evaluateToolCalls(
-          session,
-          rest,
-          {
-            ...this.resolution(binding),
-            isUserQuestion: (name, namespace) => {
-              const tools = binding.request.tools;
-              if (tools?.platformToolNames?.has(name)) {
-                return namespace === tools.askUser?.namespace;
-              }
-              if (
-                namespace !== undefined &&
-                binding.adapter?.classifyToolName(name, namespace) !== "local"
-              ) {
-                return false;
-              }
-              return isUserQuestionCall(binding, name);
-            },
-            isSpawn: (name, namespace) =>
-              binding.adapter?.isSpawnTool(name, namespace) === true,
-            lineage: binding.child?.lineage,
-            supportsDelegation: binding.adapter !== undefined && !binding.chat,
-            ...(binding.request.tools
-              ? {
-                  control: binding.request.tools.control,
-                  notice: binding.request.tools.notice,
+      ? await withCapturedGuardrailsActivation("active", () =>
+          evaluateToolCalls(
+            session,
+            rest,
+            {
+              ...this.resolution(binding),
+              isUserQuestion: (name, namespace) => {
+                const tools = binding.request.tools;
+                if (tools?.platformToolNames?.has(name)) {
+                  return namespace === tools.askUser?.namespace;
                 }
-              : {}),
-          },
-          policy,
+                if (
+                  namespace !== undefined &&
+                  binding.adapter?.classifyToolName(name, namespace) !== "local"
+                ) {
+                  return false;
+                }
+                return isUserQuestionCall(binding, name);
+              },
+              isSpawn: (name, namespace) =>
+                binding.adapter?.isSpawnTool(name, namespace) === true,
+              lineage: binding.child?.lineage,
+              supportsDelegation:
+                binding.adapter !== undefined && !binding.chat,
+              ...(binding.request.tools
+                ? {
+                    control: binding.request.tools.control,
+                    notice: binding.request.tools.notice,
+                  }
+                : {}),
+            },
+            policy,
+          ),
         )
       : [];
     const decisionById = new Map(
@@ -977,6 +988,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return;
     }
     if (!binding.request.turnEndOperationId) return;
+    enterCapturedGuardrailsActivation("active");
     await endTurn(
       this.governedSession(binding),
       binding.request.turnEndOperationId,
@@ -1011,6 +1023,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!binding.request.turnEndOperationId) {
       throw new ApiError(503, "OpenAPPA could not safely end the child turn");
     }
+    enterCapturedGuardrailsActivation("active");
     // Check correlation data and the signing key before ChildEnd.
     // If the runtime admits a value, the value crosses the boundary.
     // Fail before dispatch if the marker cannot be created.
@@ -1254,10 +1267,12 @@ async function approveChildReturnCarriers(params: {
   // The durable authority: the child returns this family crossed, retained by
   // the runtime at ChildEnd. Nothing the client carries proves a return.
   const available = (
-    await loadChildReturns({
-      organizationId: params.binding.session.organization_id,
-      parentSessionId: params.binding.session.session_id,
-    })
+    await withCapturedGuardrailsActivation("active", () =>
+      loadChildReturns({
+        organizationId: params.binding.session.organization_id,
+        parentSessionId: params.binding.session.session_id,
+      }),
+    )
   ).map((record) => ({
     ...record,
     ...(record.spawnCallId
@@ -3431,6 +3446,17 @@ const SHORT_TOOL_CALL_ID_MODEL_FAMILIES = [
   "pixtral",
   "mixtral",
 ];
+
+async function enforcementFor(
+  trustedContext: AppaTrustedContext,
+): Promise<"active" | "inactive"> {
+  if (trustedContext.enforcement) return trustedContext.enforcement;
+  try {
+    return await readGuardrailsV2Activation();
+  } catch {
+    throw new ApiError(503, "Guardrails availability could not be confirmed");
+  }
+}
 
 /** Returns true if this session is caller-scoped and eligible for lineage tracing. */
 function tracesLineage(session: OpenAppaSession, chat: boolean): boolean {

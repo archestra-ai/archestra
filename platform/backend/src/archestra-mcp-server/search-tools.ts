@@ -22,6 +22,7 @@ import {
   appLaunchToolDescription,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
@@ -322,16 +323,26 @@ export const __test = {
 
 // === Internal helpers ===
 
-function openappaSearchTools(): Array<{
-  name: string;
-  description: string | null;
-  catalogId: string | null;
-  parameters: Record<string, unknown>;
-}> {
+async function openappaSearchTools(): Promise<
+  Array<{
+    name: string;
+    description: string | null;
+    catalogId: string | null;
+    parameters: Record<string, unknown>;
+  }>
+> {
   if (!openappaEnabled()) return [];
+  const remediesActive = await isGuardrailsV2Active();
   return openappaMcpTools.flatMap((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (!isOpenappaTool(shortName)) return [];
+    if (
+      (shortName === "get_remedy_plans" ||
+        shortName === "execute_remedy_plan") &&
+      !remediesActive
+    ) {
+      return [];
+    }
     if (shortName === "yell" && !openappaYellEnabled()) return [];
     const name = shortName
       ? archestraMcpBranding.getToolName(shortName)
@@ -375,7 +386,7 @@ async function getSearchableTools(params: {
   });
   // OpenAPPA tools are reachable on every agent when the feature is on —
   // assignment and Auto-mode extras must not hide them from search_tools.
-  const injectedOpenappaTools = openappaSearchTools();
+  const injectedOpenappaTools = await openappaSearchTools();
   const injectedOpenappaNames = new Set(
     injectedOpenappaTools.map((tool) => tool.name),
   );

@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
+  ARCHESTRA_TOOL_PREFIX,
+  getArchestraToolPrefix,
+} from "@archestra/shared/archestra-mcp-server";
+import {
   ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
   isCodexOriginator,
 } from "@archestra/shared/interactions/client";
@@ -39,6 +43,16 @@ const scenarios = [
   "rpc-payload",
   "rpc-ansi-payload",
   "early-exit",
+  "branded-list-skills",
+  "branded-missing-prefix",
+  "branded-wrong-server",
+  "branded-collision",
+  "branded-required",
+  "branded-mixed-whoami",
+  "branded-mixed-policy",
+  "branded-mixed-skills",
+  "branded-canonical-only",
+  "invalid-tool-prefix",
 ] as const;
 test.for([
   ...scenarios.flatMap((scenario) =>
@@ -50,6 +64,8 @@ test.for([
   ),
   { scenario: "success", runtime: "node", printed: true },
   { scenario: "success", runtime: "powershell", printed: true },
+  { scenario: "branded-list-skills", runtime: "node", printed: true },
+  { scenario: "branded-list-skills", runtime: "powershell", printed: true },
 ])("native connection verification: $runtime / $scenario / printed=$printed", async ({
   scenario,
   runtime,
@@ -110,10 +126,41 @@ createInterface({ input: process.stdin }).on('line', line => {
       if (scenario === 'rpc-ansi-payload') return send({ id: request.id, error: { code: -32603, message: 'input:\\x1b[0m ["PRIVATE REQUEST"]' } });
       return reply({ config: { model: 'selected-model', model_provider: scenario === 'wrong-provider' ? 'other' : 'selected-proxy', approval_policy: 'on-request', sandbox_mode: 'workspace-write' } });
     case 'thread/start': return reply({ thread: { id: 'verification-thread' }, modelProvider: scenario === 'wrong-thread-provider' ? 'other' : 'selected-proxy' });
-    case 'mcpServerStatus/list':
+    case 'mcpServerStatus/list': {
       if (scenario === 'repeated-cursor') return reply({ data: [], nextCursor: 'same-page' });
       if (!request.params.cursor) return reply({ data: [{ name: 'unrelated', tools: {} }], nextCursor: 'page-2' });
-      return reply({ data: [{ name: 'selected-gateway', tools: scenario === 'no-safe-tool' ? { unsafe: { name: 'dangerous__delete' } } : { policy: { name: 'archestra__get_guardrails_policy', inputSchema: { type: 'object', properties: {} } } } }], nextCursor: null });
+      const emptySchema = { type: 'object', properties: {} };
+      const brandedSkills = { name: 'archestra_staging__list_skills', inputSchema: emptySchema };
+      const selectedTools = () => {
+        if (scenario === 'no-safe-tool') return { unsafe: { name: 'dangerous__delete' } };
+        if (scenario === 'branded-list-skills' || scenario === 'branded-missing-prefix') return { skills: brandedSkills };
+        if (scenario === 'branded-required') return {
+          skills: { name: 'archestra_staging__list_skills', inputSchema: { type: 'object', required: ['name'] } },
+          hint: { name: 'archestra_staging__execute_remedy_plan', inputSchema: emptySchema, annotations: { readOnlyHint: true } },
+        };
+        if (scenario === 'branded-collision') return {
+          model: { name: 'mcp__archestra_staging__archestra_staging__list_skills', inputSchema: emptySchema },
+          suffix: { name: 'archestra_staging__list_skills_extra', inputSchema: emptySchema },
+          serverish: { name: 'selected-gateway__list_skills', inputSchema: emptySchema },
+          side: { name: 'archestra_staging__execute_remedy_plan', inputSchema: emptySchema, annotations: { readOnlyHint: true } },
+          skills: brandedSkills,
+        };
+        if (scenario === 'branded-wrong-server') return { serverish: { name: 'selected-gateway__list_skills', inputSchema: emptySchema } };
+        const canonical = {
+          whoami: { name: 'archestra__whoami', inputSchema: emptySchema },
+          policy: { name: 'archestra__get_guardrails_policy', inputSchema: emptySchema },
+          skills: { name: 'archestra__list_skills', inputSchema: emptySchema },
+          serverish: { name: 'selected-gateway__whoami', inputSchema: emptySchema },
+        };
+        if (scenario === 'branded-canonical-only') return canonical;
+        if (scenario === 'branded-mixed-whoami') return { ...canonical, branded: { name: 'archestra_staging__whoami', inputSchema: emptySchema } };
+        if (scenario === 'branded-mixed-policy') return { ...canonical, branded: { name: 'archestra_staging__get_guardrails_policy', inputSchema: emptySchema } };
+        if (scenario === 'branded-mixed-skills') return { ...canonical, branded: { name: 'archestra_staging__list_skills', inputSchema: emptySchema } };
+        return { policy: { name: 'archestra__get_guardrails_policy', inputSchema: emptySchema } };
+      };
+      if (scenario === 'branded-wrong-server') return reply({ data: [{ name: 'other-gateway', tools: { skills: brandedSkills } }, { name: 'selected-gateway', tools: selectedTools() }], nextCursor: null });
+      return reply({ data: [{ name: 'selected-gateway', tools: selectedTools() }], nextCursor: null });
+    }
     case 'mcpServer/tool/call':
       if (scenario === 'early-exit') return process.exit(1);
       if (scenario === 'approval') return send({ id: 'approval-1', method: 'mcpServer/elicitation/request', params: { message: 'Approve?' } });
@@ -140,10 +187,18 @@ createInterface({ input: process.stdin }).on('line', line => {
 `,
       { mode: 0o700 },
     );
+    const toolPrefix =
+      scenario === "invalid-tool-prefix"
+        ? "selected-gateway"
+        : scenario.startsWith("branded-") &&
+            scenario !== "branded-missing-prefix"
+          ? "archestra_staging__"
+          : undefined;
     const options = Buffer.from(
       JSON.stringify({
         server: "selected-gateway",
         provider: "selected-proxy",
+        ...(toolPrefix ? { toolPrefix } : {}),
       }),
     ).toString("base64");
     let command = runtime === "powershell" ? "pwsh" : process.execPath;
@@ -170,6 +225,10 @@ createInterface({ input: process.stdin }).on('line', line => {
           serverName: "selected-gateway",
           url: "https://example.test/v1/mcp/gateway",
         },
+        toolPrefix:
+          scenario === "branded-list-skills"
+            ? "archestra_staging__"
+            : undefined,
         proxy: null,
         skills: null,
       });
@@ -235,6 +294,13 @@ createInterface({ input: process.stdin }).on('line', line => {
       expect(await readFile(config, "utf8")).toBe(original);
       return;
     }
+    if (scenario === "invalid-tool-prefix") {
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("Invalid Codex verification options.");
+      expect(requests).toEqual([]);
+      expect(result.stdout).not.toContain('"verified"');
+      return;
+    }
     expect(requests[0]).toEqual({
       argv: ["app-server"],
       network: "1",
@@ -275,6 +341,11 @@ createInterface({ input: process.stdin }).on('line', line => {
         "foreign-events",
         "npm-shim",
         "node-pipe-denied",
+        "branded-list-skills",
+        "branded-collision",
+        "branded-mixed-whoami",
+        "branded-mixed-policy",
+        "branded-mixed-skills",
       ].includes(scenario)
     ) {
       expect(result.code, result.stderr).toBe(0);
@@ -288,9 +359,19 @@ createInterface({ input: process.stdin }).on('line', line => {
       ).toEqual({
         threadId: "verification-thread",
         server: "selected-gateway",
-        tool: "archestra__get_guardrails_policy",
+        tool:
+          {
+            "branded-list-skills": "archestra_staging__list_skills",
+            "branded-collision": "archestra_staging__list_skills",
+            "branded-mixed-whoami": "archestra_staging__whoami",
+            "branded-mixed-policy": "archestra_staging__get_guardrails_policy",
+            "branded-mixed-skills": "archestra_staging__list_skills",
+          }[scenario] ?? "archestra__get_guardrails_policy",
         arguments: {},
       });
+      expect(
+        requests.filter((request) => request.method === "mcpServer/tool/call"),
+      ).toHaveLength(1);
       const turn = requests.find((request) => request.method === "turn/start");
       if (printed) expect(turn).toBeUndefined();
       else
@@ -312,6 +393,10 @@ createInterface({ input: process.stdin }).on('line', line => {
           "rpc-error",
           "rpc-payload",
           "rpc-ansi-payload",
+          "branded-missing-prefix",
+          "branded-wrong-server",
+          "branded-required",
+          "branded-canonical-only",
         ].includes(scenario)
       ) {
         expect(
@@ -336,8 +421,77 @@ createInterface({ input: process.stdin }).on('line', line => {
         expect(result.stderr).toContain("Configuration unavailable");
       if (["rpc-payload", "rpc-ansi-payload"].includes(scenario))
         expect(result.stderr).toContain("diagnostic payload omitted");
+      if (
+        [
+          "branded-missing-prefix",
+          "branded-wrong-server",
+          "branded-required",
+          "branded-canonical-only",
+        ].includes(scenario)
+      ) {
+        expect(result.stderr).toContain(
+          "no supported read-only verification tool",
+        );
+        expect(
+          requests.some((request) => request.method === "mcpServer/tool/call"),
+        ).toBe(false);
+      }
     }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("printed verification options use the branding prefix, not the client server name", () => {
+  const toolPrefix = getArchestraToolPrefix({
+    appName: "Archestra Staging",
+    fullWhiteLabeling: true,
+  });
+  expect(toolPrefix).toBe("archestra_staging__");
+  expect(
+    getArchestraToolPrefix({
+      appName: "Archestra Staging",
+      fullWhiteLabeling: false,
+    }),
+  ).toBe(ARCHESTRA_TOOL_PREFIX);
+  const context = {
+    appName: "Archestra Staging",
+    clientId: "codex" as const,
+    mcp: {
+      serverName: "renamed_gateway",
+      url: "https://example.test/v1/mcp/gateway",
+    },
+    proxy: null,
+    skills: null,
+    toolPrefix,
+  };
+  const linux = renderSetupScript({ ...context, platform: "linux" });
+  const linuxEncoded = linux.match(
+    /--verify "\$\(command -v codex\)" '([^']+)'/,
+  )?.[1];
+  expect(
+    JSON.parse(Buffer.from(linuxEncoded ?? "", "base64").toString()),
+  ).toEqual({
+    server: "renamed_gateway",
+    toolPrefix: "archestra_staging__",
+  });
+  const windows = renderSetupScript({ ...context, platform: "windows" });
+  const windowsEncoded = windows.match(/-OptionsBase64 '([^']+)'/)?.[1];
+  expect(
+    JSON.parse(Buffer.from(windowsEncoded ?? "", "base64").toString()),
+  ).toEqual({
+    server: "renamed_gateway",
+    toolPrefix: "archestra_staging__",
+  });
+  const canonical = renderSetupScript({
+    ...context,
+    platform: "linux",
+    toolPrefix: ARCHESTRA_TOOL_PREFIX,
+  });
+  const canonicalEncoded = canonical.match(
+    /--verify "\$\(command -v codex\)" '([^']+)'/,
+  )?.[1];
+  expect(
+    JSON.parse(Buffer.from(canonicalEncoded ?? "", "base64").toString()),
+  ).toEqual({ server: "renamed_gateway" });
 });

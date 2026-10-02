@@ -1062,9 +1062,141 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.statusCode, response.body).toBe(200);
     }
     expect(providerRequests).toHaveLength(2);
-    expect(events.filter((event) => event.event === "tool_call")).toHaveLength(
-      2,
+    // Two roots, each ruled once. The known client's native id is scoped to
+    // the loopback user. An explicit header on that unauthenticated loopback
+    // is the named root, not a second evaluation of the first call.
+    const callerId = `user:${userId}`;
+    const knownRoot = `${callerId}|known-session`;
+    const explicitRoot = "explicit-session";
+    const starts = events.filter((event) => event.event === "session_start");
+    const toolCalls = events.filter((event) => event.event === "tool_call");
+    expect(starts).toEqual([
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: knownRoot,
+      }),
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: explicitRoot,
+      }),
+    ]);
+    expect(starts.map((event) => event.parent_id)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(starts.map((event) => event.fork_of)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(toolCalls).toEqual([
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: knownRoot,
+        tool: "get_weather",
+        operation_id: "call:toolu_test_weather",
+      }),
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: explicitRoot,
+        tool: "get_weather",
+        operation_id: "call:toolu_test_weather",
+      }),
+    ]);
+    expect(toolCalls.map((event) => event.namespace)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(toolCalls.map((event) => event.parent_id)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  test("does not issue a remedy notice while the deployment switch is off, then does after it is turned on", async () => {
+    block = true;
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const off = await post(payload(false));
+    expect(off.statusCode, off.body).toBe(200);
+    expect(off.body).not.toContain("get_remedy_plans");
+    expect(noticeFrom(off.body, false).name).toBe("get_weather");
+    expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const on = await post(payload(false));
+    expect(on.statusCode, on.body).toBe(200);
+    expect(noticeFrom(on.body, false).name).toBe("archestra__get_remedy_plans");
+  });
+
+  test("keeps the captured switch through tool results and reads it again on the next request", async () => {
+    const realGet = GuardrailsDeploymentModel.get.bind(
+      GuardrailsDeploymentModel,
     );
+    let gets = 0;
+    const getSpy = vi
+      .spyOn(GuardrailsDeploymentModel, "get")
+      .mockImplementation(async () => {
+        gets += 1;
+        if (gets > 1) {
+          return {
+            id: "global",
+            enabled: false,
+            unsupportedClientAction: "bypass",
+          };
+        }
+        return realGet();
+      });
+    const enabledSpy = vi
+      .spyOn(GuardrailsDeploymentModel, "isEnabled")
+      .mockImplementation(async () => {
+        throw new Error("activation re-read inside a captured request");
+      });
+    try {
+      const response = await post(
+        payload(false, [
+          { role: "user", content: "Check the weather" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_weather",
+                name: "get_weather",
+                input: { location: "San Francisco" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_weather",
+                content: "Sunny",
+              },
+            ],
+          },
+        ]),
+      );
+      expect(response.statusCode, response.body).toBe(200);
+      expect(events.map((event) => event.event)).toContain("tool_result");
+      expect(gets).toBe(1);
+      expect(enabledSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+      enabledSpy.mockRestore();
+    }
+
+    await GuardrailsDeploymentModel.setEnabled(false);
+    block = true;
+    events.length = 0;
+    const next = await post(payload(false));
+    expect(next.statusCode, next.body).toBe(200);
+    expect(next.body).not.toContain("get_remedy_plans");
+    expect(noticeFrom(next.body, false).name).toBe("get_weather");
   });
 
   test("binds a headerless Claude Code request to its own session", async () => {

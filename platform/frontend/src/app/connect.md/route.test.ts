@@ -60,6 +60,86 @@ describe("Connect agent instructions", () => {
   it.each([
     "",
     "?client=codex",
+  ])("keeps a yielded Codex installer on the same session in %s", async (query) => {
+    const instructions = await GET(
+      new Request(`http://localhost:3000/connect.md${query}`),
+    ).text();
+    expect(instructions).toContain(
+      'Use sandbox_permissions="require_escalated" for network-blocked setup commands.',
+    );
+    expect(instructions).toContain(
+      "keep reading that same session with write_stdin",
+    );
+    expect(instructions).toContain('prints "Browser approval confirmed."');
+    expect(instructions).toContain(
+      "Do not end the turn and ask the user to say when approval is finished.",
+    );
+    expect(instructions).toContain(
+      "show its full browser approval URL as a clickable markdown link",
+    );
+    expect(instructions).toContain("Query parameter order does not matter.");
+    expect(instructions).toContain(
+      "Always show this manual fallback while approval is pending",
+    );
+    expect(instructions).toContain(
+      "After approval completes, omit the URL and code.",
+    );
+    expect(instructions).toContain("even if a browser opens automatically");
+    expect(instructions).toContain(
+      "Never suppress it because of deduplication.",
+    );
+    expect(instructions).not.toContain(
+      "Do not print the approval URL again if this session already printed it.",
+    );
+    expect(instructions).not.toContain(
+      "has not already printed the approval URL",
+    );
+    expect(instructions).toContain(
+      "Do not start a second installer or a second approval request while the first process is alive.",
+    );
+    expect(instructions).toContain("Keep the first request and its code.");
+    expect(instructions).toContain(
+      "Gateway OAuth is a later native sign-in after this installer applies the setup.",
+    );
+    expect(instructions).toContain("It is not a new connection approval.");
+    expect(instructions).not.toContain("approval_policy");
+    expect(instructions).not.toContain("native permission tools");
+    expect(instructions).not.toContain("task-scoped network permission");
+  });
+
+  it.each([
+    "cursor",
+    "claude-code",
+    "opencode",
+    "copilot-cli",
+  ])("keeps the manual approval link in focused %s", async (client) => {
+    const instructions = await GET(
+      new Request(`http://localhost:3000/connect.md?client=${client}`),
+    ).text();
+    expect(instructions).not.toContain("require_escalated");
+    expect(instructions).toContain("as a clickable markdown link");
+    expect(instructions).toContain(
+      "Always show this manual fallback while approval is pending",
+    );
+    expect(instructions).toContain(
+      "After approval completes, omit the URL and code.",
+    );
+    expect(instructions).toContain("Query parameter order does not matter.");
+    expect(instructions).toContain(
+      "Do not link the installer download, a wrapped or truncated /api/client-connections path",
+    );
+  });
+
+  it("does not tell other clients to poll a Codex session", async () => {
+    const instructions = await GET(
+      new Request("http://localhost:3000/connect.md?client=cursor"),
+    ).text();
+    expect(instructions).not.toContain("write_stdin");
+  });
+
+  it.each([
+    "",
+    "?client=codex",
   ])("does not repeat completed Codex OAuth in %s instructions", async (query) => {
     const instructions = await GET(
       new Request(`http://localhost:3000/connect.md${query}`),

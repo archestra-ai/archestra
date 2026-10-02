@@ -11,12 +11,17 @@
  * (memoized across steps, updated incrementally as the run grows). When
  * summarization is unavailable or fails, it falls back to deterministic
  * trimming so the step still fits.
+ *
+ * With a prompt-cache target, the guard also moves the cache breakpoint to the
+ * newest message of each step, so later steps read the earlier tool calls and
+ * results from the cache.
  */
 import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import { trimMessagesToTokenLimit } from "@/routes/chat/context-trimming";
+import { applyStepPromptCacheBreakpoint } from "@/routes/chat/normalization/apply-prompt-cache";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
 import {
   CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
@@ -45,10 +50,17 @@ export function createStepContextGuard(params: {
   abortSignal?: AbortSignal;
   logContext?: Record<string, unknown>;
   summarizeTranscript?: (params: SummarizeParams) => Promise<string | null>;
+  /** The provider and model whose cache breakpoint moves with each step. */
+  promptCache?: {
+    provider: string;
+    model: string;
+    anthropicNativeEndpoint: boolean;
+  };
 }): (options: { messages: ModelMessage[] }) => Promise<{
   messages: ModelMessage[];
 }> {
-  const { model, contextLength, systemPrompt, abortSignal } = params;
+  const { model, contextLength, systemPrompt, abortSignal, promptCache } =
+    params;
   const logContext = params.logContext ?? {};
   const summarize =
     params.summarizeTranscript ??
@@ -62,9 +74,17 @@ export function createStepContextGuard(params: {
   let state: { summary: string; throughIndex: number } | null = null;
   let summarizationDisabled = summarize === null;
 
+  // For a view that the next step extends: mark its newest message, so the
+  // next step reads this whole view from the cache.
+  const withStepBreakpoint = (messages: ModelMessage[]) => ({
+    messages: promptCache
+      ? applyStepPromptCacheBreakpoint({ ...promptCache, messages })
+      : messages,
+  });
+
   return async ({ messages }) => {
     const capped = capOversizedToolResults(messages);
-    if (!contextLength) return { messages: capped };
+    if (!contextLength) return withStepBreakpoint(capped);
 
     const budgetTokens = Math.floor(
       contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
@@ -79,7 +99,7 @@ export function createStepContextGuard(params: {
     );
 
     let view = applySummary(capped, state);
-    if (charSize(view) <= budgetChars) return { messages: view };
+    if (charSize(view) <= budgetChars) return withStepBreakpoint(view);
 
     if (!summarizationDisabled && summarize) {
       const minIndex = state?.throughIndex ?? 0;
@@ -107,7 +127,7 @@ export function createStepContextGuard(params: {
               "[StepContextGuard] compacted step context with summary",
             );
             view = applySummary(capped, state);
-            if (charSize(view) <= budgetChars) return { messages: view };
+            if (charSize(view) <= budgetChars) return withStepBreakpoint(view);
           } else {
             summarizationDisabled = true;
             logger.warn(
@@ -125,6 +145,9 @@ export function createStepContextGuard(params: {
       }
     }
 
+    // No cache breakpoint: as the run grows, trimming usually drops more of the
+    // oldest messages, which changes the start of the view. A cache write for
+    // this view would rarely be read and would cost more than no marker.
     return {
       messages: trimMessagesToTokenLimit({
         messages: view,

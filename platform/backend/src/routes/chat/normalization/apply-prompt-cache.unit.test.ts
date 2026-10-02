@@ -1,6 +1,9 @@
 import type { ModelMessage } from "ai";
 import { describe, expect, it } from "vitest";
-import { applyPromptCacheBreakpoints } from "./apply-prompt-cache";
+import {
+  applyPromptCacheBreakpoints,
+  applyStepPromptCacheBreakpoint,
+} from "./apply-prompt-cache";
 
 const EPHEMERAL = { type: "ephemeral" };
 
@@ -443,5 +446,108 @@ describe("applyPromptCacheBreakpoints", () => {
       expect(anthropicCacheControl(result[0])).toEqual(EPHEMERAL);
       expect(anthropicCacheControl(result[1])).toEqual(EPHEMERAL);
     });
+  });
+});
+
+describe("applyStepPromptCacheBreakpoint", () => {
+  const ONE_HOUR = { type: "ephemeral", ttl: "1h" };
+  const MODEL = "claude-haiku-4-5";
+
+  // The initial request of a run, marked by the run-start policy (1h TTL).
+  function markedTurn(text: string): ModelMessage {
+    const [marked] = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      model: MODEL,
+      messages: [userMessage(text)],
+    });
+    return marked;
+  }
+
+  function toolStep(id: string): ModelMessage[] {
+    return [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: id, toolName: "inspect", input: {} },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: id,
+            toolName: "inspect",
+            output: { type: "text", value: `result ${id}` },
+          },
+        ],
+      },
+    ];
+  }
+
+  it("marks only the newest message, with the 5m TTL", () => {
+    // No other marker, as after compaction: the run-start policy would also
+    // mark the first message, and with the 1h TTL, which doubles the write
+    // price of every step.
+    const messages: ModelMessage[] = [
+      userMessage("Summary of the earlier steps."),
+      ...toolStep("t1"),
+      ...toolStep("t2"),
+    ];
+
+    const result = applyStepPromptCacheBreakpoint({
+      provider: "anthropic",
+      model: MODEL,
+      messages,
+    });
+
+    expect(anthropicCacheControl(result[4])).toEqual(EPHEMERAL);
+    expect(result.slice(0, 4)).toEqual(messages.slice(0, 4));
+  });
+
+  it("never puts a marker before a retained 1-hour marker", () => {
+    // A context-trim retry prepends an unmarked system note. The run-start
+    // policy would mark it with the 5m TTL, ahead of the 1h marker.
+    const messages: ModelMessage[] = [
+      { role: "system", content: "[Earlier context was trimmed.]" },
+      markedTurn("task"),
+      ...toolStep("t1"),
+    ];
+
+    const result = applyStepPromptCacheBreakpoint({
+      provider: "anthropic",
+      model: MODEL,
+      messages,
+    });
+
+    expect(anthropicCacheControl(result[0])).toBeUndefined();
+    expect(anthropicCacheControl(result[1])).toEqual(ONE_HOUR);
+    expect(anthropicCacheControl(result[3])).toEqual(EPHEMERAL);
+  });
+
+  it("returns the input when the newest message already has a marker", () => {
+    // The first step sends the initial messages, which the run start marked.
+    const messages = [markedTurn("task")];
+
+    expect(
+      applyStepPromptCacheBreakpoint({
+        provider: "anthropic",
+        model: MODEL,
+        messages,
+      }),
+    ).toBe(messages);
+  });
+
+  it("adds nothing for an Anthropic-compatible endpoint", () => {
+    const messages = [userMessage("task"), ...toolStep("t1")];
+
+    expect(
+      applyStepPromptCacheBreakpoint({
+        provider: "anthropic",
+        model: MODEL,
+        anthropicNativeEndpoint: false,
+        messages,
+      }),
+    ).toBe(messages);
   });
 });

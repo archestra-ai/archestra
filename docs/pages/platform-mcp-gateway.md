@@ -173,7 +173,7 @@ See [Access Control](/docs/platform-access-control) for the permission model.
 
 ## Load Tools When Needed
 
-New gateways enable **Progressive tool loading** by default. Existing Manual-mode gateways enable it on upgrade. You can turn it off in **Manual** mode to expose every assigned tool through MCP `tools/list`.
+Gateways enable **Progressive tool loading** by default. You can turn it off in **Manual** mode to expose every assigned tool through MCP `tools/list`.
 
 Progressive loading keeps the initial tool list small. Clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first.
 

@@ -249,10 +249,13 @@ class StartupTest(unittest.TestCase):
 
     def run_turn(self, root, home, runtime, env, server, mode, plain, failure, hold, idle=False):
         turn_prefix = env["ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX"]
+        # A previous daemon can still be shutting down when a resumed turn
+        # starts. Keep native session storage, but use a fresh socket per turn.
+        tmux_socket = f"{root.name}-{Path(turn_prefix).name}"
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(home)
-            os.execvpe("tmux", ["tmux", "-L", root.name, "new-session", "-s", "agent", "-x", "180", "-y", "50", "/bin/bash", str(BIN / ("archestra-" + CLIENT))], env)
+            os.execvpe("tmux", ["tmux", "-L", tmux_socket, "new-session", "-s", "agent", "-x", "180", "-y", "50", "/bin/bash", str(BIN / ("archestra-" + CLIENT))], env)
         fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 50, 180, 0, 0))
         output = bytearray()
         status = None
@@ -340,7 +343,7 @@ class StartupTest(unittest.TestCase):
         finally:
             # A retained TUI has a separate foreground process group. Killing
             # only tmux leaves that client writing into the temporary home.
-            pane = subprocess.run(["tmux", "-L", root.name, "display-message", "-p", "-t", "agent:0.0", "#{pane_pid}"], env=env, capture_output=True, text=True)
+            pane = subprocess.run(["tmux", "-L", tmux_socket, "display-message", "-p", "-t", "agent:0.0", "#{pane_pid}"], env=env, capture_output=True, text=True)
             if pane.returncode == 0:
                 foreground = subprocess.run(["ps", "-o", "tpgid=", "-p", pane.stdout.strip()], capture_output=True, text=True)
                 if foreground.returncode == 0:
@@ -358,7 +361,7 @@ class StartupTest(unittest.TestCase):
                 except ProcessLookupError:
                     pass
             os.close(fd)
-            subprocess.run(["tmux", "-L", root.name, "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            subprocess.run(["tmux", "-L", tmux_socket, "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
 if __name__ == "__main__":

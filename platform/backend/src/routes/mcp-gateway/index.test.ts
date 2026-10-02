@@ -489,6 +489,7 @@ describe("MCP Gateway (stateless mode)", () => {
       organizationId: org.id,
       agentType: "mcp_gateway",
       name: "Gateway Auto Caller",
+      toolExposureMode: "full",
     });
     await AgentModel.update(caller.id, { accessAllSubagents: true });
 
@@ -547,6 +548,7 @@ describe("MCP Gateway (stateless mode)", () => {
       organizationId: org.id,
       agentType: "mcp_gateway",
       name: "Gateway Skill Caller",
+      toolExposureMode: "full",
     });
     const target = await makeAgent({
       organizationId: org.id,
@@ -1581,7 +1583,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(text).toContain("Blocked for this team");
   });
 
-  test("keeps only meta and always-exposed tools in tools/list when toolExposureMode is search_and_run_only", async ({
+  test("new Manual gateways default to only meta and always-exposed tools in tools/list", async ({
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
@@ -1590,7 +1592,6 @@ describe("MCP Gateway (stateless mode)", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      toolExposureMode: "search_and_run_only",
     });
     await seedAndAssignArchestraTools(agent.id);
 

@@ -2337,6 +2337,7 @@ describe("AgentForm knowledge in Auto mode", () => {
 
 describe("AgentForm progressive tool loading", () => {
   beforeEach(() => {
+    useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "user-1" } },
     } as unknown as ReturnType<typeof useSession>);
@@ -2347,6 +2348,24 @@ describe("AgentForm progressive tool loading", () => {
 
   const progressiveSwitch = (section: HTMLElement) =>
     section.querySelector<HTMLInputElement>("#load-tools-when-needed");
+
+  it.each([
+    "agent",
+    "mcp_gateway",
+  ] as const)("defaults new Manual %s to progressive loading and allows an opt-out", async (agentType) => {
+    const user = userEvent.setup();
+    render(<AgentForm agentType={agentType} />);
+    const tools = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    await user.click(within(tools).getByRole("tab", { name: "Manual" }));
+    const section = await screen.findByTestId(
+      E2eTestId.AgentToolLoadingSection,
+    );
+    const toggle = progressiveSwitch(section);
+    expect(toggle?.checked).toBe(true);
+    expect(toggle?.disabled).toBe(false);
+    if (toggle) await user.click(toggle);
+    expect(progressiveSwitch(section)?.checked).toBe(false);
+  });
 
   it("hides both settings in All mode, where the record decides neither", async () => {
     // All pins progressive loading on and the connection prompt to asking when
@@ -2911,6 +2930,38 @@ describe("AgentForm save payload and failure handling", () => {
       isSet: false,
       model: null,
       label: null,
+    });
+  });
+
+  it.each([
+    "agent",
+    "mcp_gateway",
+  ] as const)("submits the progressive default or an explicit Manual opt-out for a new %s", async (agentType) => {
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType={agentType}
+        initialValues={{ accessAllTools: false }}
+      />,
+    );
+    await user.type(screen.getByLabelText("Name *"), "Manual Resource");
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      agentType,
+      accessAllTools: false,
+      toolExposureMode: "search_and_run_only",
+    });
+    const toggle = screen
+      .getByTestId(E2eTestId.AgentToolLoadingSection)
+      .querySelector<HTMLInputElement>("#load-tools-when-needed");
+    expect(toggle).not.toBeNull();
+    if (toggle) await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(2));
+    expect(createAgent.mock.calls[1][0]).toMatchObject({
+      accessAllTools: false,
+      toolExposureMode: "full",
     });
   });
 

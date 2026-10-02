@@ -41,7 +41,7 @@ export function describeAgentRuntimeStartupProgress(
       };
     }
 
-    const waiting = findWaitingContainer(pod);
+    const waiting = findContainerStartupProgress(pod);
     if (waiting) return waiting;
 
     // Scheduled, but no container has reported a state yet.
@@ -62,7 +62,7 @@ export function describeAgentRuntimeStartupProgress(
     // A Running pod can still hold a container that is not up: a crash loop
     // reports here, and silently calling that "starting" is how a broken image
     // spends the whole attach timeout looking like a slow one.
-    const waiting = findWaitingContainer(pod);
+    const waiting = findContainerStartupProgress(pod);
     if (waiting?.detail) {
       return { ...waiting, phase: "starting" };
     }
@@ -72,6 +72,9 @@ export function describeAgentRuntimeStartupProgress(
       detail: null,
     };
   }
+
+  const containerProgress = findContainerStartupProgress(pod);
+  if (containerProgress?.detail) return containerProgress;
 
   // Succeeded/Failed/Unknown: the callers that wait for a terminal treat these
   // as the end of the road, but a phase is still reported so a run that
@@ -136,37 +139,64 @@ const BENIGN_WAITING_REASONS = new Set([
   "PodInitializing",
 ]);
 
-function findWaitingContainer(
+function findContainerStartupProgress(
   pod: k8s.V1Pod,
 ): AgentRuntimeStartupProgress | null {
-  const statuses = [
-    ...(pod.status?.initContainerStatuses ?? []),
-    ...(pod.status?.containerStatuses ?? []),
-  ];
-
-  for (const status of statuses) {
-    const waiting = status.state?.waiting;
-    if (!waiting?.reason) continue;
-
-    if (BENIGN_WAITING_REASONS.has(waiting.reason)) {
+  // The runtime's PodInitializing state only says an init container has not
+  // finished. Inspect the init container itself before that generic wait so
+  // workspace setup (or its failure) is not presented as an image download.
+  for (const status of pod.status?.initContainerStatuses ?? []) {
+    if (status.state?.running) {
       return {
         phase: "pulling",
-        message: "Pulling the agent image",
+        message: "Preparing the workspace",
         detail: null,
       };
     }
-
-    const detail = joinReason(waiting.reason, waiting.message);
-    if (IMAGE_WAITING_REASONS.has(waiting.reason)) {
-      return { phase: "pulling", message: "Pulling the agent image", detail };
+    const terminated = status.state?.terminated;
+    if (terminated && terminated.exitCode !== 0) {
+      return {
+        phase: "pulling",
+        message: "Workspace initialization failed",
+        detail: `${status.name} (exit code ${terminated.exitCode}): ${joinReason(terminated.reason, terminated.message) ?? "Init container exited"}`,
+      };
     }
-    // Anything else (CreateContainerConfigError, CrashLoopBackOff, a reason
-    // this build has never heard of) is still worth showing rather than
-    // flattening into a generic wait.
-    return { phase: "pulling", message: "Starting the container", detail };
+    const waiting = describeWaitingContainer(status);
+    if (waiting) return waiting;
   }
 
+  for (const status of pod.status?.containerStatuses ?? []) {
+    const waiting = describeWaitingContainer(status);
+    if (waiting) return waiting;
+  }
   return null;
+}
+
+function describeWaitingContainer(
+  status: k8s.V1ContainerStatus,
+): AgentRuntimeStartupProgress | null {
+  const waiting = status.state?.waiting;
+  if (!waiting?.reason) return null;
+
+  if (BENIGN_WAITING_REASONS.has(waiting.reason)) {
+    return {
+      phase: "pulling",
+      message:
+        waiting.reason === "PodInitializing"
+          ? "Preparing the workspace"
+          : "Preparing the agent container",
+      detail: null,
+    };
+  }
+
+  const detail = joinReason(waiting.reason, waiting.message);
+  if (IMAGE_WAITING_REASONS.has(waiting.reason)) {
+    return { phase: "pulling", message: "Pulling the agent image", detail };
+  }
+  // Anything else (CreateContainerConfigError, CrashLoopBackOff, a reason
+  // this build has never heard of) is still worth showing rather than
+  // flattening into a generic wait.
+  return { phase: "pulling", message: "Starting the container", detail };
 }
 
 function findUnschedulableCondition(pod: k8s.V1Pod): string | null {

@@ -1,5 +1,5 @@
 {
-  "id": "622afa90-1b3c-4090-a509-8fbdb2c53943",
+  "id": "955030e6-9da9-4ec9-8d0c-d5034276e308",
   "prevId": "b9246d2f-93d0-483f-8b00-c6df417931e0",
   "version": "7",
   "dialect": "postgresql",
@@ -4433,7 +4433,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'full'"
+          "default": "'search_and_run_only'"
         },
         "missing_credential_behavior": {
           "name": "missing_credential_behavior",
@@ -11679,12 +11679,6 @@
         "parent_index": {
           "name": "parent_index",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_spans": {
-          "name": "source_spans",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

@@ -600,7 +600,8 @@ jobs:
   # quietly passing again.
   openappa-native-tests:
     name: OpenAPPA Native Tests
-    if: github.event_name == 'merge_group'
+    # Release bumps need the real runtime/ledger checks before human review.
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))
     runs-on: blacksmith-8vcpu-ubuntu-2404
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.

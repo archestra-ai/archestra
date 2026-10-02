@@ -62,18 +62,20 @@ export async function verifyToolCallResultViaApi({
   // win the race against the assignment mutation and get the "not enabled"
   // recovery text instead of the tool result. On the lite harness
   // (frontend/backend/DB in one container, sub-ms latency) the call wins
-  // deterministically. Wait until the gateway itself lists the tool, which is
-  // the same assignment set the invocation policy checks. Skipped for "Error"
+  // deterministically. Wait until the gateway exposes or discovers the tool,
+  // using search_tools when progressive loading hides it from tools/list.
+  // Skipped for "Error"
   // expectations: there the tool may legitimately never appear for this token.
   if (expectedResult !== "Error") {
     await expect
       .poll(
         async () => {
-          const tools = await listMcpTools(request, {
+          const tool = await findAvailableMcpTool(request, {
             profileId: effectiveProfileId,
             token,
-          }).catch(() => [] as McpTool[]);
-          return tools.some((tool) => tool.name === toolName);
+            toolName,
+          }).catch(() => undefined);
+          return tool !== undefined;
         },
         { timeout: 30_000, intervals: [250, 500, 1000, 2000, 4000] },
       )
@@ -389,12 +391,24 @@ export async function waitForMcpGatewayJwtReady(params: {
         token: params.token,
       });
 
+      const expectedTool = params.expectedToolName
+        ? await findAvailableMcpTool(params.request, {
+            profileId: params.profileId,
+            token: params.token,
+            toolName: params.expectedToolName,
+            listedTools: tools,
+          })
+        : undefined;
       const matches = params.expectedToolName
-        ? tools.some((tool) => tool.name === params.expectedToolName)
+        ? expectedTool !== undefined
         : tools.length > 0;
 
       if (matches) {
-        return tools;
+        // Include the discovered target in the readiness result even when
+        // progressive loading keeps it out of the initial tools/list surface.
+        return expectedTool && !tools.some((t) => t.name === expectedTool.name)
+          ? [...tools, expectedTool]
+          : tools;
       }
 
       const stateKey = params.expectedToolName
@@ -529,6 +543,50 @@ export async function listMcpTools(
   }
 
   return listResult.result.tools;
+}
+
+/** Finds an executable tool through either full or progressive exposure. */
+async function findAvailableMcpTool(
+  request: APIRequestContext,
+  options: {
+    profileId: string;
+    token: string;
+    toolName: string;
+    listedTools?: McpTool[];
+  },
+): Promise<McpTool | undefined> {
+  const listedTools =
+    options.listedTools ?? (await listMcpTools(request, options));
+  const listedTool = listedTools.find((tool) => tool.name === options.toolName);
+  if (listedTool) return listedTool;
+
+  const searchTool = listedTools.find((tool) =>
+    tool.name.endsWith("__search_tools"),
+  );
+  if (!searchTool) return undefined;
+
+  // An exact regex avoids ranking/limit ambiguity and escapes server prefixes.
+  const escapedName = options.toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const result = await callMcpTool(request, {
+    ...options,
+    toolName: searchTool.name,
+    arguments: { query: `^${escapedName}$`, mode: "regex", limit: 1 },
+  });
+  const text = result.content.find((content) => content.type === "text")?.text;
+  if (!text) throw new Error("Tool discovery returned no search result");
+  const searchResult = JSON.parse(text) as {
+    tools: Array<{
+      toolName: string;
+      available: boolean;
+      description?: string;
+    }>;
+  };
+  const found = searchResult.tools.find(
+    (tool) => tool.toolName === options.toolName && tool.available,
+  );
+  return found
+    ? { name: found.toolName, description: found.description }
+    : undefined;
 }
 
 export async function assignWhoamiToolToProfile(

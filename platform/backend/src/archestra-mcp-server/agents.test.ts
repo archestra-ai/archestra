@@ -63,6 +63,22 @@ describe("agent tool execution", () => {
     );
   });
 
+  test("create_agent defaults Manual agents to progressive loading", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      { name: "Manual Progressive Agent", accessAllTools: false },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const created = await AgentModel.findById(
+      extractCreatedId(result),
+      mockContext.userId,
+      true,
+    );
+    expect(created?.accessAllTools).toBe(false);
+    expect(created?.toolExposureMode).toBe("search_and_run_only");
+  });
+
   test("create_agent attributes the calling user as author", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,

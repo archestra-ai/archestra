@@ -186,7 +186,8 @@ describe("gemini-openai reports the same usage streaming and non-streaming", () 
 
     expect(usageOf(adapter.formatEndSSE())).toEqual({
       prompt_tokens: 2000,
-      completion_tokens: 100,
+      completion_tokens: 600,
+      completion_tokens_details: { reasoning_tokens: 500 },
       total_tokens: 2600,
     });
   });

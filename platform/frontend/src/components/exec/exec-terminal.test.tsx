@@ -430,6 +430,39 @@ describe("ExecTerminal", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows workspace preparation without claiming an image download", async () => {
+    const transport: ExecSessionTransport = {
+      open: () => vi.fn(),
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal
+        sessionKey="task-workspace-initializing"
+        transport={transport}
+        isActive
+        initialProgress={{
+          phase: "pulling",
+          message: "Preparing the workspace",
+          detail: null,
+          resourceName: "agent-run-example",
+        }}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Preparing the workspace"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Pulling the agent image"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuetext",
+      "Preparing the workspace",
+    );
+  });
+
   it("prefers live startup progress over a stale persisted snapshot", async () => {
     const session: { handlers: ExecSessionHandlers | null } = {
       handlers: null,

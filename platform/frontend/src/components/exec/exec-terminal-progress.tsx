@@ -198,7 +198,7 @@ export function ExecTerminalStatus({
  */
 const STEPS: { label: string; phases: AgentRunAttachPhase[] }[] = [
   { label: "Scheduling onto a node", phases: ["queued", "scheduling"] },
-  { label: "Pulling the agent image", phases: ["pulling"] },
+  { label: "Preparing the agent container", phases: ["pulling"] },
   { label: "Starting the agent session", phases: ["starting"] },
   { label: "Opening the terminal", phases: ["attaching"] },
 ];

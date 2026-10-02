@@ -135,7 +135,7 @@ export function isScriptClient(
  */
 const CONNECT_SKILLS_DEFER_MS = 750;
 
-function useConnectSkills(enabled: boolean): {
+export function useConnectSkills(enabled: boolean): {
   eligible: boolean;
   skills: ConnectSkill[];
   loading: boolean;
@@ -1539,7 +1539,7 @@ function ProviderKeyGate({
 }
 
 /** Bold, underlined link to the underlying resource (gateway/proxy/skills). */
-function ResourceLink({
+export function ResourceLink({
   href,
   children,
 }: {
@@ -1559,7 +1559,7 @@ function ResourceLink({
 const SKILL_NAME_PREVIEW_LIMIT = 6;
 
 /** Names the skills the command will install, truncated past the limit. */
-function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
+export function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
   const shown = skills.slice(0, SKILL_NAME_PREVIEW_LIMIT);
   const more = skills.length - shown.length;
   return (

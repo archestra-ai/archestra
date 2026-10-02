@@ -285,7 +285,7 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getByText("Today")).toBeInTheDocument();
   });
 
-  it("shows the lock as the only leading icon on locked chat rows", () => {
+  it("shows the lock as the only leading icon on encrypted chat rows", () => {
     mockUseConversations.mockReturnValue({
       data: [
         {
@@ -293,7 +293,7 @@ describe("ConversationSearchPalette", () => {
           title: "Locked conversation",
           updatedAt: new Date().toISOString(),
           lastMessageAt: new Date().toISOString(),
-          lockedChat: true,
+          encryptedChat: true,
           messages: [],
         },
       ],
@@ -304,7 +304,7 @@ describe("ConversationSearchPalette", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
 
     const row = screen.getByTestId("cmd-item-conv-conv-locked");
-    expect(screen.getByLabelText("Locked chat")).toBeInTheDocument();
+    expect(screen.getByLabelText("Encrypted chat")).toBeInTheDocument();
     // The lock replaces the chat-bubble glyph rather than sitting next to it.
     expect(row.querySelector(".lucide-message-circle")).toBeNull();
   });
@@ -759,17 +759,17 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/chat");
   });
 
-  it("offers a new locked chat only when the feature is enabled", () => {
+  it("offers a new encrypted chat only when the feature is enabled", () => {
     const { rerender } = render(
       <ConversationSearchPalette {...defaultProps} />,
     );
-    expect(screen.queryByText("New locked chat")).not.toBeInTheDocument();
+    expect(screen.queryByText("New encrypted chat")).not.toBeInTheDocument();
 
     vi.mocked(useFeature).mockReturnValue(true);
     rerender(<ConversationSearchPalette {...defaultProps} />);
 
-    fireEvent.click(screen.getByText("New locked chat"));
-    expect(mockRouterPush).toHaveBeenCalledWith("/chat?lockedChat=1");
+    fireEvent.click(screen.getByText("New encrypted chat"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat?encryptedChat=1");
   });
 
   it("shows the project a chat belongs to, like the sidebar does", () => {

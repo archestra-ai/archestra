@@ -12,7 +12,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
-import { isLockedChatEnabled } from "@/content-encryption/locked-chat";
+import { isEncryptedChatEnabled } from "@/content-encryption/encrypted-chat";
 import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 // SPDX-SnippetBegin
@@ -150,7 +150,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               mcpSandboxDomain: z.string().nullable(),
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
-              lockedChatEnabled: z.boolean(),
+              encryptedChatEnabled: z.boolean(),
               openappaEnabled: z.boolean(),
               agentHooksEnabled: z.boolean(),
               chatopsTelegramEnabled: z.boolean(),
@@ -285,7 +285,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpSandboxDomain: config.mcpSandbox.domain,
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
-          lockedChatEnabled: isLockedChatEnabled(),
+          encryptedChatEnabled: isEncryptedChatEnabled(),
           openappaEnabled: config.openappa.enabled,
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,

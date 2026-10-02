@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-09-20
+lastUpdated: 2026-10-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,103 +12,37 @@ Archestra includes a built-in Chat interface for working with agents, MCP tools,
 
 ![Agent Platform Swarm](/docs/platform-chat.webp)
 
-### Supported Providers
+## Encrypted Chats
 
-Chat supports the LLM providers configured for your workspace. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the full list.
+Normally, everyone who operates an Archestra deployment can read every conversation — platform admins, the DevOps team, anyone with database access. Chats are stored in the database, and the LLM and MCP logs keep a copy of each request so admins can debug and audit agents.
 
-### Reasoning Depth
+That doesn't work for some conversations. Executives discussing a reorganization, HR handling a complaint, or legal reviewing a deal shouldn't be readable by the people who run the platform. At the same time, the company can't allow conversations that nobody could ever audit.
 
-Reasoning models think before answering by default. A Low/Medium/High control sits next to the model picker so you can choose per chat. It shows the current level and opens to all three.
+Encrypted chats solve both problems. When you turn on the lock in the composer, your browser creates a secret key for that chat and keeps it. Archestra uses the key to encrypt the chat's messages, attachments, LLM and MCP logs, and errors before storing them, and never saves the key itself. Without the key, the stored data is unreadable — to admins, to the database team, and to anyone holding a backup.
 
-Low asks for as little reasoning as the model allows — on a Flash model that means skipping it. Medium reasons briefly. High reasons as deeply as the model can — useful for a tricky refactor, for example. Whenever the model reasons, it shows that reasoning in the conversation. Medium is the default, matching what these models do on their own, so a chat only changes behaviour when you ask it to.
+![Encrypted chat composer](/docs/automated_screenshots/platform-chat_encrypted-chat-composer.webp)
 
-The control appears only on models that take a reasoning level: Gemini 3 and newer, the OpenAI GPT-5 and o-series models, and the Claude models that already reason.
+Because the key lives in one browser, the chat only opens there. In another browser or on another device, the chat shows up in the list but its content can't be opened.
 
-OpenRouter is covered too. Its models show the control whenever OpenRouter reports that the model reasons, which most of its catalog does. That includes models taking a thinking budget instead of a level — OpenRouter turns your choice into one for them.
+Encryption protects the stored data, not the conversation in progress: Archestra and your LLM provider still process the content to answer you. Features that would copy the content somewhere else are turned off in encrypted chats — sharing, forking, projects, sandbox commands, context compaction, and adding files to a knowledge base.
 
-Self-hosted models count too. A model you serve with vLLM or Ollama shows the control when Archestra can tell it reasons — Ollama reports that itself, and for vLLM the model registry answers. Sync your models after upgrading if a model you expect is missing it.
+### Key Escrow
 
-### Available Commands
+If the only copy of a chat key sat in one browser, clearing that browser or losing a laptop would make the chat unreadable forever — audit trail included. Key escrow prevents that.
 
-Type `/` in the prompt input to open available chat commands.
+Escrow means a trusted party holds a spare copy of a key, to be used only in an emergency. Archestra locks a copy of every chat key with a public key you configure, and only the matching private key can unlock it. You give the private key to a group the company trusts with this role — the CISO's office, for example — and they keep it offline. Archestra never has the private key, so the platform team still can't read encrypted chats. When an investigation requires it, the key holder can unlock a chat's key and read the chat.
 
-- [`/compact`](#context-compaction) summarizes older conversation history to reduce context usage and help prevent hitting the selected model's context limit. The full chat history remains visible in the conversation.
+Encrypted chats stay unavailable until escrow is configured — until then, the lock in the composer explains the feature instead of turning it on:
 
-When the agent has the [code sandbox](./platform-code-sandbox) available, a message starting with `!` (for example `! ls attachments/`) runs the rest of the message as a shell command in the conversation's sandbox instead of asking the model. The command and its output appear in the conversation as a regular `run_command` tool call, so the agent sees the result in later turns. Output appears when the command finishes. Requires the `sandbox: execute` permission; without a sandbox, the message is sent as normal text. User-typed commands do not trigger PreToolUse/PostToolUse hooks — the user, not the model, initiated the call.
+![Encrypted chats setup hint](/docs/automated_screenshots/platform-chat_encrypted-chat-setup.webp)
 
-### Chat Errors
+To enable them, generate a key pair, give `encrypted-chat-escrow.pem` to the key holders, and set `ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY` to the contents of `encrypted-chat-escrow.pub`:
 
-Simplified chat errors explain the problem without exposing provider details or raw error output.
-Your organization's support message appears beneath the explanation.
-Copied error details include the explanation, support message, and available correlation IDs.
-These IDs help administrators find the failed request in logs.
+```bash
+openssl genrsa -out encrypted-chat-escrow.pem 4096
+openssl rsa -in encrypted-chat-escrow.pem -pubout -out encrypted-chat-escrow.pub
+```
 
-### Message Queueing
+### Recovering an Encrypted Chat
 
-Press Enter while a response is streaming to queue your message. Queued messages appear above the prompt input and send in order as each turn finishes — you can keep typing without waiting. Remove a queued message with its X, or press ArrowUp on an empty prompt to pull the newest one back for editing.
-
-Queueing works during [context compaction](#context-compaction) too. A message you send while the conversation is being compacted waits in the queue, then sends once compaction finishes — so a long chat never drops what you typed.
-
-While a response streams, the send button becomes Stop. Clicking it or pressing Esc stops the response. If messages are queued, the oldest sends immediately and the rest continue in order. With an empty queue, stopping sends nothing else.
-
-### MCP Elicitation
-
-Some MCP tools can ask for additional information while they run. Chat shows these requests as a modal form, validates required fields, and resumes the tool call after you continue. If the request points to an external URL, Chat only opens HTTP or HTTPS links.
-
-Multiple-choice questions appear directly in the conversation. When an agent asks several questions at once, each question appears in its own tab. Selecting an option in a single-choice question moves you to the next tab. For multiple-choice questions, select Next to change tabs. Submit on the last tab sends all answers.
-
-Submitted answers collapse into one summary. If saving fails, you can retry without selecting answers again.
-
-### Browser (Playwright)
-
-Agents with Playwright tools can navigate and interact with websites from Chat. The browser runtime is built in. Archestra runs one Playwright deployment for Default and each additional [Environment](/docs/platform-environments). Browser traffic follows its Environment's network policy.
-
-Each caller and conversation gets an isolated browser context. Browser state persists within a conversation but is not shared with other callers or conversations.
-
-#### Context Compaction
-
-Context compaction replaces older messages with a structured handoff summary while keeping recent turns verbatim, so a long chat can continue near the model's context limit. The original history stays visible, and compaction events appear in the conversation timeline. It is handled by the [Context Compaction Subagent](/docs/platform-built-in-subagents#context-compaction-subagent).
-
-#### Chat Titles
-
-Chat titles are generated by the [Chat Title Generation Subagent](/docs/platform-built-in-subagents#chat-title-generation-subagent).
-
-#### Context Window Visualizer
-
-The context window visualizer shows how the model's context window is filled for the current turn. Click the ring indicator in the chat toolbar to open it.
-
-The indicator ring appears after the first message in a conversation. The ring color escalates as the window fills: green below 50 %, yellow from 50 %, orange from 75 %, red from 90 %.
-
-Hover the ring for a summary: tokens used, and how much of the window is left before auto-compaction runs. Auto-compaction fires at 80 % — a tick on the panel's bar marks that point.
-
-The panel breaks usage down by category:
-
-| Category | What it counts |
-| --- | --- |
-| System prompt | The agent's instructions, sent verbatim on every turn. |
-| Tools | The JSON schemas for every tool the agent can call. |
-| Messages | The conversation history — user turns and assistant replies. |
-| Tool results | Output returned from tool and knowledge-base calls. |
-| Files | Attachments included in the conversation. |
-
-Expand any category to see the largest individual contributors (top tools by schema size, top turns by length, and so on). The "Free space" row shows remaining capacity when the model's context length is known.
-
-**Estimates, not exact counts.** The breakdown is computed before the request is sent, using the same character-per-token and bytes-per-token heuristics that drive auto-compaction. The provider's exact prompt size arrives afterward via per-step token usage and supersedes the estimate for the ring. The visualizer never mutates or truncates the request.
-
-Use **Compact now** in the panel to summarize earlier turns before auto-compaction does it for you. When a compaction frees tokens, a note appears showing how many were recovered. See [Context Compaction](#context-compaction) for how compaction works.
-
-Ollama models often run with a smaller context window than the model architecturally supports. Archestra detects the effective window and sizes the ring to it — see [Ollama Context Window](/docs/platform-supported-llm-providers#context-window).
-
-### Speech to Text
-
-The microphone in the prompt input dictates into the message box. It listens in your own language, taken from your browser's language preferences — if your browser is set to German, so is the microphone. Browsers ship different language packs, so one that cannot listen in your language falls back to its own default rather than going silent.
-
-### File Attachments
-
-Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.
-
-[Chat, Project, and Knowledge Files](./platform-knowledge#chat-project-and-knowledge-files) compares all three places a file can live.
-
-You can attach any file type. Images, PDFs, and common text documents (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.toml`) go straight to the model. Other files — a zip archive, for example — are saved to the chat's Files panel. When the agent has a code sandbox, those files are also staged there for the agent to process; without one, the agent can't read them and tells you so.
-
-Large files are kept too. Anything the model can't take — the wrong file type, too big for the code sandbox, or simply too big to send — lands in the Files panel instead, ready to download, and the agent is told it is there. Admins set the maximum upload size; see [Deployment](./platform-deployment).
+Recovery happens outside Archestra, with direct database access. Decrypt `wrappedDek` from `conversations.encrypted_chat_escrow` with the private key (RSA-OAEP, SHA-256) to get the chat key. Each encrypted value is AES-256-GCM with the AAD `<table>.<column>|incognito:<conversation id>` and decrypts to `{"v": <value>}` — except attachment bytes in `conversation_attachments.file_data`, which are raw ciphertext behind a 29-byte header (version byte, 12-byte IV, 16-byte tag). Find a chat's log rows by `encrypted_chat_conversation_id` in `interactions` and `mcp_tool_calls`. A value of `{"__redacted": …}` was never stored and can't be recovered.

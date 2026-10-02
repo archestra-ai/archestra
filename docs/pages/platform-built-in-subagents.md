@@ -67,7 +67,7 @@ It runs when a tool's tool result policy is set to **Dual LLM** — typically we
 
 The Context Compaction Subagent summarizes older chat history into a structured handoff so a long conversation can continue near the model's context limit, keeping recent turns verbatim. The original history stays visible, and compaction events appear in the conversation timeline.
 
-It treats the transcript as untrusted, so instructions embedded in earlier messages are ignored. Extractable text from uploaded files and PDFs is folded into the summary; when text cannot be extracted (a scanned PDF, for example), the summary records that limitation instead of implying the file contents remain in context. See [Chat](/docs/platform-chat#context-compaction) for the `/compact` command.
+It treats the transcript as untrusted, so instructions embedded in earlier messages are ignored. Extractable text from uploaded files and PDFs is folded into the summary; when text cannot be extracted (a scanned PDF, for example), the summary records that limitation instead of implying the file contents remain in context.
 
 ## Chat Title Generation Subagent
 

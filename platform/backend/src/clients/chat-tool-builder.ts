@@ -4,12 +4,12 @@
 // execution). Must not import chat-mcp-client.ts (cycle).
 import { randomUUID } from "node:crypto";
 import {
+  ENCRYPTED_CHAT_REDACTED_MARKER,
   extractMcpExecutedAs,
   extractMcpHumanRuling,
   extractMcpToolError,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
-  LOCKED_CHAT_REDACTED_MARKER,
   MCP_EXECUTED_AS_META_KEY,
   MCP_HUMAN_RULING_META_KEY,
   parseFullToolName,
@@ -50,7 +50,7 @@ import type {
   RepeatSeverity,
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import {
   legacyTrustedDataActive,
   sensitiveContextOriginFromBoundary,
@@ -150,17 +150,17 @@ export interface ChatToolContext {
   mcpGwToken: McpGatewayToken;
   considerContextUntrusted: boolean;
   /**
-   * Locked chat: span content capture is suppressed and long calls
+   * Encrypted chat: span content capture is suppressed and long calls
    * are forced inline (never detached into durable MCP task rows).
    */
   suppressContentLogging?: boolean;
   /**
-   * Present only when the locked chat has an escrow record: the
+   * Present only when the encrypted chat has an escrow record: the
    * MCP tool-call rows and execution-claim results it produces are encrypted
    * under the conversation key instead of redacted, so break-glass recovery
    * can still read them.
    */
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
   /**
    * Per-run guard against the model re-issuing the identical tool call forever.
    * One instance per getChatMcpTools call (shared by every tool wrapper), so it
@@ -281,7 +281,7 @@ export function buildMcpGatewayTool(params: {
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
-                // LockedChat: never detach into a durable task — task rows
+                // EncryptedChat: never detach into a durable task — task rows
                 // persist tool results in plaintext. Forcing inline execution
                 // keeps the result inside the encrypted conversation only.
                 taskBridge:
@@ -304,11 +304,11 @@ export function buildMcpGatewayTool(params: {
                 // — and all of them put the result through this file's
                 // bounded media extraction before a model sees it.
                 deliversMediaAsImageParts: true,
-                // LockedChat: a run_tool dispatch persists via mcpClient, so
+                // EncryptedChat: a run_tool dispatch persists via mcpClient, so
                 // its stored row needs the same treatment as a direct call —
                 // encrypted under the conversation key, not redacted.
                 suppressContentLogging: ctx.suppressContentLogging,
-                lockedChatAudit: ctx.lockedChatAudit,
+                encryptedChatAudit: ctx.encryptedChatAudit,
                 tokenAuth: buildTokenAuthContext({
                   mcpGwToken: ctx.mcpGwToken,
                   organizationId: ctx.organizationId,
@@ -411,7 +411,7 @@ export function buildMcpGatewayTool(params: {
               toolCallId: options.toolCallId,
               isUiProvidingTool,
               suppressContentLogging: ctx.suppressContentLogging,
-              lockedChatAudit: ctx.lockedChatAudit,
+              encryptedChatAudit: ctx.encryptedChatAudit,
             });
           }
 
@@ -991,7 +991,7 @@ async function claimApprovalGatedDispatch(params: {
   const claimKey = { conversationId: ctx.conversationId, toolCallId };
   const priorClaim = await ChatToolExecutionClaimModel.findByKey(
     claimKey,
-    ctx.lockedChatAudit,
+    ctx.encryptedChatAudit,
   );
   if (priorClaim) {
     return { kind: "dedup", result: buildReplayResult(priorClaim) };
@@ -1010,7 +1010,7 @@ async function claimApprovalGatedDispatch(params: {
 
   const outcome = await ChatToolExecutionClaimModel.claim(
     { ...claimKey, toolName },
-    ctx.lockedChatAudit,
+    ctx.encryptedChatAudit,
   );
   if (outcome.claimed) {
     return { kind: "claimed", claimKey };
@@ -1041,10 +1041,10 @@ function buildReplayResult(
 /** Best-effort outcome write: a failure here must never fail the tool call. */
 async function recordClaimOutcome(
   params: Parameters<typeof ChatToolExecutionClaimModel.recordOutcome>[0],
-  lockedChatAudit: LockedChatAuditContext | null | undefined,
+  encryptedChatAudit: EncryptedChatAuditContext | null | undefined,
 ): Promise<void> {
   try {
-    await ChatToolExecutionClaimModel.recordOutcome(params, lockedChatAudit);
+    await ChatToolExecutionClaimModel.recordOutcome(params, encryptedChatAudit);
   } catch (error) {
     logger.warn(
       { error, toolCallId: params.toolCallId },
@@ -1124,15 +1124,15 @@ async function executeWithToolSpan<R>(params: {
   const { serverName } = parseFullToolName(toolName);
   const startTime = Date.now();
 
-  // LockedChat: the recorded outcome (used to answer replays) goes in encrypted
+  // EncryptedChat: the recorded outcome (used to answer replays) goes in encrypted
   // under the conversation key, so a replay still reproduces the real result.
   // Without an escrow record there is no key that could ever open it, so the
   // marker is stored instead and replays answer with it — the accepted cost of
   // never persisting unrecoverable content.
   const claimResultForStorage = (result: string | { content: string }) =>
-    ctx.suppressContentLogging && !ctx.lockedChatAudit
+    ctx.suppressContentLogging && !ctx.encryptedChatAudit
       ? ChatToolExecutionClaimModel.toStoredResult(
-          JSON.stringify(LOCKED_CHAT_REDACTED_MARKER),
+          JSON.stringify(ENCRYPTED_CHAT_REDACTED_MARKER),
         )
       : ChatToolExecutionClaimModel.toStoredResult(result);
 
@@ -1159,7 +1159,7 @@ async function executeWithToolSpan<R>(params: {
                 result as string | { content: string },
               ),
             },
-            ctx.lockedChatAudit,
+            ctx.encryptedChatAudit,
           );
         }
         return result;
@@ -1177,7 +1177,7 @@ async function executeWithToolSpan<R>(params: {
                 error instanceof Error ? error.message : String(error),
               ),
             },
-            ctx.lockedChatAudit,
+            ctx.encryptedChatAudit,
           );
         }
         // A stopped run is a cancellation, not a tool failure — don't count it.
@@ -1190,14 +1190,14 @@ async function executeWithToolSpan<R>(params: {
             isError: true,
           });
         }
-        // LockedChat: upstream/tool errors routinely echo arguments or result
+        // EncryptedChat: upstream/tool errors routinely echo arguments or result
         // content — keep only non-content metadata in the app log.
         const logPayload = ctx.suppressContentLogging
           ? {
               agentId: ctx.agentId,
               userId: ctx.userId,
               toolName,
-              errorMessage: "[redacted: locked chat]",
+              errorMessage: "[redacted: encrypted chat]",
             }
           : {
               agentId: ctx.agentId,
@@ -1251,13 +1251,13 @@ interface ToolExecutionContext {
    */
   isUiProvidingTool?: boolean;
   /**
-   * Locked chat: the persisted MCP tool-call row never holds
+   * Encrypted chat: the persisted MCP tool-call row never holds
    * plaintext content and the call is forced inline (no durable task
    * detachment).
    */
   suppressContentLogging?: boolean;
   /** Encrypts the persisted row instead of redacting it; see ChatToolContext. */
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
 }
 
 /**
@@ -1293,7 +1293,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     toolCallId,
     isUiProvidingTool,
     suppressContentLogging,
-    lockedChatAudit,
+    encryptedChatAudit,
   } = ctx;
   throwIfAborted(abortSignal);
   const startTime = Date.now();
@@ -1399,17 +1399,17 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
               }),
             }
           : {}),
-        // LockedChat: the persisted mcp_tool_calls row is encrypted under the
+        // EncryptedChat: the persisted mcp_tool_calls row is encrypted under the
         // conversation key, or redacted when there is no escrow record.
         ...(suppressContentLogging
-          ? { suppressContentLogging: true, lockedChatAudit }
+          ? { suppressContentLogging: true, encryptedChatAudit }
           : {}),
       },
     );
 
   let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
   try {
-    // LockedChat forces inline execution: a detached task persists the tool
+    // EncryptedChat forces inline execution: a detached task persists the tool
     // result on a durable task row in plaintext, so it is never minted.
     result =
       taskBridge && toolCallId && !suppressContentLogging
@@ -1965,7 +1965,7 @@ interface ToolHookContext {
   /** Conversation user id — the default sandbox is keyed per org/user/conversation. */
   userId: string;
   conversationId?: string;
-  /** Locked chats: hook dispatch is skipped (payloads persist). */
+  /** Encrypted chats: hook dispatch is skipped (payloads persist). */
   suppressContentLogging?: boolean;
   /**
    * Per-turn sink the chat route drains into inline `data-hook-run` entries.
@@ -1989,7 +1989,7 @@ async function firePreToolUseHook(params: {
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolCallId } = params;
   if (!ctx.conversationId || ctx.suppressContentLogging) {
-    // LockedChat: hook dispatch would hand tool args to the hook sandbox,
+    // EncryptedChat: hook dispatch would hand tool args to the hook sandbox,
     // which persists its payloads into the durable replay log in plaintext.
     return null;
   }
@@ -2110,7 +2110,7 @@ async function firePostToolUseHook(params: {
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
   if (!ctx.conversationId || ctx.suppressContentLogging) {
-    // LockedChat: see firePreToolUseHook — hook payloads persist in plaintext.
+    // EncryptedChat: see firePreToolUseHook — hook payloads persist in plaintext.
     return null;
   }
   try {

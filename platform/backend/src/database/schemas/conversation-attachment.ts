@@ -34,17 +34,17 @@ const conversationAttachmentsTable = pgTable(
     fileData: bytea("file_data").notNull(),
     textPreview: text("text_preview"),
     /**
-     * True when this row belongs to a locked chat, and therefore holds
+     * True when this row belongs to an encrypted chat, and therefore holds
      * `file_data` as a binary envelope and `original_name` / `text_preview` as
      * `v1:` string envelopes, all under the conversation's browser-held key.
      * `content_hash` is then an HMAC under that key rather than a plain digest.
      *
-     * Recorded on the row rather than derived from `conversations.locked_chat`
+     * Recorded on the row rather than derived from `conversations.encrypted_chat`
      * so a reader knows how to interpret the columns without a join — and
      * because raw file bytes can begin with any byte, so the envelope is not
      * self-identifying the way a `v1:` string is.
      */
-    lockedChat: boolean("locked_chat").notNull().default(false),
+    encryptedChat: boolean("encrypted_chat").notNull().default(false),
     textPreviewStatus: text("text_preview_status").notNull().default("pending"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { mode: "date" }),

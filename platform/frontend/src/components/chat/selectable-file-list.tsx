@@ -73,7 +73,7 @@ export function SelectableFileList<T extends FileListItem>({
   onEdit?: (id: string) => void;
   /**
    * The conversation these files belong to, when there is one. Downloads need
-   * it: a locked chat's attachment serves its bytes only to a request bearing
+   * it: an encrypted chat's attachment serves its bytes only to a request bearing
    * that conversation's key. Omitted on surfaces with no conversation (the
    * project page), where every file is served plainly.
    */
@@ -358,7 +358,7 @@ function FileRowMenu({
           </DropdownMenuItem>
         )}
         {item.contentUrl && (
-          // Not a bare <a href>: in a locked chat the bytes only come back to a
+          // Not a bare <a href>: in an encrypted chat the bytes only come back to a
           // request carrying the conversation key, which an anchor cannot send.
           <DropdownMenuItem
             onSelect={(e) => {

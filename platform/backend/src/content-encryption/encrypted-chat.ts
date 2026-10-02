@@ -8,21 +8,21 @@ import {
   isContentEnvelope,
   isEncryptedEnvelope,
 } from "@/utils/crypto";
-import { isLockedChatEscrowConfigured } from "./locked-chat-escrow";
+import { isEncryptedChatEscrowConfigured } from "./encrypted-chat-escrow";
 
 /**
- * Locked chats: per-conversation content encryption under a browser-held
+ * Encrypted chats: per-conversation content encryption under a browser-held
  * DEK, covering both the conversation itself and the audit trail it produces.
  *
  * The browser generates a random 32-byte DEK, keeps it in browser storage,
  * and presents it on every request for that conversation via the
- * `x-archestra-locked-chat-key` header. The server uses it transiently — rows
+ * `x-archestra-encrypted-chat-key` header. The server uses it transiently — rows
  * are written as the same `{ __encrypted: "v1:..." }` envelopes the at-rest
  * layer uses, but under the conversation DEK with a conversation-bound AAD,
  * and the raw DEK is never persisted.
  *
  * Disabled until an operator configures key escrow
- * (ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY, see locked-chat-escrow.ts).
+ * (ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY, see encrypted-chat-escrow.ts).
  * That is deliberate: the audit surfaces are encrypted rather than discarded,
  * so without an escrow copy of the DEK they would be unrecoverable by anyone
  * but the one browser that created them — private, but useless to an auditor.
@@ -33,32 +33,36 @@ import { isLockedChatEscrowConfigured } from "./locked-chat-escrow";
  * and runs guardrails). The guarantee is at-rest: no key the platform holds
  * can open these rows.
  *
- * Deliberate envelope-compat property: because locked-chat envelopes are shaped
+ * Deliberate envelope-compat property: because encrypted-chat envelopes are shaped
  * exactly like at-rest envelopes, the content-encryption backfill sweep
  * treats them as foreign-key envelopes and skips them (see rewriteFor in
  * backfill.ee.ts) — it must never re-wrap them under the server key.
  */
 
 /** Request header carrying the base64url-encoded 32-byte conversation DEK. */
-export const LOCKED_CHAT_KEY_HEADER = "x-archestra-locked-chat-key";
+export const ENCRYPTED_CHAT_KEY_HEADER = "x-archestra-encrypted-chat-key";
 
 /**
- * The header's former name, still accepted on read.
+ * The header's former names ("locked chat", then "incognito"), still accepted
+ * on read.
  *
- * A browser tab loaded before this rename keeps sending the old header, and
- * the key it carries is the only copy of that conversation's DEK outside
- * escrow — dropping it would show the user a locked tombstone for their own
- * chat until they reloaded. Read-only: nothing emits this spelling.
+ * A browser tab loaded before a rename keeps sending the old header, and the
+ * key it carries is the only copy of that conversation's DEK outside escrow —
+ * dropping it would show the user a locked tombstone for their own chat until
+ * they reloaded. Read-only: nothing emits these spellings.
  */
-export const LEGACY_LOCKED_CHAT_KEY_HEADER = "x-archestra-incognito-key";
+export const LEGACY_ENCRYPTED_CHAT_KEY_HEADERS = [
+  "x-archestra-locked-chat-key",
+  "x-archestra-incognito-key",
+] as const;
 
 /**
- * True when locked chats are offered. Configuring an escrow key is the only
+ * True when encrypted chats are offered. Configuring an escrow key is the only
  * switch: without one the feature cannot work correctly (see below), so a
  * second flag would only add a way to express the same intent twice.
  */
-export function isLockedChatEnabled(): boolean {
-  return isLockedChatEscrowConfigured();
+export function isEncryptedChatEnabled(): boolean {
+  return isEncryptedChatEscrowConfigured();
 }
 
 /**
@@ -66,7 +70,7 @@ export function isLockedChatEnabled(): boolean {
  * throws when present but malformed (not base64url, wrong length) so routes
  * can 400 with a precise message instead of failing GCM later.
  */
-export function parseLockedChatDekHeader(
+export function parseEncryptedChatDekHeader(
   headerValue: string | undefined,
 ): Buffer | null {
   if (headerValue === undefined || headerValue === "") return null;
@@ -74,11 +78,11 @@ export function parseLockedChatDekHeader(
   try {
     dek = Buffer.from(headerValue, "base64url");
   } catch {
-    throw new Error("locked chat key header is not valid base64url");
+    throw new Error("encrypted chat key header is not valid base64url");
   }
   if (dek.length !== DEK_LENGTH_BYTES) {
     throw new Error(
-      `locked chat key must decode to exactly ${DEK_LENGTH_BYTES} bytes`,
+      `encrypted chat key must decode to exactly ${DEK_LENGTH_BYTES} bytes`,
     );
   }
   return dek;
@@ -89,7 +93,7 @@ export function parseLockedChatDekHeader(
  * wrong key is rejected up front with a clean error instead of surfacing as
  * scattered GCM failures.
  */
-export function lockedChatDekFingerprint(
+export function encryptedChatDekFingerprint(
   conversationId: string,
   dek: Buffer,
 ): string {
@@ -97,7 +101,7 @@ export function lockedChatDekFingerprint(
     createHash("sha256")
       // FROZEN. This is a hashed-in domain separator, not a name: every
       // fingerprint already stored was computed with this exact string, and
-      // changing it would make every existing locked chat reject its own key.
+      // changing it would make every existing encrypted chat reject its own key.
       // It keeps the feature's former spelling ("incognito") deliberately.
       .update("archestra-incognito-dek-fp-v1")
       .update(conversationId)
@@ -107,13 +111,13 @@ export function lockedChatDekFingerprint(
 }
 
 /** Constant-time comparison of a stored fingerprint against a presented DEK. */
-export function lockedChatDekMatches(params: {
+export function encryptedChatDekMatches(params: {
   storedFingerprint: string;
   conversationId: string;
   dek: Buffer;
 }): boolean {
   const presented = Buffer.from(
-    lockedChatDekFingerprint(params.conversationId, params.dek),
+    encryptedChatDekFingerprint(params.conversationId, params.dek),
     "hex",
   );
   const stored = Buffer.from(params.storedFingerprint, "hex");
@@ -123,15 +127,15 @@ export function lockedChatDekMatches(params: {
 }
 
 /**
- * Every column that may hold a locked-chat envelope, and the AAD context that
- * binds ciphertext to it. A superset of the at-rest layer's contexts: locked-chat
+ * Every column that may hold an encrypted-chat envelope, and the AAD context that
+ * binds ciphertext to it. A superset of the at-rest layer's contexts: encrypted-chat
  * also covers the chat-side audit surfaces (errors, tool-execution claims,
  * active-run replay payloads), which have no at-rest encryption.
  *
  * The spellings deliberately match `ContentEncryptionContext` where the two
  * overlap, so a column's AAD context reads the same in both layers.
  */
-export type LockedChatContentContext =
+export type EncryptedChatContentContext =
   | "messages.content"
   | "interactions.request"
   | "interactions.processed_request"
@@ -148,16 +152,16 @@ export type LockedChatContentContext =
   | "conversation_attachments.text_preview";
 
 /**
- * A resolved authorization to write one conversation's locked-chat AUDIT
+ * A resolved authorization to write one conversation's encrypted-chat AUDIT
  * content (interactions, MCP tool calls, chat errors, claims, replay events).
  *
  * Structurally a {@link ConversationContentKey}, but carries a stronger
- * precondition: it is only ever produced by `resolveLockedChatAuditContext`,
+ * precondition: it is only ever produced by `resolveEncryptedChatAuditContext`,
  * which additionally proves the conversation has an escrow record. That makes
  * every row written under it recoverable by break-glass — the property that
  * lets these surfaces be encrypted rather than redacted.
  */
-export type LockedChatAuditContext = ConversationContentKey;
+export type EncryptedChatAuditContext = ConversationContentKey;
 
 /**
  * Encrypt a value under the conversation DEK for a specific column. The AAD
@@ -165,9 +169,9 @@ export type LockedChatAuditContext = ConversationContentKey;
  * cannot be transplanted between columns, or between conversations sharing a
  * leaked DEK.
  */
-export function encryptLockedChatValue<T>(
+export function encryptEncryptedChatValue<T>(
   value: T,
-  params: LockedChatAuditContext & { context: LockedChatContentContext },
+  params: EncryptedChatAuditContext & { context: EncryptedChatContentContext },
 ): unknown {
   if (value === null || value === undefined) return value;
   const envelope = encryptStringWithKey(
@@ -175,26 +179,26 @@ export function encryptLockedChatValue<T>(
     // decrypts to `{"v": <original>}`, matching the at-rest layer.
     JSON.stringify({ v: value }),
     params.dek,
-    lockedChatAad(params.context, params.conversationId),
+    encryptedChatAad(params.context, params.conversationId),
   );
   return { __encrypted: envelope };
 }
 
 /**
- * Decrypt one locked-chat-encrypted value. Non-envelope values pass through
+ * Decrypt one encrypted-chat-encrypted value. Non-envelope values pass through
  * unchanged (a column may legitimately hold plaintext or the fail-closed
  * redaction marker). An envelope this DEK cannot open throws — callers that
  * must tolerate that surface a locked sentinel instead of calling here.
  */
-export function decryptLockedChatValue(
+export function decryptEncryptedChatValue(
   value: unknown,
-  params: LockedChatAuditContext & { context: LockedChatContentContext },
+  params: EncryptedChatAuditContext & { context: EncryptedChatContentContext },
 ): unknown {
   if (!isContentEnvelope(value)) return value;
   const decrypted = decryptStringWithKey(
     (value as { __encrypted: string }).__encrypted,
     params.dek,
-    lockedChatAad(params.context, params.conversationId),
+    encryptedChatAad(params.context, params.conversationId),
   );
   return (JSON.parse(decrypted) as { v: unknown }).v;
 }
@@ -202,11 +206,11 @@ export function decryptLockedChatValue(
 /**
  * Encrypt a message content value under the conversation DEK.
  */
-export function encryptLockedChatMessageContent<T>(
+export function encryptEncryptedChatMessageContent<T>(
   content: T,
-  params: LockedChatAuditContext,
+  params: EncryptedChatAuditContext,
 ): unknown {
-  return encryptLockedChatValue(content, {
+  return encryptEncryptedChatValue(content, {
     ...params,
     context: "messages.content",
   });
@@ -218,13 +222,13 @@ export function encryptLockedChatMessageContent<T>(
  * era does not exist today, but the tolerance costs nothing and mirrors the
  * at-rest layer). An envelope the DEK cannot open throws.
  */
-export function decryptLockedChatMessageRow<T extends object>(
+export function decryptEncryptedChatMessageRow<T extends object>(
   row: T,
-  params: LockedChatAuditContext,
+  params: EncryptedChatAuditContext,
 ): T {
   const target = row as Record<string, unknown>;
   if (!("content" in target) || !isContentEnvelope(target.content)) return row;
-  target.content = decryptLockedChatValue(target.content, {
+  target.content = decryptEncryptedChatValue(target.content, {
     ...params,
     context: "messages.content",
   });
@@ -233,35 +237,35 @@ export function decryptLockedChatMessageRow<T extends object>(
 
 /**
  * Encrypt a bare string for a TEXT column (as opposed to
- * {@link encryptLockedChatValue}, which wraps a JSON value in an
+ * {@link encryptEncryptedChatValue}, which wraps a JSON value in an
  * `{ __encrypted }` object for a JSONB one). Returns the bare `v1:` envelope,
  * which is what the column then holds.
  */
-export function encryptLockedChatText(
+export function encryptEncryptedChatText(
   value: string,
-  params: LockedChatAuditContext & { context: LockedChatContentContext },
+  params: EncryptedChatAuditContext & { context: EncryptedChatContentContext },
 ): string {
   return encryptStringWithKey(
     value,
     params.dek,
-    lockedChatAad(params.context, params.conversationId),
+    encryptedChatAad(params.context, params.conversationId),
   );
 }
 
 /**
- * Decrypt a TEXT column written by {@link encryptLockedChatText}. A value that
+ * Decrypt a TEXT column written by {@link encryptEncryptedChatText}. A value that
  * is not an envelope passes through unchanged, so a column written before the
- * chat was locked still reads.
+ * chat was encrypted still reads.
  */
-export function decryptLockedChatText(
+export function decryptEncryptedChatText(
   value: string,
-  params: LockedChatAuditContext & { context: LockedChatContentContext },
+  params: EncryptedChatAuditContext & { context: EncryptedChatContentContext },
 ): string {
   if (!isEncryptedEnvelope(value)) return value;
   return decryptStringWithKey(
     value,
     params.dek,
-    lockedChatAad(params.context, params.conversationId),
+    encryptedChatAad(params.context, params.conversationId),
   );
 }
 
@@ -270,31 +274,31 @@ export function decryptLockedChatText(
  * Uses the compact binary envelope rather than the string one: these payloads
  * run to megabytes, where base64's ~33% inflation is a real storage cost.
  */
-export function encryptLockedChatBytes(
+export function encryptEncryptedChatBytes(
   value: Buffer,
-  params: LockedChatAuditContext & { context: LockedChatContentContext },
+  params: EncryptedChatAuditContext & { context: EncryptedChatContentContext },
 ): Buffer {
   return encryptBytesWithKey(
     value,
     params.dek,
-    lockedChatAad(params.context, params.conversationId),
+    encryptedChatAad(params.context, params.conversationId),
   );
 }
 
-/** Decrypt bytes written by {@link encryptLockedChatBytes}. */
-export function decryptLockedChatBytes(
+/** Decrypt bytes written by {@link encryptEncryptedChatBytes}. */
+export function decryptEncryptedChatBytes(
   value: Buffer,
-  params: LockedChatAuditContext & { context: LockedChatContentContext },
+  params: EncryptedChatAuditContext & { context: EncryptedChatContentContext },
 ): Buffer {
   return decryptBytesWithKey(
     value,
     params.dek,
-    lockedChatAad(params.context, params.conversationId),
+    encryptedChatAad(params.context, params.conversationId),
   );
 }
 
 /**
- * Dedup key for an attachment in a locked chat: an HMAC of the bytes under the
+ * Dedup key for an attachment in an encrypted chat: an HMAC of the bytes under the
  * conversation DEK rather than a bare SHA-256 of them.
  *
  * The plain hash is a fingerprint anyone can recompute, so a stored one lets a
@@ -304,9 +308,9 @@ export function decryptLockedChatBytes(
  * same conversation collide, so re-sent history reuses one row) and removes the
  * one it was never meant to have.
  */
-export function lockedChatContentHash(
+export function encryptedChatContentHash(
   value: Buffer,
-  params: LockedChatAuditContext,
+  params: EncryptedChatAuditContext,
 ): string {
   return createHmac("sha256", params.dek)
     .update("archestra-locked-chat-attachment-hash-v1")
@@ -319,12 +323,12 @@ export function lockedChatContentHash(
 
 const DEK_LENGTH_BYTES = 32;
 
-function lockedChatAad(
-  context: LockedChatContentContext,
+function encryptedChatAad(
+  context: EncryptedChatContentContext,
   conversationId: string,
 ): string {
   // FROZEN, for the same reason as the fingerprint domain separator above:
   // this string is authenticated into every envelope already written, so
-  // changing it would make all existing locked-chat ciphertext undecryptable.
+  // changing it would make all existing encrypted-chat ciphertext undecryptable.
   return `${context}|incognito:${conversationId}`;
 }

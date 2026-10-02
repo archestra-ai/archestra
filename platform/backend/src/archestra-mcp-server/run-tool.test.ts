@@ -349,7 +349,7 @@ describe("run_tool", () => {
     ]);
   });
 
-  test("forwards the locked chat key to a dispatched tool call", async ({
+  test("forwards the encrypted chat key to a dispatched tool call", async ({
     makeAgentTool,
     makeInternalMcpCatalog,
     makeTool,
@@ -366,7 +366,7 @@ describe("run_tool", () => {
     // it fall back to redaction — and dispatch is how an agent reaches most
     // third-party tools, so that silently loses the content this feature
     // exists to keep recoverable.
-    const lockedChatAudit = {
+    const encryptedChatAudit = {
       dek: Buffer.alloc(32, 3),
       conversationId: testConversationId,
     };
@@ -381,7 +381,7 @@ describe("run_tool", () => {
         tool_name: "github__search_repositories",
         tool_args: { query: "archestra" },
       },
-      { ...mockContext, suppressContentLogging: true, lockedChatAudit },
+      { ...mockContext, suppressContentLogging: true, encryptedChatAudit },
     );
 
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
@@ -390,7 +390,7 @@ describe("run_tool", () => {
       expect.anything(),
       expect.objectContaining({
         suppressContentLogging: true,
-        lockedChatAudit,
+        encryptedChatAudit,
       }),
     );
   });

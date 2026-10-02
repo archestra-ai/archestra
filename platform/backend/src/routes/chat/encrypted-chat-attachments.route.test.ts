@@ -1,5 +1,5 @@
 /**
- * Contract under test — file attachments in a locked chat:
+ * Contract under test — file attachments in an encrypted chat:
  * - what lands on disk is ciphertext: the bytes, the filename and the
  *   extracted text preview are all sealed, and the dedup hash is not a
  *   recomputable digest of the file
@@ -7,7 +7,7 @@
  *   conversation key, refuses one without it, and 409s on a wrong key
  * - the Files panel opens filenames with the key and falls back to a
  *   placeholder without one
- * - a locked chat's attachment cannot be copied into a knowledge base
+ * - an encrypted chat's attachment cannot be copied into a knowledge base
  */
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -24,11 +24,11 @@ import type { User } from "@/types";
 const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const ESCROW_PEM = publicKey.export({ type: "spki", format: "pem" }) as string;
 
-const KEY_HEADER = "x-archestra-locked-chat-key";
+const KEY_HEADER = "x-archestra-encrypted-chat-key";
 const FILE_BYTES = Buffer.from("board minutes, Q3\nheadcount: 412\n", "utf8");
 const FILE_NAME = "board-minutes-q3.txt";
 
-describe("locked chat attachments", () => {
+describe("encrypted chat attachments", () => {
   let app: FastifyInstanceWithZod;
   let currentUser: User;
   let organizationId: string;
@@ -37,7 +37,7 @@ describe("locked chat attachments", () => {
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
     config.enterpriseFeatures.core = false;
-    config.lockedChat.escrowPublicKey = ESCROW_PEM;
+    config.encryptedChat.escrowPublicKey = ESCROW_PEM;
     // The envelopes asserted on below must be the browser-DEK ones, so keep
     // the at-rest layer out of it even if a local .env configures a secret.
     config.contentEncryption.secret = undefined;
@@ -78,14 +78,14 @@ describe("locked chat attachments", () => {
       method: "POST",
       url: "/api/chat/conversations",
       headers: dekHeader(),
-      payload: { agentId, lockedChat: true },
+      payload: { agentId, encryptedChat: true },
     });
     expect(response.statusCode).toBe(200);
     return response.json().id as string;
   }
 
   /**
-   * Store an attachment the way the chat stream route does for a locked chat:
+   * Store an attachment the way the chat stream route does for an encrypted chat:
    * hash and seal under the conversation key. Going through the model rather
    * than the stream route keeps this about the attachment columns instead of
    * standing up an LLM turn.
@@ -126,16 +126,16 @@ describe("locked chat attachments", () => {
       file_data: Buffer;
       text_preview: string | null;
       content_hash: string;
-      locked_chat: boolean;
+      encrypted_chat: boolean;
       file_size: number;
       mime_type: string;
     }>(
-      sql`SELECT original_name, file_data, text_preview, content_hash, locked_chat, file_size, mime_type
+      sql`SELECT original_name, file_data, text_preview, content_hash, encrypted_chat, file_size, mime_type
           FROM conversation_attachments WHERE id = ${attachment.id}::uuid`,
     );
     const row = raw.rows[0];
 
-    expect(row.locked_chat).toBe(true);
+    expect(row.encrypted_chat).toBe(true);
     expect(row.original_name).not.toBe(FILE_NAME);
     expect(row.original_name).toMatch(/^v1:/);
     expect(row.text_preview).toMatch(/^v1:/);

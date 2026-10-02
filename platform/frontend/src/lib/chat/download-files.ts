@@ -1,4 +1,4 @@
-import { resolveSealedAttachmentUrl } from "@/lib/chat/locked-chat-attachment";
+import { resolveSealedAttachmentUrl } from "@/lib/chat/encrypted-chat-attachment";
 
 /**
  * Start a browser download for each file that has a byte endpoint. There is no
@@ -6,7 +6,7 @@ import { resolveSealedAttachmentUrl } from "@/lib/chat/locked-chat-attachment";
  * allow multiple downloads). Files without a `contentUrl` — e.g. the in-memory
  * `artifact.md` row — are skipped. Returns how many downloads were started.
  *
- * `conversationId` is what lets this work in a locked chat: those attachments
+ * `conversationId` is what lets this work in an encrypted chat: those attachments
  * only serve their bytes to a request carrying the conversation key, which an
  * anchor cannot send, so they are fetched first and downloaded from a `blob:`
  * URL. A file that cannot be fetched is skipped rather than downloaded as an

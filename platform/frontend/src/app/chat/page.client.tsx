@@ -59,8 +59,8 @@ import {
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   AppsPanelContent,
@@ -157,13 +157,13 @@ import {
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
+import {
+  generateEncryptedChatKey,
+  isActionAvailableForConversation,
+} from "@/lib/chat/encrypted-chat";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import { createLatestWriteQueue } from "@/lib/chat/latest-write-queue";
-import {
-  generateLockedChatKey,
-  isActionAvailableForConversation,
-} from "@/lib/chat/locked-chat";
 import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,
@@ -494,21 +494,21 @@ export function ChatPageContent({
     isInitialRuntimeMode,
   );
 
-  // Whether the NEXT chat created from the new-chat composer is a locked chat.
+  // Whether the NEXT chat created from the new-chat composer is an encrypted chat.
   // Only meaningful pre-conversation; reset after a successful create so a
   // later new chat never inherits it silently.
-  const [isLockedChatDraft, setIsLockedChatDraft] = useState(false);
+  const [isEncryptedChatDraft, setIsEncryptedChatDraft] = useState(false);
 
-  // `?locked-chat=1` (command palette entry / Alt+I) arms the composer toggle.
+  // `?encryptedChat=1` (command palette entry / Alt+I) arms the composer toggle.
   // One-shot, same posture as user_prompt and skillId: the param is stripped
   // once applied, so a reload can't silently re-arm it and a second Alt+I is a
   // real navigation rather than a no-op push of an identical URL.
-  const urlLockedChatDraft = searchParams.get("lockedChat") === "1";
+  const urlEncryptedChatDraft = searchParams.get("encryptedChat") === "1";
   useEffect(() => {
-    if (!urlLockedChatDraft) return;
-    setIsLockedChatDraft(true);
-    clearLockedChatQueryParam({ pathname, router, searchParams });
-  }, [urlLockedChatDraft, pathname, router, searchParams]);
+    if (!urlEncryptedChatDraft) return;
+    setIsEncryptedChatDraft(true);
+    clearEncryptedChatQueryParam({ pathname, router, searchParams });
+  }, [urlEncryptedChatDraft, pathname, router, searchParams]);
 
   // Persist the user's (model, key) pick as their member default for the
   // existing-conversation handlers below (the initial handlers persist via the
@@ -840,7 +840,7 @@ export function ChatPageContent({
           // sharing of one chat.
           grant.scope === conversationId,
       ) === true) &&
-    // Locked chats cannot be shared (the backend rejects it).
+    // Encrypted chats cannot be shared (the backend rejects it).
     isActionAvailableForConversation(conversation, "share");
 
   // Turning this chat into a project is owner-only (same as sharing) and
@@ -2607,11 +2607,13 @@ export function ChatPageContent({
       if (!input) {
         return false;
       }
-      // LockedChat: the conversation DEK is generated here, in the browser,
+      // EncryptedChat: the conversation DEK is generated here, in the browser,
       // BEFORE the create request. It rides along as a header; the mutation's
       // onSuccess stores it under the fresh conversation id before any
       // navigation or stream start reads it.
-      const lockedChatKey = isLockedChatDraft ? generateLockedChatKey() : null;
+      const encryptedChatKey = isEncryptedChatDraft
+        ? generateEncryptedChatKey()
+        : null;
 
       // Chained off the promise, not mutate's per-call onSuccess: an auto-send
       // can fire from the mount effect, and StrictMode's effect replay then
@@ -2620,12 +2622,14 @@ export function ChatPageContent({
       // already reported by the hook.
       createConversationMutation
         .mutateAsync(
-          lockedChatKey ? { ...input, lockedChat: true, lockedChatKey } : input,
+          encryptedChatKey
+            ? { ...input, encryptedChat: true, encryptedChatKey }
+            : input,
         )
         .then(
           (newConversation) => {
             if (!newConversation) return;
-            setIsLockedChatDraft(false);
+            setIsEncryptedChatDraft(false);
             // A recording started from scratch (before this chat had an id)
             // becomes this conversation's recording now that its id exists,
             // so the timer and buffered capture carry across the transition.
@@ -2648,7 +2652,7 @@ export function ChatPageContent({
       initialAgentId,
       initialModel,
       initialApiKeyId,
-      isLockedChatDraft,
+      isEncryptedChatDraft,
       initialThinkingEffort,
       createConversationMutation,
       searchParams,
@@ -3188,7 +3192,7 @@ export function ChatPageContent({
     );
   }
 
-  // LockedChat tombstone: the conversation exists and the viewer may see it,
+  // EncryptedChat tombstone: the conversation exists and the viewer may see it,
   // but this browser holds no (valid) encryption key, so the server returned
   // the locked view. Deliberately its own branch — this is not a 404, the
   // chat is real but undecryptable here.
@@ -3197,12 +3201,12 @@ export function ChatPageContent({
       <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="w-full max-w-xl">
           <CardHeader className="justify-items-center text-center gap-3 pt-8">
-            <LockedChatIcon className="mx-auto block size-14" />
+            <EncryptedChatIcon className="mx-auto block size-14" />
             <CardTitle className="text-xl">
               This chat can&apos;t be unlocked
             </CardTitle>
             <CardDescription className="max-w-md text-sm leading-relaxed">
-              This is a locked chat. Its encryption key existed only in the
+              This is an encrypted chat. Its encryption key existed only in the
               browser that created it and wasn&apos;t found here — clearing
               browser data or switching browsers removes the key. {appName}{" "}
               cannot decrypt the messages.
@@ -3440,7 +3444,7 @@ export function ChatPageContent({
                               </div>
                             </div>
                           </div>
-                          {/* Forking is rejected for locked chats, so the
+                          {/* Forking is rejected for encrypted chats, so the
                               affordance is hidden rather than left to fail. */}
                           {isActionAvailableForConversation(
                             conversation,
@@ -3776,15 +3780,15 @@ export function ChatPageContent({
                                   }
                                   selectorAgentId={initialAgentId}
                                   onAgentChange={handleInitialAgentChange}
-                                  lockedChat={
+                                  encryptedChat={
                                     isInitialRuntimeMode
                                       ? false
-                                      : isLockedChatDraft
+                                      : isEncryptedChatDraft
                                   }
-                                  onLockedChatChange={
+                                  onEncryptedChatChange={
                                     isInitialRuntimeMode
                                       ? undefined
-                                      : setIsLockedChatDraft
+                                      : setIsEncryptedChatDraft
                                   }
                                   modelSource={initialModelSource}
                                   onResetModelOverride={
@@ -3966,15 +3970,15 @@ function clearUserPromptQueryParam(params: {
   params.router.replace(nextUrl);
 }
 
-// `locked-chat` arms the composer toggle once (command palette / Alt+I) and is
+// `encrypted-chat` arms the composer toggle once (command palette / Alt+I) and is
 // then dropped, same one-shot posture as user_prompt and skillId.
-function clearLockedChatQueryParam(params: {
+function clearEncryptedChatQueryParam(params: {
   pathname: string;
   router: ReturnType<typeof useRouter>;
   searchParams: URLSearchParams;
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
-  nextSearchParams.delete("lockedChat");
+  nextSearchParams.delete("encryptedChat");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

@@ -1,17 +1,19 @@
 "use client";
 
 import {
-  isLockedChatSealedContent,
-  type LockedChatRedactedContent,
-  type LockedChatSealedContent,
+  type EncryptedChatRedactedContent,
+  type EncryptedChatSealedContent,
+  isEncryptedChatSealedContent,
 } from "@archestra/shared";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { cn } from "@/lib/utils/tailwind";
 
-type UnavailableContent = LockedChatSealedContent | LockedChatRedactedContent;
+type UnavailableContent =
+  | EncryptedChatSealedContent
+  | EncryptedChatRedactedContent;
 
 /**
- * What the logs pages show in place of a locked chat's audit
+ * What the logs pages show in place of an encrypted chat's audit
  * content. The two states are deliberately worded differently: locked content
  * still exists (encrypted, with an escrow copy of the key), redacted content
  * never made it to disk.
@@ -19,14 +21,14 @@ type UnavailableContent = LockedChatSealedContent | LockedChatRedactedContent;
  * Locked content really is recoverable: the wrapped key sits on the
  * conversation row, so its presence is verifiable rather than assumed.
  */
-export function LockedChatContentUnavailable({
+export function EncryptedChatContentUnavailable({
   value,
   className,
 }: {
   value: UnavailableContent;
   className?: string;
 }) {
-  const locked = isLockedChatSealedContent(value);
+  const locked = isEncryptedChatSealedContent(value);
 
   return (
     <div
@@ -35,15 +37,15 @@ export function LockedChatContentUnavailable({
         className,
       )}
     >
-      <LockedChatIcon className="mt-0.5 size-5" />
+      <EncryptedChatIcon className="mt-0.5 size-5" />
       <div className="space-y-1">
         <p className="text-sm font-medium">
-          {locked ? "Encrypted locked-chat content" : "Content not stored"}
+          {locked ? "Encrypted chat content" : "Content not stored"}
         </p>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {locked
             ? "This content is encrypted with a key held only in the browser that started the chat. It can be recovered with the escrow key, which is held offline."
-            : "This locked-chat content could not be encrypted when it was written, so it was never stored. It cannot be recovered."}
+            : "This encrypted-chat content could not be encrypted when it was written, so it was never stored. It cannot be recovered."}
         </p>
       </div>
     </div>
@@ -51,16 +53,16 @@ export function LockedChatContentUnavailable({
 }
 
 /** The same two states, for table cells where the full panel does not fit. */
-export function LockedChatContentUnavailableLabel({
+export function EncryptedChatContentUnavailableLabel({
   value,
 }: {
   value: UnavailableContent;
 }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-      <LockedChatIcon className="size-3.5" />
+      <EncryptedChatIcon className="size-3.5" />
       <span>
-        {isLockedChatSealedContent(value) ? "Encrypted" : "Not stored"}
+        {isEncryptedChatSealedContent(value) ? "Encrypted" : "Not stored"}
       </span>
     </span>
   );

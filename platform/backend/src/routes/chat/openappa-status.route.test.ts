@@ -100,14 +100,14 @@ test.each([
 test.each([
   false,
   true,
-])("returns null for a locked chat whether a browser key is supplied: %s", async (withKey) => {
+])("returns null for an encrypted chat whether a browser key is supplied: %s", async (withKey) => {
   conversationId = (
     await ConversationModel.create({
       organizationId,
       userId: user.id,
       agentId,
-      lockedChat: true,
-      lockedChatDekFingerprint: "fingerprint",
+      encryptedChat: true,
+      encryptedChatDekFingerprint: "fingerprint",
     })
   ).id;
   statusRead.mockResolvedValue({ trust: "suspicious", audience: "internal" });
@@ -115,7 +115,7 @@ test.each([
     method: "GET",
     url: statusUrl(),
     headers: withKey
-      ? { "x-archestra-locked-chat-key": "YnJvd3Nlci1rZXk" }
+      ? { "x-archestra-encrypted-chat-key": "YnJvd3Nlci1rZXk" }
       : undefined,
   });
   expect(response.statusCode).toBe(200);

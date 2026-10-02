@@ -37,7 +37,7 @@ import ResourcePermissionPolicyModel from "./resource-permission-policy";
 class ConversationModel {
   /**
    * `id` may be supplied by the caller when row fields must be derived from
-   * it before insert (locked-chat key fingerprints are bound to the id).
+   * it before insert (encrypted-chat key fingerprints are bound to the id).
    */
   static async create(
     data: InsertConversation & { id?: string },
@@ -263,11 +263,11 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
-        // LockedChat rows are encrypted under a browser-held key the server
+        // EncryptedChat rows are encrypted under a browser-held key the server
         // does not have: skip them entirely so the list carries no message
         // content (not even ciphertext) and the server-key decrypt is never
         // attempted (it would throw on the foreign envelope).
-        if (row.conversation.lockedChat) {
+        if (row.conversation.encryptedChat) {
           continue;
         }
         if (row?.message) {
@@ -427,10 +427,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      // LockedChat rows are ciphertext under a browser-held key: the route
+      // EncryptedChat rows are ciphertext under a browser-held key: the route
       // layer decrypts them (or returns the locked shape) — never attempt the
       // server-key decrypt here.
-      if (firstRow.conversation.lockedChat) {
+      if (firstRow.conversation.encryptedChat) {
         break;
       }
       if (row.message) {
@@ -455,40 +455,40 @@ class ConversationModel {
   }
 
   /**
-   * LockedChat key bookkeeping for a conversation the caller has already
+   * EncryptedChat key bookkeeping for a conversation the caller has already
    * authorized: the flag plus the stored key fingerprint (the fingerprint is
    * deliberately absent from API response shapes).
    *
    * `hasEscrow` gates whether this conversation's audit trail may be encrypted
    * rather than redacted. It is exact: the wrapped key lives on the row.
    */
-  static async getLockedChatKeyInfo(id: string): Promise<{
+  static async getEncryptedChatKeyInfo(id: string): Promise<{
     id: string;
-    lockedChat: boolean;
-    lockedChatDekFingerprint: string | null;
+    encryptedChat: boolean;
+    encryptedChatDekFingerprint: string | null;
     hasEscrow: boolean;
   } | null> {
     const [row] = await db
       .select({
         id: schema.conversationsTable.id,
-        lockedChat: schema.conversationsTable.lockedChat,
-        lockedChatDekFingerprint:
-          schema.conversationsTable.lockedChatDekFingerprint,
-        lockedChatEscrow: schema.conversationsTable.lockedChatEscrow,
+        encryptedChat: schema.conversationsTable.encryptedChat,
+        encryptedChatDekFingerprint:
+          schema.conversationsTable.encryptedChatDekFingerprint,
+        encryptedChatEscrow: schema.conversationsTable.encryptedChatEscrow,
       })
       .from(schema.conversationsTable)
       .where(and(notDeletedConversation, eq(schema.conversationsTable.id, id)));
     if (!row) return null;
     return {
       id: row.id,
-      lockedChat: row.lockedChat,
-      lockedChatDekFingerprint: row.lockedChatDekFingerprint,
-      hasEscrow: row.lockedChatEscrow !== null,
+      encryptedChat: row.encryptedChat,
+      encryptedChatDekFingerprint: row.encryptedChatDekFingerprint,
+      hasEscrow: row.encryptedChatEscrow !== null,
     };
   }
 
   /**
-   * LockedChat bookkeeping for a conversation, scoped to its owner. Used by the
+   * EncryptedChat bookkeeping for a conversation, scoped to its owner. Used by the
    * LLM proxy to decide how a chat-loopback session's audit content must be
    * stored; the owner check keeps a spoofed session id from suppressing (or
    * re-keying) someone else's audit trail.
@@ -497,20 +497,20 @@ class ConversationModel {
    * `userId`. `hasEscrow` is exact: the wrapped key lives on the row, so its
    * presence is read directly rather than inferred.
    */
-  static async getLockedChatAuditInfoOwnedBy(params: {
+  static async getEncryptedChatAuditInfoOwnedBy(params: {
     id: string;
     userId: string;
   }): Promise<{
-    lockedChat: boolean;
-    lockedChatDekFingerprint: string | null;
+    encryptedChat: boolean;
+    encryptedChatDekFingerprint: string | null;
     hasEscrow: boolean;
   } | null> {
     const [row] = await db
       .select({
-        lockedChat: schema.conversationsTable.lockedChat,
-        lockedChatDekFingerprint:
-          schema.conversationsTable.lockedChatDekFingerprint,
-        lockedChatEscrow: schema.conversationsTable.lockedChatEscrow,
+        encryptedChat: schema.conversationsTable.encryptedChat,
+        encryptedChatDekFingerprint:
+          schema.conversationsTable.encryptedChatDekFingerprint,
+        encryptedChatEscrow: schema.conversationsTable.encryptedChatEscrow,
       })
       .from(schema.conversationsTable)
       .where(
@@ -523,9 +523,9 @@ class ConversationModel {
       .limit(1);
     if (!row) return null;
     return {
-      lockedChat: row.lockedChat,
-      lockedChatDekFingerprint: row.lockedChatDekFingerprint,
-      hasEscrow: row.lockedChatEscrow !== null,
+      encryptedChat: row.encryptedChat,
+      encryptedChatDekFingerprint: row.encryptedChatDekFingerprint,
+      hasEscrow: row.encryptedChatEscrow !== null,
     };
   }
 
@@ -569,7 +569,7 @@ class ConversationModel {
     title: string | null;
     origin: ConversationOrigin;
     projectId: string | null;
-    lockedChat: boolean;
+    encryptedChat: boolean;
   } | null> {
     const [row] = await db
       .select({
@@ -577,7 +577,7 @@ class ConversationModel {
         title: schema.conversationsTable.title,
         origin: schema.conversationsTable.origin,
         projectId: schema.conversationsTable.projectId,
-        lockedChat: schema.conversationsTable.lockedChat,
+        encryptedChat: schema.conversationsTable.encryptedChat,
       })
       .from(schema.conversationsTable)
       .where(
@@ -727,10 +727,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      // LockedChat rows are ciphertext under a browser-held key: the route
+      // EncryptedChat rows are ciphertext under a browser-held key: the route
       // layer decrypts them (or returns the locked shape) — never attempt the
       // server-key decrypt here.
-      if (firstRow.conversation.lockedChat) {
+      if (firstRow.conversation.encryptedChat) {
         break;
       }
       if (row.message) {
@@ -1192,7 +1192,7 @@ function isConversationUnread(conversation: {
 
 /**
  * Assemble the API-facing message list from already-decrypted message rows.
- * Used by the locked-chat GET path, which loads and decrypts rows itself (the
+ * Used by the encrypted-chat GET path, which loads and decrypts rows itself (the
  * model cannot: the key only exists on the request). Applies the same
  * filtering/metadata rules as the standard conversation reads above.
  */

@@ -3937,22 +3937,23 @@ const config = {
       undefined,
   },
   /**
-   * Locked chats: per-conversation encryption under a browser-held key.
+   * Encrypted chats: per-conversation encryption under a browser-held key.
    * Configuring `escrowPublicKey` is the whole switch — the feature is off
    * until one is set, and unsetting it turns the feature off again.
    */
-  lockedChat: {
+  encryptedChat: {
     /**
      * The PEM (or base64-of-PEM) RSA public key conversation keys are escrowed
      * to for break-glass recovery; the private half stays offline with the
-     * customer's security team. Setting it enables locked chats; an
+     * customer's security team. Setting it enables encrypted chats; an
      * unparseable or undersized key fails startup (see
-     * verifyLockedChatConfig).
+     * verifyEncryptedChatConfig).
      */
     escrowPublicKey:
-      process.env.ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY?.trim() ||
-      // Former name, still honored so an existing deployment does not silently
+      process.env.ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY?.trim() ||
+      // Former names, still honored so an existing deployment does not silently
       // lose the feature between the config rollout and the image rollout.
+      process.env.ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY?.trim() ||
       process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
       undefined,
   },

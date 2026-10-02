@@ -62,6 +62,12 @@ import {
   parseTrajectoryStamp,
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
+import {
+  findUnenforcedCalls,
+  observeUnenforcedSession,
+  recordUnenforcedCalls,
+  unenforcedCallId,
+} from "@/openappa/unenforced";
 import { appaWireFamily } from "@/openappa/wire";
 import { rememberYellSession } from "@/openappa/yell-session";
 import type {
@@ -85,17 +91,20 @@ import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-nam
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
+import type { UnenforcedCallReason } from "@/types/openappa-unenforced";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
+import { appaTrajectory } from "./session-identity";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaChildTrajectory,
   type AppaClientAdapter,
+  type AppaRelayArrival,
   type AppaRelayMessage,
   type AppaTrustedContext,
   type AskUserArguments,
 } from "./types";
-import { withCallerScope, withoutCallerScope } from "./utils";
+import { withoutCallerScope } from "./utils";
 
 type AppaPluginBinding = {
   session: OpenAppaSession;
@@ -132,6 +141,20 @@ type AppaPluginBinding = {
    * overlay so stamps never encode a minted parent:child id.
    */
   stampSessionId: string | undefined;
+  /**
+   * The calls of this request whose outcome the runtime did not see, because
+   * enforcement was off: its results and its teammates' launches.
+   */
+  unenforcedCalls: ReadonlyMap<string, UnenforcedCallReason>;
+  /** A child this session spawned ran while enforcement was off. */
+  unenforcedSpawnResult: boolean;
+};
+
+/** A request of a governed session, seen while enforcement is off. */
+type AppaPluginObserver = {
+  session: OpenAppaSession;
+  adapter: AppaClientAdapter | undefined;
+  requestBody: unknown;
 };
 
 type NativeQuestionClaim = {
@@ -149,21 +172,31 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   readonly id = "archestra.appa";
   readonly finalizesToolCalls = true;
   private readonly bindings = new WeakMap<object, AppaPluginBinding>();
+  private readonly observers = new WeakMap<object, AppaPluginObserver>();
 
   constructor(private readonly clientAdapters: readonly AppaClientAdapter[]) {}
 
   async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
     this.bindings.delete(context.resources);
+    this.observers.delete(context.resources);
     const trustedContext = getTrustedContext(context.resources);
     if (!trustedContext) return;
     const enforcement = await enforcementFor(trustedContext);
-    if (enforcement !== "active") return;
-    // Copy trusted context before adapter inspection to isolate plugin state.
+    if (enforcement !== "active") {
+      await this.observe(context, trustedContext);
+      return;
+    }
     const chat = trustedContext.chatSource !== undefined;
+    const trajectory = appaTrajectory({
+      adapters: this.clientAdapters,
+      headers: context.headers,
+      requestBody: context.requestBody,
+      trustedContext,
+    });
     const binding: AppaPluginBinding = {
-      session: trustedContext.session,
+      session: trajectory.session,
       identity: trustedContext.toolIdentity,
-      adapter: undefined,
+      adapter: trajectory.adapter,
       request: trustedContext.request,
       requestBody: context.requestBody,
       turnOpen: false,
@@ -175,34 +208,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
       nativeHitlRulings: [],
-      spawnerNativeId: undefined,
+      spawnerNativeId: trajectory.adapter?.nativeConversationId(
+        trajectory.matchContext,
+      ),
       stampSessionId: tracesLineage(trustedContext.session, chat)
         ? clientSessionId(trustedContext.session.session_id)
         : undefined,
+      unenforcedCalls: new Map(),
+      unenforcedSpawnResult: false,
     };
-    const matchContext = {
-      headers: context.headers,
-      requestBody: context.requestBody,
-      trustedContext: cloneTrustedContext(trustedContext),
-    };
-    const adapter = this.clientAdapters.find((candidate) =>
-      candidate.matches(matchContext),
-    );
-    binding.adapter = adapter;
-    binding.spawnerNativeId = adapter?.nativeConversationId(matchContext);
-    const child = adapter?.bindChildTrajectory(matchContext);
-    if (child) {
-      // A native child is not a client fork: `parent_id` and `fork_of` name
-      // mutually exclusive runtime openings, so the child overlay drops any
-      // fork source the generic history path derived first.
-      const { fork_of: _forkOf, ...session } = binding.session;
-      binding.session = {
-        ...session,
-        session_id: withCallerScope(binding.session, child.sessionId),
-        parent_id: withCallerScope(binding.session, child.parentId),
-      };
-      binding.child = child;
-      issueChildTrajectoryReceipt(context, binding.session, child);
+    if (trajectory.child) {
+      binding.child = trajectory.child;
+      issueChildTrajectoryReceipt(context, binding.session, trajectory.child);
     }
     this.bindings.set(context.resources, binding);
   }
@@ -213,20 +230,46 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
     enterCapturedGuardrailsActivation("active");
+    binding.unenforcedCalls = await findUnenforcedCalls({
+      session: binding.session,
+      toolCallIds: [
+        ...context.toolResults.map((result) => result.id),
+        ...(binding.request.childReturns?.completions ?? []).flatMap(
+          (completion) => [
+            ...(completion.spawnCallId ? [completion.spawnCallId] : []),
+            ...(completion.envelopeId ? [completion.envelopeId] : []),
+          ],
+        ),
+        ...[
+          ...(binding.adapter
+            ?.teammateLaunches?.(binding.requestBody)
+            ?.values() ?? []),
+        ].map((launch) => launch.spawnCallId),
+      ],
+    });
+    binding.unenforcedSpawnResult = context.toolResults.some(
+      (result) =>
+        binding.adapter?.isSpawnTool(result.name, result.namespace) &&
+        binding.unenforcedCalls.has(unenforcedCallId(result.id)),
+    );
+    // The runtime never saw a call the model made while enforcement was off,
+    // so OpenAPPA ignores its result: the result reaches the model as it is.
+    const toolResults = context.toolResults.filter(
+      (result) =>
+        binding.unenforcedCalls.get(unenforcedCallId(result.id)) !== "made",
+    );
     const childResultUpdates: Record<string, string> = Object.create(null);
-    const results = context.toolResults.map((result) => {
+    const results = toolResults.map((result) => {
       const content = binding.adapter?.normalizeChildLaunchResult?.(result);
       if (content === undefined) return result;
       childResultUpdates[result.id] = content;
       return { ...result, content };
     });
-    Object.assign(
-      childResultUpdates,
-      await approveChildReturnCarriers({
-        binding,
-        results,
-      }),
-    );
+    const childReturns = await approveChildReturnCarriers({
+      binding,
+      results,
+    });
+    Object.assign(childResultUpdates, childReturns.updates);
     await admitRelayReports({
       binding,
       session: this.governedSession(binding),
@@ -238,18 +281,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // session still starts; a session that declared nothing has nothing to do.
     if (
       !binding.request.tools &&
-      context.toolResults.length === 0 &&
+      toolResults.length === 0 &&
       binding.request.declaredTools.length === 0
     ) {
       return;
     }
     assertUniqueNativeQuestionResultIds({
       binding,
-      results: context.toolResults,
+      results: toolResults,
     });
     const verifiedNativeQuestionResults = await claimNativeQuestionResults({
       binding,
-      results: context.toolResults,
+      results: toolResults,
     });
     binding.nativeHitlRulings = await recordNativeHitlRulings({
       binding,
@@ -257,23 +300,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     });
     binding.pendingHitlReviewOfferIds = await pendingNativeHitlOfferIds({
       binding,
-      results: context.toolResults,
+      results: toolResults,
       resolvedOfferIds: new Set(
         binding.nativeHitlRulings.map((entry) => entry.offerId),
       ),
     });
     binding.requiresRemedyContinuation = hasRemedyOfferResult({
       binding,
-      results: context.toolResults,
+      results: toolResults,
       verifiedNativeQuestionResults,
     });
     // A handback's result and a message's delivery receipt are the client's
-    // acknowledgements of calls the runtime already governed as crossings.
+    // acknowledgements of calls the runtime already governed as crossings. A
+    // child return that OpenAPPA ignores never reaches the runtime.
     const nonHandbackResults = results
       .filter(
         (result) =>
           !binding.adapter?.isChildHandbackTool?.(result.name) &&
-          !binding.adapter?.isRelayTool?.(result.name),
+          !binding.adapter?.isRelayTool?.(result.name) &&
+          !childReturns.ignored.has(result.id),
       )
       // An answer to an issued question is recognized as the very result the
       // client sent, so a result nothing rewrote goes on as that object.
@@ -319,7 +364,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (
       binding.adapter &&
       !binding.chat &&
-      context.toolResults.some(
+      toolResults.some(
         (answer) =>
           !Object.hasOwn(toolResultUpdates, answer.id) &&
           isUserQuestionResult({
@@ -686,6 +731,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    const observer = this.observers.get(context.resources);
+    if (observer) {
+      await recordObservedCalls(observer, context.toolCalls);
+      return;
+    }
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
     enterCapturedGuardrailsActivation("active");
@@ -1078,6 +1128,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   async onCleanup(context: LlmProxyRequestContext): Promise<void> {
     this.bindings.delete(context.resources);
+    this.observers.delete(context.resources);
   }
 
   // === Internal helpers ===
@@ -1088,6 +1139,48 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
    */
   private governedSession(binding: AppaPluginBinding): OpenAppaSession {
     return binding.session;
+  }
+
+  /**
+   * Records what OpenAPPA must know when enforcement turns on again: a
+   * session that starts now, or a governed child that runs now. A request of
+   * a governed session gets an observer, which records the calls the model
+   * makes. A record that fails never fails the request, because enforcement
+   * is off. OpenAPPA then withholds what it has no record of.
+   */
+  private async observe(
+    context: LlmProxyRequestContext,
+    trustedContext: AppaTrustedContext,
+  ): Promise<void> {
+    try {
+      const { session, adapter, child } = appaTrajectory({
+        adapters: this.clientAdapters,
+        headers: context.headers,
+        requestBody: context.requestBody,
+        trustedContext,
+      });
+      if ((await observeUnenforcedSession(session)) !== "governed") return;
+      this.observers.set(context.resources, {
+        session,
+        adapter,
+        requestBody: context.requestBody,
+      });
+      const spawnCallId = child
+        ? await resolveSpawnCallId({ session, child })
+        : undefined;
+      if (spawnCallId) {
+        await recordUnenforcedCalls({
+          session,
+          toolCallIds: [spawnCallId],
+          reason: "child",
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "OpenAPPA could not record a request made while enforcement was off",
+      );
+    }
   }
 
   /**
@@ -1250,7 +1343,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 async function approveChildReturnCarriers(params: {
   binding: AppaPluginBinding;
   results: LlmProxyToolResultsContext["toolResults"];
-}): Promise<Record<string, string>> {
+}): Promise<{
+  updates: Record<string, string>;
+  /** Results of children that ran while enforcement was off, with no crossing. */
+  ignored: Set<string>;
+}> {
   const completions = params.binding.request.childReturns?.completions ?? [];
   const adapter = params.binding.adapter;
   const envelopeIdOf = (id: string) => parseTrajectoryStamp(id)?.callId ?? id;
@@ -1259,9 +1356,15 @@ async function approveChildReturnCarriers(params: {
       params.binding.request.restoredNoticeCallIds?.has(result.id) !== true &&
       adapter?.isChildCompletionResult?.(result) === true,
   );
+  const ignored = new Set<string>();
   if (completions.length === 0 && completionResults.length === 0) {
-    return {};
+    return { updates: {}, ignored };
   }
+  // A child that ran while enforcement was off returned what the runtime did
+  // not see. Without a crossing, OpenAPPA ignores its return. A return that
+  // crossed is still checked like any other.
+  const ranUnenforced = (callId: string) =>
+    params.binding.unenforcedCalls.has(envelopeIdOf(callId));
   // Display markers carry no authority. Assistant quotes are stripped from
   // the request but never treated as parent-bound completions.
   // The durable authority: the child returns this family crossed, retained by
@@ -1307,6 +1410,12 @@ async function approveChildReturnCarriers(params: {
     const candidates = available.flatMap((record, index) =>
       record.value === completion.value ? [{ record, index }] : [],
     );
+    if (
+      candidates.length === 0 &&
+      expectedSpawn !== undefined &&
+      ranUnenforced(expectedSpawn)
+    )
+      continue;
     const exact = candidates.filter(
       ({ record }) =>
         (expectedSpawn === undefined || record.spawnCallId === expectedSpawn) &&
@@ -1397,7 +1506,9 @@ async function approveChildReturnCarriers(params: {
     });
   }
   const unrecordedResult = completionResults.find(
-    (result) => (byEnvelope.get(envelopeIdOf(result.id)) ?? []).length === 0,
+    (result) =>
+      (byEnvelope.get(envelopeIdOf(result.id)) ?? []).length === 0 &&
+      !ranUnenforced(result.id),
   );
   if (unrecordedResult) {
     throw childReturnRefusal({
@@ -1424,6 +1535,10 @@ async function approveChildReturnCarriers(params: {
   for (const result of completionResults) {
     const envelopeId = envelopeIdOf(result.id);
     const verified = byEnvelope.get(envelopeId) ?? [];
+    if (verified.length === 0 && ranUnenforced(result.id)) {
+      ignored.add(result.id);
+      continue;
+    }
     if (verified.length === 0) {
       throw childReturnRefusal({ ...unrecorded, callId: envelopeId });
     }
@@ -1442,7 +1557,7 @@ async function approveChildReturnCarriers(params: {
             ),
           });
   }
-  return updates;
+  return { updates, ignored };
 }
 
 /**
@@ -1505,6 +1620,10 @@ const SUBSTITUTED_CHILD_RETURN =
  * teammate its prompt as a message from its lead. That prompt crossed with
  * the spawn, which opened the child at its parent's label; the delegation
  * marker it carried binds its exact text.
+ *
+ * A message that came while enforcement was off has no record of crossing.
+ * OpenAPPA ignores it, and keeps it as it is, when its sender or this session
+ * ran while enforcement was off.
  */
 async function admitRelayArrivals(params: {
   binding: AppaPluginBinding;
@@ -1574,6 +1693,24 @@ async function admitRelayArrivals(params: {
     }
     return records;
   };
+  const launches = params.binding.adapter?.teammateLaunches?.(
+    params.binding.requestBody,
+  );
+  let ranUnenforced: Promise<boolean> | undefined;
+  const sentUnenforced = async (arrival: AppaRelayArrival) => {
+    if (arrival.kind === "session") return false;
+    const launch =
+      arrival.kind === "teammate" ? launches?.get(arrival.from) : undefined;
+    if (
+      launch &&
+      params.binding.unenforcedCalls.has(unenforcedCallId(launch.spawnCallId))
+    )
+      return true;
+    if (arrival.kind === "agent" && params.binding.unenforcedSpawnResult)
+      return true;
+    ranUnenforced ??= childRanUnenforced(params.binding);
+    return ranUnenforced;
+  };
   for (const arrival of arrivals) {
     if (
       openingPrompt &&
@@ -1591,7 +1728,9 @@ async function admitRelayArrivals(params: {
           : arrival.kind === "teammate"
             ? await teammateRecords(arrival.from)
             : await crossingsAndAddresses();
-    const { withheld } = arrival.admit(records);
+    const { withheld } = arrival.admit(
+      (await sentUnenforced(arrival)) ? [...records, arrival.body] : records,
+    );
     if (withheld) {
       logger.info(
         { sessionId: session.session_id, kind: arrival.kind },
@@ -1603,6 +1742,55 @@ async function admitRelayArrivals(params: {
 
 /** No record covers a message from another session. */
 const NO_RECORDS: readonly string[] = [];
+
+/**
+ * Records the calls a governed session makes while enforcement is off. A
+ * message to a teammate reaches it while enforcement is off, so the spawn that
+ * launched the teammate is recorded too.
+ */
+async function recordObservedCalls(
+  observer: AppaPluginObserver,
+  calls: readonly ToolCall[],
+): Promise<void> {
+  try {
+    await recordUnenforcedCalls({
+      session: observer.session,
+      toolCallIds: calls.map((call) => call.id),
+      reason: "made",
+    });
+    const launches = observer.adapter?.teammateLaunches?.(observer.requestBody);
+    const recipients = calls.flatMap((call) => {
+      const to = observer.adapter?.relayMessage?.(call)?.to;
+      const launch =
+        to?.kind === "teammate" ? launches?.get(to.name) : undefined;
+      return launch ? [launch.spawnCallId] : [];
+    });
+    await recordUnenforcedCalls({
+      session: observer.session,
+      toolCallIds: recipients,
+      reason: "child",
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "OpenAPPA could not record tool calls made while enforcement was off",
+    );
+  }
+}
+
+/** Whether this child ran, or got a message, while enforcement was off. */
+async function childRanUnenforced(
+  binding: AppaPluginBinding,
+): Promise<boolean> {
+  if (!binding.child) return false;
+  const spawnCallId = await resolveSpawnCallId(binding);
+  if (!spawnCallId) return false;
+  const found = await findUnenforcedCalls({
+    session: binding.session,
+    toolCallIds: [spawnCallId],
+  });
+  return found.size > 0;
+}
 
 /** Whether a teammate envelope's sender is the child `id`: `<name>` or `<name>@<team>`. */
 function namesTeammate(name: string, id: string): boolean {
@@ -1837,8 +2025,9 @@ async function crossRelay(params: {
  * started (by its id, or by its teammate name), else a teammate the parent's
  * history launched but that has not started yet. Such a teammate is
  * `unchecked` when the runtime never allowed the call that launched it, as
- * when it started while enforcement was off: it can never open, so no message
- * reaches it. A name that fits several started children is `ambiguous`.
+ * when it started while enforcement was off: OpenAPPA never governs it, so no
+ * message reaches it. A name that fits several started children is
+ * `ambiguous`.
  */
 async function resolveRelayChild(params: {
   binding: AppaPluginBinding;
@@ -1877,7 +2066,7 @@ const RELAY_UNKNOWN_RECIPIENT =
 const RELAY_AMBIGUOUS_RECIPIENT =
   "More than one teammate in this session has that name, so OpenAPPA cannot tell which one this message is for. The message was not sent.";
 const RELAY_UNCHECKED =
-  "OpenAPPA cannot check this teammate: it started while Guardrails enforcement was off, so OpenAPPA refuses its requests and did not send the message. To continue its work, start a new teammate under a new name with the Agent tool and give it the task. OpenAPPA checks that spawn.";
+  "This teammate started while Guardrails enforcement was off, so OpenAPPA does not check it. OpenAPPA does not send messages to an agent that it does not check, so it did not send this message. To continue its work, start a new teammate under a new name with the Agent tool and give it the task. OpenAPPA checks that spawn.";
 const RELAY_UNGOVERNED =
   "OpenAPPA cannot tell which spawn started this agent, so it cannot check this message. The message was not sent.";
 const RELAY_RESHAPED_PROTOCOL =
@@ -1961,7 +2150,7 @@ function uncorrelatedChild(): ApiError {
  * unrelated parent calls.
  */
 async function resolveSpawnCallId(
-  binding: AppaPluginBinding,
+  binding: Pick<AppaPluginBinding, "child" | "session">,
 ): Promise<string | undefined> {
   const lineage = binding.child?.lineage;
   if (lineage?.spawnCallId) return lineage.spawnCallId;
@@ -2002,13 +2191,6 @@ function getTrustedContext(
     "request" in trustedContext
     ? (trustedContext as AppaTrustedContext)
     : undefined;
-}
-
-function cloneTrustedContext(context: AppaTrustedContext): AppaTrustedContext {
-  return {
-    ...context,
-    session: { ...context.session },
-  };
 }
 
 function issueChildTrajectoryReceipt(

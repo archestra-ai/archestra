@@ -1124,7 +1124,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
-  test("does not issue a remedy notice while the deployment switch is off, then does after it is turned on", async () => {
+  test("does not issue a remedy notice while the deployment switch is off, then does for a session that starts after it is turned on", async ({
+    makeConversation,
+  }) => {
     block = true;
     await GuardrailsDeploymentModel.setEnabled(false);
     const off = await post(payload(false));
@@ -1134,6 +1136,19 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
 
     await GuardrailsDeploymentModel.setEnabled(true);
+    // The session started while enforcement was off, so it stays out of
+    // OpenAPPA: its call is released as the model made it.
+    const same = await post(payload(false));
+    expect(same.statusCode, same.body).toBe(200);
+    expect(noticeFrom(same.body, false).name).toBe("get_weather");
+    expect(events).toEqual([]);
+
+    sessionId = (
+      await makeConversation(agent.id, {
+        userId,
+        organizationId: agent.organizationId,
+      })
+    ).id;
     const on = await post(payload(false));
     expect(on.statusCode, on.body).toBe(200);
     expect(noticeFrom(on.body, false).name).toBe("archestra__get_remedy_plans");
@@ -5528,6 +5543,234 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           "this subagent did not start through a checked spawn",
         );
         expect(message).toContain("start a new subagent");
+      });
+    });
+
+    // The switch turns off and on again while the session runs. OpenAPPA
+    // ignores what it did not see: a session that started while enforcement
+    // was off, and the part of a governed session that ran while it was off.
+    describe("when enforcement turns off and on again", () => {
+      const subagent = "a4f1c2d3e5b6a7c8";
+      const buildPrompt = "Find out why the build fails.";
+      /** The model's next call, under an id of its own. */
+      const replyWith = (
+        id: string,
+        name: string,
+        input: Record<string, unknown>,
+      ) => {
+        options = {
+          includeToolUse: true,
+          streamStopReason: "tool_use",
+          streamingToolUse: { id, name, input },
+        };
+      };
+      const toolUse = (
+        id: string,
+        name: string,
+        input: Record<string, unknown>,
+      ) => ({
+        role: "assistant",
+        content: [{ type: "tool_use", id, name, input }],
+      });
+      const toolResult = (id: string, content: unknown) => ({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: id, content }],
+      });
+      const resultEvents = (id: string) =>
+        events.filter(
+          (event) =>
+            event.event === "tool_result" &&
+            String(event.tool_call_id).endsWith(id),
+        );
+
+      test("a lead and a teammate that started while it was off stay out of OpenAPPA", async () => {
+        await GuardrailsDeploymentModel.setEnabled(false);
+        answerText();
+        const leadOff = await send(undefined, [
+          { role: "user", content: "Audit the triggers with a teammate" },
+        ]);
+        expect(leadOff.statusCode, leadOff.body).toBe(200);
+        const teammateOff = await send(auditor, [
+          { role: "user", content: opening(spawnInput.prompt) },
+        ]);
+        expect(teammateOff.statusCode, teammateOff.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(true);
+        events.length = 0;
+        // Not refused as a child that no checked spawn started.
+        const teammate = await send(auditor, [
+          { role: "user", content: opening(spawnInput.prompt) },
+          { role: "assistant", content: "Auditing." },
+          { role: "user", content: "Continue." },
+        ]);
+        expect(teammate.statusCode, teammate.body).toBe(200);
+        const leadOn = await send(undefined, [
+          { role: "user", content: "Audit the triggers with a teammate" },
+          toolUse("toolu_off_spawn", "Agent", spawnInput),
+          toolResult("toolu_off_spawn", [
+            { type: "text", text: launchReceipt(auditor, "auditor") },
+          ]),
+          { role: "assistant", content: "The auditor is running." },
+          {
+            role: "user",
+            content: toLead(
+              teammateMessage("auditor", "Three triggers are stuck"),
+            ),
+          },
+        ]);
+        expect(leadOn.statusCode, leadOn.body).toBe(200);
+        expect(forwarded()).toContain("Three triggers are stuck");
+        expect(forwarded()).not.toContain("[appa]");
+        // A teammate that this lead starts now descends from it, and stays
+        // out of OpenAPPA with it.
+        const scout = await send(`scout@${team}`, [
+          { role: "user", content: opening("Scout the triggers.") },
+        ]);
+        expect(scout.statusCode, scout.body).toBe(200);
+        expect(events).toEqual([]);
+      });
+
+      test("a governed lead ignores the calls it made and the messages it got while it was off", async () => {
+        const spawned = await spawnTeammate();
+        answerText();
+        const started = await send(auditor, [
+          { role: "user", content: opening(spawned.prompt) },
+        ]);
+        expect(started.statusCode, started.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(false);
+        replyWith("toolu_off_message", "SendMessage", {
+          to: "team-lead",
+          message: "Three triggers are stuck",
+        });
+        const reported = await send(auditor, [
+          { role: "user", content: opening(spawned.prompt) },
+          { role: "assistant", content: "Auditing." },
+          { role: "user", content: "Report to your lead." },
+        ]);
+        expect(reported.statusCode, reported.body).toBe(200);
+        const beforeOff = [
+          { role: "user", content: "Audit the triggers with a teammate" },
+          toolUse(spawned.callId, "Agent", spawnInput),
+          toolResult(spawned.callId, [
+            { type: "text", text: launchReceipt(auditor, "auditor") },
+          ]),
+          { role: "assistant", content: "The auditor is running." },
+          {
+            role: "user",
+            content: toLead(
+              teammateMessage("auditor", "Three triggers are stuck"),
+            ),
+          },
+        ];
+        replyWith("toolu_off_weather", "get_weather", { location: "SF" });
+        const asked = await send(undefined, beforeOff);
+        expect(asked.statusCode, asked.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(true);
+        answerText();
+        events.length = 0;
+        const response = await send(undefined, [
+          ...beforeOff,
+          toolUse("toolu_off_weather", "get_weather", { location: "SF" }),
+          toolResult("toolu_off_weather", "Sunny while enforcement was off"),
+        ]);
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(forwarded()).toContain("Three triggers are stuck");
+        expect(forwarded()).toContain("Sunny while enforcement was off");
+        expect(forwarded()).not.toContain("[appa] Message withheld");
+        expect(resultEvents("toolu_off_weather")).toEqual([]);
+      });
+
+      test("a subagent's return reaches its lead when the subagent ran while it was off", async () => {
+        reply("Agent", { description: "Check the build", prompt: buildPrompt });
+        const spawn = await send(undefined, [
+          { role: "user", content: "Find out why the build fails" },
+        ]);
+        expect(spawn.statusCode, spawn.body).toBe(200);
+        const call = noticeFrom(spawn.body, true);
+        expect(call.name).toBe("Agent");
+        const prompt = String(call.input.prompt);
+        answerText();
+        const started = await send(subagent, [
+          { role: "user", content: prompt },
+        ]);
+        expect(started.statusCode, started.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(false);
+        const ended = await send(subagent, [
+          { role: "user", content: prompt },
+          { role: "assistant", content: "Reading the lockfile." },
+          { role: "user", content: "Continue." },
+        ]);
+        expect(ended.statusCode, ended.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(true);
+        events.length = 0;
+        const response = await send(undefined, [
+          { role: "user", content: "Find out why the build fails" },
+          toolUse(call.id, "Agent", call.input),
+          toolResult(call.id, [
+            { type: "text", text: "The lockfile is stale." },
+            {
+              type: "text",
+              text: `agentId: ${subagent}\n<usage>tokens: 9</usage>`,
+            },
+          ]),
+        ]);
+
+        // Not refused as a subagent result with no record.
+        expect(response.statusCode, response.body).toBe(200);
+        expect(forwarded()).toContain("The lockfile is stale.");
+        expect(resultEvents(call.id)).toEqual([]);
+      });
+
+      test("a background subagent's return reaches its lead when the lead started it while it was off", async () => {
+        reply("get_weather", { location: "SF" });
+        const governed = await send(undefined, [
+          { role: "user", content: "Check the weather first" },
+        ]);
+        expect(governed.statusCode, governed.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(false);
+        replyWith("toolu_off_agent", "Agent", {
+          description: "Check the build",
+          prompt: buildPrompt,
+          run_in_background: true,
+        });
+        const launched = await send(undefined, [
+          { role: "user", content: "Find out why the build fails" },
+        ]);
+        expect(launched.statusCode, launched.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(true);
+        answerText();
+        const response = await send(undefined, [
+          { role: "user", content: "Find out why the build fails" },
+          toolUse("toolu_off_agent", "Agent", {
+            description: "Check the build",
+            prompt: buildPrompt,
+            run_in_background: true,
+          }),
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_off_agent",
+                content: `Async agent launched successfully.\nagentId: ${subagent}\noutput_file: /tmp/${subagent}.output`,
+              },
+              {
+                type: "text",
+                text: `<task-notification>\n<task-id>${subagent}</task-id>\n<tool-use-id>toolu_off_agent</tool-use-id>\n<status>completed</status>\n<result>The lockfile is stale.</result>\n</task-notification>`,
+              },
+            ],
+          },
+        ]);
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(forwarded()).toContain("The lockfile is stale.");
       });
     });
   });

@@ -1174,6 +1174,27 @@ describe("Claude APPA permission cleanup on MCP disconnect", () => {
     expect(files[LEDGER_REL]).toBeNull();
   });
 
+  test("drops a ledger whose rules are not yet in settings", async () => {
+    const settings = claudeSettings(["Read"]);
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_actions"],
+      invoke: "disconnect_actions mcp\n",
+      files: {
+        [SETTINGS_REL]: settings,
+        [LEDGER_REL]: claudeLedger({
+          prod_gateway: OWNED_ALLOW,
+          other_gateway: OTHER_ALLOW,
+          schemaVersion: 1,
+        }),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expect(files[SETTINGS_REL]).toBe(settings);
+    expectOtherLedgerKept(files[LEDGER_REL] ?? "");
+  });
+
   test("keeps custom-profile ownership separate from the default profile", async () => {
     const decoy = claudeSettings();
     const { files } = await runGuardSnippet({
@@ -1541,6 +1562,24 @@ ConvertTo-ArchClaudeJson ([psobject]::AsPSObject($value))`,
         "Read",
       ]);
       expect(files[LEDGER_REL]).toBeNull();
+    });
+
+    test("drops a ledger whose rules are not yet in settings", async () => {
+      const settings = claudeSettings(["Read"]);
+      const files = await runWindowsMcpCleanup({
+        files: {
+          [SETTINGS_REL]: settings,
+          [LEDGER_REL]: claudeLedger({
+            prod_gateway: OWNED_ALLOW,
+            other_gateway: OTHER_ALLOW,
+            schemaVersion: 1,
+          }),
+        },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+      });
+
+      expect(files[SETTINGS_REL]).toBe(settings);
+      expectOtherLedgerKept(files[LEDGER_REL] ?? "");
     });
 
     test("keeps custom-profile ownership separate from the default profile", async () => {

@@ -217,13 +217,23 @@ export function claudeCodeOAuthNextStep(serverName: string): string {
   return `Start a new \`claude\` session, run \`/mcp\` there, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
 }
 
+export const CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING =
+  "Skipped Claude Code helper allow rules. The gateway name or tool prefix cannot be used in an exact permission rule. MCP setup continues without pre-approving those calls.";
+
+/** True when both names can be embedded as exact Claude allow rules. */
+export function claudeCodeAppaPermissionsAreLiteral(
+  mcp: SetupScriptMcpSection,
+): boolean {
+  return (
+    /^[a-zA-Z0-9_.-]+$/.test(mcp.serverName) &&
+    /^[a-zA-Z0-9_]+__$/.test(mcp.toolPrefix)
+  );
+}
+
 export function claudeCodeAppaPermissionRules(
   mcp: SetupScriptMcpSection,
 ): string[] {
-  if (
-    !/^[a-zA-Z0-9_.-]+$/.test(mcp.serverName) ||
-    !/^[a-zA-Z0-9_]+__$/.test(mcp.toolPrefix)
-  ) {
+  if (!claudeCodeAppaPermissionsAreLiteral(mcp)) {
     throw new Error(
       "Claude MCP permission rules require literal server and tool names",
     );
@@ -663,14 +673,28 @@ export function legacyServerNames(mcp: SetupScriptMcpSection): string[] {
 // Internal helpers — Claude Code
 // ===================================================================
 
+function claudeAppaPermissionsBash(mcp: SetupScriptMcpSection): string {
+  if (!claudeCodeAppaPermissionsAreLiteral(mcp)) {
+    return `warn ${sh(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING)}`;
+  }
+  return `if ! command -v python3 >/dev/null 2>&1; then
+  err 'python3 is required to configure Claude Code APPA tool permissions. Install it and re-run connection setup.'
+  exit 1
+fi
+say 'Configuring exact APPA helper permissions for Claude Code'
+ARCHESTRA_MCP_NAME=${sh(mcp.serverName)} \\
+ARCHESTRA_MCP_LEGACY_NAMES=${sh(JSON.stringify(legacyServerNames(mcp)))} \\
+ARCHESTRA_APPA_PERMISSION_RULES=${sh(JSON.stringify(claudeCodeAppaPermissionRules(mcp)))} \\
+python3 - <<'ARCHESTRA_APPA_PERMISSIONS_PY'
+${CLAUDE_APPA_PERMISSIONS_MERGE_PY}
+ARCHESTRA_APPA_PERMISSIONS_PY
+ok 'APPA helper calls are pre-approved for Claude Code, including auto mode. Gateway authorization and required human review still apply.'`;
+}
+
 function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
   if (ctx.mcp) {
-    sections.push(`if ! command -v python3 >/dev/null 2>&1; then
-  err 'python3 is required to configure Claude Code APPA tool permissions. Install it and re-run connection setup.'
-  exit 1
-fi`);
     // Register at USER scope so the gateway is visible in every directory for
     // this user. `claude mcp add` defaults to `local` (per-directory) scope,
     // which makes the server "disappear" the moment Claude Code is run from a
@@ -688,14 +712,7 @@ fi`);
 cli claude mcp remove --scope local ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
 cli claude mcp remove --scope user ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli claude mcp add --scope user --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
-    sections.push(`say 'Configuring exact APPA helper permissions for Claude Code'
-ARCHESTRA_MCP_NAME=${sh(ctx.mcp.serverName)} \\
-ARCHESTRA_MCP_LEGACY_NAMES=${sh(JSON.stringify(legacyServerNames(ctx.mcp)))} \\
-ARCHESTRA_APPA_PERMISSION_RULES=${sh(JSON.stringify(claudeCodeAppaPermissionRules(ctx.mcp)))} \\
-python3 - <<'ARCHESTRA_APPA_PERMISSIONS_PY'
-${CLAUDE_APPA_PERMISSIONS_MERGE_PY}
-ARCHESTRA_APPA_PERMISSIONS_PY
-ok 'APPA helper calls are pre-approved for Claude Code, including auto mode. Gateway authorization and required human review still apply.'`);
+    sections.push(claudeAppaPermissionsBash(ctx.mcp));
   }
 
   if (ctx.proxy) {
@@ -1027,8 +1044,9 @@ state_path.parent.mkdir(parents=True, exist_ok=True)
 backup = path.with_name(path.name + ".archestra-backup")
 if path.exists() and not backup.exists():
     shutil.copy2(path, backup)
-path.write_text(json.dumps(settings, indent=2) + "\\n")
+# Record ownership first so a failed settings write remains recoverable.
 state_path.write_text(json.dumps(state, indent=2) + "\\n")
+path.write_text(json.dumps(settings, indent=2) + "\\n")
 print(f"Updated {path}")`;
 
 const OPENCODE_OWNED_MERGE_NODE = `const fs = require("fs");

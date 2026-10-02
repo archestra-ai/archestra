@@ -5,7 +5,9 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
 import {
+  CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING,
   claudeCodeAppaPermissionRules,
+  claudeCodeAppaPermissionsAreLiteral,
   renderSetupScript,
   type SetupScriptMcpSection,
 } from "@/services/connection-setup-script";
@@ -35,6 +37,20 @@ const MCP: SetupScriptMcpSection = {
 
 function rulesFor(mcp: SetupScriptMcpSection): string[] {
   return claudeCodeAppaPermissionRules(mcp);
+}
+
+function settingsWriteSnippet(
+  script: string,
+  failSettingsWrite?: boolean,
+): string {
+  const snippet = extractSnippet(script);
+  if (!failSettingsWrite) return snippet;
+  const settingsWrite =
+    "Write-ArchAppaJsonAtomic $archAppaSettingsPath $archAppaSettingsJson";
+  if (!snippet.includes(settingsWrite)) {
+    throw new Error("Missing settings write");
+  }
+  return snippet.replace(settingsWrite, "throw 'settings write failed'");
 }
 
 function extractSnippet(script: string): string {
@@ -86,6 +102,25 @@ test("MCP connect emits the allowlist merge and proxy-only connect does not", ()
   });
   expect(proxyOnly).not.toContain("claude-appa-permissions.json");
   expect(proxyOnly).not.toContain(NOTICE);
+});
+
+test("unsafe gateway names skip helper rules and still register MCP", () => {
+  for (const mcp of [
+    { ...MCP, serverName: "team_(eu)" },
+    { ...MCP, toolPrefix: "archestra__*" },
+  ]) {
+    expect(claudeCodeAppaPermissionsAreLiteral(mcp)).toBe(false);
+    const script = windowsScript(mcp);
+    const snippet = extractSnippet(script);
+    expect(script).toContain("mcp add");
+    expect(snippet).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
+    expect(snippet).not.toContain(NOTICE);
+    expect(snippet).not.toContain("claude-appa-permissions.json");
+    expect(snippet).not.toContain("get_remedy_plans");
+    expect(() => claudeCodeAppaPermissionRules(mcp)).toThrow(
+      "literal server and tool names",
+    );
+  }
 });
 
 describe.skipIf(!powershellBin)("Windows APPA permission merge", () => {
@@ -329,6 +364,42 @@ $json = ConvertTo-ArchAppaJson ([psobject]::AsPSObject($wrapped))
     expect(invalidLedger.ownershipRaw).toBe(ledger);
     expect(invalidLedger.backupRaw).toBeNull();
   });
+
+  test("a failed settings write after the ledger is recovered on retry", async () => {
+    const rules = rulesFor(MCP);
+    const original = JSON.stringify({
+      permissions: { allow: ["Read"], deny: ["Bash"] },
+      env: { KEEP: "value" },
+    });
+    const failed = await runMerge({
+      contexts: [MCP],
+      existing: original,
+      failSettingsWrite: true,
+      expectFailure: true,
+    });
+    expect(failed.failed).toBe(true);
+    expect(failed.settingsRaw).toBe(original);
+    expect(JSON.parse(failed.ownershipRaw ?? "")).toEqual({
+      prod_gateway: rules,
+    });
+
+    const recovered = await runMerge({
+      contexts: [MCP],
+      existing: failed.settingsRaw,
+      ownership: failed.ownershipRaw,
+    });
+    expect(recovered.failed).toBe(false);
+    expect(JSON.parse(recovered.settingsRaw ?? "").permissions.allow).toEqual([
+      "Read",
+      ...rules,
+    ]);
+    expect(JSON.parse(recovered.settingsRaw ?? "").permissions.deny).toEqual([
+      "Bash",
+    ]);
+    expect(JSON.parse(recovered.ownershipRaw ?? "")).toEqual({
+      prod_gateway: rules,
+    });
+  });
 });
 
 async function runMerge(params: {
@@ -337,6 +408,7 @@ async function runMerge(params: {
   ownership?: string | null;
   customConfigDir?: boolean;
   expectFailure?: boolean;
+  failSettingsWrite?: boolean;
   afterMerge?: string;
 }): Promise<{
   settingsRaw: string | null;
@@ -382,7 +454,7 @@ function Say($m) { Write-Host ('==> ' + $m) }
 function Ok($m) { Write-Host ('==> ' + $m) }
 function Warn($m) { Write-Host ('warning: ' + $m) }
 function Err($m) { Write-Host ('error: ' + $m) }
-${extractSnippet(windowsScript(mcp))}
+${settingsWriteSnippet(windowsScript(mcp), params.failSettingsWrite)}
 ${params.afterMerge ?? ""}
 `,
       );

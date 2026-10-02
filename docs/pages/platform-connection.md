@@ -77,6 +77,7 @@ This flow does not automate those UI-only settings.
 - **Setup download or execution fails:** fix the reported issue and start again.
 - **Tools unavailable after setup:** complete the client's MCP sign-in and reload it.
 - **Claude Code still prompts for a helper:** start a new session. Only `get_remedy_plans`, `execute_remedy_plan`, `yell`, and `ask_user` are pre-approved. The rules apply only to the connected gateway.
+- **Helper preapproval skipped:** some gateway names cannot form an exact permission rule. Setup warns and continues without adding helper permissions.
 - **Claude Code says python3 is required:** install Python 3 and run setup again. macOS and Linux use it to write the helper allow rules.
 
 Approval requests expire after ten minutes, including the approved script's download window.

@@ -28,6 +28,8 @@ import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import {
   buildSetupCommand,
+  CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING,
+  claudeCodeAppaPermissionRules,
   proxyBaseUrlToOrigin,
   renderSetupScript,
   type SetupScriptContext,
@@ -211,6 +213,7 @@ async function runClaudeAppaPermissionsMerge(params: {
   ownership?: Record<string, string[]>;
   customConfigDir?: boolean;
   expectFailure?: boolean;
+  lockSettings?: boolean;
 }) {
   const home = await mkdtemp(
     path.join(tmpdir(), "archestra-appa-permissions-"),
@@ -230,6 +233,7 @@ async function runClaudeAppaPermissionsMerge(params: {
     await mkdir(path.dirname(statePath), { recursive: true });
     const original = JSON.stringify(params.existing);
     await writeFile(settingsPath, original);
+    if (params.lockSettings) await chmod(settingsPath, 0o444);
     await writeFile(statePath, JSON.stringify(params.ownership ?? {}));
     let failed = false;
     for (const mcp of params.contexts ?? [MCP]) {
@@ -368,13 +372,66 @@ describe("Claude Code APPA permission installation", () => {
     expect(result.ownership).toEqual({});
   });
 
-  test("rejects a gateway name that would widen a permission rule", () => {
+  test("skips helper rules for an unsafe gateway name and still registers MCP", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: { ...MCP, serverName: "team_(eu)" },
+    });
+    expect(script).toContain("claude mcp add");
+    expect(script).toContain("team_(eu)");
+    expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
+    expect(script).not.toContain("APPA helper calls are pre-approved");
+    expect(script).not.toContain("python3 is required");
+    expect(script).not.toContain("mcp__team_(eu)__");
     expect(() =>
-      renderSetupScript({
-        ...fullContext("claude-code"),
-        mcp: { ...MCP, serverName: "*" },
-      }),
+      claudeCodeAppaPermissionRules({ ...MCP, serverName: "team_(eu)" }),
     ).toThrow("literal server and tool names");
+  });
+
+  test("skips helper rules for an unsafe tool prefix without broadening allow syntax", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: { ...MCP, toolPrefix: "archestra__*" },
+    });
+    expect(script).toContain("claude mcp add");
+    expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
+    expect(script).not.toContain("APPA helper calls are pre-approved");
+    expect(script).not.toContain("mcp__prod_gateway__");
+    expect(script).not.toContain("*get_remedy_plans");
+    expect(() =>
+      claudeCodeAppaPermissionRules({ ...MCP, toolPrefix: "archestra__*" }),
+    ).toThrow("literal server and tool names");
+  });
+
+  test("a failed settings write after the ledger is recovered on retry", async () => {
+    const rules = [
+      "get_remedy_plans",
+      "execute_remedy_plan",
+      "yell",
+      "ask_user",
+    ].map((name) => `mcp__prod_gateway__archestra__${name}`);
+    const original = JSON.stringify({
+      permissions: { allow: ["Read"], deny: ["Bash"] },
+      env: { KEEP: "value" },
+    });
+    const failed = await runClaudeAppaPermissionsMerge({
+      existing: JSON.parse(original),
+      lockSettings: true,
+      expectFailure: true,
+    });
+    expect(failed.failed).toBe(true);
+    expect(JSON.stringify(failed.settings)).toBe(original);
+    expect(failed.ownership).toEqual({ prod_gateway: rules });
+
+    const recovered = await runClaudeAppaPermissionsMerge({
+      existing: failed.settings,
+      ownership: failed.ownership,
+    });
+    expect(recovered.failed).toBe(false);
+    expect(recovered.settings.permissions.allow).toEqual(["Read", ...rules]);
+    expect(recovered.settings.permissions.deny).toEqual(["Bash"]);
+    expect(recovered.settings.env).toEqual({ KEEP: "value" });
+    expect(recovered.ownership).toEqual({ prod_gateway: rules });
   });
 });
 

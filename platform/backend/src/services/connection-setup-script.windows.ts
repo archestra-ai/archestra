@@ -14,7 +14,9 @@ import {
 import type { ConnectionSetupClientId } from "@/types";
 import { archestraMarkWithText } from "./archestra-mark";
 import {
+  CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING,
   claudeCodeAppaPermissionRules,
+  claudeCodeAppaPermissionsAreLiteral,
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
   codexConnectionVerificationOptions,
@@ -557,6 +559,11 @@ ${pluginInstalls}`);
  * stay arrays.
  */
 function claudeAppaPermissionsSection(mcp: SetupScriptMcpSection): string {
+  if (!claudeCodeAppaPermissionsAreLiteral(mcp)) {
+    return `# >>> archestra:claude-appa-permissions >>>
+Warn ${psq(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING)}
+# <<< archestra:claude-appa-permissions <<<`;
+  }
   const rulesJson = JSON.stringify(claudeCodeAppaPermissionRules(mcp));
   const legacyJson = JSON.stringify(legacyServerNames(mcp));
   return `# >>> archestra:claude-appa-permissions >>>
@@ -721,8 +728,9 @@ $archAppaBackup = $archAppaSettingsPath + '.archestra-backup'
 if ((Test-Path -LiteralPath $archAppaSettingsPath) -and -not (Test-Path -LiteralPath $archAppaBackup)) {
   Copy-Item -LiteralPath $archAppaSettingsPath -Destination $archAppaBackup
 }
-Write-ArchAppaJsonAtomic $archAppaSettingsPath $archAppaSettingsJson
-Write-ArchAppaJsonAtomic $archAppaStatePath $archAppaStateJson`;
+# Record ownership first so a failed settings write remains recoverable.
+Write-ArchAppaJsonAtomic $archAppaStatePath $archAppaStateJson
+Write-ArchAppaJsonAtomic $archAppaSettingsPath $archAppaSettingsJson`;
 }
 
 /**

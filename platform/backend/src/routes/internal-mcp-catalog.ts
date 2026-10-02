@@ -1032,6 +1032,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         current: originalCatalogItem.deploymentSpecYaml,
       });
 
+      if (restBody.localConfig) {
+        assertMcpServiceAccountAllowed(restBody.localConfig.serviceAccount);
+      }
+
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
       // gated (409) and applied atomically by renameCascade — a pure DB
@@ -1120,10 +1124,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // `localConfigSecretId` on the row itself, so the normal gate
       // already detects them; no override needed there.
       let catalogSharedSecretValuesRotated = false;
-
-      if (restBody.localConfig) {
-        assertMcpServiceAccountAllowed(restBody.localConfig.serviceAccount);
-      }
 
       // Handle OAuth client secret - either via Readonly Vault or direct value
       if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {

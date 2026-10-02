@@ -136,6 +136,37 @@ describe("internal MCP catalog deployment YAML permission", () => {
     expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
   });
 
+  test("a disallowed runtime service account cannot persist a catalog rename", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Unchanged Runtime Identity",
+      serverType: "local",
+      localConfig: { command: "node", arguments: ["server.js"] },
+      authorId: admin.id,
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name: "Rejected Runtime Rename",
+        localConfig: {
+          command: "node",
+          arguments: ["server.js"],
+          serviceAccount: "unapproved-runtime-identity",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("not allowed");
+    const persisted = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(persisted?.name).toBe("Unchanged Runtime Identity");
+    expect(persisted?.localConfig?.serviceAccount).toBeUndefined();
+  });
+
   test("an editor cannot clear stored YAML", async ({
     makeInternalMcpCatalog,
   }) => {

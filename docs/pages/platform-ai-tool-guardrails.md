@@ -36,7 +36,9 @@ On a fresh install, the page asks you to create a policy. A chat drafts one from
 
 From then on, administrators can turn enforcement off and on with a switch. The policy stays as it is. Ask about the policy explains what it does.
 
-Turning enforcement on also applies to sessions that are already running. If a subagent in such a session finished while enforcement was off, the proxy refuses the session's later requests. Start a new session to continue — or rewind the conversation to before the subagent ran.
+OpenAPPA checks only what it sees while enforcement is on. A session that started while enforcement was off stays unchecked after you turn it on, and so do its subagents and teammates. Start a new session to work under the policy.
+
+A session that was checked before keeps its check when you turn enforcement off and on again. OpenAPPA ignores what the session did while enforcement was off — tool results, subagent answers, and messages from that time reach the model as they are.
 
 ## Subagents and Teammates
 
@@ -44,9 +46,9 @@ A subagent's answer reaches its session only through a return check. Before the 
 
 Claude Code teammates pass the same check. A teammate's message to its lead crosses the check, and the lead takes on the message's restrictions. A lead's message carries the lead's restrictions to the teammate. After the lead reads a private report, for example, the teammate it messages cannot post the report publicly either.
 
-The model reads a message only if it passed the check on its way. Any other message is withheld, and the model reads a notice in its place. This holds for messages from other sessions too. It also holds for messages from before enforcement turned on — even ones the model already read. Claude Code's own team notices, such as a teammate going idle, carry no agent text. They pass as they are.
+The model reads a message only if it passed the check on its way. Any other message is withheld, and the model reads a notice in its place. This holds for messages from other sessions too. A teammate's or lead's message sent while enforcement was off passes as it is — unless a message from the same sender passed the check before. Claude Code's own team notices, such as a teammate going idle, carry no agent text. They pass as they are.
 
-A teammate that started while enforcement was off cannot be checked. OpenAPPA refuses its requests and does not send it messages. Start a new teammate, under a new name, to continue its work. OpenAPPA checks each teammate from its own spawn, so it refuses a second teammate under a name the session already used.
+A teammate that started while enforcement was off stays unchecked. A checked lead does not send it messages. Start a new teammate, under a new name, to continue its work under the policy. OpenAPPA checks each teammate from its own spawn, so it refuses a second teammate under a name the session already used.
 
 ## Client Support Matrix
 

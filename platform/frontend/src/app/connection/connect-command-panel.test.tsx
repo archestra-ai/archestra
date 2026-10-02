@@ -379,22 +379,23 @@ describe("ConnectCommandPanel", () => {
     expect(
       screen.queryByRole("link", { name: "the LLM Proxy" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Review the setup" }),
-    ).toBeNull();
-    expect(screen.queryByText("your Claude subscription")).toBeNull();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Customize setup" }),
+    const proxySummary = screen
+      .getByText("your Claude subscription")
+      .closest("li");
+    expect(proxySummary).toHaveTextContent(
+      "Passthrough to Anthropic through the LLM Proxy using your Claude subscription",
     );
+    expect(
+      screen.queryByText("Good for reusing a subscription"),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("connect-change-proxy"));
     expect(
       screen.getByRole("tab", { name: "Claude subscription" }),
     ).toHaveAttribute("aria-selected", "true");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Done customizing" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(
       screen.queryByRole("tab", { name: "Claude subscription" }),
-    ).toBeNull();
+    ).not.toBeInTheDocument();
     expect(screen.getByText(COMMAND)).not.toBeVisible();
     await userEvent.click(screen.getByText("Advanced: terminal setup"));
     expect(screen.getByText(COMMAND)).toBeVisible();
@@ -408,7 +409,7 @@ describe("ConnectCommandPanel", () => {
     const user = userEvent.setup();
     renderPanel({ client: findClient("claude-desktop") });
     await screen.findByText(COMMAND);
-    await user.click(screen.getByRole("button", { name: "Customize setup" }));
+    await user.click(screen.getByTestId("connect-change-platform"));
     await user.click(screen.getByRole("tab", { name: "Windows" }));
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -418,6 +419,7 @@ describe("ConnectCommandPanel", () => {
         }),
       ),
     );
+    await user.click(screen.getByTestId("connect-change-proxy"));
     await user.click(screen.getByRole("tab", { name: "API key" }));
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -570,10 +572,6 @@ describe("ConnectCommandPanel", () => {
           screen.queryByRole("button", { name: "Retry setup" }),
         ).toBeNull(),
       );
-      expect(
-        screen.queryByRole("heading", { name: "Connect Claude Code" }),
-      ).toBeNull();
-      expect(screen.queryByText("for tools")).toBeNull();
       expect(screen.queryByText(COMMAND)).toBeNull();
       expect(screen.queryByTestId("connect-regenerate-command")).toBeNull();
       expect(screen.queryByTestId("connect-change-skills")).toBeNull();
@@ -581,6 +579,7 @@ describe("ConnectCommandPanel", () => {
         screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
       ).toBeNull();
       await user.click(screen.getByRole("button", { name: "Customize setup" }));
+      await user.click(screen.getByTestId("connect-change-skills"));
       await user.click(
         screen.getByRole("checkbox", { name: "Install shared skills" }),
       );

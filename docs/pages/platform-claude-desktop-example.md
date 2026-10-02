@@ -3,7 +3,7 @@ title: Using Claude Desktop (Cowork)
 category: Examples
 order: 9
 description: Route Claude Desktop's inference and tools through Archestra
-lastUpdated: 2026-10-01
+lastUpdated: 2026-09-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,7 +26,7 @@ MCP sign-in requires HTTPS, including local deployments. Use a trusted local HTT
 
 Connecting the LLM Proxy switches Desktop to third-party inference mode. That mode keeps its own conversation history, so your Claude.ai conversations do not appear there at first. See [Import Conversations](#import-conversations) to bring them over, and [Revert](#revert) before switching. Tools-only setup does not require third-party inference.
 
-Open **Connect** and select **Claude Desktop**. **Customize setup** lets you change authentication, model, gateway, and platform. The platform defaults to your detected operating system and remains editable. Finish active Desktop tasks before installing. Download the installer and open the `.mcpb` file in normal Claude Desktop. Confirm installation in Desktop’s native dialog. The setup helper opens your browser for sign-in and restart confirmation. You can remove the helper from Desktop’s Extensions settings afterward.
+Open **Connect** and select **Claude Desktop**. Review your authentication, model, gateway, and platform. The platform defaults to your detected operating system and remains editable. Finish active Desktop tasks before installing. Download the installer and open the `.mcpb` file in normal Claude Desktop. Confirm installation in Desktop’s native dialog. The setup helper opens your browser for sign-in and restart confirmation. You can remove the helper from Desktop’s Extensions settings afterward.
 
 The **Advanced: terminal setup** option requires Python 3.9+ and Claude Code for subscription sign-in. It remains available for existing third-party profiles that cannot install Desktop extensions.
 
@@ -44,7 +44,7 @@ Model access and usage limits depend on your Anthropic account. Send a message a
 
 ## API-Key Inference
 
-Open **Customize setup** and choose **API key** in the authentication settings. Archestra provisions a personal virtual key backed by your configured Anthropic key. The installer applies it without a Claude subscription sign-in.
+Choose **API key** in the review step's authentication settings. Archestra provisions a personal virtual key backed by your configured Anthropic key. The installer applies it without a Claude subscription sign-in.
 
 ## Tools And Skills
 

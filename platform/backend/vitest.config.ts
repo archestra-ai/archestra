@@ -84,6 +84,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@archestra/shared/gemini-models": path.resolve(
+        __dirname,
+        "../shared/gemini-models.ts",
+      ),
       "@archestra/shared/access-control": path.resolve(
         __dirname,
         "../shared/access-control.ts",

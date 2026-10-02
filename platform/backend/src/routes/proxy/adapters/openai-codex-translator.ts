@@ -35,11 +35,15 @@ type LooseItem = Record<string, unknown>;
 /**
  * Builds the Codex Responses request from an inbound chat-completions request,
  * applying the mandatory Codex-backend transforms. Always streaming upstream —
- * the client accumulates for non-streaming callers.
+ * the client accumulates for non-streaming callers. A `promptCacheKey` is used
+ * only when the caller sent no `prompt_cache_key`.
  */
 export function buildCodexResponsesRequest(
   params: ChatCompletionsRequest,
+  promptCacheKey?: string,
 ): ResponseCreateParamsStreaming {
+  const callerPromptCacheKey = (params as { prompt_cache_key?: string | null })
+    .prompt_cache_key;
   const request: LooseItem = {
     model: params.model,
     instructions: archestraMcpBranding.brandBuiltInText(
@@ -56,6 +60,10 @@ export function buildCodexResponsesRequest(
     parallel_tool_calls:
       (params as { parallel_tool_calls?: boolean }).parallel_tool_calls ?? true,
   };
+  const cacheKey = callerPromptCacheKey || promptCacheKey;
+  if (cacheKey) {
+    request.prompt_cache_key = cacheKey;
+  }
 
   const tools = chatToolsToResponsesTools(params.tools);
   if (tools.length > 0) {
@@ -395,11 +403,15 @@ function reasoningEffort(
   return "medium";
 }
 
+// Responses usage counts cached and reasoning tokens inside the input and
+// output totals, as chat-completions usage does, so the details carry over.
 function mapResponsesUsage(
   usage:
     | {
         input_tokens?: number;
+        input_tokens_details?: { cached_tokens?: number } | null;
         output_tokens?: number;
+        output_tokens_details?: { reasoning_tokens?: number } | null;
         total_tokens?: number;
       }
     | null
@@ -410,10 +422,18 @@ function mapResponsesUsage(
   }
   const promptTokens = usage.input_tokens ?? 0;
   const completionTokens = usage.output_tokens ?? 0;
+  const cachedTokens = usage.input_tokens_details?.cached_tokens;
+  const reasoningTokens = usage.output_tokens_details?.reasoning_tokens;
   return {
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
     total_tokens: usage.total_tokens ?? promptTokens + completionTokens,
+    ...(cachedTokens !== undefined
+      ? { prompt_tokens_details: { cached_tokens: cachedTokens } }
+      : {}),
+    ...(reasoningTokens !== undefined
+      ? { completion_tokens_details: { reasoning_tokens: reasoningTokens } }
+      : {}),
   } as Usage;
 }
 

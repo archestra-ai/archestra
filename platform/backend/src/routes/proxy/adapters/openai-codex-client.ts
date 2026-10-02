@@ -24,6 +24,7 @@ import config from "@/config";
 import type { OpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { createOpenAiCodexFetch } from "@/services/openai-codex-token";
 import type { CreateClientOptions, OpenAi } from "@/types";
+import { resolveCodexSession } from "./openai-codex-session";
 import {
   buildCodexResponsesRequest,
   codexResponsesStreamToChatChunks,
@@ -69,6 +70,7 @@ class OpenAiCodexClient {
   };
 
   private openai: OpenAIProvider;
+  private promptCacheKey: string | undefined;
 
   constructor(params: {
     credential: OpenAiCodexCredential;
@@ -76,6 +78,8 @@ class OpenAiCodexClient {
     innerFetch?: FetchLike;
   }) {
     const { credential, options, innerFetch } = params;
+    const session = resolveCodexSession(options.sessionId);
+    this.promptCacheKey = session.promptCacheKey;
     this.openai = new OpenAIProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,
       // The Codex backend authenticates via the fetch wrapper's OAuth bearer;
@@ -85,11 +89,10 @@ class OpenAiCodexClient {
       // proxies) would misroute the subscription request. Override only via the
       // dedicated codex env config.
       baseURL: config.llm.openai.codex.apiBaseUrl,
-      // A stable per-client session id for the Codex `session_id` header.
       fetch: createOpenAiCodexFetch({
         credential,
         providerApiKeyId: options.llmProviderApiKeyId,
-        sessionId: randomUUID(),
+        sessionId: session.sessionId,
         innerFetch,
       }),
     });
@@ -99,7 +102,7 @@ class OpenAiCodexClient {
     params: ChatCompletionsRequest & { stream?: boolean },
   ): Promise<ChatCompletionsResponse | AsyncIterable<ChatCompletionChunk>> {
     const wantsStream = params.stream === true;
-    const codexBody = buildCodexResponsesRequest(params);
+    const codexBody = buildCodexResponsesRequest(params, this.promptCacheKey);
 
     // Always stream upstream — the Codex backend requires it.
     const upstream = (await this.openai.responses.create(

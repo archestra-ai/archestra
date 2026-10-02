@@ -11,7 +11,6 @@
  * returned to the caller unchanged. Non-streaming callers get the final
  * Response folded from the stream's terminal `response.completed` event.
  */
-import { createHash, randomUUID } from "node:crypto";
 import OpenAIProvider from "openai";
 import type {
   CompactedResponse,
@@ -32,6 +31,7 @@ import {
   type OpenAi,
   type OpenAiCodexPassthrough,
 } from "@/types";
+import { resolveCodexSession } from "./openai-codex-session";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type ResponsesRequest = OpenAi.Types.ResponsesRequest;
@@ -91,12 +91,8 @@ class OpenAiCodexResponsesClient {
     innerFetch?: FetchLike;
   }) {
     const { credential, options, innerFetch } = params;
-    // The proxy builds a new client for every request. With a new random
-    // session on each one, the backend spread the steps of one run over
-    // different prompt caches, and most steps read nothing from the cache.
-    this.promptCacheKey = options.sessionId
-      ? codexSessionId(options.sessionId)
-      : undefined;
+    const session = resolveCodexSession(options.sessionId);
+    this.promptCacheKey = session.promptCacheKey;
     this.openai = new OpenAIProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,
       // The Codex backend authenticates via the fetch wrapper's OAuth bearer;
@@ -108,7 +104,7 @@ class OpenAiCodexResponsesClient {
       fetch: createOpenAiCodexFetch({
         credential,
         providerApiKeyId: options.llmProviderApiKeyId,
-        sessionId: this.promptCacheKey ?? randomUUID(),
+        sessionId: session.sessionId,
         innerFetch,
       }),
     });
@@ -216,17 +212,6 @@ function applyCodexResponsesTransforms(
       ? { prompt_cache_key: promptCacheKey }
       : {}),
   } as unknown as ResponseCreateParamsStreaming;
-}
-
-/**
- * Derives the Codex session id and prompt cache key from an Archestra session.
- * The upstream gets a UUID-shaped hash, the shape Codex itself sends, never
- * the internal id (a ChatOps session id names its channel).
- */
-function codexSessionId(sessionId: string): string {
-  const hex = createHash("sha256").update(sessionId).digest("hex");
-  const variant = ((Number.parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 /**

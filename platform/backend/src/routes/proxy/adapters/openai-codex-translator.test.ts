@@ -49,6 +49,26 @@ describe("buildCodexResponsesRequest", () => {
     expect(body.model).toBe("gpt-5.5-codex");
   });
 
+  it("adds the session's prompt cache key unless the caller sent one", () => {
+    const fromSession = buildCodexResponsesRequest(
+      req(),
+      "session-key",
+    ) as unknown as Record<string, unknown>;
+    const fromCaller = buildCodexResponsesRequest(
+      req({
+        prompt_cache_key: "caller-key",
+      } as Partial<ChatCompletionsRequest>),
+      "session-key",
+    ) as unknown as Record<string, unknown>;
+    const withoutSession = buildCodexResponsesRequest(
+      req(),
+    ) as unknown as Record<string, unknown>;
+
+    expect(fromSession.prompt_cache_key).toBe("session-key");
+    expect(fromCaller.prompt_cache_key).toBe("caller-key");
+    expect(withoutSession).not.toHaveProperty("prompt_cache_key");
+  });
+
   it("maps chat messages, tool calls, and tool results into responses input", () => {
     const body = buildCodexResponsesRequest(
       req({
@@ -199,6 +219,36 @@ describe("codexResponsesStreamToChatChunks + fold", () => {
     expect(response.choices[0].message.content).toBe("Hello world");
     expect(response.choices[0].finish_reason).toBe("stop");
     expect(response.usage).toMatchObject({ prompt_tokens: 10 });
+  });
+
+  it("keeps cached and reasoning tokens in the chat usage", async () => {
+    // Without the cached tokens, the proxy records every prompt token as
+    // uncached input and reports no cache reads for these requests.
+    const events = [
+      { type: "response.output_text.delta", delta: "Hi" },
+      {
+        type: "response.completed",
+        response: {
+          usage: {
+            input_tokens: 1000,
+            input_tokens_details: { cached_tokens: 896 },
+            output_tokens: 20,
+            output_tokens_details: { reasoning_tokens: 5 },
+            total_tokens: 1020,
+          },
+        },
+      },
+    ];
+
+    const chunks = await collect(
+      codexResponsesStreamToChatChunks({ stream: streamOf(events), ...base }),
+    );
+
+    expect(chunks.at(-1)?.usage).toMatchObject({
+      prompt_tokens: 1000,
+      prompt_tokens_details: { cached_tokens: 896 },
+      completion_tokens_details: { reasoning_tokens: 5 },
+    });
   });
 
   it("translates a streamed tool call into tool_calls chunks and finish_reason tool_calls", async () => {

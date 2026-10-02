@@ -1,5 +1,6 @@
 /** Serialize JSON values without PowerShell's extended object metadata. */
 export function renderPowerShellJsonWriter(name: string): string {
+  // white-label-ok: Stable internal CLR type shared by setup and cleanup, not display text.
   return `function ${name}($Value) {
   if (-not ('Archestra.ConnectionSetup.JsonValuesV1' -as [type])) {
     Add-Type -TypeDefinition '

@@ -89,8 +89,8 @@ import {
   getMessageFeedback,
   PERSISTED_MESSAGE_ID_METADATA_KEY,
 } from "@/lib/chat/chat-utils";
+import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
-import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import {
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
@@ -328,7 +328,7 @@ export function ChatMessages({
   }, [agentTools, catalogItems]);
 
   const updateChatMessageMutation = useUpdateChatMessage(conversationId);
-  // Resolved once for the whole transcript: a locked chat's attachments cannot
+  // Resolved once for the whole transcript: an encrypted chat's attachments cannot
   // be copied into a knowledge base, so their chips do not offer it.
   const { data: messagesConversation } = useConversation(conversationId);
   const canSaveToKnowledge = isActionAvailableForConversation(

@@ -117,8 +117,8 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     return part.text;
   }
 
-  test("opens the app as a locked chat when the request carries a key", async () => {
-    config.lockedChat.escrowPublicKey = ESCROW_PEM;
+  test("opens the app as an encrypted chat when the request carries a key", async () => {
+    config.encryptedChat.escrowPublicKey = ESCROW_PEM;
     const dek = randomBytes(32);
     const appId = await createApp("Ledger");
     await editApp(appId);
@@ -126,7 +126,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     const res = await app.inject({
       method: "POST",
       url: `/api/apps/${appId}/open-in-chat`,
-      headers: { "x-archestra-locked-chat-key": dek.toString("base64url") },
+      headers: { "x-archestra-encrypted-chat-key": dek.toString("base64url") },
     });
     expect(res.statusCode).toBe(200);
     const { conversationId } = res.json();
@@ -136,10 +136,10 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
       userId: user.id,
       organizationId,
     });
-    expect(conversation?.lockedChat).toBe(true);
-    // Not "Ledger": a plaintext title would say which app the locked chat is
+    expect(conversation?.encryptedChat).toBe(true);
+    // Not "Ledger": a plaintext title would say which app the encrypted chat is
     // running. It is the final title, so nothing tries to regenerate it.
-    expect(conversation?.title).toBe("Locked chat");
+    expect(conversation?.title).toBe("Encrypted chat");
     expect(conversation?.titleIsPlaceholder).toBe(false);
 
     // What the server seeded is sealed like anything the model would write:

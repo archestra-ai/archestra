@@ -38,7 +38,7 @@ import {
   type ConversationFileItem,
   persistentFilesSection,
 } from "@/lib/chat/conversation-files";
-import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
+import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -296,7 +296,7 @@ export function ConversationFilesPanel({
           selectedId={selectedId}
           onOpen={openFile}
           onRequestDelete={requestDelete}
-          // Withheld entirely in a locked chat: the backend refuses to copy its
+          // Withheld entirely in an encrypted chat: the backend refuses to copy its
           // attachments into a repository, since that would write a plaintext
           // copy others can read. Offering the action would only produce an
           // error the user cannot act on.

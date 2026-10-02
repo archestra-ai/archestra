@@ -1,4 +1,4 @@
-import { LOCKED_CHAT_REDACTED_VALUES } from "@archestra/shared";
+import { ENCRYPTED_CHAT_REDACTED_VALUES } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -27,12 +27,12 @@ export type MCPGatewayAuthMethod = z.infer<typeof MCPGatewayAuthMethodSchema>;
  * - initialize: { capabilities, serverInfo }
  */
 /**
- * The two shapes a locked-chat row's content takes when it is not available to
+ * The two shapes an encrypted-chat row's content takes when it is not available to
  * the reader: encrypted under the browser key, or never stored.
  */
-const LockedChatUnavailableContentSchema = z.union([
-  z.object({ __lockedChatSealed: z.string() }),
-  z.object({ __redacted: z.enum(LOCKED_CHAT_REDACTED_VALUES) }),
+const EncryptedChatUnavailableContentSchema = z.union([
+  z.object({ __encryptedChatSealed: z.string() }),
+  z.object({ __redacted: z.enum(ENCRYPTED_CHAT_REDACTED_VALUES) }),
 ]);
 
 export const SelectMcpToolCallSchema = createSelectSchema(
@@ -47,7 +47,7 @@ export const SelectMcpToolCallSchema = createSelectSchema(
   // Server-side plumbing telling the read path which key the row is under.
   // Clients never need it: a locked row announces itself through the sentinel,
   // which carries the conversation id.
-  .omit({ lockedChatConversationId: true })
+  .omit({ encryptedChatConversationId: true })
   .extend({
     userName: z.string().nullable(),
     // Name of the owning app for app-owned calls; null for agent-owned calls
@@ -109,7 +109,7 @@ export const InsertMcpToolCallSchema = createInsertSchema(
   });
 
 /**
- * What routes serialize. A locked-chat row carries a sentinel where the
+ * What routes serialize. An encrypted-chat row carries a sentinel where the
  * recorded call would be — unavailable, not malformed — so the response schema
  * has to admit it or one such row fails serialization for the whole list.
  * Deliberately separate from the select schema above: widening that would push
@@ -118,7 +118,7 @@ export const InsertMcpToolCallSchema = createInsertSchema(
  */
 export const McpToolCallResponseSchema = SelectMcpToolCallSchema.extend({
   toolCall: z
-    .union([CommonToolCallSchema, LockedChatUnavailableContentSchema])
+    .union([CommonToolCallSchema, EncryptedChatUnavailableContentSchema])
     .nullable(),
 });
 

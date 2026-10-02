@@ -1,51 +1,51 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import {
-  isLockedChatEnabled,
-  LEGACY_LOCKED_CHAT_KEY_HEADER,
-  LOCKED_CHAT_KEY_HEADER,
-  lockedChatDekFingerprint,
-  lockedChatDekMatches,
-  parseLockedChatDekHeader,
-} from "@/content-encryption/locked-chat";
-import { wrapLockedChatDek } from "@/content-encryption/locked-chat-escrow";
-import type { ConversationContentKey, LockedChatEscrowBlob } from "@/types";
+  ENCRYPTED_CHAT_KEY_HEADER,
+  encryptedChatDekFingerprint,
+  encryptedChatDekMatches,
+  isEncryptedChatEnabled,
+  LEGACY_ENCRYPTED_CHAT_KEY_HEADERS,
+  parseEncryptedChatDekHeader,
+} from "@/content-encryption/encrypted-chat";
+import { wrapEncryptedChatDek } from "@/content-encryption/encrypted-chat-escrow";
+import type { ConversationContentKey, EncryptedChatEscrowBlob } from "@/types";
 import { ApiError } from "@/types/api";
 
 /**
- * Request-side helpers for locked chats: header parsing, access
+ * Request-side helpers for encrypted chats: header parsing, access
  * resolution, and creation bookkeeping. All key material stays request-scoped.
  */
 
-export const LOCKED_CHAT_STATIC_TITLE = "Locked chat";
+export const ENCRYPTED_CHAT_STATIC_TITLE = "Encrypted chat";
 
 /** Error type surfaced on a present-but-wrong conversation key (409). */
-export const LOCKED_CHAT_KEY_MISMATCH_TYPE = "locked_chat_key_mismatch";
+export const ENCRYPTED_CHAT_KEY_MISMATCH_TYPE = "encrypted_chat_key_mismatch";
 
 /**
- * Validate a locked-chat creation request and produce the row fields: the
+ * Validate an encrypted-chat creation request and produce the row fields: the
  * caller must present the freshly generated DEK so it can be fingerprinted and
  * escrow-wrapped. Never returns the DEK for storage.
  *
  * The escrow record is mandatory, not optional: the conversation's audit trail
  * is encrypted under this DEK, so without an escrow copy it would be
- * recoverable by nobody. `isLockedChatEnabled()` already requires a
+ * recoverable by nobody. `isEncryptedChatEnabled()` already requires a
  * configured escrow key, so reaching the wrap below means one exists — a
  * failure there is fail-closed and no conversation is created.
  */
-export function resolveLockedChatCreation(params: {
+export function resolveEncryptedChatCreation(params: {
   request: FastifyRequest;
   conversationId: string;
 }): {
-  lockedChat: true;
-  lockedChatDekFingerprint: string;
-  lockedChatEscrow: LockedChatEscrowBlob;
+  encryptedChat: true;
+  encryptedChatDekFingerprint: string;
+  encryptedChatEscrow: EncryptedChatEscrowBlob;
 } {
-  if (!isLockedChatEnabled()) {
+  if (!isEncryptedChatEnabled()) {
     throw new ApiError(
       403,
-      "Locked chats are not enabled on this instance. An operator enables " +
-        "them by configuring ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY, " +
+      "Encrypted chats are not enabled on this instance. An operator enables " +
+        "them by configuring ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY, " +
         "which keeps an offline-recoverable copy of each conversation key.",
     );
   }
@@ -53,21 +53,21 @@ export function resolveLockedChatCreation(params: {
   if (!dek) {
     throw new ApiError(
       400,
-      `Locked chat creation requires the ${LOCKED_CHAT_KEY_HEADER} header`,
+      `Encrypted chat creation requires the ${ENCRYPTED_CHAT_KEY_HEADER} header`,
     );
   }
   return {
-    lockedChat: true,
-    lockedChatDekFingerprint: lockedChatDekFingerprint(
+    encryptedChat: true,
+    encryptedChatDekFingerprint: encryptedChatDekFingerprint(
       params.conversationId,
       dek,
     ),
-    lockedChatEscrow: wrapLockedChatDek(dek),
+    encryptedChatEscrow: wrapEncryptedChatDek(dek),
   };
 }
 
 /**
- * The locked-chat half of creating a conversation the SERVER assembles rather
+ * The encrypted-chat half of creating a conversation the SERVER assembles rather
  * than the composer — an app chat, which is opened by a POST from the browser
  * and so can carry the same key header the composer sends.
  *
@@ -79,9 +79,11 @@ export function resolveLockedChatCreation(params: {
  * The caller must both insert the conversation under this `conversationId` and
  * seal anything it seeds into the chat with `key`.
  */
-export function resolveLockedChatCreationIfRequested(request: FastifyRequest): {
+export function resolveEncryptedChatCreationIfRequested(
+  request: FastifyRequest,
+): {
   conversationId: string;
-  fields: ReturnType<typeof resolveLockedChatCreation>;
+  fields: ReturnType<typeof resolveEncryptedChatCreation>;
   key: ConversationContentKey;
 } | null {
   const dek = readDekHeader(request);
@@ -89,42 +91,42 @@ export function resolveLockedChatCreationIfRequested(request: FastifyRequest): {
   const conversationId = randomUUID();
   return {
     conversationId,
-    // Re-reads the header and re-validates that locked chats are enabled and
+    // Re-reads the header and re-validates that encrypted chats are enabled and
     // escrow is configured — a 403/400 here means no conversation is created.
-    fields: resolveLockedChatCreation({ request, conversationId }),
+    fields: resolveEncryptedChatCreation({ request, conversationId }),
     key: { dek, conversationId },
   };
 }
 
-export type LockedChatAccess =
+export type EncryptedChatAccess =
   | { state: "plain" }
   | { state: "unlocked"; key: ConversationContentKey }
   | { state: "locked" };
 
 /**
  * Resolve what the current request may see of a conversation's content.
- * Non-locked chats are always "plain". For locked-chat ones:
+ * Non-encrypted chats are always "plain". For encrypted-chat ones:
  * a valid key unlocks, an absent key yields the tombstone ("locked"), and a
  * present-but-wrong key is a 409 — the client's stored key does not belong
  * to this conversation, which is distinct from both "missing" and "forbidden".
  */
-export function resolveLockedChatAccess(params: {
+export function resolveEncryptedChatAccess(params: {
   request: FastifyRequest;
   conversation: {
     id: string;
-    lockedChat: boolean;
-    lockedChatDekFingerprint: string | null;
+    encryptedChat: boolean;
+    encryptedChatDekFingerprint: string | null;
   };
-}): LockedChatAccess {
-  if (!params.conversation.lockedChat) return { state: "plain" };
+}): EncryptedChatAccess {
+  if (!params.conversation.encryptedChat) return { state: "plain" };
 
   const dek = readDekHeader(params.request);
   if (!dek) return { state: "locked" };
 
-  const storedFingerprint = params.conversation.lockedChatDekFingerprint;
+  const storedFingerprint = params.conversation.encryptedChatDekFingerprint;
   if (
     !storedFingerprint ||
-    !lockedChatDekMatches({
+    !encryptedChatDekMatches({
       storedFingerprint,
       conversationId: params.conversation.id,
       dek,
@@ -135,8 +137,8 @@ export function resolveLockedChatAccess(params: {
     // unambiguously a key mismatch.
     throw new ApiError(
       409,
-      "The provided key does not match this locked chat",
-      LOCKED_CHAT_KEY_MISMATCH_TYPE,
+      "The provided key does not match this encrypted chat",
+      ENCRYPTED_CHAT_KEY_MISMATCH_TYPE,
     );
   }
   return {
@@ -146,23 +148,23 @@ export function resolveLockedChatAccess(params: {
 }
 
 /**
- * Like resolveLockedChatAccess but for requests that MUST have the key
+ * Like resolveEncryptedChatAccess but for requests that MUST have the key
  * (streaming, message edits): "locked" is not an option.
  */
-export function requireLockedChatKey(params: {
+export function requireEncryptedChatKey(params: {
   request: FastifyRequest;
   conversation: {
     id: string;
-    lockedChat: boolean;
-    lockedChatDekFingerprint: string | null;
+    encryptedChat: boolean;
+    encryptedChatDekFingerprint: string | null;
   };
 }): ConversationContentKey | null {
-  const access = resolveLockedChatAccess(params);
+  const access = resolveEncryptedChatAccess(params);
   if (access.state === "plain") return null;
   if (access.state === "locked") {
     throw new ApiError(
       400,
-      `This locked chat requires the ${LOCKED_CHAT_KEY_HEADER} ` +
+      `This encrypted chat requires the ${ENCRYPTED_CHAT_KEY_HEADER} ` +
         "header — the key exists only in the browser that created the chat",
     );
   }
@@ -172,18 +174,22 @@ export function requireLockedChatKey(params: {
 // === Internal ===
 
 function readDekHeader(request: FastifyRequest): Buffer | null {
-  // The legacy spelling is read only as a fallback, so a browser tab loaded
-  // before the rename keeps working; see LEGACY_LOCKED_CHAT_KEY_HEADER.
+  // Legacy spellings are read only as a fallback, so a browser tab loaded
+  // before a rename keeps working; see LEGACY_ENCRYPTED_CHAT_KEY_HEADERS.
   const raw =
-    request.headers[LOCKED_CHAT_KEY_HEADER] ??
-    request.headers[LEGACY_LOCKED_CHAT_KEY_HEADER];
+    request.headers[ENCRYPTED_CHAT_KEY_HEADER] ??
+    LEGACY_ENCRYPTED_CHAT_KEY_HEADERS.map((name) => request.headers[name]).find(
+      (value) => value !== undefined,
+    );
   const value = Array.isArray(raw) ? raw[0] : raw;
   try {
-    return parseLockedChatDekHeader(value);
+    return parseEncryptedChatDekHeader(value);
   } catch (error) {
     throw new ApiError(
       400,
-      error instanceof Error ? error.message : "invalid locked chat key header",
+      error instanceof Error
+        ? error.message
+        : "invalid encrypted chat key header",
     );
   }
 }

@@ -1,18 +1,18 @@
 /**
- * Contract under test — locked chats at the route level:
+ * Contract under test — encrypted chats at the route level:
  * - the feature is FREE and on by default: creation needs no license and no
  *   escrow key, only a valid 32-byte key header; disabling it via
  *   creation is refused (403) when no escrow key is configured
  * - without escrow configured, the fingerprint is stored and
- *   locked_chat_escrow stays NULL (no recoverable key copy anywhere)
+ *   encrypted_chat_escrow stays NULL (no recoverable key copy anywhere)
  * - with enterprise escrow configured, the RSA-wrapped blob is stored and
  *   independently recoverable with the offline private key
  * - message content at rest is an envelope only the browser-held key opens;
  *   GET decrypts with the key, returns the locked shape without it, and 409s
  *   on a wrong key
- * - the sidebar list carries no message content for locked-chat rows
+ * - the sidebar list carries no message content for encrypted-chat rows
  * - fork/compact/projects/title-generation are rejected or no-op
- * - the at-rest backfill sweep never rewrites locked-chat envelopes
+ * - the at-rest backfill sweep never rewrites encrypted-chat envelopes
  */
 import {
   constants as cryptoConstants,
@@ -42,9 +42,9 @@ const { publicKey, privateKey } = generateKeyPairSync("rsa", {
 });
 const ESCROW_PEM = publicKey.export({ type: "spki", format: "pem" }) as string;
 
-const KEY_HEADER = "x-archestra-locked-chat-key";
+const KEY_HEADER = "x-archestra-encrypted-chat-key";
 
-describe("locked chat routes", () => {
+describe("encrypted chat routes", () => {
   let app: FastifyInstanceWithZod;
   let currentUser: User;
   let organizationId: string;
@@ -59,11 +59,11 @@ describe("locked chat routes", () => {
     // config auto-restore does not apply — a flag a test flips would
     // otherwise leak into the next test.
     config.enterpriseFeatures.core = false;
-    // Escrow is what enables locked-chat, and the db sink needs no license — so
+    // Escrow is what enables encrypted-chat, and the db sink needs no license — so
     // this IS the unlicensed default posture, not an enterprise one.
-    config.lockedChat.escrowPublicKey = ESCROW_PEM;
+    config.encryptedChat.escrowPublicKey = ESCROW_PEM;
     // Force at-rest content encryption OFF (a local .env may set
-    // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): locked-chat must be exercised on a
+    // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): encrypted-chat must be exercised on a
     // free-instance posture, and the envelopes asserted on must be the
     // browser-DEK ones.
     config.contentEncryption.secret = undefined;
@@ -100,34 +100,34 @@ describe("locked chat routes", () => {
     return { [KEY_HEADER]: key.toString("base64url") };
   }
 
-  async function createLockedChatConversation(): Promise<string> {
+  async function createEncryptedChatConversation(): Promise<string> {
     const response = await app.inject({
       method: "POST",
       url: "/api/chat/conversations",
       headers: dekHeader(),
-      payload: { agentId, lockedChat: true },
+      payload: { agentId, encryptedChat: true },
     });
     expect(response.statusCode).toBe(200);
     return response.json().id as string;
   }
 
-  async function readLockedChatRow(id: string) {
+  async function readEncryptedChatRow(id: string) {
     const raw = await db.execute<{
-      locked_chat: boolean;
-      locked_chat_dek_fingerprint: string | null;
-      locked_chat_escrow: Record<string, unknown> | null;
+      encrypted_chat: boolean;
+      encrypted_chat_dek_fingerprint: string | null;
+      encrypted_chat_escrow: Record<string, unknown> | null;
     }>(
-      sql`SELECT locked_chat, locked_chat_dek_fingerprint, locked_chat_escrow FROM conversations WHERE id = ${id}::uuid`,
+      sql`SELECT encrypted_chat, encrypted_chat_dek_fingerprint, encrypted_chat_escrow FROM conversations WHERE id = ${id}::uuid`,
     );
     return raw.rows[0];
   }
 
-  describe("POST /api/chat/conversations (locked chat)", () => {
+  describe("POST /api/chat/conversations (encrypted chat)", () => {
     test("rejects a missing or malformed key header", async () => {
       const missing = await app.inject({
         method: "POST",
         url: "/api/chat/conversations",
-        payload: { agentId, lockedChat: true },
+        payload: { agentId, encryptedChat: true },
       });
       expect(missing.statusCode).toBe(400);
       expect(missing.json().error.message).toContain(KEY_HEADER);
@@ -136,13 +136,13 @@ describe("locked chat routes", () => {
         method: "POST",
         url: "/api/chat/conversations",
         headers: { [KEY_HEADER]: randomBytes(8).toString("base64url") },
-        payload: { agentId, lockedChat: true },
+        payload: { agentId, encryptedChat: true },
       });
       expect(short.statusCode).toBe(400);
       expect(short.json().error.message).toContain("32 bytes");
     });
 
-    test("rejects a locked chat in a project", async () => {
+    test("rejects an encrypted chat in a project", async () => {
       // A project lists its chats to everyone it is shared with, so a locked
       // one would sit in a shared space advertising a conversation none of
       // them can open. Refused before the project is even resolved.
@@ -156,7 +156,7 @@ describe("locked chat routes", () => {
         method: "POST",
         url: "/api/chat/conversations",
         headers: dekHeader(),
-        payload: { agentId, lockedChat: true, projectId: project.id },
+        payload: { agentId, encryptedChat: true, projectId: project.id },
       });
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain("project");
@@ -166,24 +166,24 @@ describe("locked chat routes", () => {
       // Escrow is the enablement switch. Without it the chat's audit trail
       // would be encrypted under a key nobody could recover, so the feature
       // is simply unavailable rather than silently unrecoverable.
-      config.lockedChat.escrowPublicKey = undefined;
+      config.encryptedChat.escrowPublicKey = undefined;
 
       const response = await app.inject({
         method: "POST",
         url: "/api/chat/conversations",
         headers: dekHeader(),
-        payload: { agentId, lockedChat: true },
+        payload: { agentId, encryptedChat: true },
       });
       expect(response.statusCode).toBe(403);
 
       const rows = await db.execute(
-        sql`SELECT id FROM conversations WHERE locked_chat = true`,
+        sql`SELECT id FROM conversations WHERE encrypted_chat = true`,
       );
       expect(rows.rows).toHaveLength(0);
     });
 
     test("creation stores the fingerprint and escrow blob, a static title, and never the raw key", async () => {
-      const id = await createLockedChatConversation();
+      const id = await createEncryptedChatConversation();
 
       const body = (
         await app.inject({
@@ -192,30 +192,30 @@ describe("locked chat routes", () => {
           headers: dekHeader(),
         })
       ).json();
-      expect(body.lockedChat).toBe(true);
-      expect(body.title).toBe("Locked chat");
+      expect(body.encryptedChat).toBe(true);
+      expect(body.title).toBe("Encrypted chat");
       // Server-side bookkeeping never reaches the API response.
-      expect(body.lockedChatEscrow).toBeUndefined();
-      expect(body.lockedChatDekFingerprint).toBeUndefined();
+      expect(body.encryptedChatEscrow).toBeUndefined();
+      expect(body.encryptedChatDekFingerprint).toBeUndefined();
 
-      const row = await readLockedChatRow(id);
-      expect(row.locked_chat).toBe(true);
-      expect(row.locked_chat_dek_fingerprint).toBeTruthy();
+      const row = await readEncryptedChatRow(id);
+      expect(row.encrypted_chat).toBe(true);
+      expect(row.encrypted_chat_dek_fingerprint).toBeTruthy();
       // The fingerprint is a digest, not the key.
-      expect(row.locked_chat_dek_fingerprint).not.toContain(
+      expect(row.encrypted_chat_dek_fingerprint).not.toContain(
         dek.toString("base64url"),
       );
-      // Escrow is mandatory, so every locked-chat row carries a wrapped copy.
-      expect(row.locked_chat_escrow).not.toBeNull();
+      // Escrow is mandatory, so every encrypted-chat row carries a wrapped copy.
+      expect(row.encrypted_chat_escrow).not.toBeNull();
     });
 
     test("the stored escrow blob is recoverable with the offline private key", async () => {
-      const id = await createLockedChatConversation();
-      const row = await readLockedChatRow(id);
-      expect(row.locked_chat_dek_fingerprint).toBeTruthy();
+      const id = await createEncryptedChatConversation();
+      const row = await readEncryptedChatRow(id);
+      expect(row.encrypted_chat_dek_fingerprint).toBeTruthy();
       // The escrow blob is independently recoverable with the private key —
       // the break-glass contract.
-      expect(row.locked_chat_escrow?.alg).toBe("RSA-OAEP-256");
+      expect(row.encrypted_chat_escrow?.alg).toBe("RSA-OAEP-256");
       const recovered = privateDecrypt(
         {
           key: privateKey,
@@ -223,7 +223,7 @@ describe("locked chat routes", () => {
           oaepHash: "sha256",
         },
         Buffer.from(
-          (row.locked_chat_escrow?.wrappedDek as string) ?? "",
+          (row.encrypted_chat_escrow?.wrappedDek as string) ?? "",
           "base64",
         ),
       );
@@ -231,13 +231,13 @@ describe("locked chat routes", () => {
     });
   });
 
-  describe("GET /api/chat/conversations/:id (locked chat)", () => {
+  describe("GET /api/chat/conversations/:id (encrypted chat)", () => {
     test.for([
       ["the feature is turned off", () => {}],
       [
         "the escrow key is removed",
         () => {
-          config.lockedChat.escrowPublicKey = undefined;
+          config.encryptedChat.escrowPublicKey = undefined;
         },
       ],
     ] as const)("an existing chat is still readable after %s", async ([
@@ -247,7 +247,7 @@ describe("locked chat routes", () => {
       // Both settings gate CREATION. Neither may orphan a chat already made:
       // the browser key is what opens the content, and the row keeps its own
       // escrow copy no matter what the current configuration says.
-      const id = await createLockedChatConversation();
+      const id = await createEncryptedChatConversation();
       await MessageModel.create(
         {
           conversationId: id,
@@ -273,11 +273,14 @@ describe("locked chat routes", () => {
       expect(response.json().messages[0].parts[0].text).toBe("still readable");
     });
 
-    test("still accepts the key under the pre-rename header name", async () => {
+    test.each([
+      "x-archestra-locked-chat-key",
+      "x-archestra-incognito-key",
+    ])("still accepts the key under the pre-rename header %s", async (legacyHeader) => {
       // A tab loaded before the rename keeps sending the old header, and its
       // key is the only copy outside escrow — so dropping it would show the
       // user a tombstone for their own chat.
-      const id = await createLockedChatConversation();
+      const id = await createEncryptedChatConversation();
       await MessageModel.create(
         {
           conversationId: id,
@@ -294,7 +297,7 @@ describe("locked chat routes", () => {
       const response = await app.inject({
         method: "GET",
         url: `/api/chat/conversations/${id}`,
-        headers: { "x-archestra-incognito-key": dek.toString("base64url") },
+        headers: { [legacyHeader]: dek.toString("base64url") },
       });
 
       expect(response.statusCode).toBe(200);
@@ -307,10 +310,10 @@ describe("locked chat routes", () => {
     test("decrypts with the key; locked without it; 409 on a wrong key", async () => {
       // Orthogonality pin: this full roundtrip runs on a FREE instance — no
       // enterprise license (beforeEach) and no at-rest content-encryption
-      // secret. LockedChat must not depend on either.
+      // secret. EncryptedChat must not depend on either.
       expect(config.contentEncryption.secret).toBeUndefined();
 
-      const id = await createLockedChatConversation();
+      const id = await createEncryptedChatConversation();
       const content = {
         id: "msg-1",
         role: "user",
@@ -357,10 +360,10 @@ describe("locked chat routes", () => {
       expect(wrong.json().error.message).toContain("does not match");
     });
 
-    test("the conversations list carries no message content for locked-chat rows", async ({
+    test("the conversations list carries no message content for encrypted-chat rows", async ({
       makeConversation,
     }) => {
-      const id = await createLockedChatConversation();
+      const id = await createEncryptedChatConversation();
       await MessageModel.create(
         {
           conversationId: id,
@@ -387,20 +390,20 @@ describe("locked chat routes", () => {
       expect(list.statusCode).toBe(200);
       const rows = list.json() as Array<{
         id: string;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         messages: unknown[];
       }>;
-      const lockedChatRow = rows.find((r) => r.id === id);
-      expect(lockedChatRow?.lockedChat).toBe(true);
+      const encryptedChatRow = rows.find((r) => r.id === id);
+      expect(encryptedChatRow?.encryptedChat).toBe(true);
       expect(list.body).not.toContain("listable secret");
     });
   });
 
   describe("disabled features", () => {
     // Sharing goes through the chat's permission policy, which refuses a
-    // locked chat (see resource-permissions-cutover.sessions.test.ts).
+    // encrypted chat (see resource-permissions-cutover.sessions.test.ts).
     test("fork and compact are rejected; title generation is a no-op", async () => {
-      const id = await createLockedChatConversation();
+      const id = await createEncryptedChatConversation();
 
       const fork = await app.inject({
         method: "POST",
@@ -424,13 +427,13 @@ describe("locked chat routes", () => {
         payload: {},
       });
       expect(title.statusCode).toBe(200);
-      expect(title.json().title).toBe("Locked chat");
+      expect(title.json().title).toBe("Encrypted chat");
     });
   });
 
   describe("at-rest backfill interaction", () => {
-    test("the server-key sweep completes without rewriting locked-chat envelopes", async () => {
-      const id = await createLockedChatConversation();
+    test("the server-key sweep completes without rewriting encrypted-chat envelopes", async () => {
+      const id = await createEncryptedChatConversation();
       const content = {
         id: "m-sweep",
         role: "user",
@@ -457,7 +460,7 @@ describe("locked chat routes", () => {
         const result = await runContentEncryptionBackfill({});
         expect(result.status).toBe("completed");
 
-        // The locked-chat envelope is byte-identical: skipped, not re-wrapped.
+        // The encrypted-chat envelope is byte-identical: skipped, not re-wrapped.
         const after = await db.execute<{ content: { __encrypted: string } }>(
           sql`SELECT content FROM messages WHERE conversation_id = ${id}::uuid`,
         );

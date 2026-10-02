@@ -27,7 +27,7 @@ test("shows scheduled output while running and replays it after refresh", async 
     thinkingEffort: "low",
     hasCustomToolSelection: false,
     hooksDebugEnabled: false,
-    lockedChat: false,
+    encryptedChat: false,
     todoList: null,
     artifact: null,
     pinnedAt: null,

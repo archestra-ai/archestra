@@ -32,7 +32,7 @@ import {
   UserModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
-import { resolveLockedChatCreationIfRequested } from "@/routes/chat/locked-chat";
+import { resolveEncryptedChatCreationIfRequested } from "@/routes/chat/encrypted-chat";
 import {
   assignToolToApp,
   type ToolAssignmentError,
@@ -694,10 +694,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         // Present only when the client generated a conversation key and sent
-        // it — the same header the composer's locked-chat toggle uses. Opening
+        // it — the same header the composer's encrypted-chat toggle uses. Opening
         // an app is a browser POST, so the key reaches the server on exactly
         // the flow that creates the conversation.
-        lockedChat: resolveLockedChatCreationIfRequested(request),
+        encryptedChat: resolveEncryptedChatCreationIfRequested(request),
       });
       return reply.send({ conversationId });
     },
@@ -730,7 +730,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resourceUri,
         userId: user.id,
         organizationId,
-        lockedChat: resolveLockedChatCreationIfRequested(request),
+        encryptedChat: resolveEncryptedChatCreationIfRequested(request),
       });
       return reply.send(result);
     },

@@ -181,7 +181,7 @@ export function isEncryptedEnvelope(value: unknown): value is string {
  * Strict envelope-object check: exactly `{ __encrypted: "<v1 envelope>" }`
  * and nothing else, so arbitrary user JSON that merely contains an
  * `__encrypted` key can never be misread as ciphertext. Shared by the
- * locked-chat layer and the enterprise at-rest layer (which re-exports it).
+ * encrypted-chat layer and the enterprise at-rest layer (which re-exports it).
  */
 export function isContentEnvelope(
   value: unknown,
@@ -307,7 +307,7 @@ function getEncryptionKey(): Buffer {
  *
  * Deliberately NOT a content check: arbitrary file bytes can begin with the
  * same byte, so this cannot decide on its own whether a column holds
- * ciphertext. The row says that (`conversation_attachments.locked_chat`);
+ * ciphertext. The row says that (`conversation_attachments.encrypted_chat`);
  * this only rejects a value too short to parse before slicing it.
  */
 function isEncryptedBytesEnvelope(value: Buffer): boolean {

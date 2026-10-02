@@ -64,7 +64,7 @@ export function makeConfig(
       virtualKeyDefaultExpirationSeconds: 3600,
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
-      lockedChatEnabled: false,
+      encryptedChatEnabled: false,
       openappaEnabled: false,
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,

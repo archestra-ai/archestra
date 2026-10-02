@@ -3,10 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  LOCKED_CHAT_DRAFT_SHORTCUT_EVENT,
-  NEW_LOCKED_CHAT_HREF,
+  ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT,
+  NEW_ENCRYPTED_CHAT_HREF,
   SHORTCUT_NEW_CHAT,
-  SHORTCUT_NEW_LOCKED_CHAT,
+  SHORTCUT_NEW_ENCRYPTED_CHAT,
   SHORTCUT_SEARCH,
 } from "@/consts";
 import { useFeature } from "@/lib/config/config.query";
@@ -17,7 +17,7 @@ export function useConversationSearch() {
   const [isOpen, setIsOpen] = useState(false);
   const [recentChatsView, setRecentChatsView] = useState(false);
   const { isMac } = usePlatform();
-  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
+  const encryptedChatEnabled = useFeature("encryptedChatEnabled") ?? false;
 
   useEffect(() => {
     const handleOpenPalette = (event: Event) => {
@@ -56,14 +56,14 @@ export function useConversationSearch() {
         router.push("/chat");
       }
 
-      // Alt + I: New LockedChat Chat. Same Alt-qualified shape as Alt+N, and
-      // inert while the instance has locked chats disabled.
+      // Alt + I: New EncryptedChat Chat. Same Alt-qualified shape as Alt+N, and
+      // inert while the instance has encrypted chats disabled.
       if (
-        lockedChatEnabled &&
+        encryptedChatEnabled &&
         event.altKey &&
         !event.metaKey &&
         !event.ctrlKey &&
-        event.code === SHORTCUT_NEW_LOCKED_CHAT.code
+        event.code === SHORTCUT_NEW_ENCRYPTED_CHAT.code
       ) {
         event.preventDefault();
         event.stopPropagation();
@@ -72,12 +72,12 @@ export function useConversationSearch() {
         // Handshake with the new-chat composer: when it's on screen it
         // claims the shortcut (preventDefault on this cancelable event) and
         // toggles its draft in place; dispatchEvent returns false in that
-        // case. Anywhere else, navigate to a fresh locked-chat draft.
+        // case. Anywhere else, navigate to a fresh encrypted-chat draft.
         const unclaimed = window.dispatchEvent(
-          new Event(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+          new Event(ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
         );
         if (unclaimed) {
-          router.push(NEW_LOCKED_CHAT_HREF);
+          router.push(NEW_ENCRYPTED_CHAT_HREF);
         }
       }
     };
@@ -89,7 +89,7 @@ export function useConversationSearch() {
       window.removeEventListener("open-conversation-search", handleOpenPalette);
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [router, isMac, lockedChatEnabled]);
+  }, [router, isMac, encryptedChatEnabled]);
 
   return {
     isOpen,

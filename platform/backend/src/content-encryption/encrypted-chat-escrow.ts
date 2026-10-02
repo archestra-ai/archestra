@@ -6,20 +6,20 @@ import {
   publicEncrypt,
 } from "node:crypto";
 import config from "@/config";
-import type { LockedChatEscrowBlob } from "@/types";
+import type { EncryptedChatEscrowBlob } from "@/types";
 
 /**
- * Key escrow for locked chats: at conversation creation the browser-held
+ * Key escrow for encrypted chats: at conversation creation the browser-held
  * DEK is wrapped to an operator-configured RSA public key
- * (ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY) whose private half is held
+ * (ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY) whose private half is held
  * offline by the customer's security team. Recovering content is an explicit
  * break-glass procedure, not something the platform can do alone.
  *
- * Escrow is what ENABLES locked chats: without it, a conversation's audit
+ * Escrow is what ENABLES encrypted chats: without it, a conversation's audit
  * trail (LLM interactions, MCP tool calls, chat errors, tool-execution claims,
  * replay payloads) would be encrypted under a key no one but that one browser
  * holds, which is unrecoverable rather than merely private — the opposite of
- * what an auditable deployment needs. So locked-chat is unavailable until an
+ * what an auditable deployment needs. So encrypted-chat is unavailable until an
  * escrow key is configured.
  *
  * The wrapped key is stored inline on the conversation row. That is safe by
@@ -31,10 +31,10 @@ import type { LockedChatEscrowBlob } from "@/types";
  */
 
 /**
- * True when a usable escrow key is configured. This is the locked-chat
- * enablement gate — see {@link isLockedChatEnabled}.
+ * True when a usable escrow key is configured. This is the encrypted-chat
+ * enablement gate — see {@link isEncryptedChatEnabled}.
  */
-export function isLockedChatEscrowConfigured(): boolean {
+export function isEncryptedChatEscrowConfigured(): boolean {
   return escrowKeyOrNull() !== null;
 }
 
@@ -43,8 +43,8 @@ export function isLockedChatEscrowConfigured(): boolean {
  * operator who configured escrow must never silently run with it ignored
  * because of a bad PEM or an undersized key.
  */
-export function verifyLockedChatConfig(): void {
-  const pem = config.lockedChat.escrowPublicKey;
+export function verifyEncryptedChatConfig(): void {
+  const pem = config.encryptedChat.escrowPublicKey;
   if (!pem) return;
   // Throws with the parse/size problem named.
   loadEscrowKey(pem);
@@ -56,11 +56,11 @@ export function verifyLockedChatConfig(): void {
  * recovery procedure is unambiguous.
  * @public — exported so tests can pin the exact offline recovery contract
  */
-export function wrapLockedChatDek(dek: Buffer): LockedChatEscrowBlob {
+export function wrapEncryptedChatDek(dek: Buffer): EncryptedChatEscrowBlob {
   const key = escrowKeyOrNull();
   if (!key) {
     throw new Error(
-      "locked chat escrow public key is not configured — this is a bug in the " +
+      "encrypted chat escrow public key is not configured — this is a bug in the " +
         "enablement gating",
     );
   }
@@ -94,7 +94,7 @@ class EscrowKeyCache {
   private pem: string | null = null;
 
   resolve(): KeyObject | null {
-    const pem = config.lockedChat.escrowPublicKey;
+    const pem = config.encryptedChat.escrowPublicKey;
     if (!pem) return null;
     if (this.key && this.pem === pem) return this.key;
     try {
@@ -123,14 +123,14 @@ function loadEscrowKey(pem: string): KeyObject {
   const key = createPublicKey(normalized);
   if (key.asymmetricKeyType !== "rsa") {
     throw new Error(
-      "ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY must be an RSA public key " +
+      "ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY must be an RSA public key " +
         `(got ${key.asymmetricKeyType})`,
     );
   }
   const modulusBits = key.asymmetricKeyDetails?.modulusLength ?? 0;
   if (modulusBits < MIN_ESCROW_MODULUS_BITS) {
     throw new Error(
-      `ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY must be at least ` +
+      `ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY must be at least ` +
         `${MIN_ESCROW_MODULUS_BITS} bits (got ${modulusBits})`,
     );
   }

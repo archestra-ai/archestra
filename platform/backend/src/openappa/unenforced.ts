@@ -40,6 +40,7 @@ export async function observeUnenforcedSession(
     await OpenAppaUnenforcedModel.recordSession({
       organizationId: session.organization_id,
       sessionId: session.session_id,
+      parentId: session.parent_id,
     });
   }
   const outcome = governed ? "governed" : "unenforced";
@@ -49,10 +50,12 @@ export async function observeUnenforcedSession(
 
 /**
  * Whether the session, or the parent that started it, started while
- * enforcement was off. A child of such a parent is recorded too, so its own
- * children follow it. A session the runtime already governs is not: its
- * record lost a race with the session's first governed request. Never cached,
- * so every replica decides from the same rows.
+ * enforcement was off. A record counts only for the same parent, so a root
+ * whose id spells a recorded child's id is not that child. A child of such a
+ * parent is recorded too, so its own children follow it. A session the
+ * runtime already governs is not: its record lost a race with the session's
+ * first governed request. Never cached, so every replica decides from the
+ * same rows.
  */
 export async function startedUnenforced(
   session: OpenAppaSession,
@@ -64,16 +67,23 @@ export async function startedUnenforced(
       ...(session.parent_id ? [session.parent_id] : []),
     ],
   });
-  if (recorded.length === 0) return false;
+  const own = recorded.some(
+    (row) =>
+      row.sessionId === session.session_id &&
+      (row.parentId ?? undefined) === session.parent_id,
+  );
+  const parent = recorded.some((row) => row.sessionId === session.parent_id);
+  if (!own && !parent) return false;
   const governed = await OpenAppaSessionModel.find({
     organizationId: session.organization_id,
     sessionId: session.session_id,
   });
   if (governed) return false;
-  if (!recorded.includes(session.session_id)) {
+  if (!own) {
     await OpenAppaUnenforcedModel.recordSession({
       organizationId: session.organization_id,
       sessionId: session.session_id,
+      parentId: session.parent_id,
     });
   }
   return true;
@@ -137,7 +147,11 @@ export async function findUnenforcedCalls(params: {
     children: new Set([
       ...rows.flatMap((row) => (row.childNativeId ? [row.childNativeId] : [])),
       ...childNativeIds.filter((id) =>
-        startedChildren.includes(childSessionId(id)),
+        startedChildren.some(
+          (row) =>
+            row.sessionId === childSessionId(id) &&
+            row.parentId === session.session_id,
+        ),
       ),
     ]),
   };

@@ -1,5 +1,5 @@
 {
-  "id": "851a5c9b-b60d-4e73-90ce-6bb491d60639",
+  "id": "5626fdd2-3cd4-4e3c-88aa-88b4efbfb5a8",
   "prevId": "b9246d2f-93d0-483f-8b00-c6df417931e0",
   "version": "7",
   "dialect": "postgresql",
@@ -27416,6 +27416,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

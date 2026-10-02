@@ -14,32 +14,33 @@ class OpenAppaUnenforcedModel {
   static async recordSession(params: {
     organizationId: string;
     sessionId: string;
+    parentId: string | undefined;
   }): Promise<void> {
     await db
       .insert(sessions)
       .values({
         organizationId: params.organizationId,
         sessionId: params.sessionId,
+        parentId: params.parentId ?? null,
       })
       .onConflictDoNothing();
   }
 
-  /** The caller-scoped session ids of `sessionIds` that started while enforcement was off. */
+  /** The sessions among `sessionIds` that started while enforcement was off. */
   static async findSessions(params: {
     organizationId: string;
     sessionIds: readonly string[];
-  }): Promise<string[]> {
+  }): Promise<Array<{ sessionId: string; parentId: string | null }>> {
     if (params.sessionIds.length === 0) return [];
-    const rows = await db
-      .select({ sessionId: sessions.sessionId })
+    return db
+      .select({ sessionId: sessions.sessionId, parentId: sessions.parentId })
       .from(sessions)
       .where(
         and(
           eq(sessions.organizationId, params.organizationId),
-          inArray(sessions.sessionId, [...params.sessionIds]),
+          inArray(sessions.sessionId, [...new Set(params.sessionIds)]),
         ),
       );
-    return rows.map((row) => row.sessionId);
   }
 
   static async recordCalls(params: {

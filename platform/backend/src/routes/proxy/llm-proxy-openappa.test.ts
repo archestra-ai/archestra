@@ -6095,6 +6095,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         await OpenAppaUnenforcedModel.recordSession({
           organizationId: agent.organizationId,
           sessionId: scoped("codex-root:born-off-child"),
+          parentId: scoped("codex-root"),
         });
         const started = await sendCodex("born-off-child");
         expect(started.statusCode, started.body).toBe(200);
@@ -6124,6 +6125,42 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         events.length = 0;
         const other = await sendAs(`${base}:next`);
         expect(other.statusCode, other.body).toBe(200);
+        expect(
+          events.some((event) =>
+            String(event.session_id).endsWith(`${base}:next`),
+          ),
+        ).toBe(true);
+      });
+
+      test("a root whose id spells the id of a child that started while it was off is governed", async () => {
+        const base = "6f2a8b3c-4d5e-4f6a-9b0c-1d2e3f4a5b6c";
+        await GuardrailsDeploymentModel.setEnabled(false);
+        answerText();
+        const child = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...claudeCodeHeaders("next"),
+            "x-claude-code-session-id": base,
+          },
+          payload: payload(true, [{ role: "user", content: "Hello" }]),
+        });
+        expect(child.statusCode, child.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(true);
+        events.length = 0;
+        const root = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...claudeCodeHeaders(undefined),
+            "x-claude-code-session-id": `${base}:next`,
+          },
+          payload: payload(true, [{ role: "user", content: "Hello" }]),
+        });
+        expect(root.statusCode, root.body).toBe(200);
         expect(
           events.some((event) =>
             String(event.session_id).endsWith(`${base}:next`),

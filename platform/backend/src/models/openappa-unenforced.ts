@@ -1,4 +1,4 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, lt, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { UnenforcedCallReason } from "@/types/openappa-unenforced";
 
@@ -63,6 +63,21 @@ class OpenAppaUnenforcedModel {
         })),
       )
       .onConflictDoNothing();
+  }
+
+  /** Deletes the records written before `before`, and says how many went. */
+  static async deleteOlderThan(
+    before: Date,
+  ): Promise<{ sessions: number; calls: number }> {
+    const removedSessions = await db
+      .delete(sessions)
+      .where(lt(sessions.createdAt, before))
+      .returning({ sessionId: sessions.sessionId });
+    const removedCalls = await db
+      .delete(calls)
+      .where(lt(calls.createdAt, before))
+      .returning({ toolCallId: calls.toolCallId });
+    return { sessions: removedSessions.length, calls: removedCalls.length };
   }
 
   /** The records of `sessionIds` that name one of `toolCallIds` or `childNativeIds`. */

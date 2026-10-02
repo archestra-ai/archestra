@@ -1,9 +1,10 @@
 import { TimeInMs } from "@archestra/shared/consts";
 import { LRUCacheManager } from "@/cache-manager";
+import logger from "@/logging";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import type { OpenAppaSession } from "@/openappa/service";
-import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
+import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type { UnenforcedCallReason } from "@/types/openappa-unenforced";
 
@@ -74,22 +75,19 @@ export async function startedUnenforced(
   );
   const parent = recorded.some((row) => row.sessionId === session.parent_id);
   if (!own && !parent) return false;
-  const governed = await OpenAppaSessionModel.find({
+  // One lookup for the session and its parent in the runtime's own rows.
+  const governed = await OpenAppaSessionModel.startedSessionIds({
     organizationId: session.organization_id,
-    sessionId: session.session_id,
+    sessionIds: [
+      session.session_id,
+      ...(session.parent_id ? [session.parent_id] : []),
+    ],
   });
-  if (governed) return false;
+  if (governed.has(session.session_id)) return false;
   if (!own) {
     // A recorded id can belong to another session with the same spelling. A
     // parent that the runtime governs did not start while enforcement was off.
-    if (
-      session.parent_id &&
-      (await OpenAppaSessionModel.find({
-        organizationId: session.organization_id,
-        sessionId: session.parent_id,
-      }))
-    )
-      return false;
+    if (session.parent_id && governed.has(session.parent_id)) return false;
     await OpenAppaUnenforcedModel.recordSession({
       organizationId: session.organization_id,
       sessionId: session.session_id,
@@ -110,11 +108,11 @@ export async function recordUnenforcedCalls(params: {
   reason: UnenforcedCallReason;
   childNativeId?: string;
 }): Promise<void> {
-  const key = (id: string) =>
-    `${params.organizationId}\u0000${params.sessionId}\u0000${id}`;
-  const fresh = [...new Set(params.toolCallIds.map(unenforcedCallId))].filter(
-    (id) => !recordedCalls.get(key(id)),
-  );
+  const { organizationId, sessionId } = params;
+  const key = (id: string) => `${organizationId}\u0000${sessionId}\u0000${id}`;
+  const fresh = [
+    ...new Set(params.toolCallIds.map(withoutTrajectoryStamp)),
+  ].filter((id) => !recordedCalls.get(key(id)));
   if (fresh.length === 0) return;
   await OpenAppaUnenforcedModel.recordCalls({
     organizationId: params.organizationId,
@@ -127,8 +125,8 @@ export async function recordUnenforcedCalls(params: {
 }
 
 /**
- * The records of a session that name one of `toolCallIds` (by the call id as
- * `unenforcedCallId` gives it) or one of its children in `childNativeIds`. A
+ * The records of a session that name one of `toolCallIds` (by the call id
+ * without its trajectory stamp) or one of its children in `childNativeIds`. A
  * fork reads no records of the session it continues, so what that session
  * did while enforcement was off stays withheld in the fork.
  */
@@ -144,7 +142,7 @@ export async function findUnenforcedCalls(params: {
     OpenAppaUnenforcedModel.findCalls({
       organizationId: session.organization_id,
       sessionIds: [session.session_id],
-      toolCallIds: params.toolCallIds.map(unenforcedCallId),
+      toolCallIds: params.toolCallIds.map(withoutTrajectoryStamp),
       childNativeIds,
     }),
     OpenAppaUnenforcedModel.findSessions({
@@ -178,12 +176,26 @@ export type UnenforcedCalls = {
   children: ReadonlySet<string>;
 };
 
-/** A call id as the provider gave it: without a trajectory stamp. */
-export function unenforcedCallId(id: string): string {
-  return parseTrajectoryStamp(id)?.callId ?? id;
+/**
+ * Deletes the records older than the retention window. A session that comes
+ * back after that is one OpenAPPA has no record of, so it keeps the
+ * fail-closed behavior: what the runtime did not see is withheld.
+ */
+export async function deleteExpiredUnenforcedRecords(
+  now = new Date(),
+): Promise<void> {
+  const before = new Date(now.getTime() - RETENTION_DAYS * TimeInMs.Day);
+  const deleted = await OpenAppaUnenforcedModel.deleteOlderThan(before);
+  logger.info(
+    { ...deleted, before: before.toISOString() },
+    "OpenAPPA deleted expired records of what ran while Guardrails enforcement was off",
+  );
 }
 
 // ===
+
+/** How long a record lasts: longer than a session is likely to go on. */
+const RETENTION_DAYS = 30;
 
 function sessionKey(session: OpenAppaSession): string {
   return `${session.organization_id}\u0000${session.session_id}`;

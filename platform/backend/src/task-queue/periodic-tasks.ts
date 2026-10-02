@@ -80,6 +80,14 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 3600,
     payload: {},
   },
+  // Deletes the records of what ran while Guardrails enforcement was off once
+  // they are older than their retention window. Only the proxy writes them,
+  // and only while enforcement is off.
+  {
+    taskType: "openappa_unenforced_cleanup",
+    intervalSeconds: 86400,
+    payload: {},
+  },
   // Enterprise content-encryption backfill/rotation sweep. O(1) no-op once
   // complete (and when the feature is disabled); a 10-minute tick keeps a
   // large backlog progressing without a long-lived task.

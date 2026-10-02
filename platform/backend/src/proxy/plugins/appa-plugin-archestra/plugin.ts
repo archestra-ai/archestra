@@ -59,8 +59,8 @@ import {
   withCapturedGuardrailsActivation,
 } from "@/openappa/service";
 import {
-  parseTrajectoryStamp,
   stampToolCallId,
+  withoutTrajectoryStamp,
 } from "@/openappa/trajectory-stamp";
 import {
   findUnenforcedCalls,
@@ -68,7 +68,6 @@ import {
   recordUnenforcedCalls,
   startedUnenforced,
   type UnenforcedCalls,
-  unenforcedCallId,
 } from "@/openappa/unenforced";
 import { appaWireFamily } from "@/openappa/wire";
 import { rememberYellSession } from "@/openappa/yell-session";
@@ -251,8 +250,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // so OpenAPPA ignores its result: the result reaches the model as it is.
     const toolResults = context.toolResults.filter(
       (result) =>
-        binding.unenforcedCalls.reasons.get(unenforcedCallId(result.id)) !==
-        "made",
+        binding.unenforcedCalls.reasons.get(
+          withoutTrajectoryStamp(result.id),
+        ) !== "made",
     );
     const childResultUpdates: Record<string, string> = Object.create(null);
     const results = toolResults.map((result) => {
@@ -1352,7 +1352,6 @@ async function approveChildReturnCarriers(params: {
 }> {
   const completions = params.binding.request.childReturns?.completions ?? [];
   const adapter = params.binding.adapter;
-  const envelopeIdOf = (id: string) => parseTrajectoryStamp(id)?.callId ?? id;
   const completionResults = params.results.filter(
     (result) =>
       params.binding.request.restoredNoticeCallIds?.has(result.id) !== true &&
@@ -1376,7 +1375,7 @@ async function approveChildReturnCarriers(params: {
   ).map((record) => ({
     ...record,
     ...(record.spawnCallId
-      ? { spawnCallId: envelopeIdOf(record.spawnCallId) }
+      ? { spawnCallId: withoutTrajectoryStamp(record.spawnCallId) }
       : {}),
   }));
   // A child that ran while enforcement was off returned what the runtime did
@@ -1410,7 +1409,7 @@ async function approveChildReturnCarriers(params: {
   const directSpawnResults = new Set(
     params.results
       .filter((result) => adapter?.isSpawnTool(result.name, result.namespace))
-      .map((result) => envelopeIdOf(result.id)),
+      .map((result) => withoutTrajectoryStamp(result.id)),
   );
   // One wait result can contain several children. Every completed leaf
   // consumes its own crossing. One genuine return cannot authorize siblings.
@@ -1422,16 +1421,16 @@ async function approveChildReturnCarriers(params: {
     // Display-only echoes never consume a child's crossing.
     if (completion.assistantOrigin) continue;
     const expectedSpawn = completion.spawnCallId
-      ? envelopeIdOf(completion.spawnCallId)
+      ? withoutTrajectoryStamp(completion.spawnCallId)
       : completion.envelopeId &&
-          directSpawnResults.has(envelopeIdOf(completion.envelopeId))
-        ? envelopeIdOf(completion.envelopeId)
+          directSpawnResults.has(withoutTrajectoryStamp(completion.envelopeId))
+        ? withoutTrajectoryStamp(completion.envelopeId)
         : undefined;
     const candidates = available.flatMap((record, index) =>
       record.value === completion.value ? [{ record, index }] : [],
     );
     const envelopeId = completion.envelopeId
-      ? envelopeIdOf(completion.envelopeId)
+      ? withoutTrajectoryStamp(completion.envelopeId)
       : undefined;
     if (
       candidates.length === 0 &&
@@ -1492,7 +1491,7 @@ async function approveChildReturnCarriers(params: {
       const callId = completion.envelopeId ?? completion.spawnCallId;
       throw childReturnRefusal({
         ...(first ? { reason: AMBIGUOUS_CHILD_RETURN } : unrecorded),
-        callId: callId && envelopeIdOf(callId),
+        callId: callId && withoutTrajectoryStamp(callId),
         childNativeId: completion.childNativeId,
       });
     }
@@ -1506,21 +1505,23 @@ async function approveChildReturnCarriers(params: {
     const spawnCallId =
       record.spawnCallId ??
       (completion.spawnCallId
-        ? envelopeIdOf(completion.spawnCallId)
+        ? withoutTrajectoryStamp(completion.spawnCallId)
         : undefined) ??
       (completion.envelopeId &&
-      directSpawnResults.has(envelopeIdOf(completion.envelopeId))
-        ? envelopeIdOf(completion.envelopeId)
+      directSpawnResults.has(withoutTrajectoryStamp(completion.envelopeId))
+        ? withoutTrajectoryStamp(completion.envelopeId)
         : undefined);
     if (!spawnCallId) {
       throw childReturnRefusal({
         reason: UNBOUND_CHILD_RETURN,
-        callId: completion.envelopeId && envelopeIdOf(completion.envelopeId),
+        callId:
+          completion.envelopeId &&
+          withoutTrajectoryStamp(completion.envelopeId),
         childNativeId: completion.childNativeId ?? record.childNativeId,
       });
     }
     if (completion.envelopeId) {
-      const envelopeId = envelopeIdOf(completion.envelopeId);
+      const envelopeId = withoutTrajectoryStamp(completion.envelopeId);
       if (directSpawnResults.has(envelopeId) && envelopeId !== spawnCallId) {
         throw childReturnRefusal({
           status: 400,
@@ -1540,14 +1541,14 @@ async function approveChildReturnCarriers(params: {
   }
   const unrecordedResult = completionResults.find(
     (result) =>
-      (byEnvelope.get(envelopeIdOf(result.id)) ?? []).length === 0 &&
-      !ignoredByEnvelope.has(envelopeIdOf(result.id)) &&
-      !unenforcedReturn({ spawnCallId: envelopeIdOf(result.id) }),
+      (byEnvelope.get(withoutTrajectoryStamp(result.id)) ?? []).length === 0 &&
+      !ignoredByEnvelope.has(withoutTrajectoryStamp(result.id)) &&
+      !unenforcedReturn({ spawnCallId: withoutTrajectoryStamp(result.id) }),
   );
   if (unrecordedResult) {
     throw childReturnRefusal({
       ...unrecorded,
-      callId: envelopeIdOf(unrecordedResult.id),
+      callId: withoutTrajectoryStamp(unrecordedResult.id),
     });
   }
   // Records every verified crossing with the runtime. The runtime re-checks
@@ -1567,7 +1568,7 @@ async function approveChildReturnCarriers(params: {
   // Reconstructs result content solely from crossed values.
   const updates: Record<string, string> = Object.create(null);
   for (const result of completionResults) {
-    const envelopeId = envelopeIdOf(result.id);
+    const envelopeId = withoutTrajectoryStamp(result.id);
     const verified = byEnvelope.get(envelopeId) ?? [];
     const ignoredHere = ignoredByEnvelope.get(envelopeId) ?? [];
     if (
@@ -1760,7 +1761,7 @@ async function admitRelayArrivals(params: {
     if (
       launch &&
       params.binding.unenforcedCalls.reasons.has(
-        unenforcedCallId(launch.spawnCallId),
+        withoutTrajectoryStamp(launch.spawnCallId),
       )
     ) {
       return !(await crossings()).some(

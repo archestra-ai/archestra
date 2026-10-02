@@ -4044,7 +4044,12 @@ function observedAppaSession(params: {
                 : params.callerId,
           }),
     });
-  } catch {
+  } catch (error) {
+    // Enforcement is off, so a request without a usable session id goes on.
+    logger.debug(
+      { error: error instanceof Error ? error.message : String(error) },
+      "OpenAPPA does not record a request without a usable session id while Guardrails enforcement is off",
+    );
     return undefined;
   }
 }

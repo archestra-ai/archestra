@@ -184,7 +184,7 @@ export function ResourcePermissionsDialog({
   );
   const isMobile = useIsMobile();
   const { data: canUpdateGlobal } = useHasPermissions({
-    globalPermissions: ["update"],
+    accessPolicies: ["update"],
   });
   const policy = useResourcePermissions(resource, scope, open);
   const canManage =
@@ -342,7 +342,7 @@ function PermissionsEditor({
   };
   const [allPermissionsOpen, setAllPermissionsOpen] = useState(false);
   const { data: canUpdateGlobal } = useHasPermissions({
-    globalPermissions: ["update"],
+    accessPolicies: ["update"],
   });
   const canEditAll = !!canUpdateGlobal;
   const canManage =

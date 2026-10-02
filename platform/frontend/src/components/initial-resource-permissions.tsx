@@ -61,10 +61,10 @@ export function InitialResourcePermissions({
   // The edit form shows them, so the create form has to as well, or the
   // author believes only the owner can see what they are about to make.
   const { data: canReadGlobal } = useHasPermissions({
-    globalPermissions: ["read"],
+    accessPolicies: ["read"],
   });
   const { data: canUpdateGlobal } = useHasPermissions({
-    globalPermissions: ["update"],
+    accessPolicies: ["update"],
   });
   const organizationPolicy = useResourcePermissions(
     resource,

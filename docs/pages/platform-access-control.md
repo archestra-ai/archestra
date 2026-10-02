@@ -171,6 +171,8 @@ The following table lists all available permissions that can be assigned to cust
 | `ac:create` | Create new custom roles |
 | `ac:update` | Modify custom role permissions |
 | `ac:delete` | Delete custom roles |
+| `accessPolicies:read` | View access policies for all resource types |
+| `accessPolicies:update` | Edit access policies and grant access across all resource types |
 | `agent:read` | View and list agents |
 | `agent:create` | Create new agents |
 | `agent:update` | Modify agent configuration and settings |
@@ -206,8 +208,6 @@ The following table lists all available permissions that can be assigned to cust
 | `environment:update` | Modify deployment environments, including the org default environment |
 | `environment:delete` | Delete deployment environments |
 | `file:manage` | List, read, write, and delete files in chats and projects |
-| `globalPermissions:read` | View global permission policies for all resource types |
-| `globalPermissions:update` | Edit global permission policies and grant access across all resource types |
 | `identityProvider:read` | View identity provider configurations (SSO) |
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |
@@ -398,7 +398,7 @@ Creation with `initialGrants` also records the creator's full access explicitly.
 
 ### Delegation And Concurrent Edits
 
-Global policies require `globalPermissions:read` to view or `globalPermissions:update` to edit. Update also allows viewing the policy. These role permissions apply across resource types. Admin and Platform Admin receive both by default. Ordinary resource CRUD permissions do not authorize global policy administration. Individual object policies still require `manage-permissions` on that object. You can grant only actions you hold on that object. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
+Global policies require `accessPolicies:read` to view or `accessPolicies:update` to edit. Update also allows viewing the policy. These role permissions apply across resource types. Admin and Platform Admin receive both by default. Ordinary resource CRUD permissions do not authorize global policy administration. Individual object policies still require `manage-permissions` on that object. You can grant only actions you hold on that object. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
 
 Saving includes the policy revision. If someone else changes the policy first, the API returns `409` and the editor preserves your draft. Reload the latest policy before saving again. Changes to grants are recorded in the audit log. Unsaved permission edits are kept separate from ordinary configuration saves; use **Save permissions** to apply them.
 

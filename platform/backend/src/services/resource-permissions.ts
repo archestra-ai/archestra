@@ -557,7 +557,7 @@ export class ResourcePermissions {
       throw new ApiError(
         403,
         params.scope === "*"
-          ? "You need globalPermissions:update to edit global permissions"
+          ? "You need accessPolicies:update to edit access policies"
           : "You can only grant permissions you hold on this resource",
       );
     }
@@ -645,7 +645,7 @@ export class ResourcePermissions {
   }) {
     const permissions = await getPermissionsForUserContext(params);
     return (
-      permissions.globalPermissions?.some(
+      permissions.accessPolicies?.some(
         (action) => action === "read" || action === "update",
       ) ?? false
     );
@@ -656,7 +656,7 @@ export class ResourcePermissions {
     organizationId: string;
   }) {
     const permissions = await getPermissionsForUserContext(params);
-    return permissions.globalPermissions?.includes("update") ?? false;
+    return permissions.accessPolicies?.includes("update") ?? false;
   }
 
   /**

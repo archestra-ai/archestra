@@ -93,7 +93,7 @@ function renderActions({
   });
   client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
   client.setQueryData(["auth", "userPermissions"], {
-    globalPermissions: globalActions,
+    accessPolicies: globalActions,
   });
   client.setQueryData(
     ["scoped-capabilities"],

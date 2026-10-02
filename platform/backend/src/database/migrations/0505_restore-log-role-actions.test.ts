@@ -132,7 +132,7 @@ describe("restore log role actions", () => {
       // Platform Admin intentionally already has global policy controls.
       if (actor !== predefined.id)
         expect(
-          await userHasPermission(actor, org.id, "globalPermissions", "update"),
+          await userHasPermission(actor, org.id, "accessPolicies", "update"),
         ).toBe(false);
     }
     expect(

@@ -78,7 +78,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   serviceAccount: ["read", "create", "update", "delete"],
   auditLog: ["read", "admin"],
-  globalPermissions: ["read", "update"],
+  accessPolicies: ["read", "update"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
@@ -153,7 +153,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   serviceAccount: [],
   auditLog: [],
-  globalPermissions: [],
+  accessPolicies: [],
   agentSettings: [],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
@@ -234,7 +234,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   serviceAccount: [],
   auditLog: [],
-  globalPermissions: [],
+  accessPolicies: [],
   agentSettings: [],
   llmSettings: [],
   mcpSettings: [],
@@ -547,10 +547,9 @@ export const permissionDescriptions: Record<string, string> = {
     "View every audit event in your organization (also requires Read)",
   "log:admin":
     "View every LLM and MCP log in your organization (also requires Read)",
-  "globalPermissions:read":
-    "View global permission policies for all resource types",
-  "globalPermissions:update":
-    "Edit global permission policies and grant access across all resource types",
+  "accessPolicies:read": "View access policies for all resource types",
+  "accessPolicies:update":
+    "Edit access policies and grant access across all resource types",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":

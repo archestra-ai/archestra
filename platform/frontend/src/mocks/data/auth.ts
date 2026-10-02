@@ -100,7 +100,7 @@ export function makeUserPermissions(
     llmSettings: [...ALL],
     log: ["read", "admin"],
     auditLog: ["read", "admin"],
-    globalPermissions: ["read", "update"],
+    accessPolicies: ["read", "update"],
     ac: [...ALL],
     identityProvider: [...ALL],
     secret: [...ALL],

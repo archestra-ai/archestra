@@ -74,7 +74,7 @@ function renderEditor(onParentSubmit?: () => void, canManageGlobal = false) {
   client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
   client.setQueryData(
     ["auth", "userPermissions"],
-    canManageGlobal ? { globalPermissions: ["read", "update"] } : {},
+    canManageGlobal ? { accessPolicies: ["read", "update"] } : {},
   );
   const editor = (
     <ResourcePermissions

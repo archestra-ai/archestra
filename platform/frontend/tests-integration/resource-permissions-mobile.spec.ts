@@ -70,7 +70,7 @@ for (const viewport of [
     await mswControl.use({
       method: "get",
       url: "/api/user/permissions",
-      body: { mcpRegistry: ["read"], globalPermissions: ["read"] },
+      body: { mcpRegistry: ["read"], accessPolicies: ["read"] },
     });
     await page.goto("/mcp/registry?permissions=all");
     const dialog = page.getByRole("dialog", { name: title, exact: true });

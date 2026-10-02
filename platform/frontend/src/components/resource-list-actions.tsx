@@ -34,10 +34,10 @@ export function ResourceListActions({
   children?: ReactNode;
 }) {
   const { data: canReadGlobal } = useHasPermissions({
-    globalPermissions: ["read"],
+    accessPolicies: ["read"],
   });
   const { data: canUpdateGlobal } = useHasPermissions({
-    globalPermissions: ["update"],
+    accessPolicies: ["update"],
   });
   const [opened, setOpened] = useState<ScopedResource | null>(null);
   const params = useSearchParams();

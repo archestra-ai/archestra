@@ -7,14 +7,14 @@ import { describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import resourcePermissionRoutes from "./resource-permission.routes";
 
-describe("global permission role controls", () => {
+describe("access policy role controls", () => {
   const ctx = useRouteTestApp(resourcePermissionRoutes);
   const url = "/api/resource-permissions/agent/*";
 
   const cases: Record<string, string[]>[] = [
     { agent: ["read", "create", "update", "delete"] },
-    { globalPermissions: ["read"] },
-    { globalPermissions: ["update"] },
+    { accessPolicies: ["read"] },
+    { accessPolicies: ["update"] },
   ];
   for (const permission of cases) {
     test(`enforces policy access independently of resource CRUD: ${JSON.stringify(permission)}`, async ({
@@ -41,30 +41,34 @@ describe("global permission role controls", () => {
           },
         ],
       });
-      const global = permission.globalPermissions ?? [];
+      const policyActions = permission.accessPolicies ?? [];
       const read = await ctx.app.inject({ method: "GET", url });
-      expect(read.statusCode).toBe(global.length ? 200 : 403);
+      expect(read.statusCode).toBe(policyActions.length ? 200 : 403);
       const saved = await ctx.app.inject({
         method: "PUT",
         url,
         payload: { revision: (policy?.revision ?? 0) + 1, grants: [] },
       });
-      expect(saved.statusCode).toBe(global.includes("update") ? 200 : 403);
+      expect(saved.statusCode).toBe(
+        policyActions.includes("update") ? 200 : 403,
+      );
       const subjects = await ctx.app.inject({
         method: "GET",
         url: `${url}/subjects`,
       });
-      expect(subjects.statusCode).toBe(global.includes("update") ? 200 : 403);
+      expect(subjects.statusCode).toBe(
+        policyActions.includes("update") ? 200 : 403,
+      );
     });
   }
 
-  test("global managers can grant access they do not personally hold without gaining resource access", async ({
+  test("access policy managers can grant access they do not personally hold without gaining resource access", async ({
     makeCustomRole,
     makeMember,
     makeUser,
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
-      permission: { globalPermissions: ["read", "update"] },
+      permission: { accessPolicies: ["read", "update"] },
     });
     await makeMember(ctx.user.id, ctx.organizationId, { role: role.role });
     const recipient = await makeUser();
@@ -121,7 +125,7 @@ describe("global permission role controls", () => {
       parentId: parent.id,
     });
     const role = await makeCustomRole(ctx.organizationId, {
-      permission: { globalPermissions: ["update"] },
+      permission: { accessPolicies: ["update"] },
     });
     await TeamModel.update(parent.id, { roles: [role.role] });
     await TeamModel.addMember(child.id, ctx.user.id);

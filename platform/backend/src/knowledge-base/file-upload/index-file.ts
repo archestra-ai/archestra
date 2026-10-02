@@ -183,6 +183,9 @@ export async function indexFilesIntoKnowledgeBase(params: {
         filename: file.filename,
         ocr,
       });
+      // Version the extracted text that spans and chunks refer to. The source
+      // bytes remain content-addressed by kb_files.content_hash for dedupe.
+      const contentHash = createHash("sha256").update(text).digest("hex");
 
       // Direct tokens from the file's grants, deliberately not a `container:`
       // token: `kb_container_acls` belongs to the permission-sync pass, whose
@@ -201,7 +204,7 @@ export async function indexFilesIntoKnowledgeBase(params: {
         ? await KbDocumentModel.update(existing.id, {
             title: file.filename,
             content: text,
-            contentHash: file.contentHash,
+            contentHash,
             acl,
             containerKey: file.directoryId,
             embeddingStatus: "pending",
@@ -212,7 +215,7 @@ export async function indexFilesIntoKnowledgeBase(params: {
             sourceId: file.id,
             title: file.filename,
             content: text,
-            contentHash: file.contentHash,
+            contentHash,
             acl,
             // Grouping only — never resolved as a `container:` ACL token.
             containerKey: file.directoryId,
@@ -268,7 +271,7 @@ export async function indexFilesIntoKnowledgeBase(params: {
   return { indexed: documentIds.length, failures };
 }
 
-/** Stable identity for dedupe and for the document's content hash. */
+/** Stable identity for uploaded-file dedupe. */
 export function hashFileContent(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }

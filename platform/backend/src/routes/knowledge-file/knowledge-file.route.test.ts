@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { HttpResponse, http } from "msw";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -485,6 +486,62 @@ describe("knowledge file routes", () => {
       const documents = await db.select().from(schema.kbDocumentsTable);
       expect(documents).toHaveLength(1);
       expect(documents[0].content).toContain("retained for seven (7) years");
+    });
+
+    test("re-indexes with a new content version when OCR extraction changes", async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      await configureOcr({ makeSecret, makeLlmProviderApiKey });
+      let extractedText = "SERVICE AGREEMENT - first OCR reading.";
+      server.use(
+        http.post("https://api.anthropic.com/v1/messages", () =>
+          HttpResponse.json({
+            id: "msg_test",
+            type: "message",
+            role: "assistant",
+            model: "claude-sonnet-5",
+            content: [{ type: "text", text: extractedText }],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: { input_tokens: 1500, output_tokens: 24 },
+          }),
+        ),
+      );
+
+      const uploaded = await scannedUpload();
+      expect(uploaded.statusCode).toBe(200);
+      const fileId = uploaded.json().id;
+
+      const first = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-files/index",
+        payload: { fileIds: [fileId], newKnowledgeBaseName: "OCR revisions" },
+      });
+      expect(first.statusCode, first.body).toBe(200);
+      const [firstDocument] = await db.select().from(schema.kbDocumentsTable);
+
+      extractedText = "SERVICE AGREEMENT - corrected OCR reading.";
+      const second = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-files/index",
+        payload: {
+          fileIds: [fileId],
+          knowledgeBaseId: first.json().knowledgeBaseId,
+        },
+      });
+      expect(second.statusCode, second.body).toBe(200);
+      const [secondDocument] = await db.select().from(schema.kbDocumentsTable);
+
+      expect(secondDocument.id).toBe(firstDocument.id);
+      expect(secondDocument.content).toBe(extractedText);
+      // QueryService exposes kb_documents.content_hash as contentVersion. The
+      // same bytes must not keep the same version when their spans now refer
+      // to different extracted text.
+      expect(secondDocument.contentHash).not.toBe(firstDocument.contentHash);
+      expect(secondDocument.contentHash).toBe(
+        createHash("sha256").update(extractedText).digest("hex"),
+      );
     });
 
     test("a scanned file fails indexing with a named reason when its transcription fails", async ({

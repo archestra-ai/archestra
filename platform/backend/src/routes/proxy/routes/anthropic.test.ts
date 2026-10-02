@@ -553,7 +553,8 @@ describe("Anthropic Claude Code requests", () => {
   // survive validation unchanged.
   function captureUpstreamParams() {
     const stub = createAnthropicTestClient();
-    const captured: { params?: { messages?: unknown[] } } = {};
+    const captured: { params?: { messages?: unknown[]; thinking?: unknown } } =
+      {};
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
       () =>
         ({
@@ -579,7 +580,7 @@ describe("Anthropic Claude Code requests", () => {
   function injectMessages(
     app: FastifyInstance,
     agentId: string,
-    messages: unknown[],
+    body: { messages: unknown[]; thinking?: unknown },
   ) {
     return app.inject({
       method: "POST",
@@ -595,7 +596,7 @@ describe("Anthropic Claude Code requests", () => {
       payload: {
         model: "claude-opus-4-20250514",
         max_tokens: 1024,
-        messages,
+        ...body,
       },
     });
   }
@@ -616,20 +617,22 @@ describe("Anthropic Claude Code requests", () => {
         content: "SessionStart:startup hook success: OK",
       };
 
-      const response = await injectMessages(app, agent.id, [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "hi" },
-            {
-              type: "text",
-              text: "<system-reminder>context</system-reminder>",
-              cache_control: { type: "ephemeral" },
-            },
-          ],
-        },
-        systemMessage,
-      ]);
+      const response = await injectMessages(app, agent.id, {
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "hi" },
+              {
+                type: "text",
+                text: "<system-reminder>context</system-reminder>",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+          systemMessage,
+        ],
+      });
 
       expect(response.statusCode).toBe(200);
       expect(captured.params?.messages?.[1]).toEqual(systemMessage);
@@ -674,13 +677,37 @@ describe("Anthropic Claude Code requests", () => {
         ],
       };
 
-      const response = await injectMessages(app, agent.id, [
-        { role: "user", content: "hi" },
-        assistantMessage,
-      ]);
+      const response = await injectMessages(app, agent.id, {
+        messages: [{ role: "user", content: "hi" }, assistantMessage],
+      });
 
       expect(response.statusCode).toBe(200);
       expect(captured.params?.messages?.[1]).toEqual(assistantMessage);
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Claude Code sends `display: "updates"` on interactive requests. When the
+  // proxy answers 400, Claude Code sends the request again without `display`
+  // and stops sending it for the rest of the conversation.
+  test("accepts and forwards Claude Code's thinking display mode", async ({
+    makeAgent,
+  }) => {
+    const captured = captureUpstreamParams();
+    const app = await buildApp();
+
+    try {
+      const agent = await makeAgent({ name: "Thinking Display Agent" });
+      const thinking = { type: "adaptive", display: "updates" };
+
+      const response = await injectMessages(app, agent.id, {
+        messages: [{ role: "user", content: "hi" }],
+        thinking,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(captured.params?.thinking).toEqual(thinking);
     } finally {
       await app.close();
     }

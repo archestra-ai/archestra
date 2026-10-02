@@ -1466,12 +1466,27 @@ export type AnthropicMessagesRequestInput = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
     } | {
         type: 'disabled';
+        [key: string]: unknown;
+    } | {
+        type: 'between_tools';
+        [key: string]: unknown;
     } | {
         type: 'adaptive';
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     };
     tool_choice?: {
         type: 'auto';
@@ -7757,12 +7772,27 @@ export type AnthropicMessagesRequest = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
     } | {
         type: 'disabled';
+        [key: string]: unknown;
+    } | {
+        type: 'between_tools';
+        [key: string]: unknown;
     } | {
         type: 'adaptive';
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     };
     tool_choice?: {
         type: 'auto';
@@ -29847,12 +29877,27 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -30177,12 +30222,27 @@ export type BedrockInvokeWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -30508,12 +30568,27 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -30771,12 +30846,27 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -44878,12 +44968,27 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'disabled';
+                    [key: string]: unknown;
+                } | {
+                    type: 'between_tools';
+                    [key: string]: unknown;
                 } | {
                     type: 'adaptive';
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -45118,12 +45223,27 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'disabled';
+                    [key: string]: unknown;
+                } | {
+                    type: 'between_tools';
+                    [key: string]: unknown;
                 } | {
                     type: 'adaptive';
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -52085,12 +52205,27 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
             } | {
                 type: 'disabled';
+                [key: string]: unknown;
+            } | {
+                type: 'between_tools';
+                [key: string]: unknown;
             } | {
                 type: 'adaptive';
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             };
             tool_choice?: {
                 type: 'auto';
@@ -52325,12 +52460,27 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
             } | {
                 type: 'disabled';
+                [key: string]: unknown;
+            } | {
+                type: 'between_tools';
+                [key: string]: unknown;
             } | {
                 type: 'adaptive';
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             };
             tool_choice?: {
                 type: 'auto';

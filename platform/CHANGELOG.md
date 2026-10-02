@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.68](https://github.com/archestra-ai/archestra/compare/platform-v1.3.67...platform-v1.3.68) (2026-10-01)
+
+
+### Bug Fixes
+
+* **anthropic:** isolate explicit bearer credentials (backport release/1.3) ([#8334](https://github.com/archestra-ai/archestra/issues/8334)) ([524265b](https://github.com/archestra-ai/archestra/commit/524265b84bf0ed4a6e174157a29064ba189f4a0b))
+* **bedrock:** backport Model Router prompt caching to release/1.3 ([#8363](https://github.com/archestra-ai/archestra/issues/8363)) ([d4a1298](https://github.com/archestra-ai/archestra/commit/d4a12988917ad6a8bec999d777f5841e24a960ff))
+* **deps:** patch platform and MCP image vulnerabilities (backport release/1.3) ([#8351](https://github.com/archestra-ai/archestra/issues/8351)) ([2517c8b](https://github.com/archestra-ai/archestra/commit/2517c8b5c5c36de2ee01bf24df71554ddcc06bee))
+* **gemini:** read every page of the Gemini model catalog (backport release/1.3) ([#8360](https://github.com/archestra-ai/archestra/issues/8360)) ([d773ff9](https://github.com/archestra-ai/archestra/commit/d773ff9b0d2e170d15295fdd4452e5f2d57c9d77))
+* **llm-proxy:** accept max reasoning effort (backport release/1.3) ([#8374](https://github.com/archestra-ai/archestra/issues/8374)) ([e2d0a07](https://github.com/archestra-ai/archestra/commit/e2d0a07d22172a7d110c19a5ac94405cc2eca3c9))
+* **xai:** correct the SuperGrok name in sign-in errors and docs (backport release/1.3) ([#8359](https://github.com/archestra-ai/archestra/issues/8359)) ([8851a21](https://github.com/archestra-ai/archestra/commit/8851a21193bd181806c6e96e3415af4ffe9653cd))
+* **xai:** send a current Grok CLI version (backport release/1.3) ([#8349](https://github.com/archestra-ai/archestra/issues/8349)) ([b769b00](https://github.com/archestra-ai/archestra/commit/b769b0015be33a86e8d77130462408036b2005c8))
+
 ## [1.3.67](https://github.com/archestra-ai/archestra/compare/platform-v1.3.66...platform-v1.3.67) (2026-09-30)
 
 

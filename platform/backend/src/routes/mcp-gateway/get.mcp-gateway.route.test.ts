@@ -224,6 +224,7 @@ describe("MCP Gateway GET transport", () => {
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
+      toolExposureMode: "full",
       organizationId: org.id,
       agentType: "mcp_gateway",
     });

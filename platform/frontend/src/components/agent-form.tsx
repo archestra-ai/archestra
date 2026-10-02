@@ -1332,8 +1332,9 @@ export function AgentForm({
     },
     [],
   );
-  const [toolExposureMode, setToolExposureMode] =
-    useState<ToolExposureMode>("full");
+  const [toolExposureMode, setToolExposureMode] = useState<ToolExposureMode>(
+    "search_and_run_only",
+  );
   // What the record will actually do. `isEnforcing` in
   // agent-credential-readiness refuses to enforce on an `accessAllTools`
   // record, so an Auto agent asks when a tool needs one whatever is stored —
@@ -1719,7 +1720,7 @@ export function AgentForm({
             runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
-            toolExposureMode: "full",
+            toolExposureMode: "search_and_run_only",
             missingCredentialBehavior: "allow",
             accessAllTools: initialValues?.accessAllTools ?? true,
             accessAllSubagents: true,

@@ -2752,7 +2752,10 @@ describe("createAgentServer tools/list", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({ organizationId: org.id });
+    const agent = await makeAgent({
+      toolExposureMode: "full",
+      organizationId: org.id,
+    });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       name: "bug-tracker",
@@ -3253,6 +3256,7 @@ describe("createAgentServer tools/list", () => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
 
     const gatewayAgent = await makeAgent({
+      toolExposureMode: "full",
       organizationId: org.id,
       agentType: "mcp_gateway",
     });
@@ -3260,6 +3264,7 @@ describe("createAgentServer tools/list", () => {
     // makeAgent defaults to agentType "mcp_gateway"; the chat shape must be
     // explicit or this pin compares two gateway agents.
     const chatAgent = await makeAgent({
+      toolExposureMode: "full",
       organizationId: org.id,
       agentType: "agent",
     });
@@ -3998,7 +4003,10 @@ describe("createAgentServer tools/list", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent({ organizationId: org.id });
+    const agent = await makeAgent({
+      toolExposureMode: "full",
+      organizationId: org.id,
+    });
 
     // Two different catalog items whose installs happen to share a display
     // name, producing two tool rows with the identical slugified name.
@@ -4082,7 +4090,10 @@ describe("createAgentServer tools/list", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent({ organizationId: org.id });
+    const agent = await makeAgent({
+      toolExposureMode: "full",
+      organizationId: org.id,
+    });
     await ToolModel.syncArchestraBuiltInCatalog({ organization: null });
     await ToolModel.assignArchestraToolsToAgent(
       agent.id,
@@ -4206,7 +4217,10 @@ describe("createAgentServer tools/list", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent({ organizationId: org.id });
+    const agent = await makeAgent({
+      toolExposureMode: "full",
+      organizationId: org.id,
+    });
     const upstreamTool = await makeUpstreamTool({
       makeInternalMcpCatalog,
       makeMcpServer,

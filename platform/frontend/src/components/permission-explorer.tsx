@@ -37,7 +37,6 @@ export function PermissionExplorer({
   grantable?: Permissions;
   sources?: archestraApiTypes.GetUserPermissionSourcesResponses["200"];
 }) {
-  const id = useId();
   const [category, setCategory] = useState<string | null>(null);
   const editable = !!onChange;
   const groups = Object.entries(resourceCategories)
@@ -152,33 +151,6 @@ export function PermissionExplorer({
           <div className="min-w-0 space-y-5 sm:pl-5">
             {visible.map((group) => (
               <section key={group.name} aria-label={`${group.name} resources`}>
-                <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
-                  <div className="flex items-baseline gap-2">
-                    <h3 className="text-sm font-medium">{group.name}</h3>
-                    <span className="text-xs text-muted-foreground">
-                      {group.resources.length} resources
-                    </span>
-                  </div>
-                  {editable && (
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id={`${id}-${group.name}`}
-                        aria-label={`Select all ${group.name} permissions`}
-                        checked={checkState(group.resources)}
-                        disabled={cannotSelect(group.resources)}
-                        onCheckedChange={(checked) =>
-                          toggleResources(group.resources, checked === true)
-                        }
-                      />
-                      <Label
-                        htmlFor={`${id}-${group.name}`}
-                        className="cursor-pointer text-xs text-muted-foreground"
-                      >
-                        Select all
-                      </Label>
-                    </div>
-                  )}
-                </div>
                 <div
                   className="hidden grid-cols-[minmax(8rem,1fr)_repeat(4,3rem)_minmax(4rem,0.8fr)] items-center gap-1 border-b pb-2 text-[11px] text-muted-foreground sm:grid"
                   aria-hidden="true"

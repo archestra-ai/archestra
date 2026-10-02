@@ -1,5 +1,5 @@
 import type { Permissions } from "@archestra/shared";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -20,11 +20,6 @@ describe("RolePermissionBuilder", () => {
         permission={{ knowledgeSource: ["query"] }}
       />,
     );
-    expect(
-      screen.getByRole("checkbox", {
-        name: "Select all Knowledge permissions",
-      }),
-    ).toHaveAttribute("data-state", "indeterminate");
     expect(
       screen.getByRole("checkbox", {
         name: "Knowledge Sources permissions",
@@ -124,11 +119,7 @@ describe("RolePermissionBuilder", () => {
       screen.getByRole("checkbox", { name: "Skills Read" }),
     ).not.toBeChecked();
     await user.click(
-      within(
-        screen.getByRole("region", { name: "Agents resources" }),
-      ).getByRole("checkbox", {
-        name: "Select all Agents permissions",
-      }),
+      screen.getByRole("checkbox", { name: "Skills permissions" }),
     );
     expect(screen.getByRole("checkbox", { name: "Skills Read" })).toBeChecked();
     expect(

@@ -83,7 +83,11 @@ class OpenAppaUnenforcedModel {
     };
   }
 
-  /** The records of `sessionIds` that name one of `toolCallIds` or `childNativeIds`. */
+  /**
+   * The records of `sessionIds` that name one of `toolCallIds` or
+   * `childNativeIds`. The ids come from one request, so the lists are no
+   * longer than its tool results.
+   */
   static async findCalls(params: {
     organizationId: string;
     sessionIds: readonly string[];
@@ -139,14 +143,14 @@ async function deleteInBatches(
   const { before, batchSize, maxBatches } = params;
   let total = 0;
   for (let batch = 0; batch < maxBatches; batch++) {
-    const batch = db
+    const expired = db
       .select({ ctid: sql`ctid` })
       .from(table)
       .where(lt(table.createdAt, before))
       .limit(batchSize);
     const removed = await db
       .delete(table)
-      .where(inArray(sql`ctid`, batch))
+      .where(inArray(sql`ctid`, expired))
       .returning({ createdAt: table.createdAt });
     total += removed.length;
     if (removed.length < batchSize) break;

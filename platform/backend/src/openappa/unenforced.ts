@@ -80,8 +80,8 @@ export async function startedUnenforced(
   });
   if (governed) return false;
   if (!own) {
-    // The record named by the parent id may be another trajectory's, spelled
-    // the same: a parent the runtime governs never started unenforced.
+    // A recorded id can belong to another session with the same spelling. A
+    // parent that the runtime governs did not start while enforcement was off.
     if (
       session.parent_id &&
       (await OpenAppaSessionModel.find({

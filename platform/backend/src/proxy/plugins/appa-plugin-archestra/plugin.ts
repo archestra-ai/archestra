@@ -1748,10 +1748,9 @@ async function admitRelayArrivals(params: {
   );
   let ranUnenforced: Promise<boolean> | undefined;
   // Only a sender that has nothing on record counts: a message from a sender
-  // with a crossing may be the summary of a return the check withheld. A
-  // teammate's envelope, a teammate or an agent one, names it by the name it
-  // launched under. A subagent's envelope names no sender a launch carries, so
-  // it never counts.
+  // with a crossing may be the summary of a return the check withheld. Claude
+  // Code names a teammate by its launch name, in a teammate envelope or in an
+  // agent envelope. A subagent's envelope names no launch, so it never counts.
   const sentUnenforced = async (arrival: AppaRelayArrival) => {
     if (arrival.kind === "session") return false;
     const launch =

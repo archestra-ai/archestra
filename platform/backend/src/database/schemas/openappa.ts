@@ -168,8 +168,9 @@ export const openappaUnenforcedSessionsTable = pgTable(
     organizationId: text("organization_id").notNull(),
     // The caller-scoped id, as `openappa_sessions.session_id` holds it.
     sessionId: text("session_id").notNull(),
-    // The session that started this one, for a child. A child's id is its
-    // parent's id and its own, so the parent tells it from a root of that id.
+    // For a child, the session that started it. A child's id joins its
+    // parent's id and its own, so the parent tells it apart from a root that
+    // has the same id.
     parentId: text("parent_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

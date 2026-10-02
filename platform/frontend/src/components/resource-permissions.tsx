@@ -38,6 +38,7 @@ import {
   ResourceAccessPicker,
 } from "@/components/add-resource-access-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { getPermissionSafetyPreview } from "@/components/resource-permission-safety-preview";
 import { StandardDialog } from "@/components/standard-dialog";
 import { TabbedDialogFooterSlot } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   type ResourcePermissions as Policy,
   useResourcePermissions,
@@ -179,6 +181,13 @@ export function ResourcePermissionsDialog({
   const [headerContainer, setHeaderContainer] = useState<HTMLDivElement | null>(
     null,
   );
+  const isMobile = useIsMobile();
+  const canManage =
+    useResourcePermissions(
+      resource,
+      scope,
+      open,
+    ).data?.effectiveActions.includes("manage-permissions") ?? false;
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessDirty, setAccessDirty] = useState(false);
   const noun = scopedResourceNouns[resource];
@@ -203,17 +212,26 @@ export function ResourcePermissionsDialog({
           : (description ??
             (scope !== "*"
               ? `Choose who can access this ${noun} and what they can do.`
-              : `Give access to every ${noun} in the organization, including ones created later.` +
+              : `Applies to every ${noun}, including new ones.` +
                 (ORGANIZATION_WIDE_RESOURCES.has(resource)
                   ? ""
-                  : " Permissions on individual resources can add access, but cannot reduce access given here.")))
+                  : " Individual permissions can add access, but can’t take away access granted here.")))
       }
       isDirty={isDirty || accessDirty}
-      className="sm:max-w-3xl"
+      className="w-[calc(100%-2rem)] max-h-[90dvh] sm:max-w-3xl"
+      headerClassName={
+        isMobile || !canManage
+          ? "text-left [&_[data-slot=dialog-title]]:pr-6 [&_[data-slot=dialog-title]]:leading-snug"
+          : "text-left [&_[data-slot=dialog-title]]:leading-snug"
+      }
+      headerAction={
+        !accessOpen &&
+        !isMobile &&
+        canManage && <div ref={setHeaderContainer} />
+      }
       // The list starts with its own column header, which reads as a heading
       // already. A full body inset above it just pushes the table down.
       bodyClassName={accessOpen ? undefined : "pt-2"}
-      headerAction={!accessOpen && <div ref={setHeaderContainer} />}
       footer={
         <fieldset
           ref={setFooterContainer}
@@ -229,7 +247,7 @@ export function ResourcePermissionsDialog({
       <ResourcePermissionsDialogContext.Provider
         value={{
           footerContainer,
-          headerContainer,
+          headerContainer: isMobile ? null : headerContainer,
           setAccessOpen,
           setAccessDirty,
         }}
@@ -302,8 +320,18 @@ function PermissionsEditor({
   const addButton = useRef<HTMLButtonElement>(null);
   const wasAdding = useRef(false);
   useEffect(() => {
-    if (dialog && wasAdding.current && !addOpen) addButton.current?.focus();
-    wasAdding.current = addOpen;
+    if (addOpen) {
+      wasAdding.current = true;
+      return;
+    }
+    if (!dialog || !wasAdding.current) return;
+    // Returning from the picker remounts the desktop header slot. Wait for
+    // its portal to settle so focus lands on the visible button.
+    const frame = requestAnimationFrame(() => {
+      addButton.current?.focus();
+      wasAdding.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [addOpen, dialog]);
   const setAccessOpen = (open: boolean) => {
     setAddOpen(open);
@@ -328,9 +356,15 @@ function PermissionsEditor({
   const presets = resourcePermissionPresetsFor(policy.resource);
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
+  const safety = getPermissionSafetyPreview({
+    policy,
+    grants: form.watch("grants"),
+  });
+  const blocked = dirty && safety?.blocked === true;
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const reset = () =>
     form.reset({ revision: policy.revision, grants: policy.grants });
-  const submit = form.handleSubmit((values) => {
+  const persist = (values: { revision: number; grants: Policy["grants"] }) => {
     mutation.mutate(
       {
         revision: values.revision,
@@ -344,6 +378,11 @@ function PermissionsEditor({
           form.reset({ revision: saved.revision, grants: saved.grants }),
       },
     );
+  };
+  const submit = form.handleSubmit((values) => {
+    if (blocked || changedElsewhere || refreshFailed) return;
+    if (dirty && safety?.losesManagement) setConfirmOpen(true);
+    else persist(values);
   });
   // A host form that submits this section along with its own fields needs to
   // flush the policy in its submit handler. Without it the section's edits
@@ -390,7 +429,7 @@ function PermissionsEditor({
       type="button"
       variant="outline"
       size="sm"
-      className="shrink-0"
+      className="h-11 shrink-0 sm:h-8"
       disabled={mutation.isPending || !policy.effectiveActions.includes("read")}
       ref={addButton}
       onClick={() => setAccessOpen(true)}
@@ -407,10 +446,12 @@ function PermissionsEditor({
         // A tabbed dialog hides its own buttons while this row owns its
         // footer, the way the all-permissions dialog swaps Done for it.
         data-section-actions=""
-        className="flex w-full items-center justify-between gap-3"
+        className="flex w-full items-center justify-between gap-3 [&_button]:h-11 sm:[&_button]:h-8"
       >
-        <span className="text-xs text-muted-foreground">Unsaved changes</span>
-        <div className="flex items-center gap-2">
+        <span className="hidden text-xs text-muted-foreground sm:inline">
+          Unsaved changes
+        </span>
+        <div className="ml-auto flex items-center gap-2">
           <Button
             type="button"
             size="sm"
@@ -427,7 +468,9 @@ function PermissionsEditor({
             size="sm"
             aria-label="Save permissions"
             onClick={() => void submit()}
-            disabled={mutation.isPending || changedElsewhere || refreshFailed}
+            disabled={
+              mutation.isPending || changedElsewhere || refreshFailed || blocked
+            }
           >
             <span>{mutation.isPending ? "Saving…" : "Save"}</span>
           </Button>
@@ -445,18 +488,28 @@ function PermissionsEditor({
       <Container
         hidden={!!dialog && addOpen}
         onSubmit={embedded ? undefined : submit}
-        className={embedded ? undefined : "space-y-3"}
+        className={embedded && !dialog ? undefined : "space-y-3"}
       >
         <PermissionsPanel
           embedded={embedded && !dialog}
           standalone={standalone || inShell}
         >
-          {/* In a dialog the action takes the close button's corner, so it
-            costs no vertical space above the table. */}
+          {!canManage && (
+            <InlineNotice variant="info">
+              <Info />
+              <span className="font-medium">You can’t change permissions.</span>
+              <InlineNoticeText>
+                Ask someone with full access to let you change permissions.
+              </InlineNoticeText>
+            </InlineNotice>
+          )}
           {title === null &&
             addAccessButton &&
-            headerContainer &&
-            createPortal(addAccessButton, headerContainer)}
+            (headerContainer ? (
+              createPortal(addAccessButton, headerContainer)
+            ) : (
+              <div className="flex justify-end">{addAccessButton}</div>
+            ))}
           {title !== null && (
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 space-y-1">
@@ -514,7 +567,7 @@ function PermissionsEditor({
 
           <div className="divide-y">
             {(fields.length > 0 || indirect.length > 0) && (
-              <div className="flex items-center gap-3 pb-2 text-xs font-medium text-muted-foreground">
+              <div className="hidden items-center gap-3 pb-2 text-xs font-medium text-muted-foreground sm:flex">
                 <span className="flex-1">Recipient</span>
                 <span className="w-36 border border-transparent px-3">
                   Permission
@@ -528,9 +581,12 @@ function PermissionsEditor({
               </p>
             )}
             {fields.map((grant, index) => (
-              <div key={grant.id} className="flex items-center gap-3 py-1.5">
+              <div
+                key={grant.id}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-3 sm:flex sm:gap-3 sm:py-1.5"
+              >
                 <SubjectIcon type={grant.subject.type} />
-                <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                <div className="col-span-2 flex min-w-0 flex-1 flex-col items-start gap-x-2 sm:flex-row sm:flex-wrap sm:items-baseline">
                   <p className="break-words text-sm font-medium">
                     {grant.name}
                   </p>
@@ -551,7 +607,7 @@ function PermissionsEditor({
                 >
                   <SelectTrigger
                     size="sm"
-                    className="h-8 w-36 shrink-0 border-transparent text-left shadow-none hover:bg-muted dark:bg-transparent dark:hover:bg-muted"
+                    className="h-11 min-h-11 w-full min-w-0 text-left shadow-none hover:bg-muted sm:h-8 sm:min-h-8 sm:w-36 sm:shrink-0 sm:border-transparent dark:bg-transparent dark:hover:bg-muted"
                     aria-label={`Permission for ${grant.name}`}
                     title={actionDetail(grant.actions, policy.resource)}
                   >
@@ -587,7 +643,7 @@ function PermissionsEditor({
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="size-8 shrink-0 text-muted-foreground"
+                  className="size-11 shrink-0 text-muted-foreground sm:size-8"
                   disabled={!canManage || mutation.isPending}
                   aria-label={`Remove direct access for ${grant.name}`}
                   onClick={() => remove(index)}
@@ -599,10 +655,10 @@ function PermissionsEditor({
             {indirect.map((grant) => (
               <div
                 key={grant.key}
-                className="flex items-center gap-3 py-1.5 text-muted-foreground"
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-3 text-muted-foreground sm:flex sm:gap-3 sm:py-1.5"
               >
                 <SubjectIcon type={grant.type} />
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+                <div className="col-span-2 flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
                   <p className="break-words text-sm font-medium">
                     {grant.name}
                   </p>
@@ -646,16 +702,50 @@ function PermissionsEditor({
                   </Popover>
                 </div>
                 <p
-                  className="w-36 shrink-0 truncate border border-transparent px-3 text-sm"
+                  className="min-w-0 text-sm sm:w-36 sm:shrink-0 sm:truncate sm:border sm:border-transparent sm:px-3"
                   title={actionDetail(grant.actions, policy.resource)}
                 >
                   {actionSummary(grant.actions, policy.resource)}
                 </p>
-                <span className="size-8 shrink-0" />
+                <span className="hidden size-8 shrink-0 sm:block" />
               </div>
             ))}
           </div>
 
+          {canManage &&
+            dirty &&
+            safety &&
+            (blocked ? (
+              <InlineNotice variant="error">
+                <AlertTriangle />
+                <span className="font-medium">
+                  Someone must be able to change permissions.
+                </span>
+                <InlineNoticeText>
+                  These changes would leave no one able to change permissions.
+                  Give another recipient full access before removing your own.
+                </InlineNoticeText>
+              </InlineNotice>
+            ) : safety.losesManagement ? (
+              <InlineNotice>
+                <AlertTriangle />
+                <span className="font-medium">
+                  {safety.losesAccess
+                    ? "You’ll lose access."
+                    : "You won’t be able to change permissions."}
+                </span>
+                <InlineNoticeText>
+                  <span>
+                    {safety.losesAccess
+                      ? "You won’t be able to view or use these resources. "
+                      : "You can still view these resources, but you won’t be able to change who has access. "}
+                    {safety.losesAccess
+                      ? `Ask ${safety.recovery} to give you access again.`
+                      : `To change permissions again, ask ${safety.recovery}.`}
+                  </span>
+                </InlineNoticeText>
+              </InlineNotice>
+            ) : null)}
           {pageFooter
             ? canManage && (
                 <WizardFooter className="sm:justify-end">
@@ -665,7 +755,8 @@ function PermissionsEditor({
                       !dirty ||
                       mutation.isPending ||
                       changedElsewhere ||
-                      refreshFailed
+                      refreshFailed ||
+                      blocked
                     }
                   >
                     {mutation.isPending ? (
@@ -691,6 +782,56 @@ function PermissionsEditor({
           )}
         </PermissionsPanel>
       </Container>
+      <StandardDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        size="small"
+        className="w-[calc(100%-2rem)] max-h-[90dvh]"
+        headerClassName="text-left [&_[data-slot=dialog-title]]:pr-6 [&_[data-slot=dialog-title]]:leading-snug"
+        footerClassName="[&_button]:min-h-11 sm:[&_button]:min-h-9"
+        title={
+          safety?.losesAccess
+            ? "Give up your access?"
+            : "Give up the ability to change permissions?"
+        }
+        description={
+          safety?.losesAccess
+            ? `You’re about to give up access for ${policy.scope === "*" ? `all ${resourcePluralNames[policy.resource]}` : `this ${noun}`}.`
+            : `You can still view ${policy.scope === "*" ? `all ${resourcePluralNames[policy.resource]}` : `this ${noun}`}, but you won’t be able to change who has access.`
+        }
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Keep editing
+            </Button>
+            <Button
+              disabled={
+                mutation.isPending ||
+                changedElsewhere ||
+                refreshFailed ||
+                blocked
+              }
+              onClick={() => {
+                setConfirmOpen(false);
+                void form.handleSubmit(persist)();
+              }}
+            >
+              {safety?.losesAccess
+                ? "Save and give up access"
+                : "Save changes anyway"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          You won’t be able to undo this yourself.
+          <span>
+            {safety?.losesAccess
+              ? ` Ask ${safety?.recovery} to give you access again.`
+              : ` To change permissions again, ask ${safety?.recovery}.`}
+          </span>
+        </p>
+      </StandardDialog>
       {canManage && addOpen && (
         <AccessPicker
           open={addOpen}

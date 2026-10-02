@@ -222,7 +222,10 @@ export class ResourcePermissions {
   }
 
   static async require(
-    params: PermissionContext & { action: ResourcePermissionAction },
+    params: PermissionContext & {
+      action: ResourcePermissionAction;
+      includeDeleted?: boolean;
+    },
   ): Promise<void> {
     const effective = await ResourcePermissions.getEffective(params);
     if (!hasScopedPermission({ grants: effective.grants, required: params }))
@@ -264,7 +267,9 @@ export class ResourcePermissions {
     return ResourcePermissions.findRecipients(params);
   }
 
-  static async getEffective(params: PermissionContext) {
+  static async getEffective(
+    params: PermissionContext & { includeDeleted?: boolean },
+  ) {
     if (!ResourcePermissionScopeSchema.safeParse(params.scope).success)
       throw new ApiError(400, "Invalid permission scope");
     if (

@@ -19,7 +19,6 @@ export const actions = [
   "query",
   "execute",
   "manage",
-  "manage-deleted",
   "impersonate",
   "admin",
 ] as const;

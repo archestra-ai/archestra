@@ -239984,7 +239984,7 @@
             "in": "query",
             "name": "status",
             "required": false,
-            "description": "Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default)."
+            "description": "Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete."
           }
         ],
         "responses": {
@@ -249472,7 +249472,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Restore a soft-deleted Internal MCP catalog item and its cascaded installs and tools (flag-only reinstall).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:manage-deleted`: View and restore soft-deleted MCP registry entries",
+        "description": "Restore a soft-deleted Internal MCP catalog item and its cascaded installs and tools (flag-only reinstall).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -249735,10 +249735,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpRegistry:manage-deleted"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -300165,7 +300164,7 @@
             "in": "query",
             "name": "status",
             "required": false,
-            "description": "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default)."
+            "description": "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires delete permission and is limited to connections you can uninstall."
           }
         ],
         "responses": {
@@ -302004,7 +302003,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Delete/uninstall an MCP server\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:delete`: Uninstall MCP servers",
+        "description": "Delete/uninstall an MCP server\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:delete`: Uninstall, view deleted, and restore MCP servers within your access",
         "parameters": [
           {
             "schema": {
@@ -302886,7 +302885,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Uninstall several MCP servers in one request. Each id is authorized exactly as the single uninstall authorizes its own, so a built-in server, an app-backing server (owned by the Apps lifecycle), or one the caller may not revoke is reported in `failed` while the rest of the batch still applies. Uninstall is a recoverable soft delete: stored credentials are retained so a restore recovers them, and only the live Kubernetes Secret is torn down.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:delete`: Uninstall MCP servers",
+        "description": "Uninstall several MCP servers in one request. Each id is authorized exactly as the single uninstall authorizes its own, so a built-in server, an app-backing server (owned by the Apps lifecycle), or one the caller may not revoke is reported in `failed` while the rest of the batch still applies. Uninstall is a recoverable soft delete: stored credentials are retained so a restore recovers them, and only the live Kubernetes Secret is torn down.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:delete`: Uninstall, view deleted, and restore MCP servers within your access",
         "requestBody": {
           "required": true,
           "content": {
@@ -303218,7 +303217,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Restore a soft-deleted (uninstalled) MCP server. Flag-only: the server is marked for manual reinstall, not re-provisioned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:manage-deleted`: View and restore soft-deleted (uninstalled) MCP servers",
+        "description": "Restore a soft-deleted (uninstalled) MCP server. Flag-only: the server is marked for manual reinstall, not re-provisioned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:delete`: Uninstall, view deleted, and restore MCP servers within your access",
         "parameters": [
           {
             "schema": {
@@ -303778,7 +303777,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpServerInstallation:manage-deleted"
+            "mcpServerInstallation:delete"
           ]
         }
       }
@@ -337283,7 +337282,6 @@
                                   "query",
                                   "execute",
                                   "manage",
-                                  "manage-deleted",
                                   "impersonate",
                                   "admin"
                                 ]
@@ -337641,7 +337639,6 @@
                           "query",
                           "execute",
                           "manage",
-                          "manage-deleted",
                           "impersonate",
                           "admin"
                         ]
@@ -337697,7 +337694,6 @@
                             "query",
                             "execute",
                             "manage",
-                            "manage-deleted",
                             "impersonate",
                             "admin"
                           ]
@@ -338043,7 +338039,6 @@
                             "query",
                             "execute",
                             "manage",
-                            "manage-deleted",
                             "impersonate",
                             "admin"
                           ]
@@ -338353,7 +338348,6 @@
                           "query",
                           "execute",
                           "manage",
-                          "manage-deleted",
                           "impersonate",
                           "admin"
                         ]
@@ -338431,7 +338425,6 @@
                             "query",
                             "execute",
                             "manage",
-                            "manage-deleted",
                             "impersonate",
                             "admin"
                           ]
@@ -415401,7 +415394,6 @@
                               "query",
                               "execute",
                               "manage",
-                              "manage-deleted",
                               "impersonate",
                               "admin"
                             ]
@@ -415684,7 +415676,6 @@
                         "query",
                         "execute",
                         "manage",
-                        "manage-deleted",
                         "impersonate",
                         "admin"
                       ]

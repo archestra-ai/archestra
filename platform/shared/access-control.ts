@@ -55,14 +55,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpGateway: ["read", "create", "update", "delete"],
   mcpOauthClient: ["read", "create", "update", "delete"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete", "manage-deleted"],
-  mcpServerInstallation: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "manage-deleted",
-  ],
+  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
 
@@ -449,15 +443,13 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:read": "Browse the MCP server registry",
   "mcpRegistry:create": "Add servers to the MCP registry",
   "mcpRegistry:update": "Modify MCP registry entries",
-  "mcpRegistry:delete": "Remove servers from the MCP registry",
-  "mcpRegistry:manage-deleted":
-    "View and restore soft-deleted MCP registry entries",
+  "mcpRegistry:delete":
+    "Remove, view deleted, and restore MCP registry entries within your access",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
-  "mcpServerInstallation:delete": "Uninstall MCP servers",
-  "mcpServerInstallation:manage-deleted":
-    "View and restore soft-deleted (uninstalled) MCP servers",
+  "mcpServerInstallation:delete":
+    "Uninstall, view deleted, and restore MCP servers within your access",
   "environment:read": "View and list deployment environments",
   "environment:create": "Create deployment environments",
   "environment:update":
@@ -884,11 +876,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RefreshInternalMcpCatalogImage]: {},
   [RouteId.DeleteInternalMcpCatalogItem]: {},
   [RouteId.DeleteInternalMcpCatalogItemByName]: {},
-  // Deleted-resource lifecycle is its own capability, granted by default to
-  // admins only — delete does not imply the ability to see or revive tombstones.
-  [RouteId.RestoreInternalMcpCatalogItem]: {
-    mcpRegistry: ["manage-deleted"],
-  },
+  [RouteId.RestoreInternalMcpCatalogItem]: {},
   [RouteId.GetInternalMcpCatalogLabelKeys]: {
     mcpRegistry: ["read"],
   },
@@ -937,10 +925,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServerInstallation: ["delete"],
   },
-  // Deleted-resource lifecycle is its own capability, granted by default to
-  // admins only — delete does not imply the ability to see or revive tombstones.
   [RouteId.RestoreMcpServer]: {
-    mcpServerInstallation: ["manage-deleted"],
+    mcpServerInstallation: ["delete"],
   },
   [RouteId.ReauthenticateMcpServer]: {
     // Re-authentication re-supplies credentials for a connection the caller can

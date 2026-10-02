@@ -5,7 +5,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type { ResourcePermissions as Policy } from "@/lib/resource-permissions.query";
 import { ResourcePermissions } from "./resource-permissions";
 
@@ -43,6 +51,14 @@ beforeEach(() => {
   server.use(
     http.get(endpoint, () => HttpResponse.json(policy)),
     http.get(`${endpoint}/subjects`, () => HttpResponse.json([])),
+    http.get(`${origin}/api/resource-permissions/mcpRegistry/:scope`, () =>
+      HttpResponse.json({
+        ...policy,
+        scope: "*",
+        grants: [],
+        effectiveActions: [],
+      }),
+    ),
   );
 });
 afterEach(() => server.resetHandlers());
@@ -311,10 +327,89 @@ it("retains a stale draft and requires an explicit reload after a concurrent edi
   expect(screen.getByText("Updated automation")).toBeInTheDocument();
 });
 
+it("requires confirmation before saving a mock permission handoff", async () => {
+  vi.stubEnv("NEXT_PUBLIC_API_MOCKING", "enabled");
+  policy.previewActorSubjects = [{ type: "role", id: "admin" }];
+  policy.grants = [
+    {
+      subject: { type: "role", id: "admin" },
+      name: "Admin",
+      actions: [...policy.effectiveActions],
+    },
+    {
+      subject: { type: "team", id: "team-b" },
+      name: "Platform maintainers",
+      actions: [...policy.effectiveActions],
+    },
+  ];
+  let saves = 0;
+  server.use(
+    http.put(endpoint, async () => {
+      saves++;
+      return HttpResponse.json(policy);
+    }),
+  );
+  const user = userEvent.setup();
+  renderEditor();
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Remove direct access for Admin",
+    }),
+  );
+  expect(screen.getByText("You’ll lose access.")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(
+    await screen.findByRole("dialog", { name: "Give up your access?" }),
+  ).toBeInTheDocument();
+  expect(saves).toBe(0);
+  await user.click(screen.getByRole("button", { name: "Keep editing" }));
+  expect(saves).toBe(0);
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await user.click(
+    await screen.findByRole("button", { name: "Save and give up access" }),
+  );
+  await waitFor(() => expect(saves).toBe(1));
+});
+
+it("blocks a mock policy edit that would remove its last manager", async () => {
+  vi.stubEnv("NEXT_PUBLIC_API_MOCKING", "enabled");
+  policy.previewActorSubjects = [{ type: "role", id: "admin" }];
+  policy.grants = [
+    {
+      subject: { type: "role", id: "admin" },
+      name: "Admin",
+      actions: [...policy.effectiveActions],
+    },
+  ];
+  const user = userEvent.setup();
+  renderEditor(() => {});
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Remove direct access for Admin",
+    }),
+  );
+  expect(
+    screen.getByText("Someone must be able to change permissions."),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Save permissions" }),
+  ).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "Discard changes" }));
+  expect(
+    await screen.findByRole("button", {
+      name: "Remove direct access for Admin",
+    }),
+  ).toBeEnabled();
+  expect(
+    screen.queryByText("Someone must be able to change permissions."),
+  ).not.toBeInTheDocument();
+});
+
 it("lets readers inspect grants without offering mutations", async () => {
   policy.effectiveActions = ["read"];
   renderEditor();
   await screen.findByText("Build automation");
+  expect(screen.getByText("You can’t change permissions.")).toBeInTheDocument();
   expect(
     screen.getByRole("combobox", { name: "Permission for Build automation" }),
   ).toBeDisabled();

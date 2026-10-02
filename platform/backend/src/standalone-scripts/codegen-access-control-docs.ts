@@ -374,7 +374,7 @@ Users and service accounts can have multiple organization roles. Their permissio
 
 Teams can also hold organization roles. Members inherit these grants from their own teams and every ancestor in the [team hierarchy](#team-hierarchies). Removing a role or membership removes its grants, unless another assignment provides the same permissions.
 
-The account permissions page shows each permission's sources when you hover over or focus its badge. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
+The account permissions page shows each permission's sources when you hover over or focus its granted action. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
 
 #### No privilege escalation
 

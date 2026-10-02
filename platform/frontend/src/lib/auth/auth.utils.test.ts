@@ -59,16 +59,16 @@ describe("hasPermissions", () => {
 
   it("grants only the actions a role holds, with no implied actions", () => {
     const userPermissions: Permissions = {
-      mcpServerInstallation: ["read", "create", "update", "delete"],
+      mcpServerInstallation: ["read", "create", "delete"],
     };
     expect(
       hasPermissions(userPermissions, {
-        mcpServerInstallation: ["read", "create", "update", "delete"],
+        mcpServerInstallation: ["read", "create", "delete"],
       }),
     ).toBe(true);
     expect(
       hasPermissions(userPermissions, {
-        mcpServerInstallation: ["manage-deleted"],
+        mcpServerInstallation: ["update"],
       }),
     ).toBe(false);
   });

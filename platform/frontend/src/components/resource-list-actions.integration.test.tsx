@@ -131,7 +131,7 @@ it("edits only the all-agents policy and guards dismissing unsaved changes", asy
   const dialog = await screen.findByRole("dialog", {
     name: "Permissions for all agents",
   });
-  expect(dialog).toHaveTextContent("including ones created later");
+  expect(dialog).toHaveTextContent("including new ones");
   await user.click(
     await within(dialog).findByRole("combobox", {
       name: "Permission for Support",

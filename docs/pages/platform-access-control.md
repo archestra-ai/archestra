@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-10-01
+lastUpdated: 2026-10-02
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -142,7 +142,7 @@ Users and service accounts can have multiple organization roles. Their permissio
 
 Teams can also hold organization roles. Members inherit these grants from their own teams and every ancestor in the [team hierarchy](#team-hierarchies). Removing a role or membership removes its grants, unless another assignment provides the same permissions.
 
-The account permissions page shows each permission's sources when you hover over or focus its badge. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
+The account permissions page shows each permission's sources when you hover over or focus its granted action. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
 
 #### No privilege escalation
 
@@ -249,13 +249,11 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpRegistry:read` | Browse the MCP server registry |
 | `mcpRegistry:create` | Add servers to the MCP registry |
 | `mcpRegistry:update` | Modify MCP registry entries |
-| `mcpRegistry:delete` | Remove servers from the MCP registry |
-| `mcpRegistry:manage-deleted` | View and restore soft-deleted MCP registry entries |
+| `mcpRegistry:delete` | Remove, view deleted, and restore MCP registry entries within your access |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |
-| `mcpServerInstallation:delete` | Uninstall MCP servers |
-| `mcpServerInstallation:manage-deleted` | View and restore soft-deleted (uninstalled) MCP servers |
+| `mcpServerInstallation:delete` | Uninstall, view deleted, and restore MCP servers within your access |
 | `mcpSettings:read` | View MCP settings (online catalog availability) |
 | `mcpSettings:update` | Modify MCP settings |
 | `member:read` | View organization members and their roles |

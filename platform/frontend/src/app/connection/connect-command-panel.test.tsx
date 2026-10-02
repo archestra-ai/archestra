@@ -579,18 +579,17 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.queryByRole("heading", { name: "Connect Claude Code" }),
       ).toBeNull();
-      // The approval page lists what gets connected before the user approves.
+      // The approval page lists what gets connected before the user approves;
+      // the list is read-only and options stay under "Customize setup".
       expect(screen.getByText("for tools", { exact: false })).toBeVisible();
       expect(screen.getByTestId("gateway-servers-summary")).toBeVisible();
-      expect(
-        screen.queryByRole("button", { name: "Customize setup" }),
-      ).toBeNull();
+      expect(screen.queryByTestId("connect-change-skills")).toBeNull();
       expect(screen.queryByText(COMMAND)).toBeNull();
       expect(screen.queryByTestId("connect-regenerate-command")).toBeNull();
       expect(
         screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
       ).toBeNull();
-      await user.click(screen.getByTestId("connect-change-skills"));
+      await user.click(screen.getByRole("button", { name: "Customize setup" }));
       await user.click(
         screen.getByRole("checkbox", { name: "Install shared skills" }),
       );
@@ -599,7 +598,10 @@ describe("ConnectCommandPanel", () => {
           expect.objectContaining({ skills: undefined }),
         ),
       );
-      await user.click(screen.getByTestId("connect-change-skills"));
+      expect(screen.getByText("Shared skills not installed")).toBeVisible();
+      await user.click(
+        screen.getByRole("button", { name: "Done customizing" }),
+      );
       expect(
         screen.queryByRole("checkbox", { name: "Install shared skills" }),
       ).toBeNull();

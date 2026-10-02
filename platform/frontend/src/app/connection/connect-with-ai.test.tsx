@@ -146,9 +146,7 @@ test("Cursor explains how to opt into proxy inference", () => {
     "Connecting Cursor here adds Example Platform tools and skills",
   );
   expect(notice).toHaveTextContent("Cursor keeps using its current models");
-  expect(notice).toHaveTextContent(
-    "change the LLM Proxy line when you review the setup in your browser",
-  );
+  expect(notice).toHaveTextContent("Customize setup");
   expect(notice).toHaveTextContent("Cursor model settings (manual step)");
   expect(notice).toHaveTextContent("installer output");
   expect(notice).toHaveTextContent("Otherwise use your own OpenAI API key");

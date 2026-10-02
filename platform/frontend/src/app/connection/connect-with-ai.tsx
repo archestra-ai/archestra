@@ -48,8 +48,7 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
             <p>
               Connecting Cursor here adds {appName} tools and skills. Cursor
               keeps using its current models. To route supported OpenAI requests
-              through {appName} too, change the LLM Proxy line when you review
-              the setup in your browser.
+              through {appName} too, choose LLM Proxy under Customize setup.
             </p>
             <p>
               After setup, find “Cursor model settings (manual step)” in the

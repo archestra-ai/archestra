@@ -1815,26 +1815,31 @@ async function recordObservedCalls(
 ): Promise<void> {
   const { session } = observer;
   try {
-    await recordUnenforcedCalls({
-      organizationId: session.organization_id,
-      sessionId: session.session_id,
-      toolCallIds: calls.map((call) => call.id),
-      reason: "made",
-    });
     const launches = observer.adapter?.teammateLaunches?.(observer.requestBody);
-    for (const call of calls) {
+    const messaged = calls.flatMap((call) => {
       const to = observer.adapter?.relayMessage?.(call)?.to;
       const launch =
         to?.kind === "teammate" ? launches?.get(to.name) : undefined;
-      if (!launch) continue;
-      await recordUnenforcedCalls({
+      return launch ? [launch] : [];
+    });
+    // The records are independent, so they are written together.
+    await Promise.all([
+      recordUnenforcedCalls({
         organizationId: session.organization_id,
         sessionId: session.session_id,
-        toolCallIds: [launch.spawnCallId],
-        reason: "child",
-        childNativeId: launch.childNativeId,
-      });
-    }
+        toolCallIds: calls.map((call) => call.id),
+        reason: "made",
+      }),
+      ...messaged.map((launch) =>
+        recordUnenforcedCalls({
+          organizationId: session.organization_id,
+          sessionId: session.session_id,
+          toolCallIds: [launch.spawnCallId],
+          reason: "child",
+          childNativeId: launch.childNativeId,
+        }),
+      ),
+    ]);
   } catch (error) {
     logger.warn(
       { err: error },

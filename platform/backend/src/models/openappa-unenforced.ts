@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, or } from "drizzle-orm";
+import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { UnenforcedCallReason } from "@/types/openappa-unenforced";
 
@@ -65,19 +65,19 @@ class OpenAppaUnenforcedModel {
       .onConflictDoNothing();
   }
 
-  /** Deletes the records written before `before`, and says how many went. */
+  /**
+   * Deletes the records written before `before`, `batchSize` rows per
+   * statement so that no single delete holds locks for long, and says how
+   * many went.
+   */
   static async deleteOlderThan(
     before: Date,
+    batchSize = 1000,
   ): Promise<{ sessions: number; calls: number }> {
-    const removedSessions = await db
-      .delete(sessions)
-      .where(lt(sessions.createdAt, before))
-      .returning({ sessionId: sessions.sessionId });
-    const removedCalls = await db
-      .delete(calls)
-      .where(lt(calls.createdAt, before))
-      .returning({ toolCallId: calls.toolCallId });
-    return { sessions: removedSessions.length, calls: removedCalls.length };
+    return {
+      sessions: await deleteInBatches(sessions, before, batchSize),
+      calls: await deleteInBatches(calls, before, batchSize),
+    };
   }
 
   /** The records of `sessionIds` that name one of `toolCallIds` or `childNativeIds`. */
@@ -121,6 +121,28 @@ class OpenAppaUnenforcedModel {
           ),
         ),
       );
+  }
+}
+
+/** The tables have composite keys, so a batch names its rows by `ctid`. */
+async function deleteInBatches(
+  table: typeof sessions | typeof calls,
+  before: Date,
+  batchSize: number,
+): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const batch = db
+      .select({ ctid: sql`ctid` })
+      .from(table)
+      .where(lt(table.createdAt, before))
+      .limit(batchSize);
+    const removed = await db
+      .delete(table)
+      .where(inArray(sql`ctid`, batch))
+      .returning({ createdAt: table.createdAt });
+    total += removed.length;
+    if (removed.length < batchSize) return total;
   }
 }
 

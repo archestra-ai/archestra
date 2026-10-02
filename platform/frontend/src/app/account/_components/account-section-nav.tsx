@@ -2,8 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { accountSections } from "@/app/account/_components/account-sections";
+import { useAccountConnections } from "@/app/account/_components/use-account-connections";
 import { SectionNav } from "@/components/section-nav";
-import { useFeature } from "@/lib/config/config.query";
 
 /**
  * Section switcher for the account pages. Each entry is a real route, so the
@@ -11,9 +11,10 @@ import { useFeature } from "@/lib/config/config.query";
  */
 export function AccountSectionNav() {
   const pathname = usePathname();
-  const runtimeEnabled = useFeature("agentRuntime");
+  const { isApplicable, isError } = useAccountConnections();
   const visibleSections = accountSections.filter(
-    (section) => !("feature" in section) || runtimeEnabled,
+    (section) =>
+      section.id !== "connections" || isApplicable === true || isError,
   );
 
   // Longest match wins: every href starts with "/account", so a plain

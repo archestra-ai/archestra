@@ -33,7 +33,6 @@ export const accountSections = [
     label: "Connections",
     href: "/account/connections",
     Icon: PlugZap,
-    feature: "agentRuntime" as const,
   },
   {
     id: "auth",

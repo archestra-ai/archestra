@@ -4,6 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { usePathname, useRouter } from "next/navigation";
 import {
   afterAll,
   afterEach,
@@ -14,8 +15,10 @@ import {
   it,
   vi,
 } from "vitest";
+import { AccountSectionNav } from "@/app/account/_components/account-section-nav";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { runtimeCredentialsQueryKey } from "@/lib/runtime-credentials.query";
 import AccountConnectionsPage from "./page";
 
 vi.mock("next/navigation");
@@ -24,6 +27,7 @@ vi.mock("@/lib/config/config.query");
 const origin = "http://localhost:9000";
 const server = setupServer();
 let client: QueryClient;
+const replace = vi.fn();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterAll(() => {
   server.close();
@@ -38,6 +42,17 @@ beforeEach(() => {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   archestraApiClient.setConfig({ baseUrl: origin });
+  replace.mockClear();
+  vi.mocked(useRouter).mockReturnValue({
+    replace,
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+    push: vi.fn(),
+    prefetch: vi.fn(),
+    bfcacheId: "account-connections",
+  });
+  vi.mocked(usePathname).mockReturnValue("/account/connections");
   vi.mocked(useFeature).mockImplementation(
     (feature) => feature === "agentRuntime",
   );
@@ -68,6 +83,7 @@ beforeEach(() => {
 function renderPage() {
   return render(
     <QueryClientProvider client={client}>
+      <AccountSectionNav />
       <AccountConnectionsPage />
     </QueryClientProvider>,
   );
@@ -116,6 +132,7 @@ describe("AccountConnectionsPage", () => {
   it("shows one shared account for multiple installed Claude Agents and opens native sign-in", async () => {
     const user = userEvent.setup();
     server.use(
+      http.get(`${origin}/api/credentials`, () => HttpResponse.json([])),
       http.get(`${origin}/api/agents/all`, () =>
         HttpResponse.json([
           { id: "other", runtime: { command: ["another-agent"] } },
@@ -139,6 +156,8 @@ describe("AccountConnectionsPage", () => {
     );
     renderPage();
     expect(await screen.findAllByText("Claude Code")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Connections" })).toBeVisible();
+    expect(replace).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: "Sign in" }));
     await user.click(
       screen.getByRole("button", { name: "Sign in with Claude" }),
@@ -151,6 +170,7 @@ describe("AccountConnectionsPage", () => {
 
   it("does not hide a failed Agent lookup as an empty connections list", async () => {
     server.use(
+      http.get(`${origin}/api/credentials`, () => HttpResponse.json([])),
       http.get(
         `${origin}/api/agents/all`,
         () => new HttpResponse(null, { status: 503 }),
@@ -163,5 +183,97 @@ describe("AccountConnectionsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connections" })).toBeVisible();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("waits for a confirmed empty result, then hides Connections and returns to Profile", async () => {
+    let finish!: () => void;
+    let requested = false;
+    const response = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    server.use(
+      http.get(`${origin}/api/credentials`, async () => {
+        requested = true;
+        await response;
+        return HttpResponse.json([
+          { allowPersonal: false, allowOrganization: true },
+        ]);
+      }),
+    );
+    renderPage();
+    await waitFor(() => expect(requested).toBe(true));
+    expect(replace).not.toHaveBeenCalled();
+    finish();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/account"));
+    expect(
+      screen.queryByRole("link", { name: "Connections" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/An administrator can add a personal credential/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("revalidates an empty cache before deciding whether connections are applicable", async () => {
+    client.setQueryData(runtimeCredentialsQueryKey, []);
+    let finish!: () => void;
+    let requested = false;
+    const response = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    server.use(
+      http.get(`${origin}/api/credentials`, async () => {
+        requested = true;
+        await response;
+        return HttpResponse.json([
+          {
+            kind: "static",
+            key: "repository-token",
+            name: "Repository token",
+            description: "Repository access",
+            icon: "key",
+            builtIn: false,
+            allowPersonal: true,
+            allowOrganization: false,
+            personalConfigured: false,
+            organizationConfigured: false,
+          },
+        ]);
+      }),
+    );
+    renderPage();
+    await waitFor(() => expect(requested).toBe(true));
+    await waitFor(() =>
+      expect(client.isFetching({ queryKey: ["agents"] })).toBe(0),
+    );
+    expect(replace).not.toHaveBeenCalled();
+    finish();
+    expect(
+      await screen.findByRole("button", { name: "Connect Repository token" }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Connections" })).toBeVisible();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("hides Connections without fetching runtime data when the runtime is disabled", async () => {
+    vi.mocked(useFeature).mockReturnValue(false);
+    let requests = 0;
+    server.use(
+      http.get(`${origin}/api/credentials`, () => {
+        requests++;
+        return HttpResponse.json([]);
+      }),
+      http.get(`${origin}/api/agents/all`, () => {
+        requests++;
+        return HttpResponse.json([]);
+      }),
+    );
+    renderPage();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/account"));
+    expect(
+      screen.queryByRole("link", { name: "Connections" }),
+    ).not.toBeInTheDocument();
+    expect(requests).toBe(0);
   });
 });

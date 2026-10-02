@@ -49,15 +49,9 @@ describe("buildCodexResponsesRequest", () => {
     expect(body.model).toBe("gpt-5.5-codex");
   });
 
-  it("adds the session's prompt cache key unless the caller sent one", () => {
+  it("adds the session's prompt cache key", () => {
     const fromSession = buildCodexResponsesRequest(
       req(),
-      "session-key",
-    ) as unknown as Record<string, unknown>;
-    const fromCaller = buildCodexResponsesRequest(
-      req({
-        prompt_cache_key: "caller-key",
-      } as Partial<ChatCompletionsRequest>),
       "session-key",
     ) as unknown as Record<string, unknown>;
     const withoutSession = buildCodexResponsesRequest(
@@ -65,7 +59,6 @@ describe("buildCodexResponsesRequest", () => {
     ) as unknown as Record<string, unknown>;
 
     expect(fromSession.prompt_cache_key).toBe("session-key");
-    expect(fromCaller.prompt_cache_key).toBe("caller-key");
     expect(withoutSession).not.toHaveProperty("prompt_cache_key");
   });
 

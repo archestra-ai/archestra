@@ -79,6 +79,9 @@ describe("createOpenAiCodexClient prompt cache session", () => {
     const otherRun = await sendRequest("run-2");
 
     expect(second).toEqual(first);
+    expect(first.sessionHeader).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(first.promptCacheKey).toBe(first.sessionHeader);
     expect(otherRun.sessionHeader).not.toBe(first.sessionHeader);
   });

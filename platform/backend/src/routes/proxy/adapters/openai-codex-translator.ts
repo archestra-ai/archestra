@@ -35,15 +35,14 @@ type LooseItem = Record<string, unknown>;
 /**
  * Builds the Codex Responses request from an inbound chat-completions request,
  * applying the mandatory Codex-backend transforms. Always streaming upstream —
- * the client accumulates for non-streaming callers. A `promptCacheKey` is used
- * only when the caller sent no `prompt_cache_key`.
+ * the client accumulates for non-streaming callers. The chat-completions route
+ * schema drops a caller's `prompt_cache_key`, so `promptCacheKey` is the only
+ * cache key.
  */
 export function buildCodexResponsesRequest(
   params: ChatCompletionsRequest,
   promptCacheKey?: string,
 ): ResponseCreateParamsStreaming {
-  const callerPromptCacheKey = (params as { prompt_cache_key?: string | null })
-    .prompt_cache_key;
   const request: LooseItem = {
     model: params.model,
     instructions: archestraMcpBranding.brandBuiltInText(
@@ -60,9 +59,8 @@ export function buildCodexResponsesRequest(
     parallel_tool_calls:
       (params as { parallel_tool_calls?: boolean }).parallel_tool_calls ?? true,
   };
-  const cacheKey = callerPromptCacheKey || promptCacheKey;
-  if (cacheKey) {
-    request.prompt_cache_key = cacheKey;
+  if (promptCacheKey) {
+    request.prompt_cache_key = promptCacheKey;
   }
 
   const tools = chatToolsToResponsesTools(params.tools);

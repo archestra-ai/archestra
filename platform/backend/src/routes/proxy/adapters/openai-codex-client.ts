@@ -78,7 +78,10 @@ class OpenAiCodexClient {
     innerFetch?: FetchLike;
   }) {
     const { credential, options, innerFetch } = params;
-    const session = resolveCodexSession(options.sessionId);
+    const session = resolveCodexSession({
+      archestraSessionId: options.sessionId,
+      agentId: options.agent?.id,
+    });
     this.promptCacheKey = session.promptCacheKey;
     this.openai = new OpenAIProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,

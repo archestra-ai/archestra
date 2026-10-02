@@ -59,22 +59,102 @@ describe("describeAgentRuntimeStartupProgress", () => {
     );
   });
 
-  it("treats an ordinary container start as progress with nothing to explain", () => {
+  it.for([
+    ["ContainerCreating", "Preparing the agent container"],
+    ["PodInitializing", "Preparing the workspace"],
+  ])("describes %s without claiming an image download", ([reason, message]) => {
     const progress = describeAgentRuntimeStartupProgress(
       pod({
         phase: "Pending",
         conditions: [{ type: "PodScheduled", status: "True" }],
+        containerStatuses: [{ state: { waiting: { reason } } }],
+      }),
+    );
+
+    expect(progress).toEqual({
+      phase: "pulling",
+      message,
+      detail: null,
+    });
+  });
+
+  it("reports workspace initialization while the runtime waits for its init container", () => {
+    const progress = describeAgentRuntimeStartupProgress(
+      pod({
+        phase: "Pending",
+        conditions: [{ type: "PodScheduled", status: "True" }],
+        initContainerStatuses: [
+          {
+            name: "initialize-workspace",
+            state: { running: { startedAt: new Date() } },
+          },
+        ],
         containerStatuses: [
-          { state: { waiting: { reason: "ContainerCreating" } } },
+          { state: { waiting: { reason: "PodInitializing" } } },
         ],
       }),
     );
 
     expect(progress).toEqual({
       phase: "pulling",
-      message: "Pulling the agent image",
+      message: "Preparing the workspace",
       detail: null,
     });
+  });
+
+  it.for([
+    "Pending",
+    "Failed",
+  ])("surfaces a failed init container when the pod is %s", (phase) => {
+    const progress = describeAgentRuntimeStartupProgress(
+      pod({
+        phase,
+        initContainerStatuses: [
+          {
+            name: "initialize-workspace",
+            state: {
+              terminated: {
+                exitCode: 1,
+                reason: "Error",
+                message: "Could not initialize workspace volume",
+              },
+            },
+          },
+        ],
+        containerStatuses: [
+          { state: { waiting: { reason: "PodInitializing" } } },
+        ],
+      }),
+    );
+
+    expect(progress.message).toBe("Workspace initialization failed");
+    expect(progress.detail).toContain("initialize-workspace");
+    expect(progress.detail).toContain("exit code 1");
+    expect(progress.detail).toContain("Could not initialize workspace volume");
+  });
+
+  it("advances past a completed init container to the actual image pull failure", () => {
+    const progress = describeAgentRuntimeStartupProgress(
+      pod({
+        phase: "Pending",
+        initContainerStatuses: [
+          {
+            name: "initialize-workspace",
+            state: { terminated: { exitCode: 0, reason: "Completed" } },
+          },
+        ],
+        containerStatuses: [
+          {
+            state: {
+              waiting: { reason: "ErrImagePull", message: "manifest unknown" },
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(progress.message).toBe("Pulling the agent image");
+    expect(progress.detail).toBe("ErrImagePull: manifest unknown");
   });
 
   it("waits on the agent session once the container is running", () => {

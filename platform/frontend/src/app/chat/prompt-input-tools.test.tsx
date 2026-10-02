@@ -250,14 +250,11 @@ describe("chat composer typing performance", () => {
         conversationId="conv-2"
       />,
     );
-    const status = screen.getByRole("status", {
-      name: "Trust and audience status unavailable",
-    });
-    expect(status).not.toHaveTextContent("trusted");
-    expect(status).not.toHaveTextContent("public");
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByText("Status unavailable")).toBeNull();
   });
 
-  it("keeps the OpenAPPA icon before the status endpoint returns a label", () => {
+  it("hides the session tab before the status endpoint returns a label", () => {
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -268,11 +265,8 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
-    expect(screen.getByRole("status")).toBeInTheDocument();
-    const status = screen.getByRole("status", {
-      name: "Trust and audience status unavailable",
-    });
-    expect(status).not.toHaveTextContent(/trusted|public/);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByText("Status unavailable")).toBeNull();
   });
 
   it("hides the status when guardrails are disabled", () => {

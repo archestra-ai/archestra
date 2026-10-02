@@ -313,6 +313,9 @@ describe("ConnectCommandPanel", () => {
         expect(
           screen.getByRole("heading", { name: `Connect ${label}` }),
         ).toBeVisible();
+        expect(
+          screen.getByRole("heading", { name: "Review the setup" }),
+        ).toBeVisible();
         const prompt = `Read ${window.location.origin}/connect.md?client=${selectedClient.id} and connect ${label}.`;
         expect(
           screen.getByText(
@@ -331,6 +334,9 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.getByRole("heading", { name: "Install the connection" }),
       ).toBeVisible();
+      expect(
+        screen.queryByRole("heading", { name: "Review the setup" }),
+      ).toBeNull();
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenCalledWith(
           expect.objectContaining({ clientId: "claude-desktop" }),
@@ -342,8 +348,8 @@ describe("ConnectCommandPanel", () => {
       );
       expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
       expect(
-        screen.queryByRole("heading", { name: "Review the setup" }),
-      ).toBeNull();
+        screen.getByRole("heading", { name: "Review the setup" }),
+      ).toBeVisible();
     } finally {
       view.unmount();
       queryClient.clear();

@@ -106,6 +106,12 @@ export interface CreateClientOptions {
    * cache, or use this credential outside the Responses adapter.
    */
   openAiCodexPassthrough?: OpenAiCodexPassthrough;
+  /**
+   * The conversation or agent run that the request belongs to. The ChatGPT
+   * subscription backend keeps the requests of one session on the same
+   * prompt cache, so its client sends a session id derived from this one.
+   */
+  sessionId?: string;
 }
 
 export interface OpenAiCodexPassthrough {

@@ -176,6 +176,78 @@ describe("createOpenAiCodexResponsesClient", () => {
     expect(response.id).toBe("resp_2");
   });
 
+  describe("prompt cache session", () => {
+    // The proxy builds a new client for every request, so each call here
+    // stands for one request of a run.
+    async function sendRequest(params: {
+      sessionId?: string;
+      promptCacheKey?: string;
+    }) {
+      let sent: { sessionHeader: string | null; promptCacheKey: unknown } = {
+        sessionHeader: null,
+        promptCacheKey: undefined,
+      };
+      const innerFetch = vi.fn(
+        async (_input: string | URL | Request, init?: RequestInit) => {
+          sent = {
+            sessionHeader: new Headers(init?.headers).get("session-id"),
+            promptCacheKey: JSON.parse(init?.body as string).prompt_cache_key,
+          };
+          return sseResponse([
+            {
+              type: "response.completed",
+              response: { id: "resp_cache", status: "completed", output: [] },
+            },
+          ]);
+        },
+      );
+      const client = createOpenAiCodexResponsesClient({
+        credential: CREDENTIAL,
+        options: { source: "api", sessionId: params.sessionId },
+        innerFetch,
+      }) as unknown as CodexResponsesClient;
+      await client.responses.create({
+        model: "gpt-5.6-luna",
+        input: "hi",
+        stream: false,
+        ...(params.promptCacheKey
+          ? { prompt_cache_key: params.promptCacheKey }
+          : {}),
+      });
+      return sent;
+    }
+
+    it("sends one session and prompt cache key for all requests of a session", async () => {
+      const first = await sendRequest({ sessionId: "run-1" });
+      const second = await sendRequest({ sessionId: "run-1" });
+      const otherRun = await sendRequest({ sessionId: "run-2" });
+
+      expect(second).toEqual(first);
+      expect(first.sessionHeader).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      expect(first.promptCacheKey).toBe(first.sessionHeader);
+      expect(otherRun.sessionHeader).not.toBe(first.sessionHeader);
+    });
+
+    it("keeps the caller's own prompt_cache_key", async () => {
+      const sent = await sendRequest({
+        sessionId: "run-1",
+        promptCacheKey: "caller-key",
+      });
+
+      expect(sent.promptCacheKey).toBe("caller-key");
+    });
+
+    it("uses a new session for each request when the caller names none", async () => {
+      const first = await sendRequest({});
+      const second = await sendRequest({});
+
+      expect(first.sessionHeader).not.toBe(second.sessionHeader);
+      expect(first.promptCacheKey).toBeUndefined();
+    });
+  });
+
   it("forwards native compact requests through stored subscription auth", async () => {
     let capturedUrl: string | undefined;
     let capturedHeaders: Headers | undefined;

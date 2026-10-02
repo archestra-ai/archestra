@@ -11,7 +11,7 @@
  * returned to the caller unchanged. Non-streaming callers get the final
  * Response folded from the stream's terminal `response.completed` event.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import OpenAIProvider from "openai";
 import type {
   CompactedResponse,
@@ -83,6 +83,7 @@ class OpenAiCodexResponsesClient {
   };
 
   private openai: OpenAIProvider;
+  private promptCacheKey: string | undefined;
 
   constructor(params: {
     credential: OpenAiCodexCredential;
@@ -90,6 +91,12 @@ class OpenAiCodexResponsesClient {
     innerFetch?: FetchLike;
   }) {
     const { credential, options, innerFetch } = params;
+    // The proxy builds a new client for every request. With a new random
+    // session on each one, the backend spread the steps of one run over
+    // different prompt caches, and most steps read nothing from the cache.
+    this.promptCacheKey = options.sessionId
+      ? codexSessionId(options.sessionId)
+      : undefined;
     this.openai = new OpenAIProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,
       // The Codex backend authenticates via the fetch wrapper's OAuth bearer;
@@ -101,7 +108,7 @@ class OpenAiCodexResponsesClient {
       fetch: createOpenAiCodexFetch({
         credential,
         providerApiKeyId: options.llmProviderApiKeyId,
-        sessionId: randomUUID(),
+        sessionId: this.promptCacheKey ?? randomUUID(),
         innerFetch,
       }),
     });
@@ -111,7 +118,10 @@ class OpenAiCodexResponsesClient {
     request: ResponsesRequest & { stream?: boolean },
   ): Promise<ResponsesResponse | AsyncIterable<ResponseStreamEvent>> {
     const wantsStream = request.stream === true;
-    const codexBody = applyCodexResponsesTransforms(request);
+    const codexBody = applyCodexResponsesTransforms(
+      request,
+      this.promptCacheKey,
+    );
 
     // The Codex backend requires streaming; accumulate for non-streaming callers.
     const upstream = (await this.openai.responses.create(
@@ -175,14 +185,17 @@ class OpenAiCodexPassthroughResponsesClient {
  * encrypted reasoning to `include`, drop `max_output_tokens` (the Codex backend
  * rejects it with 400 "Unsupported parameter" — the chat⇄responses translator
  * path likewise never forwards an output cap), and supply the Codex persona only
- * when the caller (e.g. a non-Codex client) omitted its own instructions.
+ * when the caller (e.g. a non-Codex client) omitted its own instructions. A
+ * `promptCacheKey` is used only when the caller sent no `prompt_cache_key`.
  */
 function applyCodexResponsesTransforms(
   request: ResponsesRequest & { stream?: boolean },
+  promptCacheKey?: string,
 ): ResponseCreateParamsStreaming {
   const loose = request as {
     include?: unknown;
     instructions?: string | null;
+    prompt_cache_key?: string | null;
   };
   const existingInclude = Array.isArray(loose.include)
     ? (loose.include as string[])
@@ -199,7 +212,21 @@ function applyCodexResponsesTransforms(
     instructions:
       loose.instructions ??
       archestraMcpBranding.brandBuiltInText(OPENAI_CODEX_INSTRUCTIONS),
+    ...(promptCacheKey && !loose.prompt_cache_key
+      ? { prompt_cache_key: promptCacheKey }
+      : {}),
   } as unknown as ResponseCreateParamsStreaming;
+}
+
+/**
+ * Derives the Codex session id and prompt cache key from an Archestra session.
+ * The upstream gets a UUID-shaped hash, the shape Codex itself sends, never
+ * the internal id (a ChatOps session id names its channel).
+ */
+function codexSessionId(sessionId: string): string {
+  const hex = createHash("sha256").update(sessionId).digest("hex");
+  const variant = ((Number.parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 /**

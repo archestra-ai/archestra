@@ -18,7 +18,10 @@ import {
 import { AccountSectionNav } from "@/app/account/_components/account-section-nav";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { runtimeCredentialsQueryKey } from "@/lib/runtime-credentials.query";
+import {
+  type RuntimeCredentialDefinition,
+  runtimeCredentialsQueryKey,
+} from "@/lib/runtime-credentials.query";
 import AccountConnectionsPage from "./page";
 
 vi.mock("next/navigation");
@@ -228,7 +231,13 @@ describe("AccountConnectionsPage", () => {
         await response;
         return HttpResponse.json([
           {
-            kind: "static",
+            id: "00000000-0000-4000-8000-000000000001",
+            githubUrl: null,
+            appId: null,
+            installationId: null,
+            githubClientId: null,
+            githubAppCredentialKey: null,
+            kind: "secret",
             key: "repository-token",
             name: "Repository token",
             description: "Repository access",
@@ -238,7 +247,7 @@ describe("AccountConnectionsPage", () => {
             allowOrganization: false,
             personalConfigured: false,
             organizationConfigured: false,
-          },
+          } satisfies RuntimeCredentialDefinition,
         ]);
       }),
     );

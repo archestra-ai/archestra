@@ -1413,6 +1413,10 @@ function pwshBin(): string | null {
 
 const powershellBin = pwshBin();
 
+if (process.env.CI === "true" && !powershellBin) {
+  throw new Error("CI requires a working PowerShell runtime for these tests");
+}
+
 function extractPowerShellFunction(script: string, name: string): string {
   const start = script.indexOf(`function ${name}`);
   if (start < 0) throw new Error(`no ${name} in rendered PowerShell`);

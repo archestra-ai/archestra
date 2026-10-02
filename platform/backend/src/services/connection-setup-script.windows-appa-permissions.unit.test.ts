@@ -23,6 +23,10 @@ const powershellBin = [
     }).status === 0,
 );
 
+if (process.env.CI === "true" && !powershellBin) {
+  throw new Error("CI requires a working PowerShell runtime for these tests");
+}
+
 const BEGIN = "# >>> archestra:claude-appa-permissions >>>";
 const END = "# <<< archestra:claude-appa-permissions <<<";
 const SECRET = "arch_secret_token_value";

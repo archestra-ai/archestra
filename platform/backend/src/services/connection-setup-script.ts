@@ -1021,10 +1021,10 @@ if not isinstance(settings, dict) or not isinstance(state, dict):
     raise ValueError("Claude settings and APPA permission state must be JSON objects")
 permissions = settings.setdefault("permissions", {})
 if not isinstance(permissions, dict):
-    raise ValueError("Claude permissions must be a JSON object")
+    raise ValueError(f"Claude permissions must be a JSON object in {path}")
 allowed = permissions.get("allow", [])
 if not isinstance(allowed, list) or not all(isinstance(rule, str) for rule in allowed):
-    raise ValueError("Claude permissions.allow must be an array of strings")
+    raise ValueError(f"Claude permissions.allow must be an array of strings in {path}")
 for owned in state.values():
     if not isinstance(owned, list) or not all(isinstance(rule, str) for rule in owned):
         raise ValueError("Invalid APPA permission ownership state")

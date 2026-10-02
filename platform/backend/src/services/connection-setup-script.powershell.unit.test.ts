@@ -29,6 +29,14 @@ const powershellAvailable =
   process.platform !== "win32" &&
   spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"]).status === 0;
 
+if (
+  process.env.CI === "true" &&
+  process.platform !== "win32" &&
+  !powershellAvailable
+) {
+  throw new Error("CI requires a working PowerShell runtime for these tests");
+}
+
 describe.skipIf(!powershellAvailable)(
   "PowerShell Claude proxy transitions",
   () => {

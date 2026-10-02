@@ -236,6 +236,7 @@ async function runClaudeAppaPermissionsMerge(params: {
     if (params.lockSettings) await chmod(settingsPath, 0o444);
     await writeFile(statePath, JSON.stringify(params.ownership ?? {}));
     let failed = false;
+    let failureMessage = "";
     for (const mcp of params.contexts ?? [MCP]) {
       const script = renderSetupScript({
         ...fullContext("claude-code", "linux"),
@@ -265,6 +266,7 @@ async function runClaudeAppaPermissionsMerge(params: {
       } catch (error) {
         if (!params.expectFailure) throw error;
         failed = true;
+        failureMessage = error instanceof Error ? error.message : String(error);
       }
     }
     return {
@@ -275,6 +277,8 @@ async function runClaudeAppaPermissionsMerge(params: {
         ? null
         : await readFile(`${settingsPath}.archestra-backup`, "utf8"),
       failed,
+      failureMessage,
+      settingsPath,
     };
   } finally {
     await rm(home, { recursive: true, force: true });
@@ -361,8 +365,11 @@ describe("Claude Code APPA permission installation", () => {
     expect(result.settings.permissions.allow).toEqual(rules);
   });
 
-  test("does not replace an invalid permissions block", async () => {
-    const existing = { permissions: { allow: "Read" }, env: { KEEP: "value" } };
+  test.each([
+    "Read",
+    { allow: "Read" },
+  ])("preserves invalid permissions %j and reports the settings path", async (permissions) => {
+    const existing = { permissions, env: { KEEP: "value" } };
     const result = await runClaudeAppaPermissionsMerge({
       existing,
       expectFailure: true,
@@ -370,6 +377,7 @@ describe("Claude Code APPA permission installation", () => {
     expect(result.failed).toBe(true);
     expect(result.settings).toEqual(existing);
     expect(result.ownership).toEqual({});
+    expect(result.failureMessage).toContain(result.settingsPath);
   });
 
   test("skips helper rules for an unsafe gateway name and still registers MCP", () => {

@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
+import Fastify from "fastify";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   connectionProxySetupContext,
@@ -204,6 +205,47 @@ test("malformed and percent-encoded tokens are stripped and not stored", () => {
   expect(rewriteConnectionProxySetupUrl(asRequest(encodedSlash))).toBe(
     encodedSlash,
   );
+});
+
+test("Fastify access and error logs do not contain the setup token", async () => {
+  const token = issueConnectionProxySetupContext(scope);
+  const lines: string[] = [];
+  const app = Fastify({
+    rewriteUrl: rewriteConnectionProxySetupUrl,
+    logger: {
+      stream: {
+        write(line: string) {
+          lines.push(line);
+        },
+      },
+    },
+  });
+  app.post("/v1/anthropic/v1/messages", async () => {
+    throw new Error("Provider unavailable");
+  });
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/connection-setup/${token}/anthropic/v1/messages`,
+    });
+    expect(response.statusCode).toBe(500);
+    const logs = lines.map((line) => JSON.parse(line));
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        msg: "incoming request",
+        req: expect.objectContaining({ url: "/v1/anthropic/v1/messages" }),
+      }),
+    );
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        err: expect.objectContaining({ message: "Provider unavailable" }),
+      }),
+    );
+    expect(lines.join("\n")).not.toContain(token);
+    expect(lines.join("\n")).not.toContain("/v1/connection-setup/");
+  } finally {
+    await app.close();
+  }
 });
 
 test("forged headers cannot install a capability", () => {

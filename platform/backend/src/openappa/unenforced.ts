@@ -80,6 +80,16 @@ export async function startedUnenforced(
   });
   if (governed) return false;
   if (!own) {
+    // The record named by the parent id may be another trajectory's, spelled
+    // the same: a parent the runtime governs never started unenforced.
+    if (
+      session.parent_id &&
+      (await OpenAppaSessionModel.find({
+        organizationId: session.organization_id,
+        sessionId: session.parent_id,
+      }))
+    )
+      return false;
     await OpenAppaUnenforcedModel.recordSession({
       organizationId: session.organization_id,
       sessionId: session.session_id,

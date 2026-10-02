@@ -1230,8 +1230,21 @@ export async function handleLLMProxy<
   } = await getGuardrailsDeployment();
   // Enforcement is off, but OpenAPPA records what it must know when enforcement
   // turns on: the sessions that start now, and the calls governed sessions make.
-  const appaObserving = appaFeatureEnabled && !appaActive && !suppressContent;
-  if (appaActive && suppressContent) {
+  // The records hold ids only, so they cover encrypted chats too.
+  const appaObserving = appaFeatureEnabled && !appaActive;
+  // An encrypted chat that started while enforcement was off stays out of
+  // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
+  if (
+    appaActive &&
+    suppressContent &&
+    !(
+      sessionId &&
+      (await startedUnenforced({
+        organization_id: resolvedAgent.organizationId,
+        session_id: sessionId,
+      }))
+    )
+  ) {
     throw new ApiError(
       409,
       "OpenAPPA does not yet support encrypted policy storage for encrypted chats",

@@ -1125,6 +1125,38 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test("an encrypted chat that started while the switch was off stays out of OpenAPPA, and a new one is still refused", async ({
+    makeConversation,
+  }) => {
+    const encrypt = (id: string) =>
+      db
+        .update(database.schema.conversationsTable)
+        .set({ encryptedChat: true })
+        .where(eq(database.schema.conversationsTable.id, id));
+    // The chat names its conversation as the session of every request.
+    const postChat = () =>
+      post(payload(false), { "x-archestra-session-id": sessionId });
+    await encrypt(sessionId);
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const off = await postChat();
+    expect(off.statusCode, off.body).toBe(200);
+
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const same = await postChat();
+    expect(same.statusCode, same.body).toBe(200);
+    expect(events).toEqual([]);
+
+    sessionId = (
+      await makeConversation(agent.id, {
+        userId,
+        organizationId: agent.organizationId,
+      })
+    ).id;
+    await encrypt(sessionId);
+    const fresh = await postChat();
+    expect(fresh.statusCode, fresh.body).toBe(409);
+  });
+
   test("does not issue a remedy notice while the deployment switch is off, then does for a session that starts after it is turned on", async ({
     makeConversation,
   }) => {
@@ -6164,6 +6196,25 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(
           events.some((event) =>
             String(event.session_id).endsWith(`${base}:next`),
+          ),
+        ).toBe(true);
+
+        // The root's own child is governed with it.
+        events.length = 0;
+        const leaf = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...claudeCodeHeaders("leaf"),
+            "x-claude-code-session-id": `${base}:next`,
+          },
+          payload: payload(true, [{ role: "user", content: "Hello" }]),
+        });
+        expect(leaf.statusCode, leaf.body).toBe(200);
+        expect(
+          events.some((event) =>
+            String(event.session_id).endsWith(`${base}:next:leaf`),
           ),
         ).toBe(true);
       });

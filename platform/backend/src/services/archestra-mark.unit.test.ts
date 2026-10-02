@@ -23,6 +23,7 @@ function setupCtx(
     appName: "Archestra",
     mcp: {
       serverName: "prod_gateway",
+      toolPrefix: "archestra__",
       url: "https://acme.example.com/v1/mcp/prod-gateway",
     },
     proxy: {

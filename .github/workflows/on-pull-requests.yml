@@ -823,12 +823,17 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Ensure Zsh for shell startup tests
+      - name: Ensure Zsh and PowerShell for shell runtime tests
         run: |
           if ! command -v zsh >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install -y zsh
           fi
+          if ! command -v pwsh >/dev/null 2>&1; then
+            echo "::error::PowerShell is required so shell runtime tests cannot skip."
+            exit 1
+          fi
+          pwsh -NoProfile -Command 'Write-Output $PSVersionTable.PSVersion'
 
       # The native addons are small compared with the Cargo target cache.
       # Load-verify an exact-source binary cache first; fall back to the warm

@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.4.0-rc.31](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.30...platform-v1.4.0-rc.31) (2026-10-02)
+
+
+### Features
+
+* **connection:** preapprove Claude Code APPA recovery helpers ([#8389](https://github.com/archestra-ai/archestra/issues/8389)) ([a40360c](https://github.com/archestra-ai/archestra/commit/a40360cc2a95dc606770254d1641d90177b40f9b))
+* **rbac:** simplify permission controls and personal settings ([#8395](https://github.com/archestra-ai/archestra/issues/8395)) ([14d78c5](https://github.com/archestra-ai/archestra/commit/14d78c5e06690c69160111f7d1a7d23cdc330730))
+
+
+### Bug Fixes
+
+* **agent-runtime:** distinguish workspace setup from image pulls ([#8398](https://github.com/archestra-ai/archestra/issues/8398)) ([e0768b7](https://github.com/archestra-ai/archestra/commit/e0768b776f69f1cdf0b70c50b4b5d365ffadce96))
+* **agents:** enable progressive tool loading by default ([#8399](https://github.com/archestra-ai/archestra/issues/8399)) ([9d67112](https://github.com/archestra-ai/archestra/commit/9d67112eba742f1564ff548716542a85f0e7fa67))
+* **connect:** show what gets connected for every client except Claude Desktop ([#8393](https://github.com/archestra-ai/archestra/issues/8393)) ([1bb7f7e](https://github.com/archestra-ai/archestra/commit/1bb7f7ec11875a83cd3b6f68ea911ef72ebff303))
+* **llm-proxy:** emit the protected session marker once per response ([#8394](https://github.com/archestra-ai/archestra/issues/8394)) ([4ca0d1a](https://github.com/archestra-ai/archestra/commit/4ca0d1a7dfcd98c9833b6d4d42e07521be442e40))
+* **llm-proxy:** expose Gemini reasoning tokens in OpenAI usage ([#8401](https://github.com/archestra-ai/archestra/issues/8401)) ([30e300c](https://github.com/archestra-ai/archestra/commit/30e300cc895ae97b524f0f0afbe75394641cd31e))
+* **mcp-app:** keep Slack message/thread anchors in openLink deep links ([#8397](https://github.com/archestra-ai/archestra/issues/8397)) ([113d76f](https://github.com/archestra-ai/archestra/commit/113d76f121d25bb6cb187deb7e74ae0aa0810df0))
+* polish chat composer and OpenAPPA session status ([#8406](https://github.com/archestra-ai/archestra/issues/8406)) ([8014a80](https://github.com/archestra-ai/archestra/commit/8014a80962f2a54e10338cc0a25be5e38eefec4b))
+
+
+### Dependencies
+
+* bump the rust-dependencies group in /platform/archestra-rs with 2 updates ([#8365](https://github.com/archestra-ai/archestra/issues/8365)) ([cac0f5c](https://github.com/archestra-ai/archestra/commit/cac0f5c25125be8a819c9fbd4b8fe99ead806a69))
+
+
+### Code Refactoring
+
+* **chat:** rename locked chat to encrypted chat ([#8391](https://github.com/archestra-ai/archestra/issues/8391)) ([40d09f9](https://github.com/archestra-ai/archestra/commit/40d09f9d54690f2dcf0cc812f73387a35f2376f1))
+
 ## [1.4.0-rc.30](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.29...platform-v1.4.0-rc.30) (2026-10-02)
 
 

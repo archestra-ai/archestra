@@ -14,6 +14,7 @@ import {
   shouldRenderBrowserApiDocument,
 } from "@/middleware/browser-api-document";
 import OrganizationModel from "@/models/organization";
+import { rewriteConnectionProxySetupUrl } from "@/services/connection-proxy-setup-context";
 import type { ApiError } from "@/types";
 import { handleServerError } from "./server/error-handler";
 
@@ -30,6 +31,7 @@ export const createFastifyInstance = () =>
     logController: new LogController({ disableRequestLogging: true }),
     trustProxy: config.api.trustProxy,
     bodyLimit: config.api.bodyLimit,
+    rewriteUrl: rewriteConnectionProxySetupUrl,
     // Held above the keep-alive timeout of any proxy or load balancer in front
     // of us, so the proxy never reuses a socket we are closing at that instant
     // (which reaches the client as an intermittent dropped request). See

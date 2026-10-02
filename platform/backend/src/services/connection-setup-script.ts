@@ -58,6 +58,8 @@ import {
 export interface SetupScriptMcpSection {
   /** Logical server name registered in the client (slug). */
   serverName: string;
+  /** Prefix advertised by this deployment's built-in MCP tools. */
+  toolPrefix: string;
   /**
    * Names an earlier connect run registered this same gateway under. A re-run
    * moves such an entry onto `serverName`, so one gateway never shows up twice
@@ -192,6 +194,22 @@ export function copilotAttributionHeadersValue(
  */
 export function claudeCodeOAuthNextStep(serverName: string): string {
   return `Start a new \`claude\` session, run \`/mcp\` there, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
+}
+
+export function claudeCodeAppaPermissionRules(
+  mcp: SetupScriptMcpSection,
+): string[] {
+  if (
+    !/^[a-zA-Z0-9_.-]+$/.test(mcp.serverName) ||
+    !/^[a-zA-Z0-9_]+__$/.test(mcp.toolPrefix)
+  ) {
+    throw new Error(
+      "Claude MCP permission rules require literal server and tool names",
+    );
+  }
+  return ["get_remedy_plans", "execute_remedy_plan", "yell", "ask_user"].map(
+    (name) => `mcp__${mcp.serverName}__${mcp.toolPrefix}${name}`,
+  );
 }
 
 /**
@@ -628,6 +646,10 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
   if (ctx.mcp) {
+    sections.push(`if ! command -v python3 >/dev/null 2>&1; then
+  err 'python3 is required to configure Claude Code APPA tool permissions. Install it and re-run connection setup.'
+  exit 1
+fi`);
     // Register at USER scope so the gateway is visible in every directory for
     // this user. `claude mcp add` defaults to `local` (per-directory) scope,
     // which makes the server "disappear" the moment Claude Code is run from a
@@ -645,6 +667,14 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
 cli claude mcp remove --scope local ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
 cli claude mcp remove --scope user ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli claude mcp add --scope user --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
+    sections.push(`say 'Configuring exact APPA helper permissions for Claude Code'
+ARCHESTRA_MCP_NAME=${sh(ctx.mcp.serverName)} \\
+ARCHESTRA_MCP_LEGACY_NAMES=${sh(JSON.stringify(legacyServerNames(ctx.mcp)))} \\
+ARCHESTRA_APPA_PERMISSION_RULES=${sh(JSON.stringify(claudeCodeAppaPermissionRules(ctx.mcp)))} \\
+python3 - <<'ARCHESTRA_APPA_PERMISSIONS_PY'
+${CLAUDE_APPA_PERMISSIONS_MERGE_PY}
+ARCHESTRA_APPA_PERMISSIONS_PY
+ok 'APPA helper calls are pre-approved for Claude Code, including auto mode. Gateway authorization and required human review still apply.'`);
   }
 
   if (ctx.proxy) {
@@ -939,6 +969,45 @@ if append_headers:
     lines.extend(new_lines)
     env["${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}"] = "\\n".join(lines)
 path.write_text(json.dumps(settings, indent=2) + "\\n")
+print(f"Updated {path}")`;
+
+const CLAUDE_APPA_PERMISSIONS_MERGE_PY = `import json, os, pathlib, shutil
+home = pathlib.Path.home()
+path = pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude") / "settings.json"
+state_root = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) if os.environ.get("CLAUDE_CONFIG_DIR") else home
+state_path = state_root / ".archestra" / "claude-appa-permissions.json"
+settings = json.loads(path.read_text()) if path.exists() and path.read_text().strip() else {}
+state = json.loads(state_path.read_text()) if state_path.exists() else {}
+if not isinstance(settings, dict) or not isinstance(state, dict):
+    raise ValueError("Claude settings and APPA permission state must be JSON objects")
+permissions = settings.setdefault("permissions", {})
+if not isinstance(permissions, dict):
+    raise ValueError("Claude permissions must be a JSON object")
+allowed = permissions.get("allow", [])
+if not isinstance(allowed, list) or not all(isinstance(rule, str) for rule in allowed):
+    raise ValueError("Claude permissions.allow must be an array of strings")
+for owned in state.values():
+    if not isinstance(owned, list) or not all(isinstance(rule, str) for rule in owned):
+        raise ValueError("Invalid APPA permission ownership state")
+server = os.environ["ARCHESTRA_MCP_NAME"]
+desired = json.loads(os.environ["ARCHESTRA_APPA_PERMISSION_RULES"])
+names = [server] + json.loads(os.environ["ARCHESTRA_MCP_LEGACY_NAMES"])
+previously_owned = {rule for name in names for rule in state.pop(name, [])}
+allowed = [rule for rule in allowed if rule not in previously_owned or rule in desired]
+owned = [rule for rule in desired if rule in previously_owned or rule not in allowed]
+for rule in desired:
+    if rule not in allowed:
+        allowed.append(rule)
+permissions["allow"] = allowed
+if owned:
+    state[server] = owned
+path.parent.mkdir(parents=True, exist_ok=True)
+state_path.parent.mkdir(parents=True, exist_ok=True)
+backup = path.with_name(path.name + ".archestra-backup")
+if path.exists() and not backup.exists():
+    shutil.copy2(path, backup)
+path.write_text(json.dumps(settings, indent=2) + "\\n")
+state_path.write_text(json.dumps(state, indent=2) + "\\n")
 print(f"Updated {path}")`;
 
 const OPENCODE_OWNED_MERGE_NODE = `const fs = require("fs");

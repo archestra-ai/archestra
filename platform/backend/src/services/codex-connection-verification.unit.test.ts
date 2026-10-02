@@ -168,6 +168,7 @@ createInterface({ input: process.stdin }).on('line', line => {
         platform: windows ? "windows" : "linux",
         mcp: {
           serverName: "selected-gateway",
+          toolPrefix: "archestra__",
           url: "https://example.test/v1/mcp/gateway",
         },
         proxy: null,

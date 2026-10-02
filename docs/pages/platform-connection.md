@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-10-01
+lastUpdated: 2026-10-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,7 +24,7 @@ You can also give your coding agent this prompt, replacing the example hostname:
 > Read https://ai.example.com/connect.md?client=cursor and connect Cursor.
 
 If a security policy blocks setup in Claude Code, Codex, or OpenCode, sign in and use Copy on the Connection page. This starts a ten-minute setup window for your account and copies the unchanged prompt.
-Approved installer gateway requests get a separate ten-minute policy exception for scripted clients. Manual n8n and other-client setups continue through normal policy checks.
+Approved installers also receive a signed, ten-minute setup exception for gateway and authenticated proxy requests. This covers connection continuations even when the client changes its tools or lacks session metadata. Authentication and access permissions still apply. After expiry, the same URLs continue through normal policy checks. Manual n8n and other-client setups continue through normal policy checks.
 
 The public instructions need no installed skill or platform login.
 They support Claude Code, Cursor, Codex, Copilot CLI, and OpenCode.
@@ -50,6 +50,8 @@ Browser approval authorizes installation. MCP gateway authentication remains the
 Follow the installer output to authenticate the gateway and reload your client.
 Verify that the gateway can list tools before considering the connection complete.
 
+For Claude Code, approved gateway setup adds exact allow rules for four helper calls. They skip Claude Code's tool-permission prompts and auto-mode tool classification. Existing ask and deny rules stay unchanged and take priority. Gateway authorization and required human review still apply. These rules cannot override model or provider safety refusals. Other gateway, policy, and credential tools are not included. Start a new session before the rules load. See [Claude Code](#claude-code).
+
 For OpenCode, the connection agent checks `opencode mcp list` after installation. If the gateway is already connected, it skips OAuth. Otherwise, it starts the gateway's native OAuth sign-in. After the agent finishes, save your work and close OpenCode normally. Start a new session in a fresh terminal. An in-session process restart can terminate the agent before it finishes.
 
 For Codex, the connection agent runs the installer's verification command. Windows uses a native PowerShell launcher. macOS and Linux use Node. Both start a fresh native client with your configured model, approvals, and sandbox. They call a read-only gateway tool and check inference through the selected proxy. The gateway check does not ask a model to run a shell command.
@@ -70,6 +72,8 @@ This flow does not automate those UI-only settings.
 - **Deployment temporarily unavailable:** polling retries until the request expires.
 - **Setup download or execution fails:** fix the reported issue and start again.
 - **Tools unavailable after setup:** complete the client's MCP sign-in and reload it.
+- **Claude Code still prompts for a helper:** start a new session. Only `get_remedy_plans`, `execute_remedy_plan`, `yell`, and `ask_user` are pre-approved. The rules apply only to the connected gateway.
+- **Claude Code says python3 is required:** install Python 3 and run setup again. macOS and Linux use it to write the helper allow rules.
 
 Approval requests expire after ten minutes, including the approved script's download window.
 The setup script can be downloaded once.
@@ -111,7 +115,7 @@ Each client stores the headers in its native provider settings. The merge leaves
 
 You can run the command as many times as you want. Nothing stacks up.
 
-CLI registrations remove the old entry before adding the new one. Config-file edits are key-scoped merges: the script rewrites only the values it manages and leaves the rest of the file alone. Re-running after a key rotation replaces the stale value in place — it never duplicates a header or a provider block.
+CLI registrations remove the old entry before adding the new one. Config-file edits are key-scoped merges: the script rewrites only the values it manages and leaves the rest of the file alone. Re-running after a key rotation replaces the stale value in place — it never duplicates a header or a provider block. Claude Code helper allow rules are replaced in place on a re-run. Your other allow, ask, and deny entries stay unchanged.
 
 Before the script edits an existing config file, it copies that file once to a `.archestra-backup` sibling. The copy happens only on the first run, so it always holds your pristine, pre-Archestra configuration.
 
@@ -177,12 +181,13 @@ For a full walkthrough, see [Using Claude Code with a Pro or Max Subscription](/
 The `claude` CLI must be on your `PATH`.
 
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
+- **Helper permissions** — gateway setup adds exact `permissions.allow` rules for `get_remedy_plans`, `execute_remedy_plan`, `yell`, and `ask_user`. Each rule uses the registered server name and this deployment's tool prefix. The server name and the tool prefix are separate. A default personal gateway allows `mcp__archestra__archestra__get_remedy_plans`. The other three helpers use that same shape. Those calls skip Claude Code's tool-permission prompt and auto-mode tool classification. Other gateway tools are not included. Policy and credential administration tools are not included. Existing ask and deny rules stay unchanged and take priority. These rules cannot override model or provider safety refusals. The installer reports that the helper calls are pre-approved. Start a new session before the rules apply. Disconnecting the gateway from the startup guard removes the rules setup added. macOS and Linux need Python 3 for that cleanup. Your other allow, ask, and deny rules stay. `claude mcp remove` alone does not remove them.
 - **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it merges the Bedrock variables, including `AWS_BEARER_TOKEN_BEDROCK` in virtual-key mode.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`, and turns on auto-update for the marketplace so Claude Code picks up new skill versions at startup. A choice you already made for that marketplace is kept.
 - **Plugins** — installs the selected Claude Code plugins. You can import OpenAPPA from the Plugins catalog, then select it here.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
-- **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore the backup, delete the Archestra env keys, run `claude mcp remove <name>` and `claude plugin marketplace remove <name>`, and drop the exported Bedrock token from your profile.
+- **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. It also removes the helper allow rules setup added. macOS and Linux need Python 3 for that removal. By hand: restore the backup, delete the Archestra env keys, run `claude mcp remove <name>` and `claude plugin marketplace remove <name>`, and drop the exported Bedrock token from your profile. `claude mcp remove` alone leaves those allow rules in place.
 
 Switching to passthrough removes saved Archestra keys from that provider's authentication variables in `~/.claude/settings.json`. Your provider credentials stay unchanged. Switching to virtual-key mode removes the old passthrough header. For Anthropic, it also removes saved Archestra keys from `ANTHROPIC_API_KEY`. Restart Claude Code after changing modes. Remove stale Archestra credentials from shell or project settings separately if you configured them there.
 
@@ -289,6 +294,6 @@ Acme's administrator shares `https://ai.example.com/connect.md` with a new engin
 The engineer asks Claude Code to read it and connect.
 They sign in through SSO and approve the matching terminal code.
 The installer applies the reviewed configuration.
-They finish MCP authentication in Claude Code and verify that tools are available.
+They start a new Claude Code session, finish MCP authentication, and verify that tools are available.
 
 The Connection page also provides a setup command for manual installation.

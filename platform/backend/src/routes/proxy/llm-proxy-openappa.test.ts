@@ -1,5 +1,7 @@
 /** Native decisions at the existing buffered proxy seam. The real native +
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
+
+import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -7,7 +9,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { vi } from "vitest";
+import { type MockInstance, vi } from "vitest";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
@@ -28,6 +30,10 @@ import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra"
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { beginConnectionPromptSession } from "@/services/connection-prompt-session";
+import {
+  issueConnectionProxySetupContext,
+  rewriteConnectionProxySetupUrl,
+} from "@/services/connection-proxy-setup-context";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -102,7 +108,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
     );
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app = Fastify({
+      rewriteUrl: rewriteConnectionProxySetupUrl,
+    }).withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
     app.setErrorHandler((error, _request, reply) =>
@@ -6413,6 +6421,869 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(JSON.stringify(providerRequests)).not.toContain("appact2-");
     });
   });
+
+  describe("signed connection-setup proxy URL", () => {
+    const prompt =
+      "Read https://ai.example.com/connect.md?client=claude-code and connect Claude Code.";
+    const latestUser = "B";
+    const secret = "RAW SETUP TOOL OUTPUT";
+    const remoteAddress = "203.0.113.44";
+    const unknownAgent = "generic-installer/0.1";
+    type SetupWire = "anthropic" | "openai-chat" | "openai-responses";
+    type SetupAuth = "passthrough" | "virtual-key" | "raw" | "none";
+
+    let virtualKey: string;
+    let virtualKeyId: string;
+    let otherVirtualKey: string;
+    let otherVirtualKeyId: string;
+    let passthroughToken: string;
+    let passthroughKeyId: string;
+    let otherPassthroughToken: string;
+    let otherPassthroughKeyId: string;
+    let otherAgent: Agent;
+    let evaluatePolicies: MockInstance;
+    let evaluateTrustedData: MockInstance;
+
+    beforeEach(
+      async ({
+        makeAgent,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeUser,
+        makeMember,
+      }) => {
+        await GuardrailsDeploymentModel.set({
+          unsupportedClientAction: "block",
+        });
+        block = true;
+        otherAgent = await makeAgent({
+          organizationId: agent.organizationId,
+          name: "Other proxy",
+        });
+        const anthropicSecret = await makeSecret({
+          secret: { apiKey: "sk-ant-test" },
+        });
+        const anthropicKey = await makeLlmProviderApiKey(
+          agent.organizationId,
+          anthropicSecret.id,
+          { provider: "anthropic" },
+        );
+        const openaiSecret = await makeSecret({
+          secret: { apiKey: "sk-openai-test" },
+        });
+        const openaiKey = await makeLlmProviderApiKey(
+          agent.organizationId,
+          openaiSecret.id,
+          { provider: "openai" },
+        );
+        const created = await VirtualApiKeyModel.create({
+          organizationId: agent.organizationId,
+          authorId: userId,
+          name: "setup virtual",
+          providerApiKeys: [
+            {
+              provider: anthropicKey.provider,
+              providerApiKeyId: anthropicKey.id,
+            },
+            { provider: openaiKey.provider, providerApiKeyId: openaiKey.id },
+          ],
+        });
+        virtualKey = created.value;
+        virtualKeyId = created.virtualKey.id;
+        const other = await VirtualApiKeyModel.create({
+          organizationId: agent.organizationId,
+          name: "other virtual",
+          providerApiKeys: [
+            {
+              provider: anthropicKey.provider,
+              providerApiKeyId: anthropicKey.id,
+            },
+            { provider: openaiKey.provider, providerApiKeyId: openaiKey.id },
+          ],
+        });
+        otherVirtualKey = other.value;
+        otherVirtualKeyId = other.virtualKey.id;
+        const passthrough = await VirtualApiKeyModel.create({
+          organizationId: agent.organizationId,
+          name: "setup passthrough",
+          keyType: "passthrough",
+          scope: "personal",
+          authorId: userId,
+        });
+        passthroughToken = passthrough.value;
+        passthroughKeyId = passthrough.virtualKey.id;
+        const otherUserId = (await makeUser()).id;
+        await makeMember(otherUserId, agent.organizationId);
+        const otherPassthrough = await VirtualApiKeyModel.create({
+          organizationId: agent.organizationId,
+          name: "other passthrough",
+          keyType: "passthrough",
+          scope: "personal",
+          authorId: otherUserId,
+        });
+        otherPassthroughToken = otherPassthrough.value;
+        otherPassthroughKeyId = otherPassthrough.virtualKey.id;
+        for (const modelId of ["gpt-4o", "gpt-5.5"]) {
+          await ModelModel.upsert({
+            externalId: `openai/${modelId}`,
+            provider: "openai",
+            modelId,
+            inputModalities: null,
+            outputModalities: null,
+            lastSyncedAt: new Date(),
+          });
+        }
+        await app.register(openAiProxyRoutes);
+        vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+          () => {
+            const client = createOpenAiTestClient({
+              includeToolCalls: true,
+              nonStreamingToolCalls: [
+                {
+                  id: "call_weather",
+                  name: "get_weather",
+                  arguments: JSON.stringify({ location: "SF" }),
+                },
+              ],
+            });
+            const create = client.chat.completions.create;
+            client.chat.completions.create = async (params) => {
+              providerRequests.push(structuredClone(params));
+              return create(params);
+            };
+            return client as never;
+          },
+        );
+        vi.spyOn(
+          openAiResponsesAdapterFactory,
+          "createClient",
+        ).mockImplementation(
+          () =>
+            ({
+              responses: {
+                create: async (params: { stream?: boolean }) => {
+                  providerRequests.push(structuredClone(params));
+                  const call = {
+                    id: "fc_weather",
+                    call_id: "call_weather",
+                    type: "function_call",
+                    name: "get_weather",
+                    arguments: JSON.stringify({ location: "SF" }),
+                    status: "completed",
+                  };
+                  const response = {
+                    id: "resp_setup",
+                    object: "response",
+                    created_at: 1,
+                    status: "completed",
+                    model: "gpt-5.5",
+                    output: [call],
+                    usage: {
+                      input_tokens: 10,
+                      output_tokens: 5,
+                      total_tokens: 15,
+                    },
+                  };
+                  if (params.stream) {
+                    return {
+                      async *[Symbol.asyncIterator]() {
+                        yield {
+                          type: "response.output_item.added",
+                          output_index: 0,
+                          sequence_number: 1,
+                          item: call,
+                        };
+                        yield {
+                          type: "response.output_item.done",
+                          output_index: 0,
+                          sequence_number: 2,
+                          item: call,
+                        };
+                        yield {
+                          type: "response.completed",
+                          sequence_number: 3,
+                          response,
+                        };
+                      },
+                    };
+                  }
+                  return response;
+                },
+              },
+            }) as never,
+        );
+        evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
+        evaluateTrustedData = vi.spyOn(
+          trustedData,
+          "evaluateIfContextIsTrusted",
+        );
+      },
+    );
+
+    const signingSecret = () => {
+      const value = config.auth.secret;
+      if (!value) throw new Error("missing auth secret");
+      return value;
+    };
+
+    const issueFor = (
+      keyId: string,
+      proxyAgentId = agent.id,
+      organizationId = agent.organizationId,
+    ) =>
+      issueConnectionProxySetupContext({
+        organizationId,
+        virtualApiKeyId: keyId,
+        proxyAgentId,
+        setupId: crypto.randomUUID(),
+        secret: signingSecret(),
+      });
+
+    const tamper = (token: string) =>
+      `${token.slice(0, -1)}${token.endsWith("a") ? "b" : "a"}`;
+
+    const authHeaders = (auth: SetupAuth, family: SetupWire) => {
+      const headers: Record<string, string> = { "user-agent": unknownAgent };
+      if (family === "anthropic") headers["anthropic-version"] = "2023-06-01";
+      if (auth === "passthrough") {
+        headers["x-archestra-virtual-key"] = passthroughToken;
+        if (family === "anthropic")
+          headers["x-api-key"] = "sk-ant-raw-provider";
+        else headers.authorization = "Bearer sk-openai-raw-provider";
+      } else if (auth === "virtual-key") {
+        headers.authorization = `Bearer ${virtualKey}`;
+      } else if (auth === "raw") {
+        if (family === "anthropic")
+          headers["x-api-key"] = "sk-ant-raw-provider";
+        else headers.authorization = "Bearer sk-openai-raw-provider";
+      }
+      return headers;
+    };
+
+    const historyBody = (
+      family: SetupWire,
+      stream: boolean,
+      deferred: boolean,
+    ) => {
+      if (family === "anthropic") {
+        const body = payload(stream, [
+          { role: "user", content: prompt },
+          {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu_old", name: "Bash", input: {} },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_old",
+                content: secret,
+              },
+            ],
+          },
+          { role: "user", content: latestUser },
+        ]);
+        if (!deferred) return body;
+        return {
+          ...body,
+          tools: [
+            ...body.tools,
+            {
+              name: "ToolSearch",
+              description: "Search deferred tools",
+              input_schema: { type: "object", properties: {} },
+            },
+            {
+              name: "deferred_setup_tool",
+              input_schema: { type: "object", properties: {} },
+              defer_loading: true,
+            },
+            { type: "tool_search_tool_regex_20251119", name: "tool_search" },
+          ],
+        };
+      }
+      const tools = [
+        {
+          type: "function",
+          name: "get_weather",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          type: "function",
+          name: "ToolSearch",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          type: "function",
+          name: "archestra__execute_remedy_plan",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          type: "function",
+          name: "archestra__get_remedy_plans",
+          parameters: { type: "object", properties: {} },
+        },
+        ...(deferred
+          ? [
+              {
+                type: "function",
+                name: "deferred_setup_tool",
+                parameters: { type: "object", properties: {} },
+                defer_loading: true,
+              },
+              { type: "tool_search", name: "tool_search" },
+            ]
+          : []),
+      ];
+      if (family === "openai-chat") {
+        return {
+          model: "gpt-4o",
+          stream,
+          messages: [
+            { role: "user", content: prompt },
+            {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "call_prev",
+                  type: "function",
+                  function: { name: "get_weather", arguments: "{}" },
+                },
+              ],
+            },
+            { role: "tool", tool_call_id: "call_prev", content: secret },
+            { role: "user", content: latestUser },
+          ],
+          tools: tools
+            .filter((tool) => tool.type === "function" && "name" in tool)
+            .map((tool) => ({
+              type: "function",
+              function: {
+                name: tool.name,
+                parameters: { type: "object", properties: {} },
+              },
+            })),
+        };
+      }
+      return {
+        model: "gpt-5.5",
+        stream,
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: prompt }],
+          },
+          {
+            type: "function_call",
+            call_id: "call_prev",
+            name: "get_weather",
+            arguments: "{}",
+          },
+          {
+            type: "function_call_output",
+            call_id: "call_prev",
+            output: secret,
+          },
+          {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: latestUser }],
+          },
+        ],
+        tools,
+      };
+    };
+
+    const postSetup = (params: {
+      family: SetupWire;
+      stream: boolean;
+      auth: SetupAuth;
+      token?: string;
+      profileId?: string;
+      ordinary?: boolean;
+      deferred?: boolean;
+      knownClient?: boolean;
+      malformedSession?: boolean;
+      omitSession?: boolean;
+      headers?: Record<string, string>;
+      url?: string;
+    }) => {
+      evaluatePolicies.mockClear();
+      evaluateTrustedData.mockClear();
+      providerRequests.length = 0;
+      events.length = 0;
+      const profileId = params.profileId ?? agent.id;
+      const route =
+        params.family === "anthropic"
+          ? `anthropic/${profileId}/v1/messages`
+          : params.family === "openai-chat"
+            ? `openai/${profileId}/chat/completions`
+            : `openai/${profileId}/responses`;
+      const headers = {
+        ...authHeaders(params.auth, params.family),
+        ...params.headers,
+      };
+      if (params.knownClient) {
+        headers["user-agent"] = "claude-cli/2.1.278 (external, cli)";
+        if (!params.omitSession) {
+          headers["x-claude-code-session-id"] = params.malformedSession
+            ? "x".repeat(513)
+            : crypto.randomUUID();
+        }
+      }
+      return app.inject({
+        method: "POST",
+        url:
+          params.url ??
+          (params.ordinary || !params.token
+            ? `/v1/${route}`
+            : `/v1/connection-setup/${params.token}/${route}`),
+        remoteAddress,
+        headers,
+        payload: historyBody(
+          params.family,
+          params.stream,
+          params.deferred ?? true,
+        ) as Record<string, unknown>,
+      });
+    };
+
+    const expectBypassed = (
+      response: { statusCode: number; body: string },
+      token: string,
+    ) => {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain("get_weather");
+      expect(response.body).not.toContain("archestra__get_remedy_plans");
+      expect(response.body).not.toContain("NATIVE REFUSAL");
+      expect(response.body).not.toContain("defers its tools");
+      expect(response.body).not.toContain("cannot use Guardrails");
+      expect(response.body).not.toContain("cps1_");
+      expect(response.body).not.toContain(token);
+      expect(events).toEqual([]);
+      expect(evaluatePolicies).not.toHaveBeenCalled();
+      expect(evaluateTrustedData).not.toHaveBeenCalled();
+      expect(providerRequests).toHaveLength(1);
+      const sent = JSON.stringify(providerRequests);
+      expect(sent).toContain(prompt);
+      expect(sent).toContain(secret);
+      expect(sent).toContain('"B"');
+      expect(sent).not.toContain("APPROVED REPLACEMENT");
+      expect(sent).not.toContain("cps1_");
+      expect(sent).not.toContain("connection-setup");
+      expect(sent).not.toContain(token);
+      expect(sent).not.toContain("archestra_setup_");
+      expect(sent).not.toContain("archestra_con_");
+    };
+
+    const expectAdmissionBlocked = (response: {
+      statusCode: number;
+      body: string;
+    }) => {
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.body).toContain("This client cannot use Guardrails");
+      expect(providerRequests).toHaveLength(0);
+      expect(events).toEqual([]);
+      expect(evaluatePolicies).not.toHaveBeenCalled();
+    };
+
+    const expectStillGoverned = (response: {
+      statusCode: number;
+      body: string;
+    }) => {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain("archestra__get_remedy_plans");
+      expect(response.body).toContain("NATIVE REFUSAL");
+      expect(events).toContainEqual(
+        expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
+      );
+      expect(evaluatePolicies).toHaveBeenCalled();
+      expect(evaluateTrustedData).toHaveBeenCalled();
+      expect(providerRequests).toHaveLength(1);
+      const sent = JSON.stringify(providerRequests);
+      expect(sent).not.toContain(secret);
+      expect(sent).toContain("APPROVED REPLACEMENT");
+      expect(sent).not.toContain("cps1_");
+    };
+
+    test.each([
+      ["passthrough", "anthropic", false],
+      ["passthrough", "anthropic", true],
+      ["passthrough", "openai-chat", false],
+      ["passthrough", "openai-chat", true],
+      ["passthrough", "openai-responses", false],
+      ["passthrough", "openai-responses", true],
+      ["virtual-key", "anthropic", false],
+      ["virtual-key", "anthropic", true],
+      ["virtual-key", "openai-chat", false],
+      ["virtual-key", "openai-chat", true],
+      ["virtual-key", "openai-responses", false],
+      ["virtual-key", "openai-responses", true],
+    ] as const)("signed setup URL bypasses APPA for a %s unknown client with no session id (%s, stream=%s)", async (auth, family, stream) => {
+      const token = issueFor(
+        auth === "passthrough" ? passthroughKeyId : virtualKeyId,
+      );
+      const response = await postSetup({
+        family,
+        stream,
+        auth,
+        token,
+        deferred: true,
+      });
+      expectBypassed(response, token);
+    });
+
+    test("signed setup URL bypasses a malformed session id and a known client that sends no session id", async () => {
+      const token = issueFor(passthroughKeyId);
+      const malformed = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        token,
+        knownClient: true,
+        malformedSession: true,
+        deferred: true,
+      });
+      expectBypassed(malformed, token);
+
+      const streamedMalformed = await postSetup({
+        family: "anthropic",
+        stream: true,
+        auth: "passthrough",
+        token,
+        knownClient: true,
+        malformedSession: true,
+        deferred: true,
+      });
+      expectBypassed(streamedMalformed, token);
+
+      const noSession = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        token,
+        knownClient: true,
+        omitSession: true,
+        deferred: true,
+      });
+      expectBypassed(noSession, token);
+
+      const rejected = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        token: tamper(token),
+        knownClient: true,
+        malformedSession: true,
+        deferred: true,
+      });
+      expect(rejected.statusCode, rejected.body).toBe(400);
+      expect(rejected.body).toContain("valid client-native session ID");
+      expect(providerRequests).toHaveLength(0);
+      expect(events).toEqual([]);
+
+      const governed = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        ordinary: true,
+        knownClient: true,
+        omitSession: true,
+        deferred: false,
+      });
+      expectStillGoverned(governed);
+    });
+
+    test("tampered, cross-key, cross-proxy, and cross-org tokens do not bypass APPA", async () => {
+      const cases: Array<{
+        label: string;
+        token: string;
+        auth: SetupAuth;
+        profileId?: string;
+        headers?: Record<string, string>;
+      }> = [
+        {
+          label: "tampered",
+          token: tamper(issueFor(passthroughKeyId)),
+          auth: "passthrough",
+        },
+        {
+          label: "cross-org",
+          token: issueFor(passthroughKeyId, agent.id, crypto.randomUUID()),
+          auth: "passthrough",
+        },
+        {
+          label: "cross-proxy",
+          token: issueFor(passthroughKeyId, otherAgent.id),
+          auth: "passthrough",
+        },
+        {
+          label: "token for this proxy used on the other proxy",
+          token: issueFor(virtualKeyId),
+          auth: "virtual-key",
+          profileId: otherAgent.id,
+        },
+        {
+          label: "cross-passthrough-key",
+          token: issueFor(otherPassthroughKeyId),
+          auth: "passthrough",
+        },
+        {
+          label: "other passthrough key presented against this token",
+          token: issueFor(passthroughKeyId),
+          auth: "passthrough",
+          headers: { "x-archestra-virtual-key": otherPassthroughToken },
+        },
+        {
+          label: "cross-virtual-key",
+          token: issueFor(otherVirtualKeyId),
+          auth: "virtual-key",
+        },
+        {
+          label: "standard token presented with a passthrough key",
+          token: issueFor(virtualKeyId),
+          auth: "passthrough",
+        },
+        {
+          label: "passthrough token presented with a standard key",
+          token: issueFor(passthroughKeyId),
+          auth: "virtual-key",
+        },
+      ];
+      for (const item of cases) {
+        const response = await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: item.auth,
+          token: item.token,
+          profileId: item.profileId,
+          headers: item.headers,
+          deferred: true,
+        });
+        expect(response.statusCode, `${item.label}: ${response.body}`).toBe(
+          400,
+        );
+        expect(response.body, item.label).toContain(
+          "This client cannot use Guardrails",
+        );
+        expect(providerRequests, item.label).toHaveLength(0);
+        expect(events, item.label).toEqual([]);
+      }
+
+      const governed = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        token: tamper(issueFor(passthroughKeyId)),
+        knownClient: true,
+        deferred: false,
+      });
+      expectStillGoverned(governed);
+
+      const otherKeyGoverned = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "virtual-key",
+        token: issueFor(virtualKeyId),
+        knownClient: true,
+        deferred: false,
+        headers: { authorization: `Bearer ${otherVirtualKey}` },
+      });
+      expectStillGoverned(otherKeyGoverned);
+    });
+
+    test("an unrelated deferred request without the setup URL returns 400", async () => {
+      const response = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        ordinary: true,
+        knownClient: true,
+        deferred: true,
+      });
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.body).toContain("defers its tools to a tool search");
+      expect(providerRequests).toHaveLength(0);
+      expect(events).toEqual([]);
+
+      const responses = await postSetup({
+        family: "openai-responses",
+        stream: false,
+        auth: "virtual-key",
+        ordinary: true,
+        knownClient: true,
+        deferred: true,
+        headers: {
+          "user-agent": "codex_cli_rs/0.154.0",
+          originator: "codex_cli_rs",
+          "x-codex-turn-metadata": JSON.stringify({
+            thread_id: crypto.randomUUID(),
+          }),
+        },
+      });
+      expect(responses.statusCode, responses.body).toBe(400);
+      expect(responses.body).toContain("defers its tools to a tool search");
+      expect(providerRequests).toHaveLength(0);
+    });
+
+    test("prompt history without a pending browser copy or setup URL does not bypass APPA", async () => {
+      const response = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        ordinary: true,
+        deferred: true,
+      });
+      expectAdmissionBlocked(response);
+      expect(response.body).not.toContain("get_weather");
+    });
+
+    test("a capability URL without credentials returns 401", async () => {
+      const token = issueFor(passthroughKeyId);
+      const response = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "none",
+        token,
+        deferred: true,
+      });
+      expect(response.statusCode, response.body).toBe(401);
+      expect(response.body).toContain("Authentication required");
+      expect(response.body).not.toContain(
+        "OpenAPPA requires an authenticated proxy request",
+      );
+      expect(providerRequests).toHaveLength(0);
+      expect(events).toEqual([]);
+      expect(response.body).not.toContain("get_weather");
+    });
+
+    test("a raw provider key does not bypass APPA through the setup URL", async () => {
+      for (const token of [
+        issueFor(passthroughKeyId),
+        issueFor(virtualKeyId),
+      ]) {
+        const response = await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "raw",
+          token,
+          deferred: true,
+        });
+        expect(response.statusCode, response.body).toBe(401);
+        expect(response.body).toContain(
+          "OpenAPPA requires an authenticated proxy request",
+        );
+        expect(providerRequests).toHaveLength(0);
+        expect(events).toEqual([]);
+        expect(evaluatePolicies).not.toHaveBeenCalled();
+      }
+
+      const openai = await postSetup({
+        family: "openai-chat",
+        stream: false,
+        auth: "raw",
+        token: issueFor(passthroughKeyId),
+        deferred: true,
+      });
+      expect(openai.statusCode, openai.body).toBe(401);
+      expect(openai.body).toContain(
+        "OpenAPPA requires an authenticated proxy request",
+      );
+      expect(providerRequests).toHaveLength(0);
+    });
+
+    test("a forged header on the ordinary route cannot carry the setup capability", async () => {
+      const token = issueFor(passthroughKeyId);
+      const response = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        ordinary: true,
+        deferred: true,
+        headers: {
+          "x-connection-setup-context": token,
+          "x-appa-setup": token,
+        },
+        url: `${url()}?archestra_setup_ctx=${encodeURIComponent(token)}`,
+      });
+      expectAdmissionBlocked(response);
+    });
+
+    test("a malformed capability prefix still reaches the provider route and does not bypass APPA", async () => {
+      const response = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        deferred: true,
+        url: `/v1/connection-setup/not-a-token/anthropic/${agent.id}/v1/messages`,
+      });
+      expect(response.statusCode).not.toBe(404);
+      expectAdmissionBlocked(response);
+    });
+
+    test("the setup capability is invalid before issuance and expires at the setup window", async () => {
+      const issuedAt = new Date("2026-09-29T12:00:00.000Z");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(issuedAt);
+        const passthroughCap = issueFor(passthroughKeyId);
+        const virtualCap = issueFor(virtualKeyId);
+
+        vi.setSystemTime(issuedAt.getTime() - 1);
+        const early = await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token: passthroughCap,
+          deferred: true,
+        });
+        expectAdmissionBlocked(early);
+
+        vi.setSystemTime(issuedAt.getTime() + CONNECTION_SETUP_WINDOW_MS - 1);
+        const stillValid = await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token: passthroughCap,
+          deferred: true,
+        });
+        expectBypassed(stillValid, passthroughCap);
+        const virtualStillValid = await postSetup({
+          family: "openai-chat",
+          stream: true,
+          auth: "virtual-key",
+          token: virtualCap,
+          deferred: true,
+        });
+        expectBypassed(virtualStillValid, virtualCap);
+
+        vi.setSystemTime(issuedAt.getTime() + CONNECTION_SETUP_WINDOW_MS);
+        const expired = await postSetup({
+          family: "anthropic",
+          stream: true,
+          auth: "passthrough",
+          token: passthroughCap,
+          deferred: true,
+        });
+        expectAdmissionBlocked(expired);
+        const virtualExpired = await postSetup({
+          family: "openai-responses",
+          stream: false,
+          auth: "virtual-key",
+          token: virtualCap,
+          deferred: true,
+        });
+        expectAdmissionBlocked(virtualExpired);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
 
 /** Client-native trajectory binding: the adapter-read ids reach the runtime. */
@@ -6443,7 +7314,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
     );
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app = Fastify({
+      rewriteUrl: rewriteConnectionProxySetupUrl,
+    }).withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
     app.setErrorHandler((error, _request, reply) =>
@@ -7987,7 +8860,9 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
     );
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app = Fastify({
+      rewriteUrl: rewriteConnectionProxySetupUrl,
+    }).withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
     app.setErrorHandler((error, _request, reply) =>

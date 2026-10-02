@@ -148,6 +148,10 @@ import {
   type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
 import {
+  connectionProxySetupContext,
+  verifyConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
+import {
   nativeSetupClientFromProvenance,
   resolveConnectionSetupScope,
 } from "@/services/connection-setup-scope";
@@ -1554,7 +1558,27 @@ export async function handleLLMProxy<
     let childCompactionContext: string | undefined;
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
-    let connectionSetupBypass = false;
+    const approvedProxySetupContext = connectionProxySetupContext(request.raw);
+    const approvedProxySetup =
+      !!approvedProxySetupContext &&
+      [virtualKeyId, passthroughVirtualKeyId].some(
+        (keyId) =>
+          !!keyId &&
+          verifyConnectionProxySetupContext({
+            token: approvedProxySetupContext,
+            organizationId: resolvedAgent.organizationId,
+            virtualApiKeyId: keyId,
+            proxyAgentId: resolvedAgent.id,
+            secret: config.auth.secret,
+          }),
+      );
+    let connectionSetupBypass = appaActive && approvedProxySetup;
+    if (connectionSetupBypass) {
+      logger.info(
+        { profileId: resolvedAgent.id, proof: "approved-installer" },
+        "Connection setup APPA bypass active",
+      );
+    }
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
@@ -1609,6 +1633,7 @@ export async function handleLLMProxy<
         isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
       const unsupportedClient =
         appaActive &&
+        !connectionSetupBypass &&
         !isInternalChat &&
         !delegatedRun &&
         headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
@@ -1622,7 +1647,12 @@ export async function handleLLMProxy<
           "This client cannot use Guardrails. Send X-Appa-Session-ID to use guardrails, or ask an administrator to choose Bypass on the Guardrails Overview tab.",
         );
       }
-      if (appaActive && !delegatedRun && !unsupportedClient) {
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        !delegatedRun &&
+        !unsupportedClient
+      ) {
         const callerId = appaUserId
           ? `user:${appaUserId}`
           : authenticatedApp

@@ -310,6 +310,7 @@ if (args[0] === "app-server") {
             appName: "Archestra",
             mcp: {
               serverName: "test_gateway",
+              toolPrefix: "archestra__",
               url: `http://127.0.0.1:${address.port}/v1/mcp/test-gateway`,
             },
             proxy: null,
@@ -388,6 +389,7 @@ exit 0
             env: {
               HOME: home,
               USERPROFILE: home,
+              CLAUDE_CONFIG_DIR: "",
               CODEX_HOME: path.join(home, "custom codex"),
               PATH: `${bin}:${process.env.PATH}`,
               NO_COLOR: "1",

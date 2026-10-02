@@ -177,23 +177,26 @@ export const openappaUnenforcedSessionsTable = pgTable(
 
 // Tool calls of a governed session whose outcome the runtime did not see,
 // because enforcement was off: a call the model made then (`made`), and a
-// spawn whose child ran or got a message then (`child`).
+// spawn whose child ran or got a message then (`child`). A record covers only
+// the session whose history holds the call.
 export const openappaUnenforcedCallsTable = pgTable(
   "openappa_unenforced_calls",
   {
     organizationId: text("organization_id").notNull(),
-    // Empty for a session without a caller.
-    callerId: text("caller_id").notNull(),
+    // The caller-scoped id of the session that made the call.
+    sessionId: text("session_id").notNull(),
     // The provider's call id, without a trajectory stamp.
     toolCallId: text("tool_call_id").notNull(),
     reason: text().$type<UnenforcedCallReason>().notNull(),
+    // For a spawn: the client's id of the child it started, when known.
+    childNativeId: text("child_native_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
     primaryKey({
-      columns: [table.organizationId, table.callerId, table.toolCallId],
+      columns: [table.organizationId, table.sessionId, table.toolCallId],
     }),
   ],
 );

@@ -1,5 +1,5 @@
 {
-  "id": "0cbff5fe-e2f2-4489-b5d0-c8b50e2d9c00",
+  "id": "851a5c9b-b60d-4e73-90ce-6bb491d60639",
   "prevId": "b9246d2f-93d0-483f-8b00-c6df417931e0",
   "version": "7",
   "dialect": "postgresql",
@@ -27352,8 +27352,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "caller_id": {
-          "name": "caller_id",
+        "session_id": {
+          "name": "session_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -27370,6 +27370,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "child_native_id": {
+          "name": "child_native_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -27381,11 +27387,11 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "openappa_unenforced_calls_organization_id_caller_id_tool_call_id_pk": {
-          "name": "openappa_unenforced_calls_organization_id_caller_id_tool_call_id_pk",
+        "openappa_unenforced_calls_organization_id_session_id_tool_call_id_pk": {
+          "name": "openappa_unenforced_calls_organization_id_session_id_tool_call_id_pk",
           "columns": [
             "organization_id",
-            "caller_id",
+            "session_id",
             "tool_call_id"
           ]
         }

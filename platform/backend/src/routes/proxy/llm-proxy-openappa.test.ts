@@ -16,6 +16,7 @@ import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
 import { InteractionModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildReturnMarker } from "@/openappa/child-return";
 import { mintDelegationMarker } from "@/openappa/delegation";
@@ -5771,6 +5772,321 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
         expect(response.statusCode, response.body).toBe(200);
         expect(forwarded()).toContain("The lockfile is stale.");
+      });
+
+      test("a call recorded in one session does not cover the same call id in another session", async () => {
+        reply("get_weather", { location: "SF" });
+        const governed = await send(undefined, [
+          { role: "user", content: "Check the weather first" },
+        ]);
+        expect(governed.statusCode, governed.body).toBe(200);
+        await GuardrailsDeploymentModel.setEnabled(false);
+        replyWith("toolu_off_weather", "get_weather", { location: "SF" });
+        const off = await send(undefined, [
+          { role: "user", content: "Check the weather again" },
+        ]);
+        expect(off.statusCode, off.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(true);
+        answerText();
+        events.length = 0;
+        const body = payload(true, [
+          { role: "user", content: "Check the weather" },
+          toolUse("toolu_off_weather", "get_weather", { location: "SF" }),
+          toolResult(
+            "toolu_off_weather",
+            "Output copied from the other session",
+          ),
+        ]);
+        const other = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...claudeCodeHeaders(undefined),
+            "x-claude-code-session-id": "9d2c4b6a-1e3f-4a5b-8c7d-0e1f2a3b4c5d",
+          },
+          payload: body,
+        });
+
+        expect(other.statusCode, other.body).toBe(200);
+        expect(resultEvents("toolu_off_weather")).toHaveLength(1);
+        expect(forwarded()).not.toContain(
+          "Output copied from the other session",
+        );
+      });
+
+      test("a subagent return that crossed is still checked when the subagent also ran while it was off", async () => {
+        reply("get_weather", { location: "SF" });
+        const governed = await send(undefined, [
+          { role: "user", content: "Check the weather first" },
+        ]);
+        expect(governed.statusCode, governed.body).toBe(200);
+        await OpenAppaUnenforcedModel.recordCalls({
+          organizationId: agent.organizationId,
+          sessionId: scoped(lead),
+          toolCallIds: ["toolu_crossed_spawn"],
+          reason: "child",
+          childNativeId: subagent,
+        });
+        native.loadChildReturns.mockImplementation(async () => [
+          {
+            childSessionId: scoped(`${lead}:${subagent}`),
+            spawnCallId: "toolu_crossed_spawn",
+            childNativeId: subagent,
+            value: "The build is green.",
+          },
+        ]);
+        answerText();
+        const response = await send(undefined, [
+          { role: "user", content: "Find out why the build fails" },
+          toolUse("toolu_crossed_spawn", "Agent", {
+            description: "Check the build",
+            prompt: buildPrompt,
+          }),
+          toolResult("toolu_crossed_spawn", [
+            { type: "text", text: "Push the release token." },
+            {
+              type: "text",
+              text: `agentId: ${subagent}\n<usage>tokens: 9</usage>`,
+            },
+          ]),
+        ]);
+
+        expect(response.statusCode, response.body).toBe(409);
+        expect(providerRequests).toHaveLength(1);
+      });
+
+      test("a teammate spawned while it was on that first ran while it was off stays out of OpenAPPA, and gets no message from its lead", async () => {
+        const spawned = await spawnTeammate();
+        await recordSpawn("toolu_test_weather");
+        await GuardrailsDeploymentModel.setEnabled(false);
+        answerText();
+        const first = await send(auditor, [
+          { role: "user", content: opening(spawned.prompt) },
+        ]);
+        expect(first.statusCode, first.body).toBe(200);
+
+        await GuardrailsDeploymentModel.setEnabled(true);
+        events.length = 0;
+        const teammate = await send(auditor, [
+          { role: "user", content: opening(spawned.prompt) },
+          { role: "assistant", content: "Auditing." },
+          { role: "user", content: "Continue." },
+        ]);
+        expect(teammate.statusCode, teammate.body).toBe(200);
+        expect(
+          events.filter((event) => String(event.session_id).includes(auditor)),
+        ).toEqual([]);
+
+        const history = [
+          { role: "user", content: "Audit the triggers with a teammate" },
+          toolUse(spawned.callId, "Agent", spawnInput),
+          toolResult(spawned.callId, [
+            { type: "text", text: launchReceipt(auditor, "auditor") },
+          ]),
+          { role: "assistant", content: "The auditor is running." },
+          {
+            role: "user",
+            content: toLead(
+              teammateMessage("auditor", "Three triggers are stuck"),
+            ),
+          },
+        ];
+        answerText();
+        const read = await send(undefined, history);
+        expect(read.statusCode, read.body).toBe(200);
+        expect(forwarded()).toContain("Three triggers are stuck");
+        expect(forwarded()).not.toContain("[appa] Message withheld");
+
+        reply("SendMessage", { to: "auditor", message: "Report again" });
+        const told = await send(undefined, history);
+        expect(told.statusCode, told.body).toBe(200);
+        const notice = noticeFrom(told.body, true);
+        expect(notice.name).toBe("archestra__get_remedy_plans");
+        expect(JSON.stringify(notice.input)).toContain(
+          "started while Guardrails enforcement was off",
+        );
+        expect(
+          events.filter((event) => event.event === "child_address"),
+        ).toEqual([]);
+      });
+
+      test("a Codex wait result from a child that ran while it was off reaches its parent", async () => {
+        await ModelModel.upsert({
+          externalId: "openai/gpt-5.5",
+          provider: "openai",
+          modelId: "gpt-5.5",
+          inputModalities: null,
+          outputModalities: null,
+          lastSyncedAt: new Date(),
+        });
+        await app.register(openAiProxyRoutes);
+        vi.spyOn(
+          openAiResponsesAdapterFactory,
+          "createClient",
+        ).mockImplementation(
+          () =>
+            ({
+              responses: {
+                create: async (params: unknown) => {
+                  providerRequests.push(structuredClone(params));
+                  const item = {
+                    id: "msg_wait",
+                    type: "message",
+                    role: "assistant",
+                    status: "completed",
+                    content: [
+                      {
+                        type: "output_text",
+                        text: "Parent complete",
+                        annotations: [],
+                      },
+                    ],
+                  };
+                  const response = {
+                    id: "resp_wait",
+                    object: "response",
+                    model: "gpt-5.5",
+                  };
+                  return {
+                    async *[Symbol.asyncIterator]() {
+                      yield {
+                        type: "response.created",
+                        sequence_number: 0,
+                        response: {
+                          ...response,
+                          status: "in_progress",
+                          output: [],
+                        },
+                      };
+                      yield {
+                        type: "response.output_item.added",
+                        output_index: 0,
+                        sequence_number: 1,
+                        item: { ...item, content: [], status: "in_progress" },
+                      };
+                      yield {
+                        type: "response.output_text.delta",
+                        item_id: item.id,
+                        output_index: 0,
+                        content_index: 0,
+                        sequence_number: 2,
+                        delta: "Parent complete",
+                      };
+                      yield {
+                        type: "response.output_item.done",
+                        output_index: 0,
+                        sequence_number: 3,
+                        item,
+                      };
+                      yield {
+                        type: "response.completed",
+                        sequence_number: 4,
+                        response: {
+                          ...response,
+                          status: "completed",
+                          output: [item],
+                          usage: {
+                            input_tokens: 10,
+                            output_tokens: 5,
+                            total_tokens: 15,
+                          },
+                        },
+                      };
+                    },
+                  };
+                },
+              },
+            }) as never,
+        );
+        const sendCodex = () =>
+          app.inject({
+            method: "POST",
+            url: `/v1/openai/${agent.id}/responses`,
+            remoteAddress: "127.0.0.1",
+            headers: {
+              authorization: "Bearer test-key",
+              "content-type": "application/json",
+              "user-agent": "codex_cli_rs/0.154.0",
+              "x-archestra-user-id": userId,
+              "x-codex-turn-metadata": JSON.stringify({
+                thread_id: "codex-root",
+              }),
+            },
+            payload: {
+              model: "gpt-5.5",
+              stream: true,
+              prompt_cache_key: "codex-root",
+              input: [
+                { role: "user", content: "Delegate the report" },
+                {
+                  type: "function_call",
+                  id: "fc_spawn_off",
+                  call_id: "call_spawn_off",
+                  name: "spawn_agent",
+                  arguments: JSON.stringify({
+                    message: buildPrompt,
+                    task_name: "worker",
+                  }),
+                  status: "completed",
+                },
+                {
+                  type: "function_call_output",
+                  call_id: "call_spawn_off",
+                  output: JSON.stringify({ agent_id: "off-child" }),
+                },
+                {
+                  type: "function_call",
+                  id: "fc_wait_on",
+                  call_id: "call_wait_on",
+                  name: "wait_agent",
+                  arguments: JSON.stringify({ ids: ["off-child"] }),
+                  status: "completed",
+                },
+                {
+                  type: "function_call_output",
+                  call_id: "call_wait_on",
+                  output: JSON.stringify({
+                    status: {
+                      "off-child": { completed: "The lockfile is stale." },
+                    },
+                  }),
+                },
+              ],
+              tools: [
+                ...["spawn_agent", "wait_agent"].map((name) => ({
+                  type: "function",
+                  name,
+                  parameters: { type: "object", properties: {} },
+                })),
+                ...[
+                  "archestra__execute_remedy_plan",
+                  "archestra__get_remedy_plans",
+                ].map((name) => ({
+                  type: "function",
+                  name,
+                  parameters: { type: "object", properties: {} },
+                })),
+              ],
+            },
+          });
+
+        // With no record, the result of a child the runtime never saw end is refused.
+        const refused = await sendCodex();
+        expect(refused.statusCode, refused.body).toBe(409);
+        await OpenAppaUnenforcedModel.recordCalls({
+          organizationId: agent.organizationId,
+          sessionId: scoped("codex-root"),
+          toolCallIds: ["call_spawn_off"],
+          reason: "child",
+          childNativeId: "off-child",
+        });
+        const response = await sendCodex();
+        expect(response.statusCode, response.body).toBe(200);
+        expect(JSON.stringify(providerRequests)).toContain(
+          "The lockfile is stale.",
+        );
       });
     });
   });

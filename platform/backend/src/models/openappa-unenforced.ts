@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { UnenforcedCallReason } from "@/types/openappa-unenforced";
 
@@ -44,9 +44,10 @@ class OpenAppaUnenforcedModel {
 
   static async recordCalls(params: {
     organizationId: string;
-    callerId: string | undefined;
+    sessionId: string;
     toolCallIds: readonly string[];
     reason: UnenforcedCallReason;
+    childNativeId?: string;
   }): Promise<void> {
     if (params.toolCallIds.length === 0) return;
     await db
@@ -54,34 +55,56 @@ class OpenAppaUnenforcedModel {
       .values(
         [...new Set(params.toolCallIds)].map((toolCallId) => ({
           organizationId: params.organizationId,
-          callerId: params.callerId ?? "",
+          sessionId: params.sessionId,
           toolCallId,
           reason: params.reason,
+          childNativeId: params.childNativeId ?? null,
         })),
       )
       .onConflictDoNothing();
   }
 
-  /** The recorded calls among `toolCallIds`, with the reason of each. */
+  /** The records of `sessionIds` that name one of `toolCallIds` or `childNativeIds`. */
   static async findCalls(params: {
     organizationId: string;
-    callerId: string | undefined;
+    sessionIds: readonly string[];
     toolCallIds: readonly string[];
-  }): Promise<Map<string, UnenforcedCallReason>> {
-    const found = new Map<string, UnenforcedCallReason>();
-    if (params.toolCallIds.length === 0) return found;
-    const rows = await db
-      .select({ toolCallId: calls.toolCallId, reason: calls.reason })
+    childNativeIds?: readonly string[];
+  }): Promise<
+    Array<{
+      toolCallId: string;
+      reason: UnenforcedCallReason;
+      childNativeId: string | null;
+    }>
+  > {
+    const toolCallIds = [...new Set(params.toolCallIds)];
+    const childNativeIds = [...new Set(params.childNativeIds ?? [])];
+    if (
+      params.sessionIds.length === 0 ||
+      (toolCallIds.length === 0 && childNativeIds.length === 0)
+    )
+      return [];
+    return db
+      .select({
+        toolCallId: calls.toolCallId,
+        reason: calls.reason,
+        childNativeId: calls.childNativeId,
+      })
       .from(calls)
       .where(
         and(
           eq(calls.organizationId, params.organizationId),
-          eq(calls.callerId, params.callerId ?? ""),
-          inArray(calls.toolCallId, [...new Set(params.toolCallIds)]),
+          inArray(calls.sessionId, [...params.sessionIds]),
+          or(
+            toolCallIds.length > 0
+              ? inArray(calls.toolCallId, toolCallIds)
+              : undefined,
+            childNativeIds.length > 0
+              ? inArray(calls.childNativeId, childNativeIds)
+              : undefined,
+          ),
         ),
       );
-    for (const row of rows) found.set(row.toolCallId, row.reason);
-    return found;
   }
 }
 

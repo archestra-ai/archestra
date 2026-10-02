@@ -50,13 +50,12 @@ export async function observeUnenforcedSession(
 /**
  * Whether the session, or a session it descends from, started while
  * enforcement was off. A session the runtime already governs is not: its
- * record lost a race with the session's first governed request.
+ * record lost a race with the session's first governed request. Never cached,
+ * so every replica decides from the same rows.
  */
 export async function startedUnenforced(
   session: OpenAppaSession,
 ): Promise<boolean> {
-  const key = sessionKey(session);
-  if (unenforcedStarts.get(key)) return true;
   const recorded = await OpenAppaUnenforcedModel.findSessions({
     organizationId: session.organization_id,
     sessionIds: [
@@ -71,45 +70,70 @@ export async function startedUnenforced(
     organizationId: session.organization_id,
     sessionId: session.session_id,
   });
-  if (governed) return false;
-  unenforcedStarts.set(key, true);
-  return true;
-}
-
-/** Records tool calls of a governed session whose outcome the runtime did not see. */
-export async function recordUnenforcedCalls(params: {
-  session: OpenAppaSession;
-  toolCallIds: readonly string[];
-  reason: UnenforcedCallReason;
-}): Promise<void> {
-  const { session } = params;
-  const fresh = [...new Set(params.toolCallIds.map(unenforcedCallId))].filter(
-    (id) => !recordedCalls.get(callKey(session, id)),
-  );
-  if (fresh.length === 0) return;
-  await OpenAppaUnenforcedModel.recordCalls({
-    organizationId: session.organization_id,
-    callerId: session.caller_id,
-    toolCallIds: fresh,
-    reason: params.reason,
-  });
-  for (const id of fresh) recordedCalls.set(callKey(session, id), true);
+  return !governed;
 }
 
 /**
- * The recorded calls among `toolCallIds` of this session's caller, by the
- * call id as `unenforcedCallId` gives it.
+ * Records tool calls whose outcome the runtime did not see, under the session
+ * whose history holds them. A spawn names the child it started, when known.
+ */
+export async function recordUnenforcedCalls(params: {
+  organizationId: string;
+  sessionId: string;
+  toolCallIds: readonly string[];
+  reason: UnenforcedCallReason;
+  childNativeId?: string;
+}): Promise<void> {
+  const key = (id: string) =>
+    `${params.organizationId}\u0000${params.sessionId}\u0000${id}`;
+  const fresh = [...new Set(params.toolCallIds.map(unenforcedCallId))].filter(
+    (id) => !recordedCalls.get(key(id)),
+  );
+  if (fresh.length === 0) return;
+  await OpenAppaUnenforcedModel.recordCalls({
+    organizationId: params.organizationId,
+    sessionId: params.sessionId,
+    toolCallIds: fresh,
+    reason: params.reason,
+    ...(params.childNativeId ? { childNativeId: params.childNativeId } : {}),
+  });
+  for (const id of fresh) recordedCalls.set(key(id), true);
+}
+
+/**
+ * The records of a session that name one of `toolCallIds` (by the call id as
+ * `unenforcedCallId` gives it) or one of `childNativeIds`. A fork also reads
+ * the records of the session it continues: its history holds their calls.
  */
 export async function findUnenforcedCalls(params: {
   session: OpenAppaSession;
   toolCallIds: readonly string[];
-}): Promise<ReadonlyMap<string, UnenforcedCallReason>> {
-  return OpenAppaUnenforcedModel.findCalls({
+  childNativeIds?: readonly string[];
+}): Promise<UnenforcedCalls> {
+  const rows = await OpenAppaUnenforcedModel.findCalls({
     organizationId: params.session.organization_id,
-    callerId: params.session.caller_id,
+    sessionIds: [
+      params.session.session_id,
+      ...(params.session.fork_of ? [params.session.fork_of] : []),
+    ],
     toolCallIds: params.toolCallIds.map(unenforcedCallId),
+    childNativeIds: params.childNativeIds ?? [],
   });
+  return {
+    reasons: new Map(rows.map((row) => [row.toolCallId, row.reason])),
+    children: new Set(
+      rows.flatMap((row) => (row.childNativeId ? [row.childNativeId] : [])),
+    ),
+  };
 }
+
+/** What a session's records say about the calls of one request. */
+export type UnenforcedCalls = {
+  /** Why the runtime did not see each recorded call, by call id. */
+  reasons: ReadonlyMap<string, UnenforcedCallReason>;
+  /** The children of recorded spawns that ran while enforcement was off. */
+  children: ReadonlySet<string>;
+};
 
 /** A call id as the provider gave it: without a trajectory stamp. */
 export function unenforcedCallId(id: string): string {
@@ -138,19 +162,14 @@ function sessionKey(session: OpenAppaSession): string {
   return `${session.organization_id}\u0000${session.session_id}`;
 }
 
-function callKey(session: OpenAppaSession, id: string): string {
-  return `${session.organization_id}\u0000${session.caller_id ?? ""}\u0000${id}`;
-}
-
-// Each entry is a fact that never changes, so a cached entry is never stale.
+// The caches serve only the requests seen while enforcement is off. A session
+// that a racing request governs after it was cached as `unenforced` only loses
+// its call records, and so keeps the fail-closed behavior.
 const observed = registerProcessLocalCache(
   new LRUCacheManager<"governed" | "unenforced">({
     maxSize: 10_000,
     defaultTtl: TimeInMs.Hour,
   }),
-);
-const unenforcedStarts = registerProcessLocalCache(
-  new LRUCacheManager<true>({ maxSize: 10_000, defaultTtl: TimeInMs.Hour }),
 );
 const recordedCalls = registerProcessLocalCache(
   new LRUCacheManager<true>({ maxSize: 10_000, defaultTtl: TimeInMs.Hour }),

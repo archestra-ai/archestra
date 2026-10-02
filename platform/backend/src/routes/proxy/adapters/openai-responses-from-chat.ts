@@ -263,7 +263,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         sequence_number: this.nextSequenceNumber(),
         response: {
           ...this.buildResponsesResponse(toolCalls),
-          usage: toResponsesUsage(this.state.usage),
+          usage: this.getResponsesUsage(),
         },
       }),
     );
@@ -385,7 +385,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         // without numeric usage is silently dropped by the Responses parser.
         response: {
           ...this.buildResponsesResponse(),
-          usage: toResponsesUsage(this.state.usage),
+          usage: this.getResponsesUsage(),
         },
       }),
     ].join("");
@@ -435,8 +435,21 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       model: this.ctx.requestedModel,
       status: "completed",
       output,
-      usage: this.state.usage ? toResponsesUsage(this.state.usage) : undefined,
+      usage: this.state.usage ? this.getResponsesUsage() : undefined,
     };
+  }
+
+  private getResponsesUsage() {
+    const usage = this.state.usage;
+    // Gemini counts thinking separately; Responses includes it in output tokens.
+    return toResponsesUsage(
+      usage && this.provider === "gemini"
+        ? {
+            ...usage,
+            outputTokens: usage.outputTokens + (usage.reasoningTokens ?? 0),
+          }
+        : usage,
+    );
   }
 
   private nextSequenceNumber(): number {

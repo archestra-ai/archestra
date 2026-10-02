@@ -157,6 +157,8 @@ export function chatCompletionToResponses(
             (wireUsage?.prompt_tokens_details?.cached_tokens ?? 0) -
             (wireUsage?.prompt_tokens_details?.cache_write_tokens ?? 0),
           outputTokens: response.usage.completion_tokens,
+          reasoningTokens:
+            response.usage.completion_tokens_details?.reasoning_tokens ?? 0,
           cacheReadTokens: wireUsage?.prompt_tokens_details?.cached_tokens ?? 0,
           cacheWriteTokens:
             wireUsage?.prompt_tokens_details?.cache_write_tokens ?? 0,

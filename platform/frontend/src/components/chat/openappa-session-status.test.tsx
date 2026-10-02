@@ -4,7 +4,7 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -66,10 +66,7 @@ it("hides retained labels after a failed refresh and recovers on reconnect", asy
   await client.refetchQueries({
     queryKey: openappaStatusQueryKey("first"),
   });
-  await screen.findByRole("status", {
-    name: "Trust and audience status unavailable",
-  });
-  expect(screen.getByRole("status")).not.toHaveTextContent("trusted");
+  await waitFor(() => expect(view.container).toBeEmptyDOMElement());
   server.resetHandlers();
   onlineManager.setOnline(false);
   onlineManager.setOnline(true);
@@ -102,6 +99,62 @@ it("reads the newly selected session as a noninteractive status", async () => {
   ).toBeNull();
   expect(screen.queryByRole("button")).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();
+  view.unmount();
+  client.clear();
+});
+
+it("hides the whole tab when a conversation has no APPA session", async () => {
+  const id = "no-session";
+  server.use(
+    http.get("/api/chat/conversations/:id/openappa-status", () =>
+      HttpResponse.json(null),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <OpenappaSessionStatus conversationId={id} />
+    </QueryClientProvider>,
+  );
+  await waitFor(() =>
+    expect(client.getQueryState(openappaStatusQueryKey(id))?.status).toBe(
+      "success",
+    ),
+  );
+  expect(view.container).toBeEmptyDOMElement();
+  view.unmount();
+  client.clear();
+});
+
+it("hides the tab while the first status is loading, then shows it", async () => {
+  let resolveStatus!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    resolveStatus = resolve;
+  });
+  server.use(
+    http.get("/api/chat/conversations/:id/openappa-status", async () => {
+      await pending;
+      return HttpResponse.json({ trust: "trusted", audience: "public" });
+    }),
+  );
+  const client = new QueryClient();
+  const view = render(
+    <QueryClientProvider client={client}>
+      <OpenappaSessionStatus conversationId="loading" />
+    </QueryClientProvider>,
+  );
+  await waitFor(() =>
+    expect(
+      client.getQueryState(openappaStatusQueryKey("loading"))?.fetchStatus,
+    ).toBe("fetching"),
+  );
+  expect(view.container).toBeEmptyDOMElement();
+  resolveStatus();
+  await screen.findByRole("status", {
+    name: "Trust: trusted; audience: public",
+  });
   view.unmount();
   client.clear();
 });

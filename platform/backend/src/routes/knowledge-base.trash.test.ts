@@ -115,7 +115,7 @@ describe("knowledge base + connector trash routes", () => {
 
   // ===== Knowledge bases =====
 
-  test("status=deleted lists soft-deleted KBs for manage-deleted holders only", async () => {
+  test("status=deleted lists soft-deleted KBs for delete holders only", async () => {
     const kb = await makeKb("Trashed KB");
     expect(
       (

@@ -55,14 +55,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpGateway: ["read", "create", "update", "delete"],
   mcpOauthClient: ["read", "create", "update", "delete"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete", "manage-deleted"],
-  mcpServerInstallation: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "manage-deleted",
-  ],
+  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
 
@@ -78,12 +72,13 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
   file: ["manage"],
-  log: ["read"],
+  log: ["read", "admin"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
   serviceAccount: ["read", "create", "update", "delete"],
-  auditLog: ["read"],
+  auditLog: ["read", "admin"],
+  accessPolicies: ["read", "update"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
@@ -158,6 +153,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   serviceAccount: [],
   auditLog: [],
+  accessPolicies: [],
   agentSettings: [],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
@@ -238,6 +234,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   serviceAccount: [],
   auditLog: [],
+  accessPolicies: [],
   agentSettings: [],
   llmSettings: [],
   mcpSettings: [],
@@ -449,15 +446,13 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:read": "Browse the MCP server registry",
   "mcpRegistry:create": "Add servers to the MCP registry",
   "mcpRegistry:update": "Modify MCP registry entries",
-  "mcpRegistry:delete": "Remove servers from the MCP registry",
-  "mcpRegistry:manage-deleted":
-    "View and restore soft-deleted MCP registry entries",
+  "mcpRegistry:delete":
+    "Remove, view deleted, and restore MCP registry entries within your access",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
-  "mcpServerInstallation:delete": "Uninstall MCP servers",
-  "mcpServerInstallation:manage-deleted":
-    "View and restore soft-deleted (uninstalled) MCP servers",
+  "mcpServerInstallation:delete":
+    "Uninstall, view deleted, and restore MCP servers within your access",
   "environment:read": "View and list deployment environments",
   "environment:create": "Create deployment environments",
   "environment:update":
@@ -548,6 +543,13 @@ export const permissionDescriptions: Record<string, string> = {
   "serviceAccount:update": "Modify service accounts",
   "serviceAccount:delete": "Delete service accounts",
   "auditLog:read": "View audit log records of your own administrative actions",
+  "auditLog:admin":
+    "View every audit event in your organization (also requires Read)",
+  "log:admin":
+    "View every LLM and MCP log in your organization (also requires Read)",
+  "accessPolicies:read": "View access policies for all resource types",
+  "accessPolicies:update":
+    "Edit access policies and grant access across all resource types",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
@@ -884,11 +886,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RefreshInternalMcpCatalogImage]: {},
   [RouteId.DeleteInternalMcpCatalogItem]: {},
   [RouteId.DeleteInternalMcpCatalogItemByName]: {},
-  // Deleted-resource lifecycle is its own capability, granted by default to
-  // admins only — delete does not imply the ability to see or revive tombstones.
-  [RouteId.RestoreInternalMcpCatalogItem]: {
-    mcpRegistry: ["manage-deleted"],
-  },
+  [RouteId.RestoreInternalMcpCatalogItem]: {},
   [RouteId.GetInternalMcpCatalogLabelKeys]: {
     mcpRegistry: ["read"],
   },
@@ -937,10 +935,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServerInstallation: ["delete"],
   },
-  // Deleted-resource lifecycle is its own capability, granted by default to
-  // admins only — delete does not imply the ability to see or revive tombstones.
   [RouteId.RestoreMcpServer]: {
-    mcpServerInstallation: ["manage-deleted"],
+    mcpServerInstallation: ["delete"],
   },
   [RouteId.ReauthenticateMcpServer]: {
     // Re-authentication re-supplies credentials for a connection the caller can
@@ -2119,7 +2115,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/logs": { log: ["read"] },
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
-  "/consults/logs": { log: ["read"] },
+  "/consults/logs": { openappaDiagnostics: ["read"] },
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },

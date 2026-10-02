@@ -8,7 +8,6 @@ for (const width of [320, 360, 640, 768, 1024, 1280]) {
 
     for (const route of [
       "/skills",
-      "/llm/logs",
       "/agents",
       "/mcp/registry",
       "/skills/new",
@@ -60,5 +59,26 @@ for (const width of [320, 360, 640, 768, 1024, 1280]) {
         }
       });
     }
+
+    test("/llm/logs has no permission actions in its header", async ({
+      page,
+    }) => {
+      await page.goto("/llm/logs");
+      const heading = page.getByRole("heading", { level: 1, name: "Logs" });
+      await expect(heading).toBeVisible();
+      const header = page.locator("[data-page-header]");
+      await expect(header.locator("[data-page-actions]")).toHaveCount(0);
+
+      const title = await heading.boundingBox();
+      const description = await header
+        .locator("[data-page-description]")
+        .boundingBox();
+      if (!title || !description) throw new Error("Missing header copy");
+      expect(description.y).toBeGreaterThanOrEqual(title.y + title.height);
+      expect(description.x + description.width).toBeLessThanOrEqual(width);
+      if (width < 640) {
+        expect(description.width).toBeGreaterThan(width - 60);
+      }
+    });
   });
 }

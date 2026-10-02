@@ -19,7 +19,6 @@ export const actions = [
   "query",
   "execute",
   "manage",
-  "manage-deleted",
   "impersonate",
   "admin",
 ] as const;
@@ -84,6 +83,7 @@ export const resources = [
   "apiKey",
   "serviceAccount",
   "auditLog",
+  "accessPolicies",
   "simpleView",
   "chatAgentPicker",
   "chatProviderSettings",
@@ -130,6 +130,7 @@ export const resourceLabels: Record<Resource, string> = {
   apiKey: "API Keys",
   serviceAccount: "Service Accounts",
   auditLog: "Audit Log",
+  accessPolicies: "Access Policies",
   organizationSettings: "Organization Settings",
   llmSettings: "LLM Settings",
   mcpSettings: "MCP Settings",
@@ -190,8 +191,9 @@ export const resourceDescriptions: Record<Resource, string> = {
   secret: "Secrets manager configuration and connectivity",
   apiKey: "User API keys for programmatic access",
   serviceAccount: "Service accounts and tokens for programmatic access",
-  auditLog:
-    "Organization-wide audit trail of administrative actions and auth events",
+  auditLog: "Audit events, with separate own and organization-wide visibility",
+  accessPolicies:
+    "View and edit organization-wide access policies for every resource type",
   organizationSettings:
     "Organization settings (appearance, authentication, etc)",
   knowledgeSource:
@@ -237,7 +239,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "mcpRegistry",
     "mcpServerInstallation",
     "mcpSettings",
-    "environment",
   ],
   LLM: [
     "llmProxy",
@@ -262,6 +263,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "chatExpandToolCalls",
   ],
   Administration: [
+    "accessPolicies",
     "member",
     "ac",
     "team",
@@ -271,6 +273,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "apiKey",
     "serviceAccount",
     "credential",
+    "environment",
     "organizationSettings",
     "siteNotification",
   ],

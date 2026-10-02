@@ -22,7 +22,6 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { MemberModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
-import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type AuditLog, type User } from "@/types";
 
@@ -67,9 +66,6 @@ describe("GET /api/audit-logs", () => {
     vi.spyOn(betterAuth.api, "getSession").mockImplementation(
       async () => ({ user: { id: user.id } }) as never,
     );
-    // Suite default: org-wide view (`read` on the audit log at `*`, which the
-    // retired auditLog:admin became). Own-only tests flip this.
-    vi.spyOn(ResourcePermissions, "allows").mockResolvedValue(true);
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -575,7 +571,7 @@ describe("GET /api/audit-logs", () => {
       await seedRow(organizationId, { actorId: other.id, actorEmail: "o@x" });
       await seedRow(organizationId, { actorId: null });
 
-      vi.spyOn(ResourcePermissions, "allows").mockResolvedValue(false);
+      await MemberModel.updateRole(user.id, organizationId, "platform_admin");
 
       const list = await app.inject({
         method: "GET",

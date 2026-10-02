@@ -1,4 +1,3 @@
-import { adminPermissions } from "@archestra/shared/access-control";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
@@ -6,6 +5,7 @@ import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
 import websocketService from "@/websocket";
@@ -197,59 +197,55 @@ describe("internal MCP catalog soft-delete routes", () => {
     });
   });
 
-  test("GET ?status=deleted requires manage-deleted and lists soft-deleted roots", async ({
+  test("trash and restore require delete on the specific catalog, not just role CRUD", async ({
     makeInternalMcpCatalog,
     makeCustomRole,
     makeMember,
     makeUser,
   }) => {
-    const catalog = await makeInternalMcpCatalog({
+    const other = await makeInternalMcpCatalog({
       organizationId,
       authorId: user.id,
+      access: "personal",
     });
-    await app.inject({
-      method: "DELETE",
-      url: `/api/internal_mcp_catalog/${catalog.id}`,
-    });
-
-    // Permitted caller sees the deleted root.
-    const ok = await app.inject({
-      method: "GET",
-      url: "/api/internal_mcp_catalog?status=deleted",
-    });
-    expect(ok.statusCode).toBe(200);
-    expect(ok.json().some((c: { id: string }) => c.id === catalog.id)).toBe(
-      true,
-    );
-
-    // A caller with every ordinary permission (delete included) but not the
-    // admin-default manage-deleted capability must not see the tombstone view.
+    await InternalMcpCatalogModel.delete(other.id);
     const role = await makeCustomRole(organizationId, {
-      permission: Object.fromEntries(
-        Object.entries(adminPermissions).map(([resource, actions]) => [
-          resource,
-          actions.filter((action) => action !== "manage-deleted"),
-        ]),
-      ),
+      permission: { mcpRegistry: ["read", "delete"] },
     });
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });
-    const forbidden = await app.inject({
+    const own = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: user.id,
+      access: "personal",
+    });
+    await InternalMcpCatalogModel.delete(own.id);
+    const trash = await app.inject({
       method: "GET",
       url: "/api/internal_mcp_catalog?status=deleted",
     });
-    expect(forbidden.statusCode).toBe(403);
-  });
-
-  test("the restore route is gated on manage-deleted in the endpoint permission map", async () => {
-    const { requiredEndpointPermissionsMap } = await import(
-      "@archestra/shared/access-control"
-    );
-    expect(
-      requiredEndpointPermissionsMap.restoreInternalMcpCatalogItem,
-    ).toEqual({
-      mcpRegistry: ["manage-deleted"],
+    expect(trash.statusCode).toBe(200);
+    expect(trash.json().map((item: { id: string }) => item.id)).toEqual([
+      own.id,
+    ]);
+    expect(trash.json()[0].effectiveActions).toContain("delete");
+    const denied = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${other.id}/restore`,
     });
+    expect(denied.statusCode).toBe(403);
+    expect(
+      await InternalMcpCatalogModel.findDeletedByIdForOrganization(
+        other.id,
+        organizationId,
+      ),
+    ).not.toBeNull();
+    const restored = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${own.id}/restore`,
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toEqual({ success: true });
   });
 
   test("restore is rejected when another active catalog reuses the name", async ({

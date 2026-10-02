@@ -1,15 +1,63 @@
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import { usePathname } from "next/navigation";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { useFeature } from "@/lib/config/config.query";
 import { AccountSectionNav } from "./account-section-nav";
 
-const { usePathname } = vi.hoisted(() => ({ usePathname: vi.fn() }));
-vi.mock("next/navigation", () => ({ usePathname }));
-vi.mock("@/lib/config/config.query", () => ({ useFeature: () => true }));
+vi.mock("next/navigation");
+vi.mock("@/lib/config/config.query");
+
+const origin = "http://localhost:9000";
+const server = setupServer();
+let client: QueryClient;
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterAll(() => {
+  server.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+afterEach(() => {
+  server.resetHandlers();
+  client.clear();
+});
+beforeEach(() => {
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  archestraApiClient.setConfig({ baseUrl: origin });
+  vi.mocked(useFeature).mockImplementation(
+    (feature) => feature === "agentRuntime",
+  );
+  server.use(
+    http.get(`${origin}/api/agents/all`, () => HttpResponse.json([])),
+    http.get(`${origin}/api/credentials`, () =>
+      HttpResponse.json([{ allowPersonal: true }]),
+    ),
+  );
+});
+
+function renderNav() {
+  return render(
+    <QueryClientProvider client={client}>
+      <AccountSectionNav />
+    </QueryClientProvider>,
+  );
+}
 
 describe("AccountSectionNav", () => {
-  it("links every section to its own route", () => {
-    usePathname.mockReturnValue("/account");
-    render(<AccountSectionNav />);
+  it("links every available section to its own route", async () => {
+    vi.mocked(usePathname).mockReturnValue("/account");
+    renderNav();
 
     expect(screen.getByRole("link", { name: "API Keys" })).toHaveAttribute(
       "href",
@@ -19,30 +67,27 @@ describe("AccountSectionNav", () => {
       "href",
       "/account/sessions",
     );
-    expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute(
-      "href",
-      "/account/connections",
-    );
+    expect(
+      await screen.findByRole("link", { name: "Connections" }),
+    ).toHaveAttribute("href", "/account/connections");
   });
 
   it("marks only the section matching the pathname as the current page", () => {
-    usePathname.mockReturnValue("/account/sessions");
-    render(<AccountSectionNav />);
+    vi.mocked(usePathname).mockReturnValue("/account/sessions");
+    renderNav();
 
     expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    // Every href starts with "/account", so the index must not also light up.
     expect(screen.getByRole("link", { name: "Profile" })).not.toHaveAttribute(
       "aria-current",
     );
   });
 
   it("treats the bare /account path as Profile", () => {
-    usePathname.mockReturnValue("/account");
-    render(<AccountSectionNav />);
-
+    vi.mocked(usePathname).mockReturnValue("/account");
+    renderNav();
     expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute(
       "aria-current",
       "page",

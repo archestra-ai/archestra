@@ -100,6 +100,10 @@ New text model families receive the requested level for Google to validate. Arch
 
 `max_completion_tokens` sets Gemini's output cap, including thinking tokens. It takes precedence over `max_tokens`; a null or omitted value falls back to `max_tokens`. Small caps can leave empty or truncated answers.
 
+### Gemini Token Usage
+
+Gemini completion counts include thinking tokens. Chat Completions reports the thinking subset in `completion_tokens_details.reasoning_tokens`. Responses reports it in `output_tokens_details.reasoning_tokens`.
+
 ## OpenAI
 
 ### Supported OpenAI APIs

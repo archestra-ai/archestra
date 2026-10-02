@@ -15,6 +15,7 @@ export interface OpenAiStreamUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  completion_tokens_details?: { reasoning_tokens: number };
   /**
    * OpenAI reports prompt-cache hits as a subset of `prompt_tokens`. Providers
    * that count cache reads separately (Anthropic, Bedrock, Gemini) must publish

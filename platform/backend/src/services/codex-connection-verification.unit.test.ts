@@ -460,6 +460,7 @@ test("printed verification options use the branding prefix, not the client serve
     clientId: "codex" as const,
     mcp: {
       serverName: "renamed_gateway",
+      toolPrefix,
       url: "https://example.test/v1/mcp/gateway",
     },
     proxy: null,

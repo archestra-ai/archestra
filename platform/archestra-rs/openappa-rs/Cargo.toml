@@ -9,12 +9,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to OpenAPPA main at 05c04872, including the wildcard fallback fix (#515).
+# Pinned to OpenAPPA v0.31.0 (release commit 6bbdd7fc486a424cbaddc9cc52b708b007c57ab3).
 # The embedded reporting helper currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6bbdd7fc486a424cbaddc9cc52b708b007c57ab3" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6bbdd7fc486a424cbaddc9cc52b708b007c57ab3" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6bbdd7fc486a424cbaddc9cc52b708b007c57ab3", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6bbdd7fc486a424cbaddc9cc52b708b007c57ab3" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

@@ -236,7 +236,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "mcpRegistry",
     "mcpServerInstallation",
     "mcpSettings",
-    "environment",
   ],
   LLM: [
     "llmProxy",
@@ -270,6 +269,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "apiKey",
     "serviceAccount",
     "credential",
+    "environment",
     "organizationSettings",
     "siteNotification",
   ],

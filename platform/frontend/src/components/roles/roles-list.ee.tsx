@@ -384,7 +384,13 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
               onClick: () => openDuplicateDialog(role),
             },
           ];
-          return <TableRowActions actions={actions} />;
+          return (
+            <TableRowActions
+              actions={actions.slice(0, 1)}
+              dropdownActions={actions.slice(1)}
+              itemName={role.name}
+            />
+          );
         }
 
         const actions: TableRowAction[] = [
@@ -416,7 +422,13 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             },
           },
         ];
-        return <TableRowActions actions={actions} />;
+        return (
+          <TableRowActions
+            actions={actions.slice(0, 1)}
+            dropdownActions={actions.slice(1)}
+            itemName={role.name}
+          />
+        );
       },
     },
   ];

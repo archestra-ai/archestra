@@ -3515,6 +3515,13 @@
       "when": 1790878174684,
       "tag": "0501_openappa-rbac",
       "breakpoints": true
+    },
+    {
+      "idx": 502,
+      "version": "7",
+      "when": 1790887388929,
+      "tag": "0502_short_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

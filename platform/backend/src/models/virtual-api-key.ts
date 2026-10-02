@@ -7,12 +7,15 @@ import {
 } from "@archestra/shared";
 import {
   and,
+  asc,
   count,
+  desc,
   eq,
   ilike,
   inArray,
   isNull,
   lt,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -292,7 +295,7 @@ class VirtualApiKeyModel {
   }
 
   /**
-   * Upsert a single provider mapping on the (virtualApiKeyId, provider) PK.
+   * Make `providerApiKeyId` the virtual key's only mapping for `provider`.
    * Replaces a stale same-provider mapping with the newly resolved key while
    * leaving other providers' mappings untouched — unlike update(), whose
    * syncProviderApiKeys deletes all mappings first.
@@ -302,20 +305,34 @@ class VirtualApiKeyModel {
     provider: SupportedProvider;
     providerApiKeyId: string;
   }): Promise<void> {
-    await db
-      .insert(schema.virtualApiKeyProviderApiKeysTable)
-      .values({
-        virtualApiKeyId: params.virtualApiKeyId,
-        provider: params.provider,
-        providerApiKeyId: params.providerApiKeyId,
-      })
-      .onConflictDoUpdate({
-        target: [
-          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
-          schema.virtualApiKeyProviderApiKeysTable.provider,
-        ],
-        set: { providerApiKeyId: params.providerApiKeyId },
-      });
+    await withDbTransaction(async (tx) => {
+      await tx
+        .delete(schema.virtualApiKeyProviderApiKeysTable)
+        .where(
+          and(
+            eq(
+              schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+              params.virtualApiKeyId,
+            ),
+            eq(
+              schema.virtualApiKeyProviderApiKeysTable.provider,
+              params.provider,
+            ),
+            ne(
+              schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+              params.providerApiKeyId,
+            ),
+          ),
+        );
+      await tx
+        .insert(schema.virtualApiKeyProviderApiKeysTable)
+        .values({
+          virtualApiKeyId: params.virtualApiKeyId,
+          provider: params.provider,
+          providerApiKeyId: params.providerApiKeyId,
+        })
+        .onConflictDoNothing();
+    });
   }
 
   /**
@@ -967,7 +984,7 @@ class VirtualApiKeyModel {
           virtualApiKeyId,
         ),
       )
-      .orderBy(schema.virtualApiKeyProviderApiKeysTable.provider);
+      .orderBy(...providerKeyPreferenceOrder());
 
     return rows;
   }
@@ -1012,7 +1029,7 @@ class VirtualApiKeyModel {
           virtualApiKeyIds,
         ),
       )
-      .orderBy(schema.virtualApiKeyProviderApiKeysTable.provider);
+      .orderBy(...providerKeyPreferenceOrder());
 
     for (const row of rows) {
       const existing = result.get(row.virtualApiKeyId) ?? [];
@@ -1271,6 +1288,20 @@ async function syncVirtualApiKeyTeams(params: {
       teamId,
     })),
   );
+}
+
+/**
+ * Order of a virtual key's mappings: by provider, then — among several keys of
+ * one provider — the order requests fall back to when no key is known to serve
+ * the model: the primary key first, then the oldest.
+ */
+function providerKeyPreferenceOrder() {
+  return [
+    asc(schema.virtualApiKeyProviderApiKeysTable.provider),
+    desc(schema.llmProviderApiKeysTable.isPrimary),
+    asc(schema.llmProviderApiKeysTable.createdAt),
+    asc(schema.llmProviderApiKeysTable.id),
+  ];
 }
 
 async function syncProviderApiKeys(params: {

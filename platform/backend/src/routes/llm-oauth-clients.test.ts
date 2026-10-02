@@ -218,6 +218,43 @@ describe("llmOauthClientsRoutes", () => {
     );
   });
 
+  test("maps several endpoints of a self-hosted provider", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const [glmKey, deepseekKey] = await Promise.all(
+      ["sk-glm", "sk-deepseek"].map(async (apiKey) =>
+        makeLlmProviderApiKey(
+          organizationId,
+          (await makeSecret({ secret: { apiKey } })).id,
+          { provider: "vllm" },
+        ),
+      ),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Two Endpoint Client",
+        providerApiKeys: [
+          { provider: "vllm", providerApiKeyId: glmKey.id },
+          { provider: "vllm", providerApiKeyId: deepseekKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      response
+        .json()
+        .providerApiKeys.map(
+          (mapping: { providerApiKeyId: string }) => mapping.providerApiKeyId,
+        )
+        .sort(),
+    ).toEqual([glmKey.id, deepseekKey.id].sort());
+  });
+
   test("rejects a credential-level subscription mapping for client credentials", async ({
     makeSecret,
     makeLlmProviderApiKey,

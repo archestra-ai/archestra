@@ -49,6 +49,27 @@ describe("chunkDocument", () => {
     }
   });
 
+  test("records source spans for every chunk", async () => {
+    const content = Array.from(
+      { length: 80 },
+      (_, i) => `Sentence number ${i + 1} belongs to the source document.`,
+    ).join(" ");
+
+    const chunks = await chunkDocument({
+      title: "Source Map",
+      content,
+      maxTokens: 128,
+    });
+
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.sourceSpans).toHaveLength(1);
+      const [span] = chunk.sourceSpans;
+      const chunkText = chunk.content.replace(/^TITLE: [^\n]*\n\n/, "");
+      expect(content.slice(span.start, span.end).trimStart()).toBe(chunkText);
+    }
+  });
+
   test("empty content returns empty array", async () => {
     const chunks = await chunkDocument({ title: "Empty", content: "" });
     expect(chunks).toEqual([]);
@@ -395,6 +416,24 @@ describe("chunkDocument parent/child indexing", () => {
     expect(children.length).toBeGreaterThan(1);
     for (const child of children) {
       expect(child.content.startsWith("TITLE: Runbook\n\n")).toBe(true);
+    }
+  });
+
+  test("child spans stay relative to the full document", async () => {
+    const children = await chunkDocument({
+      title: "Runbook",
+      content: LONG_DOCUMENT,
+      maxTokens: 512,
+      childMaxTokens: 128,
+    });
+
+    for (const child of children) {
+      expect(child.sourceSpans).toHaveLength(1);
+      const [span] = child.sourceSpans;
+      const childText = child.content.replace(/^TITLE: [^\n]*\n\n/, "");
+      expect(LONG_DOCUMENT.slice(span.start, span.end).trimStart()).toBe(
+        childText,
+      );
     }
   });
 

@@ -16,11 +16,14 @@ function asResult(chunk: {
   chunkIndex: number;
   parentIndex: number | null;
   content: string;
+  sourceSpans?: Array<{ start: number; end: number }> | null;
 }): VectorSearchResult {
   return {
     id: chunk.id,
     content: chunk.content,
     chunkIndex: chunk.chunkIndex,
+    sourceSpans: chunk.sourceSpans ?? null,
+    contentVersion: "test-version",
     parentIndex: chunk.parentIndex,
     documentId: chunk.documentId,
     sourceId: null,
@@ -39,6 +42,7 @@ async function seedDocument(params: {
     content: string;
     parentIndex: number | null;
     acl?: string[];
+    sourceSpans?: Array<{ start: number; end: number }> | null;
   }>;
   hash: string;
 }) {
@@ -57,6 +61,7 @@ async function seedDocument(params: {
       content: chunk.content,
       chunkIndex: index,
       parentIndex: chunk.parentIndex,
+      sourceSpans: chunk.sourceSpans ?? null,
       acl: chunk.acl ?? ["org:*"],
     })),
   );
@@ -149,9 +154,18 @@ describe("resolveParentPassages", () => {
         {
           content: "The ingest pipeline accepts batched events.",
           parentIndex: 0,
+          sourceSpans: [{ start: 0, end: 43 }],
         },
-        { content: "The ingest service listens on port 8080.", parentIndex: 0 },
-        { content: "Events are written to the durable queue.", parentIndex: 0 },
+        {
+          content: "The ingest service listens on port 8080.",
+          parentIndex: 0,
+          sourceSpans: [{ start: 45, end: 92 }],
+        },
+        {
+          content: "Events are written to the durable queue.",
+          parentIndex: 0,
+          sourceSpans: [{ start: 94, end: 136 }],
+        },
         { content: "An unrelated later passage.", parentIndex: 1 },
       ],
     });
@@ -172,6 +186,11 @@ describe("resolveParentPassages", () => {
     );
     // The passage stops at its own boundary — the next one is a separate result.
     expect(resolved.content).not.toContain("unrelated later passage");
+    expect(resolved.sourceSpans).toEqual([
+      { start: 0, end: 43 },
+      { start: 45, end: 92 },
+      { start: 94, end: 136 },
+    ]);
   });
 
   test("repeats the title prefix only once across a stitched passage", async ({

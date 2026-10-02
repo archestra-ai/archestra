@@ -8,7 +8,11 @@ import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import type { Bm25Tuning, VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
-import type { AclEntry, KbDocumentMetadataFilter } from "@/types";
+import type {
+  AclEntry,
+  KbDocumentMetadataFilter,
+  KnowledgeSourceSpan,
+} from "@/types";
 import { expandChunkContext } from "./context-expansion";
 import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
 import {
@@ -65,6 +69,10 @@ interface ChunkResult {
     documentId: string;
     sourceId: string | null;
     connectorType: string | null;
+    /** Immutable version of the document text these offsets refer to. */
+    contentVersion: string | null;
+    /** One or more character ranges in the versioned document text. */
+    sourceSpans: KnowledgeSourceSpan[] | null;
   };
 }
 
@@ -570,6 +578,8 @@ export class QueryService {
         documentId: row.documentId,
         sourceId: row.sourceId ?? null,
         connectorType: row.connectorType,
+        contentVersion: row.contentVersion ?? null,
+        sourceSpans: row.sourceSpans ?? null,
       },
     }));
   }

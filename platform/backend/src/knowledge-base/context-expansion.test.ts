@@ -12,11 +12,14 @@ function asResult(chunk: {
   documentId: string;
   chunkIndex: number;
   content: string;
+  sourceSpans?: Array<{ start: number; end: number }> | null;
 }): VectorSearchResult {
   return {
     id: chunk.id,
     content: chunk.content,
     chunkIndex: chunk.chunkIndex,
+    sourceSpans: chunk.sourceSpans ?? null,
+    contentVersion: "test-version",
     parentIndex: null,
     documentId: chunk.documentId,
     sourceId: null,
@@ -31,7 +34,11 @@ function asResult(chunk: {
 async function seedDocument(params: {
   organizationId: string;
   connectorId: string;
-  chunks: Array<{ content: string; acl?: string[] }>;
+  chunks: Array<{
+    content: string;
+    acl?: string[];
+    sourceSpans?: Array<{ start: number; end: number }> | null;
+  }>;
   hash: string;
 }) {
   const doc = await KbDocumentModel.create({
@@ -48,6 +55,7 @@ async function seedDocument(params: {
       documentId: doc.id,
       content: chunk.content,
       chunkIndex: index,
+      sourceSpans: chunk.sourceSpans ?? null,
       acl: chunk.acl ?? ["org:*"],
     })),
   );
@@ -70,9 +78,9 @@ describe("expandChunkContext", () => {
       connectorId: connector.id,
       hash: "expand-basic",
       chunks: [
-        { content: "Chunk zero." },
-        { content: "Chunk one." },
-        { content: "Chunk two." },
+        { content: "Chunk zero.", sourceSpans: [{ start: 0, end: 11 }] },
+        { content: "Chunk one.", sourceSpans: [{ start: 13, end: 24 }] },
+        { content: "Chunk two.", sourceSpans: [{ start: 26, end: 37 }] },
       ],
     });
 
@@ -83,6 +91,11 @@ describe("expandChunkContext", () => {
     });
 
     expect(expanded.content).toBe("Chunk zero.\n\nChunk one.\n\nChunk two.");
+    expect(expanded.sourceSpans).toEqual([
+      { start: 0, end: 11 },
+      { start: 13, end: 24 },
+      { start: 26, end: 37 },
+    ]);
     // Ranking identity is untouched — only the text the model reads is wider.
     expect(expanded.id).toBe(chunks[1].id);
     expect(expanded.chunkIndex).toBe(1);

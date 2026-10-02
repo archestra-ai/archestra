@@ -11,6 +11,7 @@ import type {
   InsertKbChunk,
   KbChunk,
   KbDocumentMetadataFilter,
+  KnowledgeSourceSpan,
 } from "@/types";
 import KbDocumentAccessModel from "./kb-document-access";
 
@@ -37,6 +38,10 @@ export interface VectorSearchResult {
   id: string;
   content: string;
   chunkIndex: number;
+  /** Character ranges in the source document that produced this chunk. */
+  sourceSpans?: KnowledgeSourceSpan[] | null;
+  /** Hash of the document text these spans and chunk content belong to. */
+  contentVersion?: string;
   /**
    * The passage this chunk was sliced out of, or `null` when the chunk IS the
    * passage. Retrieval reads it to decide whether a hit resolves to a parent
@@ -165,6 +170,7 @@ class KbChunkModel {
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         c.parent_index AS "parentIndex",
+        c.source_spans AS "sourceSpans", d.content_hash AS "contentVersion",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         1 - (c.${col} <=> ${embeddingStr}${vectorCast}) AS score
@@ -246,7 +252,8 @@ class KbChunkModel {
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex",
         c.parent_index AS "parentIndex",
-        c.document_id AS "documentId", d.source_id AS "sourceId", d.title,
+        c.document_id AS "documentId", c.source_spans AS "sourceSpans",
+        d.content_hash AS "contentVersion", d.source_id AS "sourceId", d.title,
         d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType"
       FROM kb_chunks c
@@ -475,7 +482,8 @@ class KbChunkModel {
     const rows = await db.execute(sql`
       SELECT
         c.id, c.document_id AS "documentId",
-        c.chunk_index AS "chunkIndex", c.content
+        c.chunk_index AS "chunkIndex", c.content,
+        c.source_spans AS "sourceSpans"
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
@@ -492,6 +500,7 @@ class KbChunkModel {
       documentId: string;
       chunkIndex: number;
       content: string;
+      sourceSpans: KnowledgeSourceSpan[] | null;
     }>;
   }
 
@@ -557,7 +566,8 @@ class KbChunkModel {
       SELECT
         c.id, c.document_id AS "documentId",
         c.parent_index AS "parentIndex",
-        c.chunk_index AS "chunkIndex", c.content
+        c.chunk_index AS "chunkIndex", c.content,
+        c.source_spans AS "sourceSpans"
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
@@ -577,6 +587,7 @@ class KbChunkModel {
       parentIndex: number;
       chunkIndex: number;
       content: string;
+      sourceSpans: KnowledgeSourceSpan[] | null;
     }>;
   }
 
@@ -729,6 +740,7 @@ class KbChunkModel {
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         c.parent_index AS "parentIndex",
+        c.source_spans AS "sourceSpans", d.content_hash AS "contentVersion",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         GREATEST(${scoreExpression}) AS score
@@ -1034,6 +1046,7 @@ class KbChunkModel {
       candidates AS (
         SELECT
           c.id, c.content, c.chunk_index, c.parent_index, c.document_id,
+          c.source_spans, d.content_hash,
           c.search_vector, c.tok_len, c.fts_language,
           d.source_id, d.title, d.source_url, d.metadata,
           kbc.connector_type
@@ -1063,6 +1076,7 @@ class KbChunkModel {
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         c.parent_index AS "parentIndex",
+        c.source_spans AS "sourceSpans", c.content_hash AS "contentVersion",
         c.source_id AS "sourceId", c.title, c.source_url AS "sourceUrl", c.metadata,
         c.connector_type AS "connectorType",
         -- Cast to double precision, not the bare numeric this sum produces:
@@ -1132,6 +1146,7 @@ class KbChunkModel {
       WHERE c.tok_len IS NOT NULL
       GROUP BY
         c.id, c.content, c.chunk_index, c.parent_index, c.document_id,
+        c.source_spans, c.content_hash,
         c.source_id, c.title, c.source_url, c.metadata, c.connector_type
       -- c.id breaks ties deterministically, so pagination and the eval
       -- harness see a stable order for equally-scored chunks.

@@ -166,6 +166,7 @@ describe("QueryService", () => {
         documentId: doc.id,
         content: "First chunk about TypeScript",
         chunkIndex: 0,
+        sourceSpans: [{ start: 0, end: 28 }],
         acl: ["org:*"],
       },
       {
@@ -207,6 +208,8 @@ describe("QueryService", () => {
       documentId: doc.id,
       sourceId: null,
       connectorType: "jira",
+      contentVersion: "hash-query-1",
+      sourceSpans: [{ start: 0, end: 28 }],
     });
     // First result should have higher score (closer embedding)
     expect(results[0].score).toBeGreaterThanOrEqual(results[1].score);

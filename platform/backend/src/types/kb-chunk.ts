@@ -4,6 +4,17 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { AclEntrySchema } from "./kb-document";
 
+/** A half-open character range in the document text a chunk was extracted from. */
+export interface KnowledgeSourceSpan {
+  start: number;
+  end: number;
+}
+
+export const KnowledgeSourceSpanSchema = z.object({
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+});
+
 // Shared field overrides for drizzle-zod schema generation.
 // `ftsLanguage` is declared here because drizzle-zod widens the `regconfig`
 // custom column type to a bare string, which would let any value through to a
@@ -17,6 +28,7 @@ const extendedFields = {
   embedding3072: z.array(z.number()).nullable(),
   embedding1408: z.array(z.number()).nullable(),
   ftsLanguage: TextSearchLanguageSchema,
+  sourceSpans: z.array(KnowledgeSourceSpanSchema).nullable(),
 };
 
 export const SelectKbChunkSchema = createSelectSchema(
@@ -32,6 +44,7 @@ export const InsertKbChunkSchema = createInsertSchema(schema.kbChunksTable, {
   embedding3072: z.array(z.number()).nullable().optional(),
   embedding1408: z.array(z.number()).nullable().optional(),
   ftsLanguage: TextSearchLanguageSchema.optional(),
+  sourceSpans: z.array(KnowledgeSourceSpanSchema).nullable().optional(),
 }).omit({ id: true, createdAt: true, searchVector: true });
 
 export type KbChunk = z.infer<typeof SelectKbChunkSchema>;

@@ -1,0 +1,1 @@
+ALTER TABLE "kb_chunks" ADD COLUMN "source_spans" jsonb;

@@ -13,6 +13,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { KnowledgeSourceSpan } from "@/types/kb-chunk";
 import kbDocumentsTable from "./kb-document";
 
 function createVectorType(dimensions: number) {
@@ -104,6 +105,15 @@ const kbChunksTable = pgTable(
      * text and are contiguous in `chunk_index`, so the stitch is exact.
      */
     parentIndex: integer("parent_index"),
+    /**
+     * Character ranges in the document's extracted text that produced this
+     * chunk. The ranges are tied to the document content hash returned with a
+     * citation, so a re-ingested document cannot silently reuse old offsets.
+     *
+     * Nullable for chunks created before source locations existed and for
+     * sources whose format cannot provide text offsets.
+     */
+    sourceSpans: jsonb("source_spans").$type<KnowledgeSourceSpan[] | null>(),
     metadataSuffixSemantic: text("metadata_suffix_semantic"),
     metadataSuffixKeyword: text("metadata_suffix_keyword"),
     /**

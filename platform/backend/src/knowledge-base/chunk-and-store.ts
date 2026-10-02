@@ -56,6 +56,8 @@ export async function chunkAndStoreDocument(params: {
         documentId,
         content: dataUrl,
         chunkIndex: 0,
+        // Media bytes have no character offsets in extracted text.
+        sourceSpans: null,
         metadataSuffixSemantic: null,
         metadataSuffixKeyword: null,
         // A media chunk's content is a base64 data URL, not prose: there is
@@ -101,6 +103,7 @@ export async function chunkAndStoreDocument(params: {
       documentId,
       content: chunk.content,
       chunkIndex: chunk.chunkIndex,
+      sourceSpans: chunk.sourceSpans,
       parentIndex: chunk.parentIndex,
       metadataSuffixSemantic: chunk.metadataSuffixSemantic,
       metadataSuffixKeyword: chunk.metadataSuffixKeyword,

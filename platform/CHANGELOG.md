@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.69](https://github.com/archestra-ai/archestra/compare/platform-v1.3.68...platform-v1.3.69) (2026-10-02)
+
+
+### Bug Fixes
+
+* **llm-proxy:** backport Gemini reasoning effort and output caps to release/1.3 ([#8400](https://github.com/archestra-ai/archestra/issues/8400)) ([ff37777](https://github.com/archestra-ai/archestra/commit/ff3777730c0fd56f2152aee31ea2e62ce60de4bd))
+* **llm-proxy:** backport Gemini reasoning usage to release/1.3 ([#8402](https://github.com/archestra-ai/archestra/issues/8402)) ([d323661](https://github.com/archestra-ai/archestra/commit/d323661db86b1429a06bd4c87160d8b16c3d004b))
+
 ## [1.3.68](https://github.com/archestra-ai/archestra/compare/platform-v1.3.67...platform-v1.3.68) (2026-10-01)
 
 

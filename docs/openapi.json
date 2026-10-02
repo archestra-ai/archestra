@@ -250152,7 +250152,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Generate a deployment YAML template preview for a catalog item\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Generate a deployment YAML template preview for a catalog item\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpAdvancedSettings:read`: View the Kubernetes deployment YAML of self-hosted MCP servers\n`mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -250417,6 +250417,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
+            "mcpAdvancedSettings:read",
             "mcpRegistry:read"
           ]
         }
@@ -250428,7 +250429,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Validate a deployment YAML template\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Validate a deployment YAML template\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpAdvancedSettings:read`: View the Kubernetes deployment YAML of self-hosted MCP servers",
         "requestBody": {
           "required": true,
           "content": {
@@ -250714,7 +250715,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpRegistry:read"
+            "mcpAdvancedSettings:read"
           ]
         }
       }
@@ -250725,7 +250726,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Reset the deployment YAML to default by clearing the custom YAML\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Reset the deployment YAML to default by clearing the custom YAML\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpAdvancedSettings:update`: Edit the Kubernetes deployment YAML of self-hosted MCP servers\n`mcpRegistry:update`: Modify MCP registry entries",
         "parameters": [
           {
             "schema": {
@@ -250990,6 +250991,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
+            "mcpAdvancedSettings:update",
             "mcpRegistry:update"
           ]
         }

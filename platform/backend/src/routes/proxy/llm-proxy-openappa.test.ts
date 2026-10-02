@@ -1361,9 +1361,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   test.each([
-    true,
-    false,
-  ])("the user's answer to Claude Code's own question reaches the model as given, on later turns too (stream=%s)", async (stream) => {
+    [true, false],
+    [false, false],
+    [true, true],
+    [false, true],
+  ])("the user's answer to Claude Code's own question reaches the model as given, on later turns too (stream=%s, proxyOnly=%s)", async (stream, proxyOnly) => {
     config.openappa = {
       ...config.openappa,
       offerSigningSecret: "test-offer-signing-secret-32chars",
@@ -1391,6 +1393,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     };
     const request = (messages: unknown[]) => {
       const body = payload(stream, messages);
+      // A proxy-only client does not connect the MCP gateway, so it declares
+      // none of the APPA tools.
+      if (proxyOnly) {
+        body.tools = body.tools.filter(
+          (tool) => !tool.name.startsWith("archestra__"),
+        );
+      }
       body.tools.push({
         name: "AskUserQuestion",
         description: "Ask the user a question",
@@ -1410,6 +1419,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(asked.statusCode, asked.body).toBe(200);
     const call = noticeFrom(asked.body, stream);
     expect(call.name).toBe("AskUserQuestion");
+    // The answer comes back under the proxy's signed question id.
+    expect(parseTrajectoryStamp(call.id)?.callId).toMatch(
+      /^toolu_aq1_[A-Za-z0-9_-]{16}_[A-Za-z0-9_-]{22}$/,
+    );
 
     options = { includeToolUse: false, streamStopReason: "end_turn" };
     events.length = 0;

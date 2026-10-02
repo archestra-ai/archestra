@@ -138,6 +138,12 @@ type NativeQuestionClaim = {
   offerIds?: string[];
 };
 
+type IssuedNativeQuestion = {
+  id: string;
+  name: string;
+  offerIds: string[];
+};
+
 type RecordedNativeHitlRuling = {
   offerId: string;
   ruling: "approve" | "deny" | "none";
@@ -440,9 +446,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
-    const tools = binding?.request.tools;
-    if (!binding || !tools) return;
+    if (!binding) return;
     enterCapturedGuardrailsActivation("active");
+    const tools = binding.request.tools;
+    if (!tools) {
+      // A proxy-only session declares no APPA tools, but the runtime still
+      // releases the client's own question calls, so their answers need the
+      // signed id too.
+      const issuedNativeQuestions: IssuedNativeQuestion[] = [];
+      const toolCalls = context.toolCalls.map((call) => {
+        const issued = withNativeQuestionId(binding, call);
+        if (!issued) return call;
+        issuedNativeQuestions.push({ ...issued.question, offerIds: [] });
+        return issued.call;
+      });
+      if (issuedNativeQuestions.length === 0) return;
+      await rememberNativeQuestions(binding, issuedNativeQuestions);
+      return { decision: "allow", toolCalls };
+    }
     // Restore before host validation; finalization may only append the child
     // receipt, never change the arguments the other policies already checked.
     let incomingToolCalls = restoreAuthorizedSpawnRetry({
@@ -523,11 +544,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       changed = true;
     }
     const claimedOfferIds = new Set<string>();
-    const issuedNativeQuestions: Array<{
-      id: string;
-      name: string;
-      offerIds: string[];
-    }> = [];
+    const issuedNativeQuestions: IssuedNativeQuestion[] = [];
     const toolCalls: Array<(typeof context.toolCalls)[number]> = [];
     for (const call of incomingToolCalls) {
       // The declared control tool itself, in its own namespace: a same-named
@@ -593,40 +610,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const nativeQuestion = this.asNativeQuestion(binding, prepared);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
-      const issuedQuestionName = nativeQuestionName(binding, prepared.name);
-      if (issuedQuestionName) {
-        const issuedId = issueNativeQuestionId({
-          session: binding.session,
-          name: issuedQuestionName,
-          currentId: prepared.id,
-        });
-        prepared = { ...prepared, wireId: issuedId };
-        issuedNativeQuestions.push({
-          id: issuedId,
-          name: issuedQuestionName,
-          offerIds,
-        });
+      const issued = withNativeQuestionId(binding, prepared);
+      if (issued) {
+        prepared = issued.call;
+        issuedNativeQuestions.push({ ...issued.question, offerIds });
         changed = true;
       }
       toolCalls.push(prepared);
     }
-    await Promise.all(
-      issuedNativeQuestions.map((question) =>
-        cacheManager.set(
-          nativeQuestionCacheKey({
-            session: binding.session,
-            id: question.id,
-          }),
-          {
-            name: question.name,
-            ...(question.offerIds.length > 0
-              ? { offerIds: question.offerIds }
-              : {}),
-          },
-          TimeInMs.Minute * 10,
-        ),
-      ),
-    );
+    await rememberNativeQuestions(binding, issuedNativeQuestions);
     if (changed) return { decision: "allow", toolCalls };
   }
 
@@ -770,19 +762,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             rest,
             {
               ...this.resolution(binding),
-              isUserQuestion: (name, namespace) => {
-                const tools = binding.request.tools;
-                if (tools?.platformToolNames?.has(name)) {
-                  return namespace === tools.askUser?.namespace;
-                }
-                if (
-                  namespace !== undefined &&
-                  binding.adapter?.classifyToolName(name, namespace) !== "local"
-                ) {
-                  return false;
-                }
-                return isUserQuestionCall(binding, name);
-              },
+              isUserQuestion: (name, namespace) =>
+                releasesUserQuestion(binding, { name, namespace }),
               isSpawn: (name, namespace) =>
                 binding.adapter?.isSpawnTool(name, namespace) === true,
               lineage: binding.child?.lineage,
@@ -2800,6 +2781,71 @@ function isUserQuestionCall(binding: AppaPluginBinding, name: string): boolean {
     binding.request.tools?.platformToolNames?.has(name) === true ||
     nativeQuestionName(binding, name) !== undefined ||
     isGatewayAskUser(binding, name)
+  );
+}
+
+/**
+ * True for a call that the runtime releases as a user question. The runtime
+ * keeps no record of such a call, so the result side must recognize its
+ * answer by other means.
+ */
+function releasesUserQuestion(
+  binding: AppaPluginBinding,
+  call: { name: string; namespace?: string },
+): boolean {
+  const tools = binding.request.tools;
+  if (tools?.platformToolNames?.has(call.name)) {
+    return call.namespace === tools.askUser?.namespace;
+  }
+  if (
+    call.namespace !== undefined &&
+    binding.adapter?.classifyToolName(call.name, call.namespace) !== "local"
+  ) {
+    return false;
+  }
+  return isUserQuestionCall(binding, call.name);
+}
+
+/**
+ * Gives a native question call a signed id, but only when the runtime
+ * releases that call as a user question. An answer under this id skips the
+ * runtime's result check, so a call that the runtime rules on must keep its
+ * own id.
+ */
+function withNativeQuestionId(
+  binding: AppaPluginBinding,
+  call: ToolCall,
+): { call: ToolCall; question: { id: string; name: string } } | undefined {
+  const name = nativeQuestionName(binding, call.name);
+  if (!name || !releasesUserQuestion(binding, call)) return undefined;
+  const id = issueNativeQuestionId({
+    session: binding.session,
+    name,
+    currentId: call.id,
+  });
+  return { call: { ...call, wireId: id }, question: { id, name } };
+}
+
+async function rememberNativeQuestions(
+  binding: AppaPluginBinding,
+  questions: readonly IssuedNativeQuestion[],
+): Promise<void> {
+  await Promise.all(
+    questions.map((question) =>
+      cacheManager.set(
+        nativeQuestionCacheKey({
+          session: binding.session,
+          id: question.id,
+        }),
+        {
+          name: question.name,
+          ...(question.offerIds.length > 0
+            ? { offerIds: question.offerIds }
+            : {}),
+        },
+        TimeInMs.Minute * 10,
+      ),
+    ),
   );
 }
 

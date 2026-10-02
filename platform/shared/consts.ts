@@ -311,6 +311,9 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  * instance silent: a guard from a newer deploy simply sees an equal-or-lower
  * number and says nothing. Bump this by exactly one when, and only when, a
  * guard change should prompt a re-connect.
+ *
+ * Preview installs already used version 2. Version 3 repairs their PowerShell
+ * permission cleanup; reusing version 2 would not prompt those users to reconnect.
  */
 export const STARTUP_GUARD_FORMAT_VERSION = 3;
 

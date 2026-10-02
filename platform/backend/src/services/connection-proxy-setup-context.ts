@@ -26,6 +26,8 @@ type IssueParams = {
   secret: string | undefined;
 };
 
+// setupId identifies the approving installation, not each inference session.
+// Later requests authenticate by org/key/proxy; they do not resend setup tickets.
 type VerifyParams = {
   token: string;
   organizationId: string;

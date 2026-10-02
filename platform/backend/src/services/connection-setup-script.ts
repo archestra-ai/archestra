@@ -1014,7 +1014,8 @@ home = pathlib.Path.home()
 path = pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude") / "settings.json"
 state_root = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) if os.environ.get("CLAUDE_CONFIG_DIR") else home
 state_path = state_root / ".archestra" / "claude-appa-permissions.json"
-settings = json.loads(path.read_text()) if path.exists() and path.read_text().strip() else {}
+settings_raw = path.read_text() if path.exists() else ""
+settings = json.loads(settings_raw) if settings_raw.strip() else {}
 state = json.loads(state_path.read_text()) if state_path.exists() else {}
 if not isinstance(settings, dict) or not isinstance(state, dict):
     raise ValueError("Claude settings and APPA permission state must be JSON objects")

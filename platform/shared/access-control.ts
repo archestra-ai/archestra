@@ -456,7 +456,7 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpAdvancedSettings:read":
     "View the Kubernetes deployment YAML of self-hosted MCP servers",
   "mcpAdvancedSettings:update":
-    "Edit the Kubernetes deployment YAML of self-hosted MCP servers",
+    "Edit Kubernetes deployment YAML, Secret/ConfigMap references, and service accounts of self-hosted MCP servers",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
@@ -919,7 +919,7 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.ResetDeploymentYaml]: {
     mcpRegistry: ["update"],
-    mcpAdvancedSettings: ["update"],
+    mcpAdvancedSettings: ["read", "update"],
   },
   [RouteId.GetK8sImagePullSecrets]: {
     mcpRegistry: ["read"],

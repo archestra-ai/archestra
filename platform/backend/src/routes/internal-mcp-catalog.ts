@@ -469,6 +469,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         organizationId: request.organizationId,
         requested: restBody.deploymentSpecYaml,
+        requestedLocalConfig: restBody.localConfig,
       });
 
       // Secret FK columns are server-managed: clients submit secret values, never
@@ -1029,7 +1030,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         organizationId: request.organizationId,
         requested: restBody.deploymentSpecYaml,
+        requestedLocalConfig: restBody.localConfig,
         current: originalCatalogItem.deploymentSpecYaml,
+        currentLocalConfig: originalCatalogItem.localConfig,
       });
 
       if (restBody.localConfig) {

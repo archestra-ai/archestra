@@ -244,6 +244,9 @@ export function McpCatalogForm({
     DocsPage.McpAuthentication,
     "upstream-identity-provider-jwt-jwks",
   );
+  const { data: canUpdateAdvancedSettings } = useHasPermissions({
+    mcpAdvancedSettings: ["update"],
+  });
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
@@ -1377,15 +1380,19 @@ export function McpCatalogForm({
                   disablePromptOnInstallation={isMultitenant}
                   disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
                   labelSuffix={<ReinstallHint show={isEnvDirty} />}
-                  envFrom={{
-                    fields: envFromFields,
-                    append: appendEnvFrom,
-                    remove: removeEnvFrom,
-                    watch: form.watch,
-                    setValue: form.setValue,
-                    register: form.register,
-                    fieldNamePrefix: "localConfig.envFrom",
-                  }}
+                  envFrom={
+                    canUpdateAdvancedSettings
+                      ? {
+                          fields: envFromFields,
+                          append: appendEnvFrom,
+                          remove: removeEnvFrom,
+                          watch: form.watch,
+                          setValue: form.setValue,
+                          register: form.register,
+                          fieldNamePrefix: "localConfig.envFrom",
+                        }
+                      : undefined
+                  }
                 />
               </div>
             )}

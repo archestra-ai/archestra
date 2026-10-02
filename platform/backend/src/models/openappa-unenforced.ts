@@ -68,15 +68,18 @@ class OpenAppaUnenforcedModel {
   /**
    * Deletes the records written before `before`, `batchSize` rows per
    * statement so that no single delete holds locks for long, and says how
-   * many went.
+   * many went. One sweep deletes at most `maxBatches` batches per table; the
+   * next sweep takes the rest.
    */
   static async deleteOlderThan(
     before: Date,
     batchSize = 1000,
+    maxBatches = 100,
   ): Promise<{ sessions: number; calls: number }> {
+    const limits = { before, batchSize, maxBatches };
     return {
-      sessions: await deleteInBatches(sessions, before, batchSize),
-      calls: await deleteInBatches(calls, before, batchSize),
+      sessions: await deleteInBatches(sessions, limits),
+      calls: await deleteInBatches(calls, limits),
     };
   }
 
@@ -124,14 +127,18 @@ class OpenAppaUnenforcedModel {
   }
 }
 
-/** The tables have composite keys, so a batch names its rows by `ctid`. */
+/**
+ * The tables have composite keys, so a batch names its rows by `ctid`. The
+ * select is a subquery of the delete, so a row cannot move between the two;
+ * keep them one statement.
+ */
 async function deleteInBatches(
   table: typeof sessions | typeof calls,
-  before: Date,
-  batchSize: number,
+  params: { before: Date; batchSize: number; maxBatches: number },
 ): Promise<number> {
+  const { before, batchSize, maxBatches } = params;
   let total = 0;
-  for (;;) {
+  for (let batch = 0; batch < maxBatches; batch++) {
     const batch = db
       .select({ ctid: sql`ctid` })
       .from(table)
@@ -142,8 +149,9 @@ async function deleteInBatches(
       .where(inArray(sql`ctid`, batch))
       .returning({ createdAt: table.createdAt });
     total += removed.length;
-    if (removed.length < batchSize) return total;
+    if (removed.length < batchSize) break;
   }
+  return total;
 }
 
 export default OpenAppaUnenforcedModel;

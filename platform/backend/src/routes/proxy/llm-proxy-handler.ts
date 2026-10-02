@@ -1663,6 +1663,13 @@ export async function handleLLMProxy<
           : virtualKeyId
             ? `virtual-key:${virtualKeyId}`
             : undefined;
+      // A platform request over loopback that brings no credential of its own.
+      // Only such a request may name an unscoped session in the header.
+      const platformLoopback =
+        isInternalRequest &&
+        !authenticatedUserId &&
+        !authenticatedApp &&
+        !virtualKeyId;
       const unsupportedClient =
         appaActive &&
         !connectionSetupBypass &&
@@ -1800,10 +1807,7 @@ export async function handleLLMProxy<
                 : {
                     // Scope external sessions to the authenticated principal.
                     scope:
-                      isInternalRequest &&
-                      !authenticatedUserId &&
-                      !authenticatedApp &&
-                      !virtualKeyId &&
+                      platformLoopback &&
                       incomingAppaSessionHeader !== undefined
                         ? undefined
                         : callerId,
@@ -1849,12 +1853,7 @@ export async function handleLLMProxy<
           organizationId: resolvedAgent.organizationId,
           callerId,
           isInternalChat,
-          scoped: !(
-            isInternalRequest &&
-            !authenticatedUserId &&
-            !authenticatedApp &&
-            !virtualKeyId
-          ),
+          platformLoopback,
         });
       }
       pluginContext = {
@@ -3967,13 +3966,6 @@ function preambleSseCarriesContent(data: string | Uint8Array): boolean {
 }
 
 /**
- * The session a request has while enforcement is off: the one the enforced
- * path binds, without a fork source. Undefined for a client that OpenAPPA
- * cannot govern, or a request that names no valid session of its own. A
- * fallback root is shared by all conversations of a credential, so it is
- * never one session. Never throws, because enforcement is off.
- */
-/**
  * Fills the APPA session and parent headers from the client's own session
  * identity when the request did not send them. The enforced path and the
  * observer both use it, so they read the same session from a request.
@@ -3998,6 +3990,13 @@ function fillAppaSessionHeaders(
     headers[parentHeader] = identity.parentId;
 }
 
+/**
+ * The session a request has while enforcement is off: the one the enforced
+ * path binds, without a fork source. Undefined for a client that OpenAPPA
+ * cannot govern, or a request that names no valid session of its own. A
+ * fallback root is shared by all conversations of a credential, so it is
+ * never one session. Never throws, because enforcement is off.
+ */
 function observedAppaSession(params: {
   headers: Record<string, string | string[] | undefined>;
   body: unknown;
@@ -4005,8 +4004,8 @@ function observedAppaSession(params: {
   organizationId: string;
   callerId: string | undefined;
   isInternalChat: boolean;
-  /** Whether the enforced path scopes this session to its caller. */
-  scoped: boolean;
+  /** A platform request over loopback with no credential of its own. */
+  platformLoopback: boolean;
 }): OpenAppaSession | undefined {
   const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
   const parentHeader = APPA_PARENT_HEADER.toLowerCase();
@@ -4038,7 +4037,7 @@ function observedAppaSession(params: {
         ? {}
         : {
             scope:
-              !params.scoped && incoming !== undefined
+              params.platformLoopback && incoming !== undefined
                 ? undefined
                 : params.callerId,
           }),

@@ -380,6 +380,7 @@ describe("MCP deployment YAML routes", () => {
     RouteId.ResetDeploymentYaml,
   ])("%s is reachable by admins only", (routeId) => {
     const required = requiredEndpointPermissionsMap[routeId];
+    if (!required) throw new Error(`Missing permissions for ${routeId}`);
     const canCall = (role: keyof typeof predefinedPermissionsMap) =>
       findUngrantablePermissions(predefinedPermissionsMap[role], required)
         .length === 0;

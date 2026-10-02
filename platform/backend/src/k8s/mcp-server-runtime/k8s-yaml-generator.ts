@@ -41,18 +41,6 @@ interface YamlValidationResult {
 }
 
 /**
- * Placeholder patterns used in the YAML template.
- * - ${env.KEY} for plain text environment variables
- * - ${secret.KEY} for secret-type environment variables
- * - ${archestra.*} for system-managed values
- */
-const PLACEHOLDER_PATTERNS = {
-  env: /\$\{env\.([^}]+)\}/g,
-  secret: /\$\{secret\.([^}]+)\}/g,
-  archestra: /\$\{archestra\.([^}]+)\}/g,
-};
-
-/**
  * System-managed archestra placeholders.
  */
 const ARCHESTRA_PLACEHOLDERS = [
@@ -368,7 +356,9 @@ export function resolvePlaceholders(
   },
   envValues: Record<string, string>,
 ): string {
-  let resolved = yamlString;
+  // Parse before interpolation so a configuration value cannot add YAML fields.
+  // Only scalar values are substituted; mapping keys and document structure stay
+  // under the control of the advanced-settings author.
 
   // Resolve archestra placeholders
   const archestraMap: Record<string, string> = {
@@ -383,19 +373,52 @@ export function resolvePlaceholders(
     service_account: context.serviceAccount || "default",
   };
 
-  resolved = resolved.replace(PLACEHOLDER_PATTERNS.archestra, (_, key) => {
-    return archestraMap[key] || "";
-  });
+  const visited = new WeakSet<object>();
+  const resolving = new WeakSet<object>();
+  function resolveValue(value: unknown): unknown {
+    if (typeof value === "string") {
+      if (value === placeholder("archestra", "arguments")) {
+        return context.arguments || [];
+      }
+      // Substitute in one pass: values containing placeholders remain data.
+      return value.replace(
+        /\$\{(archestra|env)\.([^}]+)\}/g,
+        (_, prefix, key) =>
+          prefix === "archestra"
+            ? archestraMap[key] || ""
+            : envValues[key] || "",
+      );
+    }
+    if (typeof value !== "object" || value === null) return value;
+    if (resolving.has(value))
+      throw new Error("Recursive YAML aliases are invalid");
+    if (visited.has(value)) return value;
+    visited.add(value);
+    resolving.add(value);
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index++) {
+        value[index] = resolveValue(value[index]);
+      }
+    } else {
+      for (const [key, child] of Object.entries(value)) {
+        (value as Record<string, unknown>)[key] = resolveValue(child);
+      }
+    }
+    resolving.delete(value);
+    return value;
+  }
 
-  // Resolve env placeholders
-  resolved = resolved.replace(PLACEHOLDER_PATTERNS.env, (_, key) => {
-    return envValues[key] || "";
-  });
-
-  // Note: secret placeholders are not resolved here - they remain as secretKeyRef in the YAML
-  // The K8s API will resolve them at runtime
-
-  return resolved;
+  try {
+    // Secret placeholders remain for Kubernetes secretKeyRef resolution.
+    return yaml.dump(resolveValue(yaml.load(yamlString)), {
+      lineWidth: -1,
+      noRefs: true,
+    });
+  } catch {
+    // An empty document fails parsing at the deployment boundary, preserving
+    // the existing default-deployment fallback without forwarding unsafe YAML.
+    return "";
+  }
 }
 
 /**
@@ -476,6 +499,9 @@ export function customYamlToDeployment(
 
     parsed.spec.template.metadata.labels = systemValues.labels;
 
+    // Kubernetes still accepts this deprecated alias when the canonical field
+    // is absent. Remove it before applying the catalog-owned identity.
+    delete podSpec.serviceAccount;
     if (systemValues.serviceAccountName) {
       podSpec.serviceAccountName = systemValues.serviceAccountName;
     } else {

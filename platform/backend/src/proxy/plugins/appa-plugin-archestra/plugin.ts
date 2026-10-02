@@ -13,7 +13,7 @@ import config from "@/config";
 import logger from "@/logging";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
-import { clientSessionId } from "@/openappa/actor";
+import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
   childReturnMarkersConfigured,
@@ -2037,7 +2037,10 @@ async function governRelays(params: {
     const addressed = await addressChild({
       session: parent,
       operationId: `address:${call.id}`,
-      childSessionId: `${parent.session_id}:${recipient.childNativeId}`,
+      childSessionId: childSessionId(
+        parent.session_id,
+        recipient.childNativeId,
+      ),
       value: adapter.relayMessage(crossed.call)?.value ?? relay.value,
     });
     outcomes.set(
@@ -2131,7 +2134,10 @@ async function resolveRelayChild(params: {
     })) &&
     !(await startedUnenforced({
       ...params.parent,
-      session_id: `${params.parent.session_id}:${launch.childNativeId}`,
+      session_id: childSessionId(
+        params.parent.session_id,
+        launch.childNativeId,
+      ),
       parent_id: params.parent.session_id,
     }));
   return checked

@@ -3,6 +3,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
+import { childSessionId } from "@/openappa/actor";
 import type { OpenAppaSession } from "@/openappa/service";
 import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
@@ -137,7 +138,7 @@ export async function findUnenforcedCalls(params: {
 }): Promise<UnenforcedCalls> {
   const { session } = params;
   const childNativeIds = [...new Set(params.childNativeIds ?? [])];
-  const childSessionId = (id: string) => `${session.session_id}:${id}`;
+  const childOf = (id: string) => childSessionId(session.session_id, id);
   const [rows, startedChildren] = await Promise.all([
     OpenAppaUnenforcedModel.findCalls({
       organizationId: session.organization_id,
@@ -147,7 +148,7 @@ export async function findUnenforcedCalls(params: {
     }),
     OpenAppaUnenforcedModel.findSessions({
       organizationId: session.organization_id,
-      sessionIds: childNativeIds.map(childSessionId),
+      sessionIds: childNativeIds.map(childOf),
     }),
   ]);
   return {
@@ -157,7 +158,7 @@ export async function findUnenforcedCalls(params: {
       ...childNativeIds.filter((id) =>
         startedChildren.some(
           (row) =>
-            row.sessionId === childSessionId(id) &&
+            row.sessionId === childOf(id) &&
             row.parentId === session.session_id,
         ),
       ),

@@ -1,5 +1,6 @@
 import { posix } from "node:path";
 import { APPA_PARENT_HEADER, APPA_SESSION_HEADER } from "@archestra/shared";
+import { childSessionId } from "@/openappa/actor";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { verifyDelegatedPrompt } from "@/openappa/delegation";
 import { isWellFormedAppaId } from "@/openappa/service";
@@ -70,9 +71,7 @@ export function namesChildrenFromArguments(params: {
     (agent) => agent !== params.rootId && !ancestors.has(agent),
   );
   unique.sort();
-  return unique.map((agent) =>
-    mintChildTrajectoryId({ parentId: params.rootId, childNativeId: agent }),
-  );
+  return unique.map((agent) => childSessionId(params.rootId, agent));
 }
 
 /**
@@ -118,12 +117,9 @@ export function bindMintedChildTrajectory(params: {
   const sessionId =
     recorded?.childId ??
     (childNativeId
-      ? mintChildTrajectoryId({ parentId, childNativeId })
+      ? childSessionId(parentId, childNativeId)
       : delegated?.spawnCallId
-        ? mintChildTrajectoryId({
-            parentId,
-            childNativeId: delegated.spawnCallId,
-          })
+        ? childSessionId(parentId, delegated.spawnCallId)
         : undefined);
   if (!sessionId) {
     if (claims.parentId) {
@@ -378,13 +374,6 @@ function nativeId(value: string | undefined): string | undefined {
 
 function correlationError(message: string): ApiError {
   return new ApiError(400, message);
-}
-
-function mintChildTrajectoryId(params: {
-  parentId: string;
-  childNativeId: string;
-}): string {
-  return `${params.parentId}:${params.childNativeId}`;
 }
 
 function collectNamedChildren(

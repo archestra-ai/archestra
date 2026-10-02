@@ -1785,22 +1785,7 @@ export async function handleLLMProxy<
                 scope: (session) => scopedSessionId(callerId, session),
               })
             : undefined;
-        if (
-          appaIdentity.sessionId &&
-          isWellFormedAppaId(appaIdentity.sessionId) &&
-          !incomingAppaSessionHeader
-        ) {
-          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
-            appaIdentity.sessionId;
-        }
-        if (
-          appaIdentity.parentId &&
-          isWellFormedAppaId(appaIdentity.parentId) &&
-          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
-        ) {
-          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] =
-            appaIdentity.parentId;
-        }
+        fillAppaSessionHeaders(headersForExtraction, appaIdentity);
         // Reading connect.md can taint the rest of setup, so the verified
         // session bypasses APPA trust and invocation decisions together.
         openappaSession = connectionSetupBypass
@@ -3988,6 +3973,31 @@ function preambleSseCarriesContent(data: string | Uint8Array): boolean {
  * fallback root is shared by all conversations of a credential, so it is
  * never one session. Never throws, because enforcement is off.
  */
+/**
+ * Fills the APPA session and parent headers from the client's own session
+ * identity when the request did not send them. The enforced path and the
+ * observer both use it, so they read the same session from a request.
+ */
+function fillAppaSessionHeaders(
+  headers: Record<string, string | string[] | undefined>,
+  identity: AppaSessionIdentity,
+): void {
+  const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
+  const parentHeader = APPA_PARENT_HEADER.toLowerCase();
+  if (
+    identity.sessionId &&
+    isWellFormedAppaId(identity.sessionId) &&
+    !headers[sessionHeader]
+  )
+    headers[sessionHeader] = identity.sessionId;
+  if (
+    identity.parentId &&
+    isWellFormedAppaId(identity.parentId) &&
+    !headers[parentHeader]
+  )
+    headers[parentHeader] = identity.parentId;
+}
+
 function observedAppaSession(params: {
   headers: Record<string, string | string[] | undefined>;
   body: unknown;
@@ -4018,19 +4028,8 @@ function observedAppaSession(params: {
           headers: params.headers,
         })
       : {};
-    const headers: Record<string, unknown> = { ...params.headers };
-    if (
-      identity.sessionId &&
-      isWellFormedAppaId(identity.sessionId) &&
-      incoming === undefined
-    )
-      headers[sessionHeader] = identity.sessionId;
-    if (
-      identity.parentId &&
-      isWellFormedAppaId(identity.parentId) &&
-      !headers[parentHeader]
-    )
-      headers[parentHeader] = identity.parentId;
+    const headers = { ...params.headers };
+    fillAppaSessionHeaders(headers, identity);
     return sessionFromHeaders({
       headers,
       organizationId: params.organizationId,

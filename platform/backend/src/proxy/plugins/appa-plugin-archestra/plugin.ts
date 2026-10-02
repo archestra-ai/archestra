@@ -147,8 +147,6 @@ type AppaPluginBinding = {
    * enforcement was off: its results and its teammates' launches.
    */
   unenforcedCalls: UnenforcedCalls;
-  /** A child this session spawned ran while enforcement was off. */
-  unenforcedSpawnResult: boolean;
 };
 
 /** A request of a governed session, seen while enforcement is off. */
@@ -216,7 +214,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ? clientSessionId(trustedContext.session.session_id)
         : undefined,
       unenforcedCalls: { reasons: new Map(), children: new Set() },
-      unenforcedSpawnResult: false,
     };
     if (trajectory.child) {
       binding.child = trajectory.child;
@@ -250,11 +247,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ].map((launch) => launch.spawnCallId),
       ],
     });
-    binding.unenforcedSpawnResult = context.toolResults.some(
-      (result) =>
-        binding.adapter?.isSpawnTool(result.name, result.namespace) &&
-        binding.unenforcedCalls.reasons.has(unenforcedCallId(result.id)),
-    );
     // The runtime never saw a call the model made while enforcement was off,
     // so OpenAPPA ignores its result: the result reaches the model as it is.
     const toolResults = context.toolResults.filter(
@@ -1396,16 +1388,20 @@ async function approveChildReturnCarriers(params: {
   const crossedChildren = new Set(
     available.map((record) => record.childNativeId),
   );
-  // Results that carry only returns OpenAPPA ignores, such as a wait result.
-  const ignoredEnvelopes = new Set<string>();
-  const ranUnenforced = (spawnCallId: string | undefined) =>
-    spawnCallId !== undefined &&
-    reasons.has(spawnCallId) &&
-    !crossedSpawns.has(spawnCallId);
-  const childRanUnenforced = (childNativeId: string | undefined) =>
-    childNativeId !== undefined &&
-    children.has(childNativeId) &&
-    !crossedChildren.has(childNativeId);
+  const unenforcedReturn = (ids: {
+    spawnCallId?: string;
+    childNativeId?: string;
+    envelopeId?: string;
+  }) =>
+    !(ids.spawnCallId !== undefined && crossedSpawns.has(ids.spawnCallId)) &&
+    !(
+      ids.childNativeId !== undefined && crossedChildren.has(ids.childNativeId)
+    ) &&
+    ((ids.spawnCallId !== undefined && reasons.has(ids.spawnCallId)) ||
+      (ids.childNativeId !== undefined && children.has(ids.childNativeId)) ||
+      (ids.envelopeId !== undefined && reasons.get(ids.envelopeId) === "made"));
+  // The returns OpenAPPA ignores, by the result that carries them.
+  const ignoredByEnvelope = new Map<string, AppaChildReturnCompletion[]>();
   // A fork carries its source's subagent results, but the runtime retained
   // them under the source session, so the lookup above finds none of them.
   const unrecorded = params.binding.session.fork_of
@@ -1434,15 +1430,23 @@ async function approveChildReturnCarriers(params: {
     const candidates = available.flatMap((record, index) =>
       record.value === completion.value ? [{ record, index }] : [],
     );
+    const envelopeId = completion.envelopeId
+      ? envelopeIdOf(completion.envelopeId)
+      : undefined;
     if (
       candidates.length === 0 &&
-      ((completion.envelopeId !== undefined &&
-        reasons.get(envelopeIdOf(completion.envelopeId)) === "made") ||
-        ranUnenforced(expectedSpawn) ||
-        childRanUnenforced(completion.childNativeId))
+      unenforcedReturn({
+        spawnCallId: expectedSpawn,
+        childNativeId: completion.childNativeId,
+        envelopeId,
+      })
     ) {
-      if (completion.envelopeId)
-        ignoredEnvelopes.add(envelopeIdOf(completion.envelopeId));
+      if (envelopeId) {
+        ignoredByEnvelope.set(envelopeId, [
+          ...(ignoredByEnvelope.get(envelopeId) ?? []),
+          completion,
+        ]);
+      }
       continue;
     }
     const exact = candidates.filter(
@@ -1537,8 +1541,8 @@ async function approveChildReturnCarriers(params: {
   const unrecordedResult = completionResults.find(
     (result) =>
       (byEnvelope.get(envelopeIdOf(result.id)) ?? []).length === 0 &&
-      !ranUnenforced(envelopeIdOf(result.id)) &&
-      !ignoredEnvelopes.has(envelopeIdOf(result.id)),
+      !ignoredByEnvelope.has(envelopeIdOf(result.id)) &&
+      !unenforcedReturn({ spawnCallId: envelopeIdOf(result.id) }),
   );
   if (unrecordedResult) {
     throw childReturnRefusal({
@@ -1565,9 +1569,10 @@ async function approveChildReturnCarriers(params: {
   for (const result of completionResults) {
     const envelopeId = envelopeIdOf(result.id);
     const verified = byEnvelope.get(envelopeId) ?? [];
+    const ignoredHere = ignoredByEnvelope.get(envelopeId) ?? [];
     if (
       verified.length === 0 &&
-      (ranUnenforced(envelopeId) || ignoredEnvelopes.has(envelopeId))
+      (ignoredHere.length > 0 || unenforcedReturn({ spawnCallId: envelopeId }))
     ) {
       ignored.add(result.id);
       continue;
@@ -1575,19 +1580,31 @@ async function approveChildReturnCarriers(params: {
     if (verified.length === 0) {
       throw childReturnRefusal({ ...unrecorded, callId: envelopeId });
     }
+    // A return OpenAPPA ignores stays beside the crossed ones, as it came.
     updates[result.id] =
       verified.length === 1 &&
+      ignoredHere.length === 0 &&
       adapter?.isSpawnTool(result.name, result.namespace)
         ? verified[0].value
         : JSON.stringify({
-            status: Object.fromEntries(
-              matched
+            status: Object.fromEntries([
+              ...matched
                 .filter(({ record }) => verified.includes(record))
                 .map(({ completion, record }) => [
                   completion.childNativeId ?? record.childNativeId,
                   { completed: record.value },
                 ]),
-            ),
+              ...ignoredHere.flatMap((completion) =>
+                completion.childNativeId
+                  ? [
+                      [
+                        completion.childNativeId,
+                        { completed: completion.value },
+                      ],
+                    ]
+                  : [],
+              ),
+            ]),
           });
   }
   return { updates, ignored };
@@ -1655,8 +1672,8 @@ const SUBSTITUTED_CHILD_RETURN =
  * marker it carried binds its exact text.
  *
  * A message that came while enforcement was off has no record of crossing.
- * OpenAPPA ignores it, and keeps it as it is, when its sender or this session
- * ran while enforcement was off.
+ * OpenAPPA ignores it, and keeps it as it is, when its sender, or this child,
+ * ran while enforcement was off and has no crossing on record.
  */
 async function admitRelayArrivals(params: {
   binding: AppaPluginBinding;
@@ -1730,8 +1747,12 @@ async function admitRelayArrivals(params: {
     params.binding.requestBody,
   );
   let ranUnenforced: Promise<boolean> | undefined;
+  // Only a sender that has nothing on record counts: a message from a sender
+  // with a crossing may be the summary of a return the check withheld. A
+  // subagent's envelope names no sender any record carries, so it never counts.
   const sentUnenforced = async (arrival: AppaRelayArrival) => {
-    if (arrival.kind === "session") return false;
+    if (arrival.kind !== "teammate" && arrival.kind !== "coordinator")
+      return false;
     const launch =
       arrival.kind === "teammate" ? launches?.get(arrival.from) : undefined;
     if (
@@ -1739,12 +1760,13 @@ async function admitRelayArrivals(params: {
       params.binding.unenforcedCalls.reasons.has(
         unenforcedCallId(launch.spawnCallId),
       )
-    )
-      return true;
-    if (arrival.kind === "agent" && params.binding.unenforcedSpawnResult)
-      return true;
+    ) {
+      return !(await crossings()).some(
+        (record) => record.childNativeId === launch.childNativeId,
+      );
+    }
     ranUnenforced ??= spawnRanUnenforced(params.binding);
-    return ranUnenforced;
+    return (await ranUnenforced) && (await addresses()).length === 0;
   };
   for (const arrival of arrivals) {
     if (

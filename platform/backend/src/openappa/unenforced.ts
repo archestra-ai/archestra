@@ -48,8 +48,9 @@ export async function observeUnenforcedSession(
 }
 
 /**
- * Whether the session, or a session it descends from, started while
- * enforcement was off. A session the runtime already governs is not: its
+ * Whether the session, or the parent that started it, started while
+ * enforcement was off. A child of such a parent is recorded too, so its own
+ * children follow it. A session the runtime already governs is not: its
  * record lost a race with the session's first governed request. Never cached,
  * so every replica decides from the same rows.
  */
@@ -59,10 +60,8 @@ export async function startedUnenforced(
   const recorded = await OpenAppaUnenforcedModel.findSessions({
     organizationId: session.organization_id,
     sessionIds: [
-      ...new Set([
-        ...lineage(session.session_id),
-        ...(session.parent_id ? lineage(session.parent_id) : []),
-      ]),
+      session.session_id,
+      ...(session.parent_id ? [session.parent_id] : []),
     ],
   });
   if (recorded.length === 0) return false;
@@ -70,7 +69,14 @@ export async function startedUnenforced(
     organizationId: session.organization_id,
     sessionId: session.session_id,
   });
-  return !governed;
+  if (governed) return false;
+  if (!recorded.includes(session.session_id)) {
+    await OpenAppaUnenforcedModel.recordSession({
+      organizationId: session.organization_id,
+      sessionId: session.session_id,
+    });
+  }
+  return true;
 }
 
 /**
@@ -102,28 +108,38 @@ export async function recordUnenforcedCalls(params: {
 
 /**
  * The records of a session that name one of `toolCallIds` (by the call id as
- * `unenforcedCallId` gives it) or one of `childNativeIds`. A fork also reads
- * the records of the session it continues: its history holds their calls.
+ * `unenforcedCallId` gives it) or one of its children in `childNativeIds`. A
+ * fork reads no records of the session it continues, so what that session
+ * did while enforcement was off stays withheld in the fork.
  */
 export async function findUnenforcedCalls(params: {
   session: OpenAppaSession;
   toolCallIds: readonly string[];
   childNativeIds?: readonly string[];
 }): Promise<UnenforcedCalls> {
-  const rows = await OpenAppaUnenforcedModel.findCalls({
-    organizationId: params.session.organization_id,
-    sessionIds: [
-      params.session.session_id,
-      ...(params.session.fork_of ? [params.session.fork_of] : []),
-    ],
-    toolCallIds: params.toolCallIds.map(unenforcedCallId),
-    childNativeIds: params.childNativeIds ?? [],
-  });
+  const { session } = params;
+  const childNativeIds = [...new Set(params.childNativeIds ?? [])];
+  const childSessionId = (id: string) => `${session.session_id}:${id}`;
+  const [rows, startedChildren] = await Promise.all([
+    OpenAppaUnenforcedModel.findCalls({
+      organizationId: session.organization_id,
+      sessionIds: [session.session_id],
+      toolCallIds: params.toolCallIds.map(unenforcedCallId),
+      childNativeIds,
+    }),
+    OpenAppaUnenforcedModel.findSessions({
+      organizationId: session.organization_id,
+      sessionIds: childNativeIds.map(childSessionId),
+    }),
+  ]);
   return {
     reasons: new Map(rows.map((row) => [row.toolCallId, row.reason])),
-    children: new Set(
-      rows.flatMap((row) => (row.childNativeId ? [row.childNativeId] : [])),
-    ),
+    children: new Set([
+      ...rows.flatMap((row) => (row.childNativeId ? [row.childNativeId] : [])),
+      ...childNativeIds.filter((id) =>
+        startedChildren.includes(childSessionId(id)),
+      ),
+    ]),
   };
 }
 
@@ -131,7 +147,10 @@ export async function findUnenforcedCalls(params: {
 export type UnenforcedCalls = {
   /** Why the runtime did not see each recorded call, by call id. */
   reasons: ReadonlyMap<string, UnenforcedCallReason>;
-  /** The children of recorded spawns that ran while enforcement was off. */
+  /**
+   * The children that ran while enforcement was off: of a recorded spawn, or
+   * started then.
+   */
   children: ReadonlySet<string>;
 };
 
@@ -141,22 +160,6 @@ export function unenforcedCallId(id: string): string {
 }
 
 // ===
-
-/**
- * The session id and the ids of the sessions it descends from. A child's id is
- * its parent's id, a colon, and the client's id of the child, after the
- * caller scope.
- */
-function lineage(sessionId: string): string[] {
-  const scope = sessionId.indexOf("|") + 1;
-  const ids = [sessionId];
-  let separator = sessionId.indexOf(":", scope + 1);
-  while (separator > scope) {
-    ids.push(sessionId.slice(0, separator));
-    separator = sessionId.indexOf(":", separator + 1);
-  }
-  return ids;
-}
 
 function sessionKey(session: OpenAppaSession): string {
   return `${session.organization_id}\u0000${session.session_id}`;

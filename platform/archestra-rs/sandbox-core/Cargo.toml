@@ -24,11 +24,11 @@ eyre = "0.6"
 futures-util = "0.3"
 napi = { version = "3", optional = true }
 napi-derive = { version = "3", optional = true }
-opentelemetry = "0.32"
+opentelemetry = "0.33"
 opentelemetry_sdk = "0.33.0"
 # http/protobuf OTLP over rustls (musl-friendly, no system openssl), aimed at
 # the same collector the node SDK uses (port 4318).
-opentelemetry-otlp = { version = "0.32", default-features = false, features = [
+opentelemetry-otlp = { version = "0.33", default-features = false, features = [
     "trace",
     "logs",
     "http-proto",
@@ -36,9 +36,9 @@ opentelemetry-otlp = { version = "0.32", default-features = false, features = [
     # thread, where the async reqwest client panics ("no reactor running") and
     # kills the export pipeline. the blocking client runs the request inline.
     "reqwest-blocking-client",
-    "reqwest-rustls-webpki-roots",
+    "reqwest-rustls",
 ], optional = true }
-opentelemetry-appender-tracing = { version = "0.32", optional = true }
+opentelemetry-appender-tracing = { version = "0.33", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = [
@@ -50,7 +50,7 @@ tokio = { version = "1", features = [
     "io-util",
 ] }
 tracing = "0.1"
-tracing-opentelemetry = "0.33"
+tracing-opentelemetry = "0.34"
 tracing-subscriber = { version = "0.3", default-features = false, features = [
     "std",
     "fmt",

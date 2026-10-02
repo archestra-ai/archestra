@@ -4,7 +4,6 @@
 import { resourceCategories } from "@archestra/shared";
 import { PermissionExplorer } from "@/components/permission-explorer";
 import { QueryLoadError } from "@/components/query-load-error";
-import { SettingsBlock } from "@/components/settings/settings-block";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { usePermissionSources } from "@/lib/auth/permission-sources.query";
@@ -36,18 +35,11 @@ export function PermissionsCard() {
   const hasPermissions = Object.values(resourceCategories)
     .flat()
     .some((resource) => (permissions?.[resource]?.length ?? 0) > 0);
-  return (
-    <SettingsBlock
-      title="Your permissions"
-      description="Permissions from your direct roles and team memberships. Focus a permission to see its source."
-    >
-      {hasPermissions ? (
-        <PermissionExplorer permissions={permissions ?? {}} sources={sources} />
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Your roles and teams do not provide access to any resources.
-        </p>
-      )}
-    </SettingsBlock>
+  return hasPermissions ? (
+    <PermissionExplorer permissions={permissions ?? {}} sources={sources} />
+  ) : (
+    <p className="text-sm text-muted-foreground">
+      Your roles and teams do not provide access to any resources.
+    </p>
   );
 }

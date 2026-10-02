@@ -21,11 +21,20 @@ describe("resolveLegacyAccountHref", () => {
     ).toBeNull();
   });
 
-  it("routes the personal-token highlight to the gateway token page", () => {
+  it("routes the personal-token highlight to Auth", () => {
     // The token dialog lives inside that card, so the card has to mount.
     expect(
       resolveLegacyAccountHref({ section: null, highlight: "personal-token" }),
-    ).toBe("/account/gateway-token");
+    ).toBe("/account/auth");
+  });
+
+  it.each([
+    "gateway-token",
+    "two-factor",
+  ])("routes the legacy %s section to Auth", (section) => {
+    expect(resolveLegacyAccountHref({ section, highlight: null })).toBe(
+      "/account/auth",
+    );
   });
 
   it("lets an explicit section win over the highlight", () => {

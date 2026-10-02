@@ -8,7 +8,6 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
 import { RuntimeCredentialRowContent } from "@/components/runtime-credential-row-content";
-import { SettingsBlock } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -37,11 +36,7 @@ export default function AccountConnectionsPage() {
 
   return (
     <>
-      <SettingsBlock
-        title="Personal credentials"
-        description="Connect a credential once to reuse it with your agents and MCP connections. Values stay private to you."
-        control={null}
-      >
+      <div>
         {definitions.isError || agents.isError ? (
           <QueryLoadError
             title="Couldn't load Agent connections"
@@ -113,7 +108,7 @@ export default function AccountConnectionsPage() {
               )}
           </div>
         )}
-      </SettingsBlock>
+      </div>
 
       {connecting && (
         <RuntimeCredentialConnectionDialog

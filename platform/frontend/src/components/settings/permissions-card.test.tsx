@@ -18,13 +18,8 @@ describe("PermissionsCard", () => {
     vi.clearAllMocks();
     mockPermissions({ agent: ["create", "read"], mcpGateway: ["read"] });
   });
-  it("explains permission sources and immediately shows a useful category", () => {
+  it("immediately shows a useful category in read-only mode", () => {
     renderCard();
-    expect(
-      screen.getByText(
-        "Permissions from your direct roles and team memberships. Focus a permission to see its source.",
-      ),
-    ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Agents Read granted" }),
     ).toBeVisible();

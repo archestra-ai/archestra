@@ -94,3 +94,18 @@ it.each([
   expect(target.searchParams.get("code")).toBe("synthetic+code");
   expect(target.searchParams.get("state")).toBe("synthetic/state");
 });
+
+it.each([
+  "/account/gateway-token",
+  "/account/two-factor",
+])("redirects %s to Auth without losing token dialog parameters", async (path) => {
+  const { default: nextConfig } = await import("../next.config");
+  const response = await unstable_getResponseFromNextConfig({
+    url: `https://app.example.com${path}?highlight=personal-token`,
+    nextConfig,
+  });
+  expect(response.status).toBe(308);
+  const target = new URL(getRedirectUrl(response) ?? "");
+  expect(target.pathname).toBe("/account/auth");
+  expect(target.searchParams.get("highlight")).toBe("personal-token");
+});

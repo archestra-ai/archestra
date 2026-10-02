@@ -183,6 +183,10 @@ Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini D
   - **Google AI Studio (default)**: Pass your Gemini API key in the `x-goog-api-key` header
   - **Vertex AI**: No API key required from clients - uses server-side [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials)
 
+### Model Router Token Usage
+
+Gemini completion counts include thinking tokens. Chat Completions reports the thinking subset in `completion_tokens_details.reasoning_tokens`. Responses reports it in `output_tokens_details.reasoning_tokens`.
+
 ### Using Vertex AI
 
 To use Vertex AI instead of Google AI Studio, configure these environment variables:

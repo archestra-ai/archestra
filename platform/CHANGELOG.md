@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0-rc.30](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.29...platform-v1.4.0-rc.30) (2026-10-02)
+
+
+### Bug Fixes
+
+* **agent-runtime:** restore Claude MCP startup and image validation ([#8387](https://github.com/archestra-ai/archestra/issues/8387)) ([108d928](https://github.com/archestra-ai/archestra/commit/108d9283b6c145cc2d18cfeff413d503627072d1))
+
 ## [1.4.0-rc.29](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.28...platform-v1.4.0-rc.29) (2026-10-02)
 
 

@@ -32,7 +32,7 @@ The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.
 
 The agent downloads a public bootstrap installer and starts a connection request.
 Your browser opens an approval page for the requested client and operating system.
-**Review the setup** lists the gateway with its MCP servers and tools, the LLM Proxy, and shared skills, using your deployment’s defaults. Select **Change** on a line to adjust it.
+It lists the gateway with its MCP servers and tools, the LLM Proxy, and shared skills, using your deployment’s defaults. Select **Change** on a line to adjust it.
 Sign in using your deployment's usual login or SSO.
 Confirm that the browser code matches your terminal.
 ![Browser approval with a matching terminal code](/docs/automated_screenshots/platform-connection_browser-approval.webp)
@@ -62,7 +62,7 @@ Verification uses the deployment's tool prefix, including full white-label names
 
 If the operating system blocks startup, Codex can request approval for that one verification command. Your configured sandbox and approval settings stay unchanged. The verifier never approves permission requests automatically. Installation and OAuth alone do not prove the connection works.
 
-Cursor still requires native gateway OAuth. Connecting its gateway does not route inference through the LLM Proxy. To route supported OpenAI chat models, select the proxy in **Review the setup** on the approval page, then apply the printed key and base URL in Cursor's model settings.
+Cursor still requires native gateway OAuth. Connecting its gateway does not route inference through the LLM Proxy. To route supported OpenAI chat models, change the LLM Proxy line on the approval page, then apply the printed key and base URL in Cursor's model settings.
 The installer places shared skills in Cursor's skills folder; reload Cursor to see them.
 See [Supported Clients](#supported-clients) for each client's remaining steps.
 This flow does not automate those UI-only settings.

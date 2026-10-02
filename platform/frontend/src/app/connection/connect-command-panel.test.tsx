@@ -525,7 +525,7 @@ describe("ConnectCommandPanel", () => {
     }
   });
 
-  it("reviews the setup on the approval page and approves the changed choices", async () => {
+  it("lists the setup on the approval page and approves the changed choices", async () => {
     const decisions: unknown[] = [];
     const server = setupServer(
       http.get("http://localhost:9000/api/client-connections/demo", () =>
@@ -580,10 +580,8 @@ describe("ConnectCommandPanel", () => {
         screen.queryByRole("heading", { name: "Connect Claude Code" }),
       ).toBeNull();
       // The approval page lists what gets connected before the user approves.
-      expect(
-        screen.getByRole("heading", { name: "Review the setup" }),
-      ).toBeVisible();
       expect(screen.getByText("for tools", { exact: false })).toBeVisible();
+      expect(screen.getByTestId("gateway-servers-summary")).toBeVisible();
       expect(
         screen.queryByRole("button", { name: "Customize setup" }),
       ).toBeNull();

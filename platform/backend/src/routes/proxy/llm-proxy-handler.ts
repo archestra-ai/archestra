@@ -1212,6 +1212,7 @@ export async function handleLLMProxy<
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
       llmProviderApiKeyId: perKeyChatApiKeyId,
+      sessionId: sessionId ?? undefined,
       onResponseHeaders: (responseHeaders) => {
         if (providerName === "anthropic") {
           billingMode = utils.refineAnthropicBillingModeFromHeaders({

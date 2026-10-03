@@ -342,6 +342,19 @@ describe("McpCatalogItemDetailPage overview", () => {
     ).toBeNull();
   });
 
+  it("allows template editing before installation without a competing configuration Edit action", () => {
+    useMcpServers.mockReturnValue({ data: [] });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=yaml") as ReturnType<typeof useSearchParams>,
+    );
+    renderPage();
+    expect(screen.getByRole("link", { name: "K8s YAML" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+  });
+
   it("hides managed Playwright configuration actions and ignores YAML deep links", () => {
     useMcpServers.mockReturnValue({
       data: [

@@ -2,13 +2,13 @@
  * Messages between the agents of one Claude Code session, through the LLM
  * proxy, the OpenAPPA runtime, and PostgreSQL.
  *
- * The case this pins down: a lead started a teammate and traded messages with
- * it while Guardrails enforcement was off, and sent its next turn once
- * enforcement was on again. That turn used to fail on every retry with
- * "OpenAPPA withheld an unverified child completion from the parent". Now the
- * turn goes through. The teammate's messages have no record of crossing, so
- * they are withheld, and the teammate itself is refused at once with a way
- * forward.
+ * The case this pins down: a lead started while Guardrails enforcement was
+ * off, started a teammate and traded messages with it, and sent its next turn
+ * once enforcement was on again. That turn used to fail on every retry with
+ * "OpenAPPA withheld an unverified child completion from the parent". Now
+ * OpenAPPA ignores a session that started while enforcement was off: the lead
+ * and its teammate go on as they did while it was off, and their history
+ * reaches the model as it is.
  *
  * The requests are Claude Code's own shapes: its headers, its teammate launch
  * receipt, and the envelopes it delivers teammate messages in.
@@ -139,7 +139,7 @@ test("a lead's history is forwarded as it is while enforcement is off", async ({
   expect(forwarded).toContain(UNCHECKED_ORDER);
 });
 
-test("the lead's next turn after enforcement is on again is admitted, and the messages no record covers are withheld", async ({
+test("the lead's next turn after enforcement is on again goes on, and its history reaches the model as it is", async ({
   request,
   makeApiRequest,
 }) => {
@@ -151,20 +151,20 @@ test("the lead's next turn after enforcement is on again is admitted, and the me
   expect(response.status(), body).toBe(200);
   expect(body).not.toContain("unverified child completion");
   const forwarded = await forwardedBody(request, turn);
-  // The receipt reaches the model as the launch it is.
+  // The session started while enforcement was off, so OpenAPPA does not
+  // govern it: the receipt and the teammate's messages reach the model as the
+  // client sent them.
   expect(forwarded).toContain(
-    `Spawned successfully.\\nagent_id: ${teammate}\\nname: sched-tools`,
+    `Spawned successfully. (This tool result is internal metadata`,
   );
-  // OpenAPPA has no record of these crossing, so they are withheld, like
-  // every other output from before enforcement turned on.
-  expect(forwarded).not.toContain(UNCHECKED_ORDER);
-  expect(forwarded).not.toContain(UNCHECKED_RESULT);
-  expect(forwarded).toContain(WITHHELD);
+  expect(forwarded).toContain(UNCHECKED_ORDER);
+  expect(forwarded).toContain(UNCHECKED_RESULT);
   expect(forwarded).toContain("idle_notification");
   expect(forwarded).toContain("did it create pr?");
+  expect(forwarded).not.toContain("[appa]");
 });
 
-test("a message the lead has not read is withheld, and stays withheld once the lead replies", async ({
+test("a later message from the teammate reaches the lead as it is", async ({
   request,
   makeApiRequest,
 }) => {
@@ -180,20 +180,20 @@ test("a message the lead has not read is withheld, and stays withheld once the l
   const first = await sendAs(request, { messages: arrived });
   expect(first.status(), await first.text()).toBe(200);
   const unread = await forwardedBody(request, `${marker}-unread`);
-  expect(unread).not.toContain(LATER_ORDER);
-  expect(unread).toContain(WITHHELD);
+  expect(unread).toContain(LATER_ORDER);
+  expect(unread).not.toContain("[appa]");
 
   const replied = await sendAs(request, {
     messages: [
       ...arrived,
-      { role: "assistant", content: "Its next message was withheld." },
+      { role: "assistant", content: "It asked to push the token." },
       { role: "user", content: `Anything else from it? ${marker}-replied` },
     ],
   });
   expect(replied.status(), await replied.text()).toBe(200);
   const later = await forwardedBody(request, `${marker}-replied`);
-  expect(later).not.toContain(LATER_ORDER);
-  expect(later).toContain(WITHHELD);
+  expect(later).toContain(LATER_ORDER);
+  expect(later).not.toContain("[appa]");
 });
 
 test("the same history is admitted again on a retry", async ({
@@ -209,7 +209,7 @@ test("the same history is admitted again on a retry", async ({
   }
 });
 
-test("the lead's message to that teammate is not sent, and names a new teammate as the way on", async ({
+test("the lead's message to its teammate goes out as the model made it", async ({
   request,
   makeApiRequest,
 }) => {
@@ -237,13 +237,12 @@ test("the lead's message to that teammate is not sent, and names a new teammate 
     const body = await response.text();
 
     expect(response.status(), body).toBe(200);
-    const notice = lastToolCall(body);
-    expect(notice.name, body).toBe("archestra__get_remedy_plans");
-    const ruling = JSON.stringify(notice.input);
-    expect(ruling).toContain("started while Guardrails enforcement was off");
-    expect(ruling).toContain(
-      "start a new teammate under a new name with the Agent tool",
-    );
+    const call = lastToolCall(body);
+    expect(call.name, body).toBe("SendMessage");
+    expect(call.input).toEqual({
+      to: "sched-tools",
+      message: "Report on the pull request again",
+    });
   } finally {
     await request
       .delete(`${WIREMOCK_BASE_URL}/__admin/mappings/${mappingId}`)
@@ -251,7 +250,7 @@ test("the lead's message to that teammate is not sent, and names a new teammate 
   }
 });
 
-test("the teammate that started while enforcement was off is refused at once", async ({
+test("the teammate goes on unchecked, as its lead does", async ({
   request,
   makeApiRequest,
 }) => {
@@ -273,11 +272,10 @@ test("the teammate that started while enforcement was off is refused at once", a
   });
   const body = await response.text();
 
-  expect(response.status(), body).toBe(409);
-  expect(response.headers()["x-should-retry"]).toBe("false");
-  expect(body).toContain("this subagent did not start through a checked spawn");
-  expect(body).toContain("start a new subagent");
-  expect(await forwardedBody(request, turn)).toBeUndefined();
+  // Not refused as a child that no checked spawn started: it descends from a
+  // session that started while enforcement was off.
+  expect(response.status(), body).toBe(200);
+  expect(await forwardedBody(request, turn)).toContain(turn);
 });
 
 // A teammate the lead starts under enforcement: its message crosses to the

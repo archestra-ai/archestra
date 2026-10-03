@@ -74,10 +74,12 @@ function supportsOneHourCache(
 }
 
 // Anthropic and Bedrock both reject a request with more than 4 cache
-// breakpoints, and the AI SDK provider throws before the call. Breakpoints
-// already present (e.g. `materializeAttachments` marks each Anthropic
-// file/document part) count against this budget, so the markers added here
-// must fit in what's left.
+// breakpoints. The AI SDK Anthropic provider drops the extra markers with only
+// a warning, newest message first, so an over-budget rolling marker would
+// silently disappear. Breakpoints already present (e.g.
+// `materializeAttachments` marks each Anthropic file/document part) count
+// against this budget, so the markers added here must fit in the remaining
+// budget.
 const MAX_CACHE_BREAKPOINTS = 4;
 
 /**
@@ -117,8 +119,16 @@ export function applyPromptCacheBreakpoints(params: {
    * other providers (Bedrock keys off its own provider entry).
    */
   anthropicNativeEndpoint?: boolean;
+  /** False keeps every new marker at the 5-minute TTL. Defaults to true. */
+  allowOneHourTtl?: boolean;
 }): ModelMessage[] {
-  const { provider, model, messages, anthropicNativeEndpoint = true } = params;
+  const {
+    provider,
+    model,
+    messages,
+    anthropicNativeEndpoint = true,
+    allowOneHourTtl = true,
+  } = params;
   if (provider === "anthropic" && !anthropicNativeEndpoint) {
     return messages;
   }
@@ -150,7 +160,10 @@ export function applyPromptCacheBreakpoints(params: {
   // one — so mixing 1h here with those 5m markers can fail the request. Staying
   // uniformly 5m when any marker pre-exists keeps ordering valid.
   const useOneHour =
-    !!model && supportsOneHourCache(config, model) && existingBreakpoints === 0;
+    allowOneHourTtl &&
+    !!model &&
+    supportsOneHourCache(config, model) &&
+    existingBreakpoints === 0;
   const markerValue = useOneHour
     ? { type: config.type, ttl: "1h" }
     : { type: config.type };
@@ -184,6 +197,46 @@ export function applyPromptCacheBreakpoints(params: {
     indicesToMark.has(index)
       ? withCacheBreakpoint(message, config, markerValue)
       : message,
+  );
+}
+
+/**
+ * Moves the rolling breakpoint to the newest message of one tool-loop step, so
+ * the step reads the earlier tool calls and results from the cache instead of
+ * paying the full input price for them again.
+ *
+ * Call it from a `prepareStep` hook on the messages that the step sends. The
+ * SDK applies a `prepareStep` override to that step only, so the number of
+ * markers does not increase: each request carries the markers of its initial
+ * messages plus one on its own last message.
+ *
+ * Only the last message can get a marker. An earlier message can come before
+ * a retained 1-hour marker (for example, a system note that a context-trim
+ * retry prepends), and providers reject a 5-minute marker before a 1-hour one.
+ *
+ * The marker always uses the 5-minute TTL. The next step usually starts
+ * within seconds, and a 5-minute write costs 1.25x the input price where a
+ * 1-hour write costs 2x. When the next step starts more than 5 minutes later
+ * (a slow tool or a delegated run), the entry expires first, so that step
+ * writes the tool history again at 1.25x, which costs more than no marker.
+ */
+export function applyStepPromptCacheBreakpoint(
+  params: Omit<
+    Parameters<typeof applyPromptCacheBreakpoints>[0],
+    "allowOneHourTtl"
+  >,
+): ModelMessage[] {
+  const { messages } = params;
+  const lastIndex = messages.length - 1;
+  const marked = applyPromptCacheBreakpoints({
+    ...params,
+    allowOneHourTtl: false,
+  });
+  if (lastIndex < 0 || marked[lastIndex] === messages[lastIndex]) {
+    return messages;
+  }
+  return messages.map((message, index) =>
+    index === lastIndex ? marked[lastIndex] : message,
   );
 }
 

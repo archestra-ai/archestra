@@ -54,9 +54,19 @@ export interface AnthropicStubOptions {
    * buffered (non-streaming) response, e.g. a gateway `run_tool` dispatch with
    * a client-decorated name. Implies a `tool_use` stop reason.
    */
-  nonStreamingToolUse?: { name: string; input: Record<string, unknown> };
+  nonStreamingToolUse?: {
+    name: string;
+    input: Record<string, unknown>;
+    /** The call id; `toolu_test_weather` when absent. */
+    id?: string;
+  };
   /** Emit this tool call through the streamed input-json deltas. */
-  streamingToolUse?: { name: string; input: Record<string, unknown> };
+  streamingToolUse?: {
+    name: string;
+    input: Record<string, unknown>;
+    /** The call id; `toolu_test_weather` when absent. */
+    id?: string;
+  };
 }
 
 export interface GeminiStubOptions {
@@ -166,7 +176,7 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
                   },
                   {
                     type: "tool_use",
-                    id: "toolu_test_weather",
+                    id: options.nonStreamingToolUse?.id ?? "toolu_test_weather",
                     name: options.nonStreamingToolUse?.name ?? "get_weather",
                     input: options.nonStreamingToolUse?.input ?? {
                       location: "SF",
@@ -508,7 +518,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 0,
         content_block: {
           type: "tool_use",
-          id: "toolu_test_weather",
+          id: options.streamingToolUse?.id ?? "toolu_test_weather",
           caller: { type: "direct" },
           name: options.streamingToolUse?.name ?? "get_weather",
           input: {},

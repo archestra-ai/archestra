@@ -97,7 +97,7 @@ function classify(error: unknown): {
     return {
       statusCode: 409,
       detail:
-        "this subagent did not start through a checked spawn. This happens when it started while Guardrails enforcement was off. OpenAPPA refuses its requests. To continue its work, start a new subagent.",
+        "this subagent did not start through a checked spawn. This can happen when it started while Guardrails enforcement was off. OpenAPPA refuses its requests. To continue its work, start a new subagent.",
     };
   return { statusCode: 503, detail: "the policy runtime is unavailable." };
 }

@@ -62,6 +62,11 @@ export function parseTrajectoryStamp(id: string): TrajectoryStamp | undefined {
   };
 }
 
+/** A tool-call id as the provider gave it: without a trajectory stamp. */
+export function withoutTrajectoryStamp(id: string): string {
+  return parseTrajectoryStamp(id)?.callId ?? id;
+}
+
 /**
  * Returns unique verified session IDs from the supplied stamps, ordered from oldest
  * to most recent call.

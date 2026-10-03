@@ -19,6 +19,7 @@ import type {
   ExternalConsultOutcome,
   ExternalConsultRole,
 } from "@/types/openappa-external-consults";
+import type { UnenforcedCallReason } from "@/types/openappa-unenforced";
 import organizationsTable from "./organization";
 
 // The payload and policy bytes belong to OpenAPPA. TypeScript never decodes
@@ -151,6 +152,56 @@ export const openappaProcessedResultsTable = pgTable(
       "openappa_results_status",
       sql`(${table.status} = 'pending' AND ${table.approvedOutput} IS NULL AND ${table.decision} IS NULL) OR (${table.status} = 'complete' AND ${table.approvedOutput} IS NOT NULL AND ${table.decision} IS NOT NULL)`,
     ),
+  ],
+);
+
+// The proxy writes the two tables below only while Guardrails enforcement is
+// off, and reads them while it is on. OpenAPPA ignores what they name: the
+// part of a session that it did not see.
+
+// Sessions that started while enforcement was off: the proxy saw a request of
+// the session, and the runtime had no record of it. Such a session and the
+// children it starts stay out of OpenAPPA after enforcement turns on.
+export const openappaUnenforcedSessionsTable = pgTable(
+  "openappa_unenforced_sessions",
+  {
+    organizationId: text("organization_id").notNull(),
+    // The caller-scoped id, as `openappa_sessions.session_id` holds it.
+    sessionId: text("session_id").notNull(),
+    // For a child, the session that started it. A child's id joins its
+    // parent's id and its own, so the parent tells it apart from a root that
+    // has the same id.
+    parentId: text("parent_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.organizationId, table.sessionId] })],
+);
+
+// Tool calls of a governed session whose outcome the runtime did not see,
+// because enforcement was off: a call the model made then (`made`), and a
+// spawn whose child ran or got a message then (`child`). A record covers only
+// the session whose history holds the call.
+export const openappaUnenforcedCallsTable = pgTable(
+  "openappa_unenforced_calls",
+  {
+    organizationId: text("organization_id").notNull(),
+    // The caller-scoped id of the session that made the call.
+    sessionId: text("session_id").notNull(),
+    // The provider's call id, without a trajectory stamp.
+    toolCallId: text("tool_call_id").notNull(),
+    reason: text().$type<UnenforcedCallReason>().notNull(),
+    // For a spawn: the client's id of the child it started, when known.
+    childNativeId: text("child_native_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.organizationId, table.sessionId, table.toolCallId],
+    }),
   ],
 );
 

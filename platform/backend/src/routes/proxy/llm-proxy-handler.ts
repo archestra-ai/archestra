@@ -115,6 +115,7 @@ import {
 } from "@/openappa/service";
 import { formatSessionReceipt } from "@/openappa/session-token";
 import { stampedSessions } from "@/openappa/trajectory-stamp";
+import { startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
@@ -131,6 +132,7 @@ import {
 } from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
 import {
   APPA_CLIENT_ADAPTERS,
+  appaTrajectory,
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
@@ -1221,9 +1223,28 @@ export async function handleLLMProxy<
   // Content never reaches spans or logs for an encrypted-chat session, whether it
   // ends up encrypted or redacted.
   const suppressContent = encryptedChat.kind !== "none";
-  const { active: appaActive, unsupportedClientAction } =
-    await getGuardrailsDeployment();
-  if (appaActive && suppressContent) {
+  const {
+    active: appaActive,
+    featureEnabled: appaFeatureEnabled,
+    unsupportedClientAction,
+  } = await getGuardrailsDeployment();
+  // Enforcement is off, but OpenAPPA records what it must know when enforcement
+  // turns on: the sessions that start now, and the calls governed sessions make.
+  // The records hold ids only, so they cover encrypted chats too.
+  const appaObserving = appaFeatureEnabled && !appaActive;
+  // An encrypted chat that started while enforcement was off stays out of
+  // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
+  if (
+    appaActive &&
+    suppressContent &&
+    !(
+      sessionId &&
+      (await startedUnenforced({
+        organization_id: resolvedAgent.organizationId,
+        session_id: sessionId,
+      }))
+    )
+  ) {
     throw new ApiError(
       409,
       "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
@@ -1554,6 +1575,9 @@ export async function handleLLMProxy<
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
+    // The session a request has while enforcement is off, for the records
+    // OpenAPPA reads once it turns on. Nothing governs it.
+    let observedSession: OpenAppaSession | undefined;
     let sessionReceipt: SessionReceiptOutput | undefined;
     let childTrajectoryReceipt: ChildTrajectoryReceiptOutput | undefined;
     let childCompactionContext: string | undefined;
@@ -1632,6 +1656,20 @@ export async function handleLLMProxy<
       const delegatedRun =
         isInternalRequest &&
         isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
+      const callerId = appaUserId
+        ? `user:${appaUserId}`
+        : authenticatedApp
+          ? `app:${authenticatedApp.id}`
+          : virtualKeyId
+            ? `virtual-key:${virtualKeyId}`
+            : undefined;
+      // A platform request over loopback that brings no credential of its own.
+      // Only such a request may name an unscoped session in the header.
+      const platformLoopback =
+        isInternalRequest &&
+        !authenticatedUserId &&
+        !authenticatedApp &&
+        !virtualKeyId;
       const unsupportedClient =
         appaActive &&
         !connectionSetupBypass &&
@@ -1654,13 +1692,6 @@ export async function handleLLMProxy<
         !delegatedRun &&
         !unsupportedClient
       ) {
-        const callerId = appaUserId
-          ? `user:${appaUserId}`
-          : authenticatedApp
-            ? `app:${authenticatedApp.id}`
-            : virtualKeyId
-              ? `virtual-key:${virtualKeyId}`
-              : undefined;
         appaCallerId = callerId;
         // Extract client-native session metadata into APPA session identity.
         // Client adapters resolve resume, fork, and compaction semantics
@@ -1761,22 +1792,7 @@ export async function handleLLMProxy<
                 scope: (session) => scopedSessionId(callerId, session),
               })
             : undefined;
-        if (
-          appaIdentity.sessionId &&
-          isWellFormedAppaId(appaIdentity.sessionId) &&
-          !incomingAppaSessionHeader
-        ) {
-          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
-            appaIdentity.sessionId;
-        }
-        if (
-          appaIdentity.parentId &&
-          isWellFormedAppaId(appaIdentity.parentId) &&
-          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
-        ) {
-          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] =
-            appaIdentity.parentId;
-        }
+        fillAppaSessionHeaders(headersForExtraction, appaIdentity);
         // Reading connect.md can taint the rest of setup, so the verified
         // session bypasses APPA trust and invocation decisions together.
         openappaSession = connectionSetupBypass
@@ -1791,10 +1807,7 @@ export async function handleLLMProxy<
                 : {
                     // Scope external sessions to the authenticated principal.
                     scope:
-                      isInternalRequest &&
-                      !authenticatedUserId &&
-                      !authenticatedApp &&
-                      !virtualKeyId &&
+                      platformLoopback &&
                       incomingAppaSessionHeader !== undefined
                         ? undefined
                         : callerId,
@@ -1825,6 +1838,23 @@ export async function handleLLMProxy<
             "OpenAPPA bound a fallback root because the client reported no session",
           );
         }
+      } else if (
+        appaObserving &&
+        !delegatedRun &&
+        (isInternalRequest ||
+          authenticatedUserId ||
+          authenticatedApp ||
+          virtualKeyId)
+      ) {
+        observedSession = observedAppaSession({
+          headers: headersForExtraction,
+          body,
+          interactionType: provider.interactionType,
+          organizationId: resolvedAgent.organizationId,
+          callerId,
+          isInternalChat,
+          platformLoopback,
+        });
       }
       pluginContext = {
         requestId: request.id,
@@ -1839,6 +1869,48 @@ export async function handleLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
+      // The facts that bind a child trajectory. Read without preparing the
+      // request for enforcement, which changes the body and refuses tool
+      // shapes that OpenAPPA cannot govern. Built only for an OpenAPPA session.
+      const lineageRequest = (): AppaTrustedContext["request"] => ({
+        tools: undefined,
+        session: appaIdentity,
+        customTools: new Set(),
+        declaredTools: [],
+        ...(delegationMarkers
+          ? { delegation: { markers: delegationMarkers } }
+          : {}),
+        ...(childReturns ? { childReturns } : {}),
+        ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
+          ? { childTrajectoryReceipts }
+          : {}),
+      });
+      if (
+        openappaSession &&
+        (await startedUnenforced(
+          appaTrajectory({
+            adapters: APPA_CLIENT_ADAPTERS,
+            headers: pluginContext.headers,
+            requestBody: pluginContext.requestBody,
+            trustedContext: {
+              session: openappaSession,
+              profileId: resolvedAgent.id,
+              toolIdentity,
+              request: lineageRequest(),
+              claims: appaClaims,
+              ...(isInternalChat ? { chatSource: source } : {}),
+            },
+          }).session,
+        ))
+      ) {
+        // The session started while enforcement was off. OpenAPPA never
+        // governs it: the request goes on as if enforcement were off.
+        logger.info(
+          { sessionId: openappaSession.session_id },
+          "OpenAPPA ignores a session that started while Guardrails enforcement was off",
+        );
+        openappaSession = undefined;
+      }
       if (openappaSession) {
         // A Chat session is a conversation, and the request must name the
         // user whose conversation it is: without one there is nothing to
@@ -1893,6 +1965,17 @@ export async function handleLLMProxy<
           claims: appaClaims,
           compaction: clientCompaction && !isInternalChat,
           enforcement: "active",
+          ...(isInternalChat ? { chatSource: source } : {}),
+        } satisfies AppaTrustedContext);
+      } else if (observedSession) {
+        pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
+          session: observedSession,
+          profileId: resolvedAgent.id,
+          toolIdentity,
+          request: lineageRequest(),
+          claims: appaClaims,
+          compaction: clientCompaction && !isInternalChat,
+          enforcement: "inactive",
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
       }
@@ -3880,6 +3963,103 @@ function preambleSseCarriesContent(data: string | Uint8Array): boolean {
     return true;
   }
   return !sawDataLine;
+}
+
+/**
+ * Fills the APPA session and parent headers from the client's own session
+ * identity when the request did not send them. The enforced path and the
+ * observer both use it, so they read the same session from a request.
+ */
+function fillAppaSessionHeaders(
+  headers: Record<string, string | string[] | undefined>,
+  identity: AppaSessionIdentity,
+): void {
+  const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
+  const parentHeader = APPA_PARENT_HEADER.toLowerCase();
+  if (
+    identity.sessionId &&
+    isWellFormedAppaId(identity.sessionId) &&
+    !headers[sessionHeader]
+  )
+    headers[sessionHeader] = identity.sessionId;
+  if (
+    identity.parentId &&
+    isWellFormedAppaId(identity.parentId) &&
+    !headers[parentHeader]
+  )
+    headers[parentHeader] = identity.parentId;
+}
+
+/**
+ * The session a request has while enforcement is off: the one the enforced
+ * path binds, without a fork source. Undefined for a client that OpenAPPA
+ * cannot govern, or a request that names no valid session of its own. A
+ * fallback root is shared by all conversations of a credential, so it is
+ * never one session. Never throws, because enforcement is off.
+ */
+function observedAppaSession(params: {
+  headers: Record<string, string | string[] | undefined>;
+  body: unknown;
+  interactionType: Parameters<typeof appaWireFamily>[0];
+  organizationId: string;
+  callerId: string | undefined;
+  isInternalChat: boolean;
+  /** A platform request over loopback with no credential of its own. */
+  platformLoopback: boolean;
+}): OpenAppaSession | undefined {
+  const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
+  const parentHeader = APPA_PARENT_HEADER.toLowerCase();
+  const incoming = params.headers[sessionHeader];
+  const governable =
+    params.isInternalChat ||
+    incoming !== undefined ||
+    params.headers[parentHeader] !== undefined ||
+    APPA_CLIENT_ADAPTERS.some((adapter) =>
+      adapter.matches({ headers: params.headers, requestBody: params.body }),
+    );
+  if (!governable) return undefined;
+  try {
+    const family = appaWireFamily(params.interactionType);
+    const identity = family
+      ? extractAppaSessionIdentity({
+          family,
+          body: params.body,
+          headers: params.headers,
+        })
+      : {};
+    const headers = { ...params.headers };
+    fillAppaSessionHeaders(headers, identity);
+    return sessionFromHeaders({
+      headers,
+      organizationId: params.organizationId,
+      callerId: params.callerId,
+      ...(params.isInternalChat
+        ? {}
+        : {
+            scope:
+              params.platformLoopback && incoming !== undefined
+                ? undefined
+                : params.callerId,
+          }),
+    });
+  } catch (error) {
+    // Enforcement is off, so the request goes on either way. A request
+    // without a usable session id is expected; anything else is not.
+    const details = {
+      error: error instanceof Error ? error.message : String(error),
+    };
+    if (error instanceof ApiError)
+      logger.debug(
+        details,
+        "OpenAPPA does not record a request without a usable session id while Guardrails enforcement is off",
+      );
+    else
+      logger.warn(
+        details,
+        "OpenAPPA could not read the session of a request while Guardrails enforcement is off",
+      );
+    return undefined;
+  }
 }
 
 async function evaluateProxyPluginToolCalls(

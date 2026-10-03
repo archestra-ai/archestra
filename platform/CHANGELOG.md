@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.70](https://github.com/archestra-ai/archestra/compare/platform-v1.3.69...platform-v1.3.70) (2026-10-03)
+
+
+### Bug Fixes
+
+* **agents:** cache Anthropic tool results between agent steps (backport release/1.3) ([#8417](https://github.com/archestra-ai/archestra/issues/8417)) ([7bf2520](https://github.com/archestra-ai/archestra/commit/7bf25200700de5bbb3d9e6c9b465ce288a46cc54))
+* **llm-proxy:** accept Claude Code thinking display "updates" (backport release/1.3) ([#8410](https://github.com/archestra-ai/archestra/issues/8410)) ([12f12af](https://github.com/archestra-ai/archestra/commit/12f12afd5720381dacf879847be8c950e9a44e9d))
+* **llm-proxy:** keep ChatGPT subscription requests on one prompt cache (backport release/1.3) ([#8415](https://github.com/archestra-ai/archestra/issues/8415)) ([96ff104](https://github.com/archestra-ai/archestra/commit/96ff1047172d09e29683e1917dc69df55b2c9ddc))
+
 ## [1.3.69](https://github.com/archestra-ai/archestra/compare/platform-v1.3.68...platform-v1.3.69) (2026-10-02)
 
 

@@ -91,7 +91,6 @@ import {
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
-import { McpCapabilityBadges } from "../_parts/mcp-capability-badges";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
 import {
@@ -341,8 +340,11 @@ function CatalogItemDetails({
       !(isPlaywright && panel.id === "yaml") &&
       (panel.id !== "yaml" || userCanViewDeploymentYaml),
   );
-  // Diagnostics need at least one install to read from.
-  const diagnosticTabs = allInstalls.length > 0 ? diagnosticPanels : [];
+  // Runtime diagnostics read an installation. YAML edits the catalog template
+  // and must also be reachable before the first installation.
+  const diagnosticTabs = diagnosticPanels.filter(
+    (panel) => panel.id === "yaml" || allInstalls.length > 0,
+  );
   // Remote servers manage credentials; local servers manage hosted
   // installations. Built-ins need neither.
   const showConnectionsTab = variant !== "builtin" && !isPlaywright;
@@ -490,19 +492,6 @@ function CatalogItemDetails({
             <McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />
           </div>
           <span className="min-w-0 truncate">{item.name}</span>
-          <Badge variant="secondary" className="capitalize font-normal">
-            {item.serverType}
-          </Badge>
-          <McpCapabilityBadges
-            providesUi={item.providesUi}
-            providesSkills={item.providesSkills}
-            skillCount={item.skillCount}
-          />
-          {item.serverType !== "builtin" && (
-            <Badge variant="outline" className="font-normal">
-              {environmentLabel ?? defaultEnvironment.name}
-            </Badge>
-          )}
         </div>
       }
       status={
@@ -517,7 +506,9 @@ function CatalogItemDetails({
       }
       documentTitle={item.name}
       backLink={<PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>}
-      description={item.description ?? ""}
+      description={
+        effectiveTab === "yaml" ? undefined : (item.description ?? "")
+      }
       tabs={tabs}
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
@@ -531,7 +522,7 @@ function CatalogItemDetails({
               {isChatCreating ? "Creating..." : "Chat"}
             </Button>
           )}
-          {canModify && (
+          {canModify && effectiveTab !== "yaml" && (
             <Button asChild>
               <Link href={mcpServerActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
@@ -614,7 +605,31 @@ function CatalogItemDetails({
             {item.serverType !== "builtin" && (
               <OverviewSummary
                 headingId="mcp-overview-heading"
-                facts={overviewFacts}
+                facts={[
+                  {
+                    label: "Hosting",
+                    value:
+                      item.serverType === "local"
+                        ? "Managed deployment"
+                        : "External server",
+                  },
+                  {
+                    label: "Environment",
+                    value: environmentLabel ?? defaultEnvironment.name,
+                  },
+                  ...(item.providesUi
+                    ? [{ label: "Interactive tools", value: "Available" }]
+                    : []),
+                  ...(item.providesSkills
+                    ? [
+                        {
+                          label: "Skills",
+                          value: `${item.skillCount ?? 0} available`,
+                        },
+                      ]
+                    : []),
+                  ...overviewFacts,
+                ]}
                 configHref={
                   canModify ? mcpServerActionHref(editAction) : undefined
                 }
@@ -685,7 +700,7 @@ function CatalogItemDetails({
           pod selector and live stream survive switching between them. */}
         {isLogsTab && (
           <Card className="py-0">
-            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
+            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-4">
               <McpLogsContent
                 isActive={isLogsTab}
                 serverName={item.name}
@@ -702,7 +717,7 @@ function CatalogItemDetails({
 
         {effectiveTab === "yaml" && (
           <Card className="py-0">
-            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
+            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-4">
               <YamlConfigContent item={item} onClose={() => {}} hideHeader />
             </div>
           </Card>

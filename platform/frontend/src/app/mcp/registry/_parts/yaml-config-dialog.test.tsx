@@ -133,7 +133,7 @@ describe("deployment YAML workflow", () => {
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
   });
 
-  it("places validation feedback with the editor and clears it after a correction", async () => {
+  it("places validation feedback above the editor and clears it after a correction", async () => {
     renderEditor();
     const editor = await screen.findByRole("textbox", {
       name: "Deployment YAML",
@@ -142,7 +142,7 @@ describe("deployment YAML workflow", () => {
     const error = await screen.findByText("spec is required");
     expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
     expect(
-      editor.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING,
+      editor.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_PRECEDING,
     ).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(editor).toHaveValue(original);

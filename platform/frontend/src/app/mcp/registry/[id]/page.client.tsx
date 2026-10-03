@@ -716,11 +716,9 @@ function CatalogItemDetails({
         )}
 
         {effectiveTab === "yaml" && (
-          <Card className="py-0">
-            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-4">
-              <YamlConfigContent item={item} onClose={() => {}} hideHeader />
-            </div>
-          </Card>
+          <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col">
+            <YamlConfigContent item={item} onClose={() => {}} hideHeader />
+          </div>
         )}
 
         {/* Inline install flow (remote/local/no-auth/OAuth) — no navigation. */}

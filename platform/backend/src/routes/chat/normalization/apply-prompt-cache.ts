@@ -78,7 +78,8 @@ function supportsOneHourCache(
 // a warning, newest message first, so an over-budget rolling marker would
 // silently disappear. Breakpoints already present (e.g.
 // `materializeAttachments` marks each Anthropic file/document part) count
-// against this budget, so the markers added here must fit in what's left.
+// against this budget, so the markers added here must fit in the remaining
+// budget.
 const MAX_CACHE_BREAKPOINTS = 4;
 
 /**
@@ -205,9 +206,9 @@ export function applyPromptCacheBreakpoints(params: {
  * paying the full input price for them again.
  *
  * Call it from a `prepareStep` hook on the messages that the step sends. The
- * SDK applies a `prepareStep` override to that step only, so the markers do
- * not pile up: each request carries the markers of its initial messages plus
- * one on its own last message.
+ * SDK applies a `prepareStep` override to that step only, so the number of
+ * markers does not increase: each request carries the markers of its initial
+ * messages plus one on its own last message.
  *
  * Only the last message can get a marker. An earlier message can come before
  * a retained 1-hour marker (for example, a system note that a context-trim
@@ -216,8 +217,8 @@ export function applyPromptCacheBreakpoints(params: {
  * The marker always uses the 5-minute TTL. The next step usually starts
  * within seconds, and a 5-minute write costs 1.25x the input price where a
  * 1-hour write costs 2x. When the next step starts more than 5 minutes later
- * (a slow tool or a delegated run), the entry has expired: that step writes
- * the tool history again at 1.25x, which costs more than no marker.
+ * (a slow tool or a delegated run), the entry expires first, so that step
+ * writes the tool history again at 1.25x, which costs more than no marker.
  */
 export function applyStepPromptCacheBreakpoint(
   params: Omit<

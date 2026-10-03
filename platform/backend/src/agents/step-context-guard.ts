@@ -12,9 +12,9 @@
  * summarization is unavailable or fails, it falls back to deterministic
  * trimming so the step still fits.
  *
- * With a prompt-cache target, the guard also moves the cache breakpoint to the
- * newest message of each step, so later steps read the earlier tool calls and
- * results from the cache.
+ * When `promptCache` is set, the guard also moves the cache breakpoint to the
+ * newest message of each step that it does not trim, so later steps read the
+ * earlier tool calls and results from the cache.
  */
 import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
 import type { ModelMessage } from "ai";

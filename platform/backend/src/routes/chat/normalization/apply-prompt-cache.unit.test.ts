@@ -487,8 +487,8 @@ describe("applyStepPromptCacheBreakpoint", () => {
 
   it("marks only the newest message, with the 5m TTL", () => {
     // No other marker, as after compaction: the run-start policy would also
-    // mark the first message, and with the 1h TTL, which doubles the write
-    // price of every step.
+    // mark the first message, and with the 1h TTL, which writes every step at
+    // 2x the input price instead of 1.25x.
     const messages: ModelMessage[] = [
       userMessage("Summary of the earlier steps."),
       ...toolStep("t1"),

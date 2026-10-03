@@ -78,8 +78,14 @@ class OpenAiCodexResponsesClient {
       request: ResponsesRequest & { stream?: boolean },
     ): Promise<ResponsesResponse | AsyncIterable<ResponseStreamEvent>> =>
       this.create(request),
+    // Compaction sends the same conversation prefix, so it uses the session's
+    // cache key too, unless the caller sent its own.
     compact: (request: ResponseCompactParams): Promise<CompactedResponse> =>
-      this.openai.responses.compact(request),
+      this.openai.responses.compact(
+        this.promptCacheKey && !request.prompt_cache_key
+          ? { ...request, prompt_cache_key: this.promptCacheKey }
+          : request,
+      ),
   };
 
   private openai: OpenAIProvider;

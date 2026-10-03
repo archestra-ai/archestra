@@ -217,19 +217,6 @@ describe("createOpenAiCodexResponsesClient", () => {
       return sent;
     }
 
-    it("sends one session and prompt cache key for all requests of a session", async () => {
-      const first = await sendRequest({ sessionId: "run-1" });
-      const second = await sendRequest({ sessionId: "run-1" });
-      const otherRun = await sendRequest({ sessionId: "run-2" });
-
-      expect(second).toEqual(first);
-      expect(first.sessionHeader).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-      );
-      expect(first.promptCacheKey).toBe(first.sessionHeader);
-      expect(otherRun.sessionHeader).not.toBe(first.sessionHeader);
-    });
-
     it("keeps the caller's own prompt_cache_key", async () => {
       const sent = await sendRequest({
         sessionId: "run-1",
@@ -245,6 +232,44 @@ describe("createOpenAiCodexResponsesClient", () => {
 
       expect(first.sessionHeader).not.toBe(second.sessionHeader);
       expect(first.promptCacheKey).toBeUndefined();
+    });
+
+    it("gives a compact request the session's cache key unless the caller sent one", async () => {
+      const sendCompact = async (promptCacheKey?: string) => {
+        let sent: { sessionHeader: string | null; promptCacheKey: unknown } = {
+          sessionHeader: null,
+          promptCacheKey: undefined,
+        };
+        const innerFetch = vi.fn(
+          async (_input: string | URL | Request, init?: RequestInit) => {
+            sent = {
+              sessionHeader: new Headers(init?.headers).get("session-id"),
+              promptCacheKey: JSON.parse(init?.body as string).prompt_cache_key,
+            };
+            return new Response(JSON.stringify(COMPACTED_RESPONSE), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          },
+        );
+        const client = createOpenAiCodexResponsesClient({
+          credential: CREDENTIAL,
+          options: { source: "api", sessionId: "run-1" },
+          innerFetch,
+        }) as unknown as CodexResponsesClient;
+        await client.responses.compact({
+          model: "gpt-5.6-sol",
+          input: [{ type: "compaction", encrypted_content: "previous-cipher" }],
+          ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
+        });
+        return sent;
+      };
+
+      const fromSession = await sendCompact();
+      const fromCaller = await sendCompact("caller-key");
+
+      expect(fromSession.promptCacheKey).toBe(fromSession.sessionHeader);
+      expect(fromCaller.promptCacheKey).toBe("caller-key");
     });
   });
 

@@ -370,3 +370,24 @@ describe("platform_admin predefined role", () => {
     expect(findUngrantablePermissions(p, memberPermissions)).toEqual([]);
   });
 });
+
+describe("MCP deployment YAML routes", () => {
+  // The custom deployment YAML sets an MCP server's whole pod spec, so only
+  // the predefined admin roles reach it; custom roles opt in explicitly.
+  test.each([
+    RouteId.GetDeploymentYamlPreview,
+    RouteId.ValidateDeploymentYaml,
+    RouteId.ResetDeploymentYaml,
+  ])("%s is reachable by admins only", (routeId) => {
+    const required = requiredEndpointPermissionsMap[routeId];
+    if (!required) throw new Error(`Missing permissions for ${routeId}`);
+    const canCall = (role: keyof typeof predefinedPermissionsMap) =>
+      findUngrantablePermissions(predefinedPermissionsMap[role], required)
+        .length === 0;
+
+    expect(canCall("admin")).toBe(true);
+    expect(canCall("platform_admin")).toBe(true);
+    expect(canCall("editor")).toBe(false);
+    expect(canCall("member")).toBe(false);
+  });
+});

@@ -5040,6 +5040,7 @@ export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
+ * `mcpAdvancedSettings:read`: View the Kubernetes deployment YAML of self-hosted MCP servers
  * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentYamlPreviewData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentYamlPreviewResponses, GetDeploymentYamlPreviewErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/deployment-yaml-preview', ...options });
@@ -5053,7 +5054,7 @@ export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `mcpRegistry:read`: Browse the MCP server registry
+ * `mcpAdvancedSettings:read`: View the Kubernetes deployment YAML of self-hosted MCP servers
  */
 export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ValidateDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ValidateDeploymentYamlResponses, ValidateDeploymentYamlErrors, ThrowOnError>({
     url: '/api/internal_mcp_catalog/validate-deployment-yaml',
@@ -5073,6 +5074,8 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
+ * `mcpAdvancedSettings:read`: View the Kubernetes deployment YAML of self-hosted MCP servers
+ * `mcpAdvancedSettings:update`: Edit Kubernetes deployment YAML, Secret/ConfigMap references, and service accounts of self-hosted MCP servers
  * `mcpRegistry:update`: Modify MCP registry entries
  */
 export const resetDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ResetDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ResetDeploymentYamlResponses, ResetDeploymentYamlErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/reset-deployment-yaml', ...options });

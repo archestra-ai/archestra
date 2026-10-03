@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type ResourcePermissionAction,
@@ -2055,6 +2056,11 @@ class InternalMcpCatalogModel {
       hasClientSecret: Boolean(row.clientSecretId),
       hasLocalConfigSecret: Boolean(row.localConfigSecretId),
       hasDeploymentSpecYaml: Boolean(row.deploymentSpecYaml),
+      deploymentSpecYamlHash: row.deploymentSpecYaml
+        ? createHash("sha256").update(row.deploymentSpecYaml).digest("hex")
+        : null,
+      serviceAccount: row.localConfig?.serviceAccount || "default",
+      envFrom: row.localConfig?.envFrom ?? [],
       hasEnterpriseManagedConfig: row.enterpriseManagedConfig !== null,
       toolCount,
       installCount,

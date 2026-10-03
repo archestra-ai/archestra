@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Editor } from "@/components/editor";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -19,6 +19,10 @@ interface K8sYamlEditorProps {
   onChange: (value: string) => void;
   /** Whether the catalog item has been saved */
   isSaved?: boolean;
+  /** Show the YAML without letting the user change or reset it */
+  readOnly?: boolean;
+  help?: ReactNode;
+  onValidationChange?: (valid: boolean) => void;
 }
 
 /**
@@ -31,6 +35,9 @@ export function K8sYamlEditor({
   value,
   onChange,
   isSaved = false,
+  readOnly = false,
+  help,
+  onValidationChange,
 }: K8sYamlEditorProps) {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
@@ -44,26 +51,35 @@ export function K8sYamlEditor({
   // Validate YAML on change (debounced)
   // biome-ignore lint/correctness/useExhaustiveDependencies: validateYaml.mutate is stable from useMutation
   useEffect(() => {
+    onValidationChange?.(false);
     if (!value) {
       setValidationErrors([]);
       setValidationWarnings([]);
       return;
     }
 
+    let active = true;
     const timeoutId = setTimeout(() => {
       validateYaml.mutate(
         { yaml: value },
         {
           onSuccess: (result) => {
-            setValidationErrors(result?.errors ?? []);
+            if (!active) return;
+            setValidationErrors(
+              result?.errors ?? ["Unable to validate YAML. Try again."],
+            );
+            onValidationChange?.(result?.valid === true);
             setValidationWarnings(result?.warnings ?? []);
           },
         },
       );
     }, 500); // Debounce validation by 500ms
 
-    return () => clearTimeout(timeoutId);
-  }, [value]);
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [value, onValidationChange]);
 
   const handleEditorChange = useCallback(
     (newValue: string | undefined) => {
@@ -100,78 +116,96 @@ export function K8sYamlEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {/* Validation Errors */}
-      {validationErrors.length > 0 && (
-        <InlineNotice variant="error">
-          <AlertCircle />
-          <InlineNoticeText>
-            <ul className="list-disc list-inside space-y-1">
-              {validationErrors.map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </ul>
-          </InlineNoticeText>
-        </InlineNotice>
+      {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+        <div className="shrink-0 space-y-2">
+          {/* Validation Errors */}
+          {validationErrors.length > 0 && (
+            <InlineNotice variant="error">
+              <AlertCircle />
+              <InlineNoticeText>
+                <ul className="list-disc list-inside space-y-1">
+                  {validationErrors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </InlineNoticeText>
+            </InlineNotice>
+          )}
+          {/* Validation Warnings */}
+          {validationWarnings.length > 0 && (
+            <InlineNotice variant="warning">
+              <AlertCircle />
+              <InlineNoticeText>
+                <ul className="list-disc list-inside space-y-1">
+                  {validationWarnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </InlineNoticeText>
+            </InlineNotice>
+          )}
+        </div>
       )}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Deployment YAML</span>
+            {readOnly && (
+              <span className="text-xs text-muted-foreground">Read only</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {help}
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="Reset to default"
+                onClick={handleResetToDefault}
+                disabled={!catalogId || resetYaml.isPending}
+              >
+                <RefreshCw className="size-3.5" />
+                <span>Reset</span>
+              </Button>
+            )}
+          </div>
+        </div>
 
-      {/* Validation Warnings */}
-      {validationWarnings.length > 0 && (
-        <InlineNotice variant="warning">
-          <AlertCircle />
-          <InlineNoticeText>
-            <ul className="list-disc list-inside space-y-1">
-              {validationWarnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
-
-      {/* Editor Header with Reset Button */}
-      <div className="flex justify-end items-center">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleResetToDefault}
-          disabled={!catalogId || resetYaml.isPending}
-        >
-          <RefreshCw className="h-3 w-3 mr-1" />
-          Reset to Default
-        </Button>
-      </div>
-
-      {/* Monaco Editor */}
-      <div className="min-h-0 flex-1 overflow-hidden rounded-md border">
-        <Editor
-          height="100%"
-          defaultLanguage="yaml"
-          value={value || ""}
-          onChange={handleEditorChange}
-          loading={
-            <div className="flex h-full items-center justify-center w-full bg-muted/50">
-              <p className="text-sm text-muted-foreground">Loading editor...</p>
-            </div>
-          }
-          options={{
-            minimap: { enabled: false },
-            lineNumbers: "on",
-            folding: true,
-            scrollBeyondLastLine: false,
-            wordWrap: "on",
-            fontSize: 13,
-            fontFamily: "monospace",
-            tabSize: 2,
-            padding: { top: 8, bottom: 8 },
-            renderLineHighlight: "line",
-            scrollbar: {
-              vertical: "auto",
-              horizontal: "auto",
-              verticalScrollbarSize: 10,
-            },
-          }}
-        />
+        {/* Monaco Editor */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <Editor
+            height="100%"
+            defaultLanguage="yaml"
+            value={value || ""}
+            onChange={handleEditorChange}
+            loading={
+              <div className="flex h-full items-center justify-center w-full bg-muted/50">
+                <p className="text-sm text-muted-foreground">
+                  Loading editor...
+                </p>
+              </div>
+            }
+            options={{
+              readOnly,
+              minimap: { enabled: false },
+              lineNumbers: "on",
+              folding: true,
+              scrollBeyondLastLine: false,
+              wordWrap: "on",
+              fontSize: 13,
+              fontFamily: "monospace",
+              tabSize: 2,
+              padding: { top: 8, bottom: 8 },
+              renderLineHighlight: "line",
+              scrollbar: {
+                vertical: "auto",
+                horizontal: "auto",
+                verticalScrollbarSize: 10,
+              },
+            }}
+          />
+        </div>
       </div>
     </div>
   );

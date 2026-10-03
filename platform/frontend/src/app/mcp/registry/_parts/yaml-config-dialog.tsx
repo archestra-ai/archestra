@@ -1,14 +1,9 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { ChevronDown } from "lucide-react";
+import { CircleHelp } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +13,12 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useGetDeploymentYamlPreview,
@@ -56,6 +57,9 @@ export function YamlConfigContent({
 }: YamlConfigContentProps) {
   const appName = useAppName();
   const updateMutation = useUpdateInternalMcpCatalogItem();
+  const { data: canEditYaml } = useHasPermissions({
+    mcpAdvancedSettings: ["update"],
+  });
 
   // Fetch the deployment YAML preview (generates default if not stored)
   const { data: yamlPreview, isLoading: isLoadingYaml } =
@@ -63,6 +67,7 @@ export function YamlConfigContent({
 
   // Local state for form fields
   const [deploymentYaml, setDeploymentYaml] = useState("");
+  const [isYamlValid, setIsYamlValid] = useState(false);
   // Track original YAML to detect changes
   const [originalYaml, setOriginalYaml] = useState("");
 
@@ -111,7 +116,7 @@ export function YamlConfigContent({
     <div
       className={
         hideHeader
-          ? "flex min-h-0 flex-1 flex-col px-4 py-4"
+          ? "flex min-h-0 flex-1 flex-col"
           : "flex min-h-0 flex-1 flex-col"
       }
     >
@@ -120,90 +125,6 @@ export function YamlConfigContent({
           <DialogTitle>K8s Deployment YAML</DialogTitle>
         </DialogHeader>
       )}
-
-      <div className="shrink-0 space-y-2 text-sm text-muted-foreground">
-        <p>
-          Customize the deployment to mount external secrets, volumes, or add
-          custom labels and annotations. Environment variables configured in the
-          UI take precedence over values defined here.
-        </p>
-        <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors [&[data-state=open]>svg]:rotate-180">
-            More details
-            <ChevronDown className="h-3 w-3 transition-transform duration-200" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-2 pt-2">
-            <p>
-              <strong>Placeholders</strong> are replaced at deployment time:{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                ${"{env.*}"}
-              </code>
-              ,{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                ${"{secret.*}"}
-              </code>
-              ,{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                ${"{archestra.*}"}
-              </code>
-              . Available archestra values:{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                deployment_name
-              </code>
-              ,{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                server_id
-              </code>
-              ,{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                server_name
-              </code>
-              ,{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                docker_image
-              </code>
-              ,{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                secret_name
-              </code>
-              ,{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                command
-              </code>
-              ,{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                arguments
-              </code>
-              ,{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                service_account
-              </code>
-              .
-            </p>
-            <p>
-              <strong>Protected fields</strong> are always overwritten by
-              {appName}: mcp-server-id and app labels, and the deployment
-              selector.
-            </p>
-            <p>
-              <strong>Transport-specific settings:</strong> {appName} requires{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                stdin: true
-              </code>{" "}
-              and{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                tty: false
-              </code>{" "}
-              for stdio servers, and a{" "}
-              <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
-                containerPort
-              </code>{" "}
-              for streamable-http servers. These are included in the default
-              YAML.
-            </p>
-          </CollapsibleContent>
-        </Collapsible>
-      </div>
 
       <DialogForm
         onSubmit={handleSave}
@@ -220,21 +141,88 @@ export function YamlConfigContent({
               catalogId={item.id}
               value={deploymentYaml}
               onChange={handleYamlChange}
+              onValidationChange={setIsYamlValid}
               isSaved={true}
+              readOnly={!canEditYaml}
+              help={
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label="YAML help"
+                    >
+                      <CircleHelp className="size-3.5" />
+                      <span>Help</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    className="w-96 max-w-[calc(100vw-2rem)] space-y-3 text-sm"
+                  >
+                    <h3 className="font-medium">Deployment YAML</h3>
+                    <p className="text-muted-foreground">
+                      Customize volumes, external secrets, labels, and
+                      annotations. Environment variables set in Configuration
+                      take precedence.
+                    </p>
+                    <div className="space-y-1">
+                      <h4 className="font-medium">Template values</h4>
+                      <p className="text-muted-foreground">
+                        Use <code>${"{env.KEY}"}</code>,{" "}
+                        <code>${"{secret.KEY}"}</code>, or{" "}
+                        <code>${"{archestra.KEY}"}</code>. Values are replaced
+                        at deployment time.
+                      </p>
+                      <p className="text-xs font-mono text-muted-foreground break-words">
+                        deployment_name, server_id, server_name, docker_image,
+                        secret_name, command, arguments, service_account
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="font-medium">Managed fields</h4>
+                      <p className="text-muted-foreground">
+                        {appName} controls the deployment selector, system
+                        labels, and service account. Configure the service
+                        account on the catalog, rather than in YAML.
+                      </p>
+                    </div>
+                    <p className="text-muted-foreground">
+                      The default template includes the required transport
+                      settings: <code>stdin: true</code> and{" "}
+                      <code>tty: false</code> for stdio, or a{" "}
+                      <code>containerPort</code> for HTTP.
+                    </p>
+                  </PopoverContent>
+                </Popover>
+              }
             />
           ))}
 
-        {(!hideHeader || hasYamlChanged) &&
+        {canEditYaml &&
+          (!hideHeader || hasYamlChanged) &&
           (() => {
             const Footer = hideHeader ? DialogStickyFooter : DialogFooter;
             return (
               <Footer>
-                <Button variant="outline" onClick={handleClose} type="button">
-                  Cancel
+                <Button
+                  variant="outline"
+                  onClick={
+                    hideHeader
+                      ? () => setDeploymentYaml(originalYaml)
+                      : handleClose
+                  }
+                  type="button"
+                  disabled={updateMutation.isPending}
+                >
+                  <span>{hideHeader ? "Discard" : "Cancel"}</span>
                 </Button>
                 <Button
                   type="submit"
-                  disabled={updateMutation.isPending || !hasYamlChanged}
+                  disabled={
+                    updateMutation.isPending || !hasYamlChanged || !isYamlValid
+                  }
                 >
                   {updateMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>

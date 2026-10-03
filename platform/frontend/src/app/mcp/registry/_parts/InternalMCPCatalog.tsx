@@ -521,7 +521,6 @@ export function InternalMCPCatalog({
               environmentValues: installResult.environmentValues,
               userConfigValues: installResult.userConfigValues,
               isByosVault: installResult.isByosVault,
-              serviceAccount: installResult.serviceAccount,
             }),
           ),
         );

@@ -192,7 +192,7 @@ import {
   resolveLockedChatAccess,
   resolveLockedChatCreation,
 } from "./locked-chat";
-import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
+import { applyStepPromptCacheBreakpoint } from "./normalization/apply-prompt-cache";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { assertWithinContextWindow } from "./normalization/enforce-context-window-limit";
 import {
@@ -1333,25 +1333,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   messages: modelMessages,
                   ...(provider === "anthropic" &&
                     anthropicNativeEndpoint && {
-                      prepareStep: ({ messages }) => {
-                        const cachePreparedMessages =
-                          applyPromptCacheBreakpoints({
-                            provider,
-                            model: selectedModel,
-                            anthropicNativeEndpoint,
-                            messages,
-                          });
-                        return {
-                          // Only advance the tail: context-trim retries can prepend
-                          // a system note that must not get a 5m marker before a
-                          // retained 1h marker.
-                          messages: messages.map((message, index) =>
-                            index === messages.length - 1
-                              ? cachePreparedMessages[index]
-                              : message,
-                          ),
-                        };
-                      },
+                      prepareStep: ({ messages }) => ({
+                        messages: applyStepPromptCacheBreakpoint({
+                          provider,
+                          model: selectedModel,
+                          anthropicNativeEndpoint,
+                          messages,
+                        }),
+                      }),
                     }),
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),

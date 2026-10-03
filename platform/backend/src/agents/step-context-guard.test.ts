@@ -30,6 +30,16 @@ const assistantToolCall = (toolCallId = "call_1") =>
     ],
   }) as ModelMessage;
 
+// budget: floor(200 * 0.8) tokens * 4 chars = 640 chars; the keep window is
+// 30% of that (~192 chars), so with 300-char turns only the last survives
+// verbatim, everything earlier is compactable, and summary + suffix fit
+// comfortably back under the budget.
+const overBudgetMessages = (): ModelMessage[] => [
+  { role: "user", content: "a".repeat(300) },
+  { role: "assistant", content: "b".repeat(300) },
+  { role: "user", content: "c".repeat(300) },
+];
+
 describe("createStepContextGuard — tool result capping", () => {
   test("caps an oversized tool result and keeps its toolCallId pairing", async () => {
     const guard = createStepContextGuard({ contextLength: null });
@@ -66,16 +76,6 @@ describe("createStepContextGuard — tool result capping", () => {
 });
 
 describe("createStepContextGuard — summarization compaction", () => {
-  // budget: floor(200 * 0.8) tokens * 4 chars = 640 chars; the keep window is
-  // 30% of that (~192 chars), so with 300-char turns only the last survives
-  // verbatim, everything earlier is compactable, and summary + suffix fit
-  // comfortably back under the budget.
-  const overBudgetMessages = (): ModelMessage[] => [
-    { role: "user", content: "a".repeat(300) },
-    { role: "assistant", content: "b".repeat(300) },
-    { role: "user", content: "c".repeat(300) },
-  ];
-
   test("replaces the older prefix with a summary message", async () => {
     const summarize = vi.fn(
       async (_p: SummarizeParams): Promise<string | null> =>
@@ -234,3 +234,79 @@ describe("createStepContextGuard — summarization compaction", () => {
     }
   });
 });
+
+describe("createStepContextGuard — prompt cache breakpoint", () => {
+  const promptCache = {
+    provider: "anthropic",
+    model: "claude-haiku-4-5",
+    anthropicNativeEndpoint: true,
+  };
+
+  // null skips the context-window check; 100_000 keeps these steps within
+  // budget, which is the path of a run whose model has a known context length.
+  test.each([
+    null,
+    100_000,
+  ])("moves the breakpoint to the newest message of each step (context length %s)", async (contextLength) => {
+    const guard = createStepContextGuard({ contextLength, promptCache });
+    const firstStep: ModelMessage[] = [
+      { role: "user", content: "list the workflow runs" },
+      assistantToolCall("call_1"),
+      toolResultMessage("run 1", "call_1"),
+    ];
+    const { messages: first } = await guard({ messages: firstStep });
+    expect(anthropicCacheControl(first[2])).toEqual({ type: "ephemeral" });
+
+    // The SDK passes the loop's own unmarked messages to the next step.
+    const { messages: second } = await guard({
+      messages: [
+        ...firstStep,
+        assistantToolCall("call_2"),
+        toolResultMessage("run 2", "call_2"),
+      ],
+    });
+    expect(anthropicCacheControl(second[4])).toEqual({ type: "ephemeral" });
+    expect(second.slice(0, 4).map(anthropicCacheControl)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  test("marks the newest message of a compacted view", async () => {
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeTranscript: async () => "the compact summary",
+      promptCache,
+    });
+    const { messages: result } = await guard({
+      messages: overBudgetMessages(),
+    });
+
+    expect(result[0].content).toContain("the compact summary");
+    expect(anthropicCacheControl(result.at(-1))).toEqual({
+      type: "ephemeral",
+    });
+  });
+
+  test("adds no breakpoint to a trimmed view", async () => {
+    // As the run grows, trimming usually drops more of the oldest messages, so
+    // a cache entry written for this view would rarely be read.
+    const guard = createStepContextGuard({ contextLength: 200, promptCache });
+    const { messages: result } = await guard({
+      messages: overBudgetMessages(),
+    });
+
+    expect(result[0].content).toContain("trimmed");
+    expect(result.map(anthropicCacheControl).filter(Boolean)).toEqual([]);
+  });
+});
+
+function anthropicCacheControl(message: ModelMessage | undefined) {
+  return (
+    message?.providerOptions as
+      | { anthropic?: { cacheControl?: unknown } }
+      | undefined
+  )?.anthropic?.cacheControl;
+}

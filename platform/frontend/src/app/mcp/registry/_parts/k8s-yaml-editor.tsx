@@ -116,90 +116,97 @@ export function K8sYamlEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Deployment YAML</span>
-          {readOnly && (
-            <span className="text-xs text-muted-foreground">Read only</span>
+      {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+        <div className="shrink-0 space-y-2">
+          {/* Validation Errors */}
+          {validationErrors.length > 0 && (
+            <InlineNotice variant="error">
+              <AlertCircle />
+              <InlineNoticeText>
+                <ul className="list-disc list-inside space-y-1">
+                  {validationErrors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </InlineNoticeText>
+            </InlineNotice>
+          )}
+          {/* Validation Warnings */}
+          {validationWarnings.length > 0 && (
+            <InlineNotice variant="warning">
+              <AlertCircle />
+              <InlineNoticeText>
+                <ul className="list-disc list-inside space-y-1">
+                  {validationWarnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </InlineNoticeText>
+            </InlineNotice>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          {help}
-          {!readOnly && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label="Reset to default"
-              onClick={handleResetToDefault}
-              disabled={!catalogId || resetYaml.isPending}
-            >
-              <RefreshCw className="size-3.5" />
-              <span>Reset</span>
-            </Button>
-          )}
+      )}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Deployment YAML</span>
+            {readOnly && (
+              <span className="text-xs text-muted-foreground">Read only</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {help}
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="Reset to default"
+                onClick={handleResetToDefault}
+                disabled={!catalogId || resetYaml.isPending}
+              >
+                <RefreshCw className="size-3.5" />
+                <span>Reset</span>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Monaco Editor */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <Editor
+            height="100%"
+            defaultLanguage="yaml"
+            value={value || ""}
+            onChange={handleEditorChange}
+            loading={
+              <div className="flex h-full items-center justify-center w-full bg-muted/50">
+                <p className="text-sm text-muted-foreground">
+                  Loading editor...
+                </p>
+              </div>
+            }
+            options={{
+              readOnly,
+              minimap: { enabled: false },
+              lineNumbers: "on",
+              folding: true,
+              scrollBeyondLastLine: false,
+              wordWrap: "on",
+              fontSize: 13,
+              fontFamily: "monospace",
+              tabSize: 2,
+              padding: { top: 8, bottom: 8 },
+              renderLineHighlight: "line",
+              scrollbar: {
+                vertical: "auto",
+                horizontal: "auto",
+                verticalScrollbarSize: 10,
+              },
+            }}
+          />
         </div>
       </div>
-
-      {/* Monaco Editor */}
-      <div className="min-h-0 flex-1 overflow-hidden rounded-md border">
-        <Editor
-          height="100%"
-          defaultLanguage="yaml"
-          value={value || ""}
-          onChange={handleEditorChange}
-          loading={
-            <div className="flex h-full items-center justify-center w-full bg-muted/50">
-              <p className="text-sm text-muted-foreground">Loading editor...</p>
-            </div>
-          }
-          options={{
-            readOnly,
-            minimap: { enabled: false },
-            lineNumbers: "on",
-            folding: true,
-            scrollBeyondLastLine: false,
-            wordWrap: "on",
-            fontSize: 13,
-            fontFamily: "monospace",
-            tabSize: 2,
-            padding: { top: 8, bottom: 8 },
-            renderLineHighlight: "line",
-            scrollbar: {
-              vertical: "auto",
-              horizontal: "auto",
-              verticalScrollbarSize: 10,
-            },
-          }}
-        />
-      </div>
-      {/* Validation Errors */}
-      {validationErrors.length > 0 && (
-        <InlineNotice variant="error">
-          <AlertCircle />
-          <InlineNoticeText>
-            <ul className="list-disc list-inside space-y-1">
-              {validationErrors.map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </ul>
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
-
-      {/* Validation Warnings */}
-      {validationWarnings.length > 0 && (
-        <InlineNotice variant="warning">
-          <AlertCircle />
-          <InlineNoticeText>
-            <ul className="list-disc list-inside space-y-1">
-              {validationWarnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
     </div>
   );
 }

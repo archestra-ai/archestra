@@ -603,6 +603,18 @@ export async function executeA2AMessage(
         systemPrompt,
         abortSignal,
         logContext: { agentId: agent.id, sessionId },
+        // runAgentStream marks only the initial messages. Without a breakpoint
+        // that moves with the tool loop, every later step pays the full input
+        // price for all earlier tool calls and results. Native Anthropic only,
+        // as in the chat route.
+        ...(provider === "anthropic" &&
+          anthropicNativeEndpoint && {
+            promptCache: {
+              provider,
+              model: selectedModel,
+              anthropicNativeEndpoint,
+            },
+          }),
       }),
     };
     const currentTurn: { role: "user"; content: UserContent } | null =

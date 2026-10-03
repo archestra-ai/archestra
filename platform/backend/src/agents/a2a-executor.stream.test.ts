@@ -1,14 +1,18 @@
 // Real-boundary tests for executeA2AMessage: only the LLM model, MCP tools, and
 // DB lookups are mocked — `streamText` and `runAgentStream` run for real against
-// a MockLanguageModelV3. This exercises the multi-consumer stream (probe +
-// toUIMessageStream + text/usage/finishReason), the captured-error → ProviderError
-// mapping, and the context-trim recovery on the A2A `messages` path — none of
-// which the mocked-streamText suite in a2a-executor.test.ts can prove.
+// a MockLanguageModelV3, or, in the prompt-caching block, against the real
+// Anthropic provider with the network faked by MSW. This exercises the
+// multi-consumer stream (probe + toUIMessageStream + text/usage/finishReason),
+// the captured-error → ProviderError mapping, and the context-trim recovery on
+// the A2A `messages` path — none of which the mocked-streamText suite in
+// a2a-executor.test.ts can prove.
 
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { ChatErrorCode } from "@archestra/shared";
-import type { ModelMessage } from "ai";
+import type { LanguageModel, ModelMessage } from "ai";
 import { simulateReadableStream, tool } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
+import { http } from "msw";
 import { vi } from "vitest";
 import { z } from "zod";
 import {
@@ -16,7 +20,15 @@ import {
   REPEAT_CALL_TERMINATION_NOTICE,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import ModelModel from "@/models/model";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
+import {
+  type AnthropicWireRequest,
+  anthropicRequestBlocks,
+  anthropicStreamResponse,
+  expectLongerTtlFirst,
+} from "@/test/anthropic-messages-wire";
+import { useMswServer } from "@/test/msw";
 import { THINKING_ONLY_NOTICE } from "@/utils/strip-thinking-blocks";
 import { executeA2AMessage } from "./a2a-executor";
 
@@ -195,7 +207,7 @@ function primeAgent(model: MockLanguageModelV3) {
 }
 
 function primePromptCacheAgent(params: {
-  model: MockLanguageModelV3;
+  model: LanguageModel;
   provider: "anthropic" | "bedrock";
   selectedModel: string;
   anthropicNativeEndpoint: boolean;
@@ -767,3 +779,113 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(result.text).toBe(REPEAT_CALL_TERMINATION_NOTICE);
   });
 });
+
+describe("executeA2AMessage Anthropic tool-loop prompt caching", () => {
+  const server = useMswServer();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("keeps the latest tool result inside the cached prefix on every step", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    // A known context length sends every step through the guard's budget
+    // check, the path that production runs take.
+    await ModelModel.create({
+      externalId: `anthropic/${ANTHROPIC_MODEL}`,
+      provider: "anthropic",
+      modelId: ANTHROPIC_MODEL,
+      supportsToolCalling: true,
+      contextLength: 200000,
+      outputLength: 8192,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    primePromptCacheAgent({
+      provider: "anthropic",
+      selectedModel: ANTHROPIC_MODEL,
+      anthropicNativeEndpoint: true,
+      model: createAnthropic({
+        apiKey: "test-key",
+        baseURL: ANTHROPIC_BASE_URL,
+      })(ANTHROPIC_MODEL),
+    });
+    mockGetChatMcpTools.mockResolvedValue({ inspect_path: inspectPathTool() });
+    const requests = serveAnthropicToolLoop({ server, toolSteps: 4 });
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Inspect four API paths.",
+      organizationId: org.id,
+      userId: user.id,
+    });
+
+    expect(result.text).toBe(TOOL_LOOP_FINAL_TEXT);
+    expect(requests).toHaveLength(5);
+    for (const [step, request] of requests.entries()) {
+      expectLongerTtlFirst({ request, label: `request ${step + 1}` });
+      const toolResults = anthropicRequestBlocks(request).filter(
+        (block) => block.type === "tool_result",
+      );
+      expect(toolResults).toHaveLength(step);
+      if (step > 0) {
+        expect(
+          toolResults.at(-1)?.cache_control,
+          `request ${step + 1} must cache its latest tool result`,
+        ).toMatchObject({ type: "ephemeral" });
+      }
+    }
+  });
+});
+
+const ANTHROPIC_BASE_URL = "https://anthropic.test/v1";
+const ANTHROPIC_MODEL = "claude-haiku-4-5";
+const TOOL_LOOP_FINAL_TEXT = "All paths are inspected.";
+
+function inspectPathTool() {
+  return tool({
+    description: "Inspect one API path",
+    inputSchema: z.object({ path: z.number() }),
+    execute: async ({ path }) => `Path ${path}: ${"ok ".repeat(200)}`,
+  });
+}
+
+// Answers each request with one inspect_path call until `toolSteps` tool
+// results are in the request, then with the final text. Returns the captured
+// request bodies in order.
+function serveAnthropicToolLoop(params: {
+  server: ReturnType<typeof useMswServer>;
+  toolSteps: number;
+}): AnthropicWireRequest[] {
+  const requests: AnthropicWireRequest[] = [];
+  params.server.use(
+    http.post(`${ANTHROPIC_BASE_URL}/messages`, async ({ request }) => {
+      const body = (await request.json()) as AnthropicWireRequest;
+      requests.push(body);
+      const completed = anthropicRequestBlocks(body).filter(
+        (block) => block.type === "tool_result",
+      ).length;
+      return anthropicStreamResponse({
+        model: ANTHROPIC_MODEL,
+        block:
+          completed < params.toolSteps
+            ? {
+                type: "tool_use",
+                id: `tool_${completed + 1}`,
+                name: "inspect_path",
+                input: { path: completed + 1 },
+              }
+            : { type: "text", text: TOOL_LOOP_FINAL_TEXT },
+      });
+    }),
+  );
+  return requests;
+}

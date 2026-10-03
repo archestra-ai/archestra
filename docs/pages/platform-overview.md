@@ -2,32 +2,37 @@
 title: Overview
 category: Archestra Platform
 order: -1
-description: High-level architecture overview of Archestra Platform components
-lastUpdated: 2026-07-03
+description: Run agents, connect tools, and govern AI across your organization.
+lastUpdated: 2026-10-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra is a centralized AI platform for organizations where engineers and non-technical teams both work with AI agents. A non-technical user works through a chat UI and gets results right away. An engineer builds agents in LangChain, n8n, Python, or another stack, using the MCP orchestrator, guardrails, and observability. Both use the same platform.
+Archestra is an AI platform for teams. You can work with agents in Chat or connect existing applications through its LLM and MCP proxies.
 
-> Fun fact: the team behind Archestra.AI previously worked on Grafana OnCall.
+## Start Here
+
+- **Try Archestra locally:** Follow the [Quickstart](/docs/platform-quickstart) to run the platform and chat with your first agent.
+- **Use your workspace:** Read about [Chat](/docs/platform-chat), [Projects](/docs/platform-projects), and [Knowledge](/docs/platform-knowledge).
+- **Connect an application:** Use the [LLM Proxy](/docs/platform-llm-proxy) for model requests or an [MCP Gateway](/docs/platform-mcp-gateway) for tools.
+- **Deploy for a team:** Follow [Deployment](/docs/platform-deployment), then configure [Access Control](/docs/platform-access-control).
+
+<span id="composable-components"></span>
+
+## How the Platform Fits Together
+
+Agents combine instructions, models, and tools. The runtime executes them, while Chat and messaging integrations provide places to interact with them.
 
 :::architecture-diagram:::
 
-## Composable Components
+| Component | Purpose |
+| --- | --- |
+| [Agents](/docs/platform-agents) | Define instructions, tools, sub-agents, and triggers. |
+| [MCP Orchestrator](/docs/platform-orchestrator) | Run MCP servers as isolated Kubernetes pods. |
+| [MCP Gateway](/docs/platform-mcp-gateway) | Expose selected tools through one MCP endpoint. |
+| [LLM Proxy](/docs/platform-llm-proxy) | Route application requests to model providers. |
+| [Knowledge](/docs/platform-knowledge) | Give agents access to your documents and connected data. |
+| [Guardrails](/docs/platform-ai-tool-guardrails) | Apply policies to tool calls and data access. |
+| [Observability](/docs/platform-observability) | Inspect requests with metrics and traces. |
 
-Archestra is a set of composable components. Most organizations already run tools like n8n, LiteLLM, Grafana, or custom MCP servers. Adopt all of Archestra, a few components, or just one — each works with what you already have.
-
-**[Agentic Chat](/docs/platform-chat)** — ChatGPT-like interface for non-technical users. Talk to agents via web UI, [Slack](/docs/platform-slack), [MS Teams](/docs/platform-ms-teams), or [Email](/docs/platform-agent-triggers-email).
-
-**[Agent Runtime](/docs/platform-agents)** — No-code builder for autonomous agents. Define system prompts, assign MCP tools and sub-agents, configure triggers.
-
-**[MCP Orchestrator](/docs/platform-orchestrator)** — Run MCP servers as isolated pods in Kubernetes.
-
-**[Knowledge Base](/docs/platform-knowledge)** — Built-in RAG Knowledge Base to give your agents access to your data.
-
-**[LLM & MCP Proxies](/docs/platform-llm-proxy)** — Drop-in proxy between your apps and LLM providers. [MCP Gateway](/docs/platform-mcp-gateway) provides a single endpoint for all MCP tools. Works with any framework: n8n, LangChain, Vercel AI, Pydantic AI, Mastra.
-
-**[Security & Guardrails](/docs/platform-ai-tool-guardrails#the-lethal-trifecta)** and **[Observability](/docs/platform-observability)** — Deterministic tool invocation policies and trusted data policies that cannot be bypassed by prompt injection. Prometheus metrics, OpenTelemetry tracing, and [per-team cost tracking](/docs/platform-costs-and-limits).
-
-See [Pricing Model](/docs/platform-pricing-model) for licensing details.
+You can adopt the whole platform or connect individual components to your existing stack. See [Costs and Limits](/docs/platform-costs-and-limits) for usage controls and [Pricing Model](/docs/platform-pricing-model) for licensing.

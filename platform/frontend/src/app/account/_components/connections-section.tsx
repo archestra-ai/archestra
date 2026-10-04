@@ -22,8 +22,7 @@ import {
  * something to connect (or the lookup failed, so the error is not hidden
  * behind a missing section).
  *
- * `/account#connections` is its address: the old `/account/connections` route
- * redirects here, and GitHub sign-in comes back here.
+ * `/account#connections` is its address; GitHub sign-in comes back here.
  */
 export function ConnectionsSection() {
   const byosEnabled = useFeature("byosEnabled");

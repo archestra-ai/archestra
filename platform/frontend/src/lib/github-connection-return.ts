@@ -26,9 +26,6 @@ export function consumeGitHubConnectionReturn(state: string | null) {
 
 const personalConnections = "/account#connections";
 const accountPath = "/account";
-// Where personal connections used to live; a sign-in started before the move
-// can still name it, and it redirects to the section anyway.
-const legacyPersonalConnectionsPath = "/account/connections";
 const organizationCredentials = "/settings/credentials";
 const storagePrefix = "github-connection-return:";
 
@@ -39,10 +36,7 @@ function validatedDestination(destination: string | null): string {
     if (url.origin !== window.location.origin) return personalConnections;
     // A connect started from the Connections section records `/account`, the
     // page it sits on; come back to the section, not the top of the page.
-    if (
-      url.pathname === accountPath ||
-      url.pathname === legacyPersonalConnectionsPath
-    )
+    if (url.pathname === accountPath)
       return `${accountPath}${url.search}${url.hash || "#connections"}`;
     if (
       url.pathname === organizationCredentials ||

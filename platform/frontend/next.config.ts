@@ -82,21 +82,6 @@ const nextConfig: NextConfig = {
     // messaging-channels restructure, so existing bookmarks and links don't 404.
     // `:path*` matches the bare path and any sub-path.
     return [
-      // The personal gateway token, two-factor and permissions sections all
-      // live on the Profile tab now. Next preserves query parameters,
-      // including the `?highlight=personal-token` token dialog deep link.
-      ...[
-        "/account/gateway-token",
-        "/account/two-factor",
-        "/account/auth",
-        "/account/permissions",
-      ].map((source) => ({ source, destination: "/account", permanent: true })),
-      // Connections is a section of the Profile tab now.
-      {
-        source: "/account/connections",
-        destination: "/account#connections",
-        permanent: true,
-      },
       // Keep registered GitHub App callbacks valid. Next preserves the OAuth query.
       {
         source: "/settings/credentials/github/callback",

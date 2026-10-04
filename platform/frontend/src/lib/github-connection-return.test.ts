@@ -58,12 +58,8 @@ it.each([
   expect(consumeGitHubConnectionReturn("flow")).toBe("/account#connections");
 });
 
-it.each([
-  "/account",
-  // A sign-in started on the old route before it moved into Profile.
-  "/account/connections",
-])("returns a personal connect from %s to the Connections section", (destination) => {
-  rememberGitHubConnectionReturn("flow", destination);
+it("returns a personal connect from /account to the Connections section", () => {
+  rememberGitHubConnectionReturn("flow", "/account");
   expect(consumeGitHubConnectionReturn("flow")).toBe("/account#connections");
 });
 

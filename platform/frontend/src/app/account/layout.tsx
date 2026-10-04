@@ -20,11 +20,6 @@ const PAGE_DESCRIPTIONS: Record<string, React.ReactNode> = {
     "The browsers and devices you're signed in on. Sign out of any you don't recognize.",
 };
 
-const ACCOUNT_TABS = accountSections.map(({ label, href }) => ({
-  label,
-  href,
-}));
-
 function ApiKeysDescription() {
   const apiDocsUrl = getFrontendDocsUrl("platform-api-reference");
   return (
@@ -72,7 +67,7 @@ function AccountShell({ children }: { children: React.ReactNode }) {
     <PageLayout
       title="Personal Settings"
       description={PAGE_DESCRIPTIONS[pathname] ?? PAGE_DESCRIPTIONS["/account"]}
-      tabs={ACCOUNT_TABS}
+      tabs={accountSections}
       // API Keys puts Create API Key in the header through this slot.
       actionButton={
         pathname === "/account/api-keys" ? (

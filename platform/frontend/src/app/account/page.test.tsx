@@ -41,8 +41,6 @@ vi.mock("@/lib/auth/account.query", () => ({
   }),
 }));
 
-const replace = vi.fn();
-
 function renderPage() {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -61,7 +59,7 @@ describe("AccountProfilePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
-      replace,
+      replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
     setSearch("");
     vi.mocked(useSession).mockReturnValue({
@@ -128,7 +126,6 @@ describe("AccountProfilePage", () => {
       screen.getByRole("switch", { name: "Two-factor authentication" }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Manage" })).toBeVisible();
-    expect(replace).not.toHaveBeenCalled();
   });
 
   it("hides the password row when the deployment does not use passwords", () => {
@@ -150,20 +147,11 @@ describe("AccountProfilePage", () => {
     expect(await screen.findByRole("dialog")).toBeVisible();
   });
 
-  it("forwards an old ?section= link to the tab that replaced it", () => {
-    setSearch("section=sessions");
+  it("opens the gateway token dialog from the Manage token deep link", async () => {
+    setSearch("highlight=personal-token");
 
     renderPage();
 
-    expect(replace).toHaveBeenCalledWith("/account/sessions?section=sessions");
-  });
-
-  it("opens the gateway token dialog from an old token deep link without leaving Profile", async () => {
-    setSearch("section=gateway-token&highlight=personal-token");
-
-    renderPage();
-
-    expect(replace).not.toHaveBeenCalled();
     expect(await screen.findByRole("dialog")).toBeVisible();
   });
 });

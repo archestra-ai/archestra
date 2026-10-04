@@ -890,7 +890,7 @@ describe("search_tools", () => {
         const org = await makeOrganization();
         const user = await makeUser();
         const role = await makeCustomRole(org.id, {
-          permission: { agent: ["read"] },
+          permission: { chat: ["read", "create"] },
         });
         await makeMember(user.id, org.id, { role: role.role });
         const agent = await makeAgent({

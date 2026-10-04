@@ -4,53 +4,23 @@ import { resolveLegacyAccountHref } from "./account-sections";
 
 describe("resolveLegacyAccountHref", () => {
   it("leaves a plain /account visit alone", () => {
-    expect(
-      resolveLegacyAccountHref({ section: null, highlight: null }),
-    ).toBeNull();
+    expect(resolveLegacyAccountHref(null)).toBeNull();
   });
 
-  it("sends an old ?section= link to the route that replaced it", () => {
-    expect(
-      resolveLegacyAccountHref({ section: "sessions", highlight: null }),
-    ).toBe("/account/sessions");
-  });
-
-  it("leaves an unknown section on the profile page rather than redirecting", () => {
-    expect(
-      resolveLegacyAccountHref({ section: "nope", highlight: null }),
-    ).toBeNull();
-  });
-
-  it("routes the personal-token highlight to Auth", () => {
-    // The token dialog lives inside that card, so the card has to mount.
-    expect(
-      resolveLegacyAccountHref({ section: null, highlight: "personal-token" }),
-    ).toBe("/account/auth");
+  it("sends an old ?section= link to the tab that replaced it", () => {
+    expect(resolveLegacyAccountHref("sessions")).toBe("/account/sessions");
+    expect(resolveLegacyAccountHref("api-keys")).toBe("/account/api-keys");
   });
 
   it.each([
+    "permissions",
+    "auth",
     "gateway-token",
     "two-factor",
-  ])("routes the legacy %s section to Auth", (section) => {
-    expect(resolveLegacyAccountHref({ section, highlight: null })).toBe(
-      "/account/auth",
-    );
-  });
-
-  it("lets an explicit section win over the highlight", () => {
-    expect(
-      resolveLegacyAccountHref({
-        section: "api-keys",
-        highlight: "personal-token",
-      }),
-    ).toBe("/account/api-keys");
-  });
-
-  it("does not redirect the change-password highlight", () => {
-    // Its button and dialog both sit in the layout, above the sections, so it
-    // opens from whichever section is showing.
-    expect(
-      resolveLegacyAccountHref({ section: null, highlight: "change-password" }),
-    ).toBeNull();
+    "nope",
+  ])("keeps the %s section on the profile page", (section) => {
+    // Permissions and auth were folded into Profile, so `/account` already
+    // shows them; anything unknown also just renders Profile.
+    expect(resolveLegacyAccountHref(section)).toBeNull();
   });
 });

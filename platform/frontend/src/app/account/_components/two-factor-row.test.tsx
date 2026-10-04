@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { TwoFactorCard } from "./two-factor-card";
+import { TwoFactorRow } from "./two-factor-row";
 
 vi.mock("next/navigation");
 
@@ -30,7 +30,7 @@ function renderCard({ required = false } = {}) {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <TwoFactorCard required={required} />
+      <TwoFactorRow required={required} />
     </QueryClientProvider>,
   );
 }
@@ -45,7 +45,7 @@ function mockSession(twoFactorEnabled: boolean) {
   } as Awaited<ReturnType<typeof authClient.getSession>>);
 }
 
-describe("TwoFactorCard", () => {
+describe("TwoFactorRow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useAppName).mockReturnValue("Acme AI");
@@ -84,7 +84,7 @@ describe("TwoFactorCard", () => {
 
     expect(
       await screen.findByText(
-        "Your organization requires two-factor authentication. Set it up now to continue using the platform.",
+        "Required by your organization. Turn it on to keep using the platform.",
       ),
     ).toBeVisible();
     expect(
@@ -103,7 +103,7 @@ describe("TwoFactorCard", () => {
     await waitFor(() => expect(toggle).toBeChecked());
     expect(
       screen.queryByText(
-        "Your organization requires two-factor authentication. Set it up now to continue using the platform.",
+        "Required by your organization. Turn it on to keep using the platform.",
       ),
     ).not.toBeInTheDocument();
   });

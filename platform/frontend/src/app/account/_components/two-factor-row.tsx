@@ -5,7 +5,10 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { SettingsBlock } from "@/components/settings/settings-block";
+import {
+  AccountRow,
+  AccountRowMuted,
+} from "@/app/account/_components/account-rows";
 import {
   StandardDialog,
   StandardFormDialog,
@@ -33,11 +36,13 @@ const PasswordFormSchema = z.object({
 type PasswordFormValues = z.infer<typeof PasswordFormSchema>;
 
 /**
+ * The two-factor row of the security list: on/off, toggled in place.
+ *
  * Enable/disable two-factor authentication. Enabling returns backup codes
  * (shown once in a dialog) and a TOTP URI; after saving the codes the user is
  * sent to /auth/two-factor to scan the QR code and confirm the authenticator.
  */
-export function TwoFactorCard({ required = false }: { required?: boolean }) {
+export function TwoFactorRow({ required = false }: { required?: boolean }) {
   const enterpriseCoreActive = useEnterpriseFeature("core");
   const { data: session, isPending: isSessionPending } = useSession();
   const twoFactorEnabled = !!session?.user?.twoFactorEnabled;
@@ -56,16 +61,9 @@ export function TwoFactorCard({ required = false }: { required?: boolean }) {
 
   return (
     <>
-      <SettingsBlock
-        title="Two-Factor Authentication"
-        description={
-          twoFactorEnabled
-            ? "Two-factor authentication is enabled for your account."
-            : mustEnroll
-              ? "Your organization requires two-factor authentication. Set it up now to continue using the platform."
-              : "Add an extra layer of security by requiring a one-time code at sign-in."
-        }
-        control={
+      <AccountRow
+        label="Two-factor"
+        action={
           <Switch
             aria-label="Two-factor authentication"
             checked={twoFactorEnabled}
@@ -76,7 +74,7 @@ export function TwoFactorCard({ required = false }: { required?: boolean }) {
               if (!enabled) {
                 // Disabling is still possible when required — the middleware
                 // will simply lock the account out again; better-auth offers
-                // no disable-block hook, so the card warns via copy.
+                // no disable-block hook, so the row warns via copy.
                 setIsPasswordDialogOpen(true);
                 return;
               }
@@ -87,7 +85,18 @@ export function TwoFactorCard({ required = false }: { required?: boolean }) {
             }}
           />
         }
-      />
+      >
+        {twoFactorEnabled ? (
+          <span>On</span>
+        ) : mustEnroll ? (
+          <span className="text-destructive">
+            Required by your organization. Turn it on to keep using the
+            platform.
+          </span>
+        ) : (
+          <AccountRowMuted>Off</AccountRowMuted>
+        )}
+      </AccountRow>
       <TwoFactorPasswordDialog
         open={isPasswordDialogOpen}
         onOpenChange={setIsPasswordDialogOpen}

@@ -98,7 +98,9 @@ it.each([
 it.each([
   "/account/gateway-token",
   "/account/two-factor",
-])("redirects %s to Auth without losing token dialog parameters", async (path) => {
+  "/account/auth",
+  "/account/permissions",
+])("redirects %s to Profile without losing token dialog parameters", async (path) => {
   const { default: nextConfig } = await import("../next.config");
   const response = await unstable_getResponseFromNextConfig({
     url: `https://app.example.com${path}?highlight=personal-token`,
@@ -106,6 +108,18 @@ it.each([
   });
   expect(response.status).toBe(308);
   const target = new URL(getRedirectUrl(response) ?? "");
-  expect(target.pathname).toBe("/account/auth");
+  expect(target.pathname).toBe("/account");
   expect(target.searchParams.get("highlight")).toBe("personal-token");
+});
+
+it("redirects the old Connections route to its section on Profile", async () => {
+  const { default: nextConfig } = await import("../next.config");
+  const response = await unstable_getResponseFromNextConfig({
+    url: "https://app.example.com/account/connections",
+    nextConfig,
+  });
+  expect(response.status).toBe(308);
+  const target = new URL(getRedirectUrl(response) ?? "");
+  expect(target.pathname).toBe("/account");
+  expect(target.hash).toBe("#connections");
 });

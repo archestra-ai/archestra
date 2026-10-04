@@ -15,14 +15,13 @@ import {
   it,
   vi,
 } from "vitest";
-import { AccountSectionNav } from "@/app/account/_components/account-section-nav";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type RuntimeCredentialDefinition,
   runtimeCredentialsQueryKey,
 } from "@/lib/runtime-credentials.query";
-import AccountConnectionsPage from "./page";
+import { ConnectionsSection } from "./connections-section";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
@@ -86,13 +85,12 @@ beforeEach(() => {
 function renderPage() {
   return render(
     <QueryClientProvider client={client}>
-      <AccountSectionNav />
-      <AccountConnectionsPage />
+      <ConnectionsSection />
     </QueryClientProvider>,
   );
 }
 
-describe("AccountConnectionsPage", () => {
+describe("ConnectionsSection", () => {
   it("opens GitHub sign-in from the row action", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -159,8 +157,7 @@ describe("AccountConnectionsPage", () => {
     );
     renderPage();
     expect(await screen.findAllByText("Claude Code")).toHaveLength(1);
-    expect(screen.getByRole("link", { name: "Connections" })).toBeVisible();
-    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Connections" })).toBeVisible();
     await user.click(await screen.findByRole("button", { name: "Sign in" }));
     await user.click(
       screen.getByRole("button", { name: "Sign in with Claude" }),
@@ -186,11 +183,10 @@ describe("AccountConnectionsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Connections" })).toBeVisible();
-    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Connections" })).toBeVisible();
   });
 
-  it("waits for a confirmed empty result, then hides Connections and returns to Profile", async () => {
+  it("waits for a confirmed empty result, then hides the section", async () => {
     let finish!: () => void;
     let requested = false;
     const response = new Promise<void>((resolve) => {
@@ -207,11 +203,14 @@ describe("AccountConnectionsPage", () => {
     );
     renderPage();
     await waitFor(() => expect(requested).toBe(true));
-    expect(replace).not.toHaveBeenCalled();
     finish();
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/account"));
+    await waitFor(() =>
+      expect(client.isFetching({ queryKey: runtimeCredentialsQueryKey })).toBe(
+        0,
+      ),
+    );
     expect(
-      screen.queryByRole("link", { name: "Connections" }),
+      screen.queryByRole("heading", { name: "Connections" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(/An administrator can add a personal credential/),
@@ -256,13 +255,11 @@ describe("AccountConnectionsPage", () => {
     await waitFor(() =>
       expect(client.isFetching({ queryKey: ["agents"] })).toBe(0),
     );
-    expect(replace).not.toHaveBeenCalled();
     finish();
     expect(
       await screen.findByRole("button", { name: "Connect Repository token" }),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: "Connections" })).toBeVisible();
-    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Connections" })).toBeVisible();
   });
 
   it("hides Connections without fetching runtime data when the runtime is disabled", async () => {
@@ -279,9 +276,8 @@ describe("AccountConnectionsPage", () => {
       }),
     );
     renderPage();
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/account"));
     expect(
-      screen.queryByRole("link", { name: "Connections" }),
+      screen.queryByRole("heading", { name: "Connections" }),
     ).not.toBeInTheDocument();
     expect(requests).toBe(0);
   });

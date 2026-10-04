@@ -4130,6 +4130,68 @@ describe("ChatOpsManager Slack conversation context", () => {
     };
   }
 
+  test.for([
+    true,
+    false,
+  ])("preserves Slack envelopes through response compaction (valid blocks: %s)", async (validBlocks, {
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalAgent,
+  }) => {
+    const text = `\`\`\`slack-blocks\n${JSON.stringify({
+      text: "Run 11111111-1111-4111-8111-111111111111 started",
+      blocks: [
+        {
+          type: validBlocks ? "section" : "unsupported",
+          text: { type: "plain_text", text: "Your report is being prepared." },
+        },
+      ],
+    })}\n\`\`\``;
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text,
+        messageId: "rich-reply",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "rich-reply",
+          role: "assistant",
+          parts: [{ type: "text", text }],
+        },
+      });
+    const user = await makeUser({ email: "rich-reply@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      access: "org",
+    });
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_CTX",
+      workspaceId: "T_CTX",
+      agentId: agent.id,
+    });
+    const provider = createSlackProvider({
+      getUserEmail: async () => user.email,
+    });
+    const sendReply = vi.spyOn(provider, "sendReply");
+    await new ChatOpsManager().processMessage({
+      message: slackMessage(),
+      provider,
+    });
+    expect(executorSpy).toHaveBeenCalledOnce();
+    expect(executorSpy.mock.calls[0][0].message).toContain("slack-blocks");
+    expect(sendReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text,
+        footer: expect.stringContaining(agent.name),
+      }),
+    );
+  });
+
   test("names the channel, so an instruction scoped to one can be checked", async ({
     makeUser,
     makeOrganization,

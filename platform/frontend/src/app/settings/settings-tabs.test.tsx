@@ -258,7 +258,7 @@ describe("useSettingsTabs", () => {
   it("shows Secrets tab only when using Vault storage and user has permission", async () => {
     mockSecretsType = "Vault";
     mockPermissions = {
-      secret: ["read"],
+      organizationSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -274,7 +274,7 @@ describe("useSettingsTabs", () => {
   it("hides Secrets tab when using DB storage", async () => {
     mockSecretsType = "DB";
     mockPermissions = {
-      secret: ["read"],
+      organizationSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -364,7 +364,6 @@ describe("useSettingsTabs", () => {
       ac: ["read"],
       credential: ["read"],
       identityProvider: ["read"],
-      secret: ["read"],
       organizationSettings: ["read"],
       serviceAccount: ["read"],
     };

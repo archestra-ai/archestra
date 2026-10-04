@@ -76,7 +76,6 @@ Full access to core resources, but cannot change organization settings or manage
 | Roles | `read` |
 | Teams | `read` |
 | Identity Providers | `read` |
-| Secrets | `read` |
 
 ### Member
 
@@ -250,8 +249,6 @@ The following table lists all available permissions that can be assigned to cust
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |
 | `scheduledTask:update` | Modify scheduled task configuration |
 | `scheduledTask:delete` | Delete scheduled tasks |
-| `secret:read` | View secrets manager configuration |
-| `secret:update` | Modify secrets manager settings and test connectivity |
 | `serviceAccount:read` | View service accounts |
 | `serviceAccount:create` | Create service accounts |
 | `serviceAccount:update` | Modify service accounts |

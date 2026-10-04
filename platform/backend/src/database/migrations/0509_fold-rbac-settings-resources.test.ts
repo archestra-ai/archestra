@@ -31,6 +31,8 @@ test("drops retired resources without widening organization settings", async ({
       agentTrigger: ["read", "create"],
       siteNotification: ["read", "create"],
       sandbox: ["execute"],
+      secret: ["read", "update"],
+      file: ["manage"],
     },
   });
 

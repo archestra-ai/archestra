@@ -226,6 +226,28 @@ describe("access-control", () => {
     });
   });
 
+  describe("secrets routes", () => {
+    // The secrets backend is organization configuration; reading one stored
+    // Vault reference serves the MCP catalog form, so it follows that form.
+    test("the secrets backend is organization settings", () => {
+      expect(requiredEndpointPermissionsMap[RouteId.GetSecretsType]).toEqual({
+        organizationSettings: ["read"],
+      });
+      expect(
+        requiredEndpointPermissionsMap[RouteId.CheckSecretsConnectivity],
+      ).toEqual({ organizationSettings: ["update"] });
+      expect(requiredPagePermissionsMap["/settings/secrets"]).toEqual({
+        organizationSettings: ["read"],
+      });
+    });
+
+    test("reading a Vault reference follows MCP catalog editing", () => {
+      expect(requiredEndpointPermissionsMap[RouteId.GetSecret]).toEqual({
+        mcpRegistry: ["update"],
+      });
+    });
+  });
+
   describe("conversation soft-delete routes", () => {
     // Restore is the inverse of delete, and listing the trash is part of the
     // delete/restore lifecycle — both gate on chat:delete so a chat:read-only

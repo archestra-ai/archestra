@@ -383055,7 +383055,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Get the secrets manager type and configuration details (for Vault)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`secret:read`: View secrets manager configuration",
+        "description": "Get the secrets manager type and configuration details (for Vault)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -383320,7 +383320,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "secret:read"
+            "organizationSettings:read"
           ]
         }
       }
@@ -383331,7 +383331,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Get a secret by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`secret:read`: View secrets manager configuration",
+        "description": "Get a secret by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
         "parameters": [
           {
             "schema": {
@@ -383626,7 +383626,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "secret:read"
+            "mcpRegistry:update"
           ]
         }
       }
@@ -383637,7 +383637,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Check connectivity to the secrets storage and return secret count.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`secret:update`: Modify secrets manager settings and test connectivity",
+        "description": "Check connectivity to the secrets storage and return secret count.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -383890,7 +383890,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "secret:update"
+            "organizationSettings:update"
           ]
         }
       }

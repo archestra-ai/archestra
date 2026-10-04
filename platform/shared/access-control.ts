@@ -82,7 +82,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ac: ["read", "create", "update", "delete"],
   team: ["read", "create", "update", "delete"],
   identityProvider: ["read", "create", "update", "delete"],
-  secret: ["read", "update"],
   organizationSettings: ["read", "update"],
 
   // UI behavior resources
@@ -144,7 +143,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   ac: ["read"],
   team: ["read"],
   identityProvider: ["read"],
-  secret: ["read"],
   organizationSettings: [],
 
   // Administration
@@ -212,7 +210,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   ac: [],
   team: ["read"],
   identityProvider: [],
-  secret: [],
   organizationSettings: [],
 
   // Administration
@@ -484,8 +481,6 @@ export const permissionDescriptions: Record<string, string> = {
   "identityProvider:create": "Set up new identity providers",
   "identityProvider:update": "Modify identity provider settings",
   "identityProvider:delete": "Remove identity providers",
-  "secret:read": "View secrets manager configuration",
-  "secret:update": "Modify secrets manager settings and test connectivity",
   "apiKey:read": "View API keys",
   "apiKey:create": "Create API keys",
   "apiKey:delete": "Delete API keys",
@@ -1506,13 +1501,15 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Secrets Routes
   [RouteId.GetSecretsType]: {
-    secret: ["read"],
+    organizationSettings: ["read"],
   },
   [RouteId.CheckSecretsConnectivity]: {
-    secret: ["update"],
+    organizationSettings: ["update"],
   },
+  // Only returns Vault references (never values), for prefilling the MCP
+  // catalog form in BYOS mode — so it follows the form, not the settings.
   [RouteId.GetSecret]: {
-    secret: ["read"],
+    mcpRegistry: ["update"],
   },
 
   // Incoming Email Routes
@@ -2089,7 +2086,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Type-wide grants are an access decision, not a role definition, so the
   // page answers to the same permission that opens the roles screen.
   "/settings/identity-providers": { identityProvider: ["read"] },
-  "/settings/secrets": { secret: ["read"] },
+  "/settings/secrets": { organizationSettings: ["read"] },
   "/settings/credentials": { credential: ["read"] },
   "/settings/openappa": { organizationSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },

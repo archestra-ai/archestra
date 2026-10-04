@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 -- The per-area settings resources (agent, LLM, MCP, skills, knowledge and
 -- OpenAPPA settings), agent triggers and site notifications fold into
--- `organizationSettings`; the code sandbox and its file store run under
+-- `organizationSettings`, as does the secrets backend (`secret`); the code
+-- sandbox and its file store run under
 -- `agent:read`; and
 -- inviting people is part of `member:create`. Custom roles drop the retired
 -- keys rather than gaining `organizationSettings`, which would hand a role
@@ -35,7 +36,8 @@ WITH stripped AS (
       'chatAgentPicker',
       'chatProviderSettings',
       'chatExpandToolCalls',
-      'file'
+      'file',
+      'secret'
     ] AS permission
   FROM organization_role
 ),

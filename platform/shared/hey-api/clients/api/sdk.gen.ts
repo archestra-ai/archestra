@@ -9796,7 +9796,7 @@ export const createScheduleTriggerRunConversation = <ThrowOnError extends boolea
  *
  * Authorization:
  *
- * `secret:read`: View secrets manager configuration
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getSecretsType = <ThrowOnError extends boolean = false>(options?: Options<GetSecretsTypeData, ThrowOnError>) => (options?.client ?? client).get<GetSecretsTypeResponses, GetSecretsTypeErrors, ThrowOnError>({ url: '/api/secrets/type', ...options });
 
@@ -9809,7 +9809,7 @@ export const getSecretsType = <ThrowOnError extends boolean = false>(options?: O
  *
  * Authorization:
  *
- * `secret:read`: View secrets manager configuration
+ * `mcpRegistry:update`: Modify MCP registry entries
  */
 export const getSecret = <ThrowOnError extends boolean = false>(options: Options<GetSecretData, ThrowOnError>) => (options.client ?? client).get<GetSecretResponses, GetSecretErrors, ThrowOnError>({ url: '/api/secrets/{id}', ...options });
 
@@ -9822,7 +9822,7 @@ export const getSecret = <ThrowOnError extends boolean = false>(options: Options
  *
  * Authorization:
  *
- * `secret:update`: Modify secrets manager settings and test connectivity
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const checkSecretsConnectivity = <ThrowOnError extends boolean = false>(options?: Options<CheckSecretsConnectivityData, ThrowOnError>) => (options?.client ?? client).post<CheckSecretsConnectivityResponses, CheckSecretsConnectivityErrors, ThrowOnError>({ url: '/api/secrets/check-connectivity', ...options });
 

@@ -48,7 +48,6 @@ export const resources = [
   "llmVirtualKey",
   "llmOauthClient",
   "llmModel",
-  "secret",
   "organizationSettings",
   "scheduledTask",
   /**
@@ -108,7 +107,6 @@ export const resourceLabels: Record<Resource, string> = {
   llmVirtualKey: "LLM Virtual Keys",
   llmOauthClient: "LLM OAuth Clients",
   llmModel: "LLM Models",
-  secret: "Secrets",
   apiKey: "API Keys",
   serviceAccount: "Service Accounts",
   auditLog: "Audit Log",
@@ -153,14 +151,13 @@ export const resourceDescriptions: Record<Resource, string> = {
   team: "Teams for organizing users and access control",
   invitation: "User invitations",
   identityProvider: "Identity providers for authentication",
-  secret: "Secrets manager configuration and connectivity",
   apiKey: "User API keys for programmatic access",
   serviceAccount: "Service accounts and tokens for programmatic access",
   auditLog: "Audit events, with separate own and organization-wide visibility",
   accessPolicies:
     "View and edit organization-wide access policies for every resource type",
   organizationSettings:
-    "Organization-wide settings: appearance, authentication, agents and security, LLM, MCP, skills, knowledge, OpenAPPA enforcement, messaging channels, and site notifications",
+    "Organization-wide settings: appearance, authentication, agents and security, LLM, MCP, skills, knowledge, OpenAPPA enforcement, messaging channels, site notifications, and the secrets backend",
   knowledgeSource:
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
   simpleView: "Collapse the app sidebar by default",
@@ -205,7 +202,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "ac",
     "team",
     "identityProvider",
-    "secret",
     "apiKey",
     "serviceAccount",
     "credential",

@@ -31,7 +31,7 @@ export default function SecretsSettingsPage() {
 
     setActionButton(
       <PermissionButton
-        permissions={{ secret: ["update"] }}
+        permissions={{ organizationSettings: ["update"] }}
         onClick={handleCheckConnectivity}
         disabled={checkConnectivityMutation.isPending}
       >

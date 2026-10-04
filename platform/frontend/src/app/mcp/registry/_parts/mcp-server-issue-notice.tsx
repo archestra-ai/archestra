@@ -122,9 +122,10 @@ export function McpServerIssueNotice({
     { mcpRegistry: ["update"] },
     "*",
   );
-  const { data: canEditCatalog } = useHasPermissions({
-    mcpRegistry: ["update"],
-  });
+  const { data: canEditCatalog } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    item.id,
+  );
   const restoreMutation = useRestoreMcpServerAlerts();
 
   const liveIssues = issues.filter((i) => !i.muted);

@@ -112,7 +112,7 @@ describe("RolePermissionBuilder", () => {
       screen.getByRole("checkbox", { name: "Agents Delete" }),
     ).toBeChecked();
     expect(
-      screen.getByRole("checkbox", { name: "Agents Update" }),
+      screen.getByRole("checkbox", { name: "Agents Create" }),
     ).toBeDisabled();
     expect(
       screen.getByRole("checkbox", { name: "Skills Read" }),

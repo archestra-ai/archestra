@@ -90,7 +90,11 @@ export const TOOL_PERMISSIONS: Record<
   deploy_mcp_server: { resource: "mcpRegistry", action: "update" },
   list_mcp_server_deployments: { resource: "mcpRegistry", action: "read" },
   get_mcp_server_logs: { resource: "mcpRegistry", action: "read" },
-  reload_mcp_server_tools: { resource: "mcpRegistry", action: "update" },
+  // Same gate as the ReloadMcpServerTools route: a subset of reinstalling.
+  reload_mcp_server_tools: {
+    resource: "mcpServerInstallation",
+    action: "create",
+  },
 
   // Teams
   create_team: { resource: "team", action: "create" },

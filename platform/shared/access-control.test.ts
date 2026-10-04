@@ -246,7 +246,7 @@ describe("access-control", () => {
 
   describe("secrets routes", () => {
     // The secrets backend is organization configuration; reading one stored
-    // Vault reference serves the MCP catalog form, so it follows that form.
+    // Vault reference serves the MCP catalog form for one entry.
     test("the secrets backend is organization settings", () => {
       expect(requiredEndpointPermissionsMap[RouteId.GetSecretsType]).toEqual({
         organizationSettings: ["read"],
@@ -259,10 +259,9 @@ describe("access-control", () => {
       });
     });
 
-    test("reading a Vault reference follows MCP catalog editing", () => {
-      expect(requiredEndpointPermissionsMap[RouteId.GetSecret]).toEqual({
-        mcpRegistry: ["update"],
-      });
+    test("reading a Vault reference is decided per registry entry", () => {
+      // The handler requires an update grant on the owning entry.
+      expect(requiredEndpointPermissionsMap[RouteId.GetSecret]).toEqual({});
     });
   });
 

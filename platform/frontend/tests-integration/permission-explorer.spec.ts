@@ -13,7 +13,7 @@ const customRole: archestraApiTypes.GetRoleResponses["200"] = {
   role: "agent_editor",
   name: "Agent editor",
   description: "Create and maintain agents",
-  permission: { agent: ["read", "create", "update", "delete"] },
+  permission: { agent: ["read", "create", "delete"] },
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: null,
   predefined: false,
@@ -125,7 +125,7 @@ test("editing across categories saves the complete role", async ({
   const updated = {
     ...customRole,
     permission: {
-      agent: ["read", "create", "update"],
+      agent: ["read", "create"],
       knowledgeSource: ["read"],
     },
   };

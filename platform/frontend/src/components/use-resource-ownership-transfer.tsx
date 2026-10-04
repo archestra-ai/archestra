@@ -48,17 +48,22 @@ export function useResourceOwnershipTransfer({
       : kind === "catalog"
         ? "mcpRegistry"
         : kind === "remoteAgent"
-          ? "agentSettings"
+          ? "organizationSettings"
           : kind;
+  // Plugins and remote agents keep role-based transfer; every other kind is
+  // transferred by whoever holds `update` and `manage-permissions` on the object.
+  const roleBased = kind === "plugin" || kind === "remoteAgent";
+  const objectGrant = useHasPermissions(
+    { [permissionResource]: ["update", "manage-permissions"] },
+    roleBased ? undefined : (resource?.id ?? ""),
+  );
   const update = useHasPermissions({ [permissionResource]: ["update"] });
   // Managing every object of the kind is `update` at `*`, the grant the
   // retired `admin` role actions became.
   const admin = useHasPermissions(
-    kind === "catalog"
-      ? { mcpRegistry: ["update"] }
-      : kind === "remoteAgent"
-        ? { organizationSettings: ["update"] }
-        : { [permissionResource]: ["update"] },
+    kind === "remoteAgent"
+      ? { organizationSettings: ["update"] }
+      : { [permissionResource]: ["update"] },
     "*",
   );
   const managed =
@@ -72,12 +77,13 @@ export function useResourceOwnershipTransfer({
       (resource?.organizationId === null ||
         resource?.id === ARCHESTRA_MCP_CATALOG_ID ||
         resource?.serverType === "app"));
-  const allowed =
-    !!update.data &&
-    (!!admin.data ||
-      (kind !== "plugin" &&
-        !!session?.user.id &&
-        resource?.authorId === session.user.id));
+  const allowed = roleBased
+    ? !!update.data &&
+      (!!admin.data ||
+        (kind !== "plugin" &&
+          !!session?.user.id &&
+          resource?.authorId === session.user.id))
+    : !!objectGrant.data;
   return {
     menuItem:
       resource && !managed ? (

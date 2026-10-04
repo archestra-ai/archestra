@@ -1,8 +1,10 @@
 import { RouteId, SecretsManagerType } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import SecretModel from "@/models/secret";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   constructResponseSchema,
@@ -47,7 +49,32 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectSecretSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Only the configuration secret of an MCP registry entry the caller can
+      // edit: the catalog form prefills its Vault references from it. Anything
+      // else answers as missing rather than disclosing that it exists.
+      const catalogIds =
+        await InternalMcpCatalogModel.findIdsByLocalConfigSecretId({
+          secretId: id,
+          organizationId,
+        });
+      const canEditOwningEntry = (
+        await Promise.all(
+          catalogIds.map((scope) =>
+            ResourcePermissions.allows({
+              userId: user.id,
+              organizationId,
+              resource: "mcpRegistry",
+              scope,
+              action: "update",
+            }),
+          ),
+        )
+      ).some(Boolean);
+      if (!canEditOwningEntry) {
+        throw new ApiError(404, "Secret not found");
+      }
+
       // Security: Only allow access to secrets when BYOS is enabled or the secret is a BYOS secret.
       // This prevents exposing actual secret values (API keys, tokens, etc.) when BYOS is not enabled.
       // When BYOS is enabled, secrets contain vault references (safe to expose) rather than actual values.

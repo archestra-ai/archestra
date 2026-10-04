@@ -332,11 +332,11 @@ Required RBAC permission: `credential:create`
 | `create_agent` | Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. | `agent:create` |
 | `get_agent` | Get a specific agent by ID or name. | `agent:read` |
 | `list_agents` | List agents with optional filtering by name or provider key. | `agent:read` |
-| `edit_agent` | Edit an existing agent. | `agent:update` |
+| `edit_agent` | Edit an existing agent. | `update` on the agent (granted per item) |
 | `list_hooks` | List an agent's lifecycle hooks. | `agent:read` |
-| `create_hook` | Create a lifecycle hook on an agent. | `agent:update` |
-| `update_hook` | Update an existing lifecycle hook: its event, file name, script content, Python requirements, or enabled state. | `agent:update` |
-| `delete_hook` | Delete a lifecycle hook by ID. | `agent:update` |
+| `create_hook` | Create a lifecycle hook on an agent. | `update` on the agent (granted per item) |
+| `update_hook` | Update an existing lifecycle hook: its event, file name, script content, Python requirements, or enabled state. | `update` on the agent (granted per item) |
+| `delete_hook` | Delete a lifecycle hook by ID. | `update` on the agent (granted per item) |
 
 #### create_agent
 
@@ -472,7 +472,7 @@ Required RBAC permission: `agent:read`
 
 #### edit_agent
 
-Required RBAC permission: `agent:update`
+Required RBAC permission: `update` on the agent (granted per item)
 
 ##### Input
 
@@ -531,7 +531,7 @@ Availability: Served only when the code runtime is enabled (the same prerequisit
 
 #### create_hook
 
-Required RBAC permission: `agent:update`
+Required RBAC permission: `update` on the agent (granted per item)
 
 Availability: Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.
 
@@ -563,7 +563,7 @@ Availability: Served only when the code runtime is enabled (the same prerequisit
 
 #### update_hook
 
-Required RBAC permission: `agent:update`
+Required RBAC permission: `update` on the agent (granted per item)
 
 Availability: Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.
 
@@ -595,7 +595,7 @@ Availability: Served only when the code runtime is enabled (the same prerequisit
 
 #### delete_hook
 
-Required RBAC permission: `agent:update`
+Required RBAC permission: `update` on the agent (granted per item)
 
 Availability: Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.
 
@@ -618,7 +618,7 @@ Availability: Served only when the code runtime is enabled (the same prerequisit
 |------|-------------|--------------------------|
 | `create_mcp_gateway` | Create a new MCP gateway with the specified name, optional labels, and optional assigned knowledge bases or knowledge connectors. | `mcpGateway:create` |
 | `get_mcp_gateway` | Get a specific MCP gateway by ID or name. | `mcpGateway:read` |
-| `edit_mcp_gateway` | Edit an existing MCP gateway. | `mcpGateway:update` |
+| `edit_mcp_gateway` | Edit an existing MCP gateway. | `update` on the MCP gateway (granted per item) |
 
 #### create_mcp_gateway
 
@@ -688,7 +688,7 @@ Required RBAC permission: `mcpGateway:read`
 
 #### edit_mcp_gateway
 
-Required RBAC permission: `mcpGateway:update`
+Required RBAC permission: `update` on the MCP gateway (granted per item)
 
 ##### Input
 
@@ -713,13 +713,13 @@ Required RBAC permission: `mcpGateway:update`
 | `search_private_mcp_registry` | Search the private MCP registry for available MCP servers. | `mcpRegistry:read` |
 | `get_mcp_servers` | List all MCP servers from the catalog. | `mcpRegistry:read` |
 | `get_mcp_server_tools` | Get all tools available for a specific MCP server by its catalog ID (from get_mcp_servers). | `mcpRegistry:read` |
-| `edit_mcp_description` | Edit an MCP server's display information and metadata. | `mcpRegistry:update` |
-| `edit_mcp_config` | Edit an MCP server's technical configuration. | `mcpRegistry:update` |
+| `edit_mcp_description` | Edit an MCP server's display information and metadata. | `update` on the MCP registry entry (granted per item) |
+| `edit_mcp_config` | Edit an MCP server's technical configuration. | `update` on the MCP registry entry (granted per item) |
 | `create_mcp_server` | Create a new MCP server in the private registry. | `mcpRegistry:create` |
-| `deploy_mcp_server` | Deploy (install) an MCP server from the catalog. | `mcpRegistry:update` |
+| `deploy_mcp_server` | Deploy (install) an MCP server from the catalog. | `update` on the MCP registry entry (granted per item) |
 | `list_mcp_server_deployments` | List all deployed (installed) MCP server instances accessible to the current user. | `mcpRegistry:read` |
 | `get_mcp_server_logs` | Get recent container logs from a deployed local (K8s) MCP server. | `mcpRegistry:read` |
-| `reload_mcp_server_tools` | Re-discover a deployed MCP server's tools from the live server and refresh Archestra's tool catalog for it — picks up added, removed, and changed tools (names, descriptions, and input schemas) with... | `mcpRegistry:update` |
+| `reload_mcp_server_tools` | Re-discover a deployed MCP server's tools from the live server and refresh Archestra's tool catalog for it — picks up added, removed, and changed tools (names, descriptions, and input schemas) with... | `mcpServerInstallation:create` |
 
 #### search_private_mcp_registry
 
@@ -786,7 +786,7 @@ Required RBAC permission: `mcpRegistry:read`
 
 #### edit_mcp_description
 
-Required RBAC permission: `mcpRegistry:update`
+Required RBAC permission: `update` on the MCP registry entry (granted per item)
 
 ##### Input
 
@@ -807,7 +807,7 @@ Required RBAC permission: `mcpRegistry:update`
 
 #### edit_mcp_config
 
-Required RBAC permission: `mcpRegistry:update`
+Required RBAC permission: `update` on the MCP registry entry (granted per item)
 
 ##### Input
 
@@ -918,7 +918,7 @@ Required RBAC permission: `mcpRegistry:create`
 
 #### deploy_mcp_server
 
-Required RBAC permission: `mcpRegistry:update`
+Required RBAC permission: `update` on the MCP registry entry (granted per item)
 
 ##### Input
 
@@ -951,7 +951,7 @@ Required RBAC permission: `mcpRegistry:read`
 
 #### reload_mcp_server_tools
 
-Required RBAC permission: `mcpRegistry:update`
+Required RBAC permission: `mcpServerInstallation:create`
 
 ##### Input
 
@@ -1716,13 +1716,13 @@ Required RBAC permission: `toolPolicy:delete`
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `bulk_assign_tools_to_agents` | Assign multiple tools to multiple agents in bulk with validation and error handling | `agent:update` |
-| `bulk_remove_tools_from_agents` | Remove multiple tools from multiple agents in bulk. | `agent:update` |
-| `bulk_assign_tools_to_mcp_gateways` | Assign multiple tools to multiple MCP gateways in bulk with validation and error handling | `mcpGateway:update` |
+| `bulk_assign_tools_to_agents` | Assign multiple tools to multiple agents in bulk with validation and error handling | `update` on the agent (granted per item) |
+| `bulk_remove_tools_from_agents` | Remove multiple tools from multiple agents in bulk. | `update` on the agent (granted per item) |
+| `bulk_assign_tools_to_mcp_gateways` | Assign multiple tools to multiple MCP gateways in bulk with validation and error handling | `update` on the MCP gateway (granted per item) |
 
 #### bulk_assign_tools_to_agents
 
-Required RBAC permission: `agent:update`
+Required RBAC permission: `update` on the agent (granted per item)
 
 ##### Input
 
@@ -1760,7 +1760,7 @@ Required RBAC permission: `agent:update`
 
 #### bulk_remove_tools_from_agents
 
-Required RBAC permission: `agent:update`
+Required RBAC permission: `update` on the agent (granted per item)
 
 ##### Input
 
@@ -1789,7 +1789,7 @@ Required RBAC permission: `agent:update`
 
 #### bulk_assign_tools_to_mcp_gateways
 
-Required RBAC permission: `mcpGateway:update`
+Required RBAC permission: `update` on the MCP gateway (granted per item)
 
 ##### Input
 
@@ -2725,8 +2725,8 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `list_skills` | List the Agent Skills available in this organization — one line per skill (name and description). | `skill:read` |
 | `load_skill` | Load a specialized Agent Skill — a reusable SKILL.md instruction set. | `skill:read` |
 | `create_skill` | Create a new Agent Skill from a SKILL.md manifest. | `skill:create` |
-| `update_skill` | Update an existing Agent Skill from a SKILL.md manifest. | `skill:update` |
-| `edit_skill` | Make a targeted edit to an existing Agent Skill without resending the whole SKILL.md. | `skill:update` |
+| `update_skill` | Update an existing Agent Skill from a SKILL.md manifest. | `update` on the skill (granted per item) |
+| `edit_skill` | Make a targeted edit to an existing Agent Skill without resending the whole SKILL.md. | `update` on the skill (granted per item) |
 
 #### list_skills
 
@@ -2769,7 +2769,7 @@ Required RBAC permission: `skill:create`
 
 #### update_skill
 
-Required RBAC permission: `skill:update`
+Required RBAC permission: `update` on the skill (granted per item)
 
 ##### Input
 
@@ -2785,7 +2785,7 @@ Required RBAC permission: `skill:update`
 
 #### edit_skill
 
-Required RBAC permission: `skill:update`
+Required RBAC permission: `update` on the skill (granted per item)
 
 ##### Input
 
@@ -3453,25 +3453,25 @@ Required RBAC permission: `agent:read`
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
 | `scaffold_app` | Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. | `app:create` |
-| `refine_app` | Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. | `app:update` |
+| `refine_app` | Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. | `update` on the app (granted per item) |
 | `list_apps` | List apps visible to the caller, optionally filtered by name or labels — use it to find an app's id. | `app:read` |
 | `list_app_versions` | List the immutable versions of an app, newest first, without returning their HTML. | `app:read` |
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
 | `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
-| `restore_app_version` | Restore a historical app version directly on the server as a new head version. | `app:update` |
-| `edit_app` | The single path for any change to an app's HTML: pass edits for targeted str_replace changes, imageReplacements to replace embedded images from chat attachments without sending base64 through the m... | `app:update` |
-| `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `app:update` |
-| `set_app_labels` | Replace an app's labels with exactly the set you pass ([] clears them). | `app:update` |
-| `set_app_lock` | Lock or unlock an app. | `app:update` |
+| `restore_app_version` | Restore a historical app version directly on the server as a new head version. | `update` on the app (granted per item) |
+| `edit_app` | The single path for any change to an app's HTML: pass edits for targeted str_replace changes, imageReplacements to replace embedded images from chat attachments without sending base64 through the m... | `update` on the app (granted per item) |
+| `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `update` on the app (granted per item) |
+| `set_app_labels` | Replace an app's labels with exactly the set you pass ([] clears them). | `update` on the app (granted per item) |
+| `set_app_lock` | Lock or unlock an app. | `update` on the app (granted per item) |
 | `validate_app` | The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true w... | `app:read` |
-| `publish_app` | Share an app by granting read and use access to specific teams (scope: team, teams: names or IDs) or the whole organization (scope: org). | `app:manage-permissions` |
-| `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
+| `publish_app` | Share an app by granting read and use access to specific teams (scope: team, teams: names or IDs) or the whole organization (scope: org). | `manage-permissions` on the app (granted per item) |
+| `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `update` on the app (granted per item) |
 | `get_app_diagnostics` | Check how the app's current version rendered for you. | `app:read` |
-| `delete_app` | Soft-delete an app the caller owns or administers, and remove its MCP backing so it is no longer served. | `app:delete` |
+| `delete_app` | Soft-delete an app the caller owns or administers, and remove its MCP backing so it is no longer served. | `delete` on the app (granted per item) |
 | `app_data_get` | Read a value from the calling app's data store (per-user or shared partition). | `app:read` |
-| `app_data_set` | Write a value to the calling app's data store (per-user or shared partition). | `app:update` |
+| `app_data_set` | Write a value to the calling app's data store (per-user or shared partition). | `update` on the app (granted per item) |
 | `app_data_list` | List all entries in one partition of the calling app's data store. | `app:read` |
-| `app_data_delete` | Delete a key from the calling app's data store (per-user or shared partition). | `app:update` |
+| `app_data_delete` | Delete a key from the calling app's data store (per-user or shared partition). | `update` on the app (granted per item) |
 | `llm_complete` | Run a single LLM completion for the calling app (backs archestra.llm.complete). | `app:read` |
 
 #### scaffold_app
@@ -3519,7 +3519,7 @@ Required RBAC permission: `app:create`
 
 #### refine_app
 
-Required RBAC permission: `app:update`
+Required RBAC permission: `update` on the app (granted per item)
 
 ##### Input
 
@@ -3659,7 +3659,7 @@ Required RBAC permission: `app:read`
 
 #### restore_app_version
 
-Required RBAC permission: `app:update`
+Required RBAC permission: `update` on the app (granted per item)
 
 ##### Input
 
@@ -3685,7 +3685,7 @@ Required RBAC permission: `app:update`
 
 #### edit_app
 
-Required RBAC permission: `app:update`
+Required RBAC permission: `update` on the app (granted per item)
 
 ##### Input
 
@@ -3721,7 +3721,7 @@ Required RBAC permission: `app:update`
 
 #### set_app_tools
 
-Required RBAC permission: `app:update`
+Required RBAC permission: `update` on the app (granted per item)
 
 ##### Input
 
@@ -3739,7 +3739,7 @@ Required RBAC permission: `app:update`
 
 #### set_app_labels
 
-Required RBAC permission: `app:update`
+Required RBAC permission: `update` on the app (granted per item)
 
 ##### Input
 
@@ -3761,7 +3761,7 @@ Required RBAC permission: `app:update`
 
 #### set_app_lock
 
-Required RBAC permission: `app:update`
+Required RBAC permission: `update` on the app (granted per item)
 
 ##### Input
 
@@ -3807,7 +3807,7 @@ Required RBAC permission: `app:read`
 
 #### publish_app
 
-Required RBAC permission: `app:manage-permissions`
+Required RBAC permission: `manage-permissions` on the app (granted per item)
 
 ##### Input
 
@@ -3827,7 +3827,7 @@ Required RBAC permission: `app:manage-permissions`
 
 #### preview_app_tool
 
-Required RBAC permission: `app:update`
+Required RBAC permission: `update` on the app (granted per item)
 
 ##### Input
 
@@ -3870,7 +3870,7 @@ Required RBAC permission: `app:read`
 
 #### delete_app
 
-Required RBAC permission: `app:delete`
+Required RBAC permission: `delete` on the app (granted per item)
 
 ##### Input
 
@@ -3900,7 +3900,7 @@ Required RBAC permission: `app:read`
 
 #### app_data_set
 
-Required RBAC permission: `app:update`
+Required RBAC permission: `update` on the app (granted per item)
 
 ##### Input
 
@@ -3942,7 +3942,7 @@ Required RBAC permission: `app:read`
 
 #### app_data_delete
 
-Required RBAC permission: `app:update`
+Required RBAC permission: `update` on the app (granted per item)
 
 ##### Input
 

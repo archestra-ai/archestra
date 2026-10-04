@@ -5,6 +5,7 @@ import {
   type Action,
   type archestraApiTypes,
   isPermissionActionGranted,
+  ManagedResourceSchema,
   type Permissions,
   type Resource,
   resourceCategories,
@@ -14,6 +15,7 @@ import {
 import {
   allAvailableActions,
   permissionDescriptions,
+  roleActionResourceFor,
 } from "@archestra/shared/access-control";
 import { Check, Info } from "lucide-react";
 import { useId, useState } from "react";
@@ -279,6 +281,14 @@ export function PermissionExplorer({
                     );
                   })}
                 </div>
+                {group.resources.some((resource) =>
+                  PER_ITEM_RESOURCES.has(resource),
+                ) && (
+                  <p className="pt-3 text-xs text-muted-foreground">
+                    Which specific items someone can see, edit, delete or share
+                    is set on each item's Permissions tab.
+                  </p>
+                )}
               </section>
             ))}
           </div>
@@ -395,6 +405,15 @@ function PermissionAction({
 }
 
 const standardActions: Action[] = ["read", "create", "update", "delete"];
+// Role resources whose individual items carry their own grants. Environments
+// and scheduled tasks are governed organization-wide instead.
+const PER_ITEM_RESOURCES = new Set<Resource>(
+  ManagedResourceSchema.options
+    .filter(
+      (resource) => resource !== "environment" && resource !== "scheduledTask",
+    )
+    .map(roleActionResourceFor),
+);
 const UNGRANTABLE_PERMISSION_TOOLTIP =
   "You can only grant permissions that you currently have yourself.";
 const actionLabels: Record<Action, string> = {

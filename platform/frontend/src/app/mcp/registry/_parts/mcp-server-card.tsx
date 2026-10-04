@@ -934,6 +934,7 @@ export function McpServerCard({
                 ? { mcpRegistry: ["update"] }
                 : { mcpServerInstallation: ["create"] }
             }
+            permissionScope={showAdminCatalogReinstall ? item.id : undefined}
             onClick={triggerCombinedReinstall}
             disabled={reinstallCatalogMutation.isPending || showApprovalPanel}
             size="sm"

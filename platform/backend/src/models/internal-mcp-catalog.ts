@@ -737,6 +737,30 @@ class InternalMcpCatalogModel {
     return rows.map((row) => row.id);
   }
 
+  /** Live catalog entries in an organization whose local configuration is this secret. */
+  static async findIdsByLocalConfigSecretId(params: {
+    secretId: string;
+    organizationId: string;
+  }): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(
+            schema.internalMcpCatalogTable.localConfigSecretId,
+            params.secretId,
+          ),
+          eq(
+            schema.internalMcpCatalogTable.organizationId,
+            params.organizationId,
+          ),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
+    return rows.map((row) => row.id);
+  }
+
   /**
    * Whether a catalog of this name would give its tools the prefix the built-in
    * server's tools carry in every organization.

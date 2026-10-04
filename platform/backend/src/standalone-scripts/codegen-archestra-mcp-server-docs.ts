@@ -10,7 +10,13 @@ import {
   getArchestraToolGroupId,
   getArchestraToolShortName,
   isAppRuntimeOnlyArchestraToolShortName,
+  type Resource,
+  resourceLabels,
 } from "@archestra/shared";
+import {
+  allAvailableActions,
+  roleActionResourceFor,
+} from "@archestra/shared/access-control";
 import { getAllArchestraMcpTools } from "@/archestra-mcp-server";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";
@@ -405,6 +411,12 @@ export function formatToolPermission(
     return "None (no additional RBAC permission required)";
   }
 
+  // No role holds this action: it is granted on the individual item.
+  const resource = roleActionResourceFor(permission.resource);
+  if (!allAvailableActions[resource]?.includes(permission.action as never)) {
+    const item = perItemNoun(resource);
+    return `\`${permission.action}\` on the ${item} (granted per item)`;
+  }
   return `\`${permission.resource}:${permission.action}\``;
 }
 
@@ -715,4 +727,16 @@ function getObjectSchema(schema?: JsonSchema): JsonSchema | undefined {
 function getUnionVariants(schema: JsonSchema): JsonSchema[] | undefined {
   const variants = schema.anyOf ?? schema.oneOf;
   return variants && variants.length > 0 ? variants : undefined;
+}
+
+// A function, not a constant: this script runs while the module loads.
+function perItemNoun(resource: Resource): string {
+  switch (resource) {
+    case "mcpGateway":
+      return "MCP gateway";
+    case "mcpRegistry":
+      return "MCP registry entry";
+    default:
+      return resourceLabels[resource].toLowerCase().replace(/s$/, "");
+  }
 }

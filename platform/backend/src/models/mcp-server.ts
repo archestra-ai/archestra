@@ -1939,6 +1939,10 @@ class McpServerModel {
       .select({ server: schema.mcpServersTable })
       .from(schema.mcpServersTable)
       .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .leftJoin(
         schema.teamsTable,
         eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
       )
@@ -1953,6 +1957,10 @@ class McpServerModel {
         and(
           eq(schema.mcpServersTable.id, id),
           isNotNull(schema.mcpServersTable.deletedAt),
+          or(
+            isNull(schema.internalMcpCatalogTable.organizationId),
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          ),
           or(
             eq(schema.teamsTable.organizationId, organizationId),
             isNotNull(schema.membersTable.id),
@@ -2406,6 +2414,10 @@ class McpServerModel {
       .where(
         and(
           isNotNull(schema.mcpServersTable.deletedAt),
+          or(
+            isNull(schema.internalMcpCatalogTable.organizationId),
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          ),
           ne(schema.mcpServersTable.serverType, "app"),
           or(
             eq(schema.teamsTable.organizationId, organizationId),

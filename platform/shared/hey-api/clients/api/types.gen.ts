@@ -1478,12 +1478,27 @@ export type AnthropicMessagesRequestInput = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
     } | {
         type: 'disabled';
+        [key: string]: unknown;
+    } | {
+        type: 'between_tools';
+        [key: string]: unknown;
     } | {
         type: 'adaptive';
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     };
     tool_choice?: {
         type: 'auto';
@@ -7784,12 +7799,27 @@ export type AnthropicMessagesRequest = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
     } | {
         type: 'disabled';
+        [key: string]: unknown;
+    } | {
+        type: 'between_tools';
+        [key: string]: unknown;
     } | {
         type: 'adaptive';
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     };
     tool_choice?: {
         type: 'auto';
@@ -33425,12 +33455,27 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -33764,12 +33809,27 @@ export type BedrockInvokeWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -34104,12 +34164,27 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -34376,12 +34451,27 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -49021,12 +49111,27 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'disabled';
+                    [key: string]: unknown;
+                } | {
+                    type: 'between_tools';
+                    [key: string]: unknown;
                 } | {
                     type: 'adaptive';
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -49270,12 +49375,27 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'disabled';
+                    [key: string]: unknown;
+                } | {
+                    type: 'between_tools';
+                    [key: string]: unknown;
                 } | {
                     type: 'adaptive';
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -56254,12 +56374,27 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
             } | {
                 type: 'disabled';
+                [key: string]: unknown;
+            } | {
+                type: 'between_tools';
+                [key: string]: unknown;
             } | {
                 type: 'adaptive';
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             };
             tool_choice?: {
                 type: 'auto';
@@ -56503,12 +56638,27 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
             } | {
                 type: 'disabled';
+                [key: string]: unknown;
+            } | {
+                type: 'between_tools';
+                [key: string]: unknown;
             } | {
                 type: 'adaptive';
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             };
             tool_choice?: {
                 type: 'auto';
@@ -61216,7 +61366,7 @@ export type GetInternalMcpCatalogData = {
     query?: {
         includeApps?: boolean;
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default).
+         * Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.
          */
         status?: 'active' | 'deleted';
     };
@@ -76912,7 +77062,7 @@ export type GetMcpServersData = {
         assignmentScope?: 'personal' | 'team' | 'org';
         assignmentTeamIds?: Array<string>;
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default).
+         * Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires delete permission and is limited to connections you can uninstall.
          */
         status?: 'active' | 'deleted';
     };
@@ -87518,7 +87668,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'impersonate' | 'admin'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -87542,7 +87692,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'impersonate' | 'admin'>;
         };
     };
     path?: never;
@@ -87626,7 +87776,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'impersonate' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87812,7 +87962,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'impersonate' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87827,7 +87977,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'impersonate' | 'admin'>;
         };
     };
     path: {
@@ -87916,7 +88066,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'impersonate' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -108103,7 +108253,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'impersonate' | 'admin'>;
         };
     }>;
 };
@@ -108187,7 +108337,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate' | 'admin'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'impersonate' | 'admin'>;
     };
 };
 
@@ -112405,7 +112555,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
     };
     query?: {
         query?: string;
@@ -112584,7 +112734,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions';
     }>;
@@ -112595,7 +112745,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: {
@@ -112700,7 +112850,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -112777,7 +112927,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;
@@ -112852,7 +113002,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -112929,7 +113079,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;

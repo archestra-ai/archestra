@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   isResourcePermissionPreset,
+  ManagedResourceSchema,
   type PermissionSubject,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
@@ -8,7 +9,6 @@ import {
   resourcePermissionPresets,
   resourcePermissionPresetsFor,
   type ScopedResource,
-  ScopedResourceSchema,
   widenToPreset,
 } from "@archestra/shared";
 import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
@@ -147,7 +147,7 @@ export default class ResourcePermissionPolicyModel {
     await params.tx
       .insert(schema.resourcePermissionPoliciesTable)
       .values([
-        ...ScopedResourceSchema.options
+        ...ManagedResourceSchema.options
           .filter(
             (resource) =>
               resource !== "conversation" && resource !== "agentRun",
@@ -158,13 +158,9 @@ export default class ResourcePermissionPolicyModel {
             scope: "*",
             legacySharingMigrated: true,
             grants: [
-              ...(resource === "log" || resource === "auditLog"
-                ? ["admin"]
-                : ["admin", "platform_admin"]
-              ).map((id) => ({
+              ...["admin", "platform_admin"].map((id) => ({
                 subject: { type: "role" as const, id },
-                // The top preset of each resource: for logs that is read plus
-                // managing access, for OAuth clients everything but `use`.
+                // OAuth registrations offer every action except `use`.
                 actions: [
                   ...resourcePermissionPresetsFor(resource).manage.actions,
                 ],
@@ -822,7 +818,7 @@ export default class ResourcePermissionPolicyModel {
     organizationId: string,
     routeParams?: Record<string, unknown>,
   ) {
-    const resource = ScopedResourceSchema.safeParse(routeParams?.resource);
+    const resource = ManagedResourceSchema.safeParse(routeParams?.resource);
     if (!resource.success) return null;
     const policy = await ResourcePermissionPolicyModel.find({
       organizationId,

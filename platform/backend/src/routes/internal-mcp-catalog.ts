@@ -173,7 +173,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .enum(["active", "deleted"])
             .default("active")
             .describe(
-              "Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default).",
+              "Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.",
             ),
         }),
         response: constructResponseSchema(
@@ -188,34 +188,31 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      // Soft-deleted catalog items are visible only to holders of the dedicated
-      // manage-deleted capability (admins by default) — the ordinary delete
-      // permission must not unlock the org-wide tombstone view. This lists
-      // org-scoped deleted roots (a backend affordance for discovering
-      // restorable ids — no UI toggle this change).
       if (request.query.status === "deleted") {
-        const { success: canManageDeleted } = await hasPermission(
-          { mcpRegistry: ["manage-deleted"] },
-          request.headers,
-        );
-        if (!canManageDeleted) {
-          throw new ApiError(
-            403,
-            "You do not have permission to list deleted catalog items.",
-          );
-        }
         const deleted =
           await InternalMcpCatalogModel.findDeletedForOrganization(
             request.organizationId,
           );
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Trash uses the same per-entry delete grants as the live registry.
+        const actions = await ResourcePermissions.getCatalogActions({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          targets: deleted,
+        });
         return reply.send(
-          deleted.map((item) => ({
-            ...item,
-            alertMutes: [],
-            imageApprovalRequired: false,
-            effectiveActions: [],
-          })),
+          deleted
+            .filter((item) => actions.get(item.id)?.includes("delete"))
+            .map((item) => ({
+              ...item,
+              alertMutes: [],
+              imageApprovalRequired: false,
+              effectiveActions: actions.get(item.id) ?? [],
+            })),
         );
+        // SPDX-SnippetEnd
       }
 
       const isAdmin = await isMcpInstallationAdmin({
@@ -1846,9 +1843,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Authorization is the route-level manage-deleted permission (admin-only
-      // by default): deleted-resource lifecycle is one org-scoped capability,
-      // not derived from authorship of the live resource.
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "mcpRegistry",
+        scope: id,
+        action: "delete",
+        includeDeleted: true,
+      });
+      // SPDX-SnippetEnd
 
       const conflict =
         await InternalMcpCatalogModel.getRestoreConflictMessage(catalogItem);

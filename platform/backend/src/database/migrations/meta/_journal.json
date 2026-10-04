@@ -3540,8 +3540,22 @@
     {
       "idx": 505,
       "version": "7",
-      "when": 1791072233012,
-      "tag": "0505_peer-message-inbox",
+      "when": 1790974534285,
+      "tag": "0505_simplify-role-permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 506,
+      "version": "7",
+      "when": 1790979396089,
+      "tag": "0506_openappa-unenforced-records",
+      "breakpoints": true
+    },
+    {
+      "idx": 507,
+      "version": "7",
+      "when": 1791074452370,
+      "tag": "0507_peer-message-inbox",
       "breakpoints": true
     }
   ]

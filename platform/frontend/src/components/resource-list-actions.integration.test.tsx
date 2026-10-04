@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { archestraApiClient, type ScopedResource } from "@archestra/shared";
+import {
+  type Action,
+  archestraApiClient,
+  type ScopedResource,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -74,10 +78,12 @@ function renderActions({
   resource = "agent",
   scope = "*",
   secondary = false,
+  globalActions = ["read", "update"],
 }: {
   resource?: ScopedResource;
   scope?: string;
   secondary?: boolean;
+  globalActions?: Action[];
 } = {}) {
   const client = new QueryClient({
     defaultOptions: {
@@ -86,6 +92,9 @@ function renderActions({
     },
   });
   client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
+  client.setQueryData(["auth", "userPermissions"], {
+    accessPolicies: globalActions,
+  });
   client.setQueryData(
     ["scoped-capabilities"],
     [{ resource, scope, action: "read" }],
@@ -131,7 +140,7 @@ it("edits only the all-agents policy and guards dismissing unsaved changes", asy
   const dialog = await screen.findByRole("dialog", {
     name: "Permissions for all agents",
   });
-  expect(dialog).toHaveTextContent("including ones created later");
+  expect(dialog).toHaveTextContent("including new ones");
   await user.click(
     await within(dialog).findByRole("combobox", {
       name: "Permission for Support",
@@ -201,6 +210,7 @@ it("does not offer all-resource permissions to a recipient with only individual 
   renderActions({
     scope: "00000000-0000-4000-8000-000000000010",
     secondary: true,
+    globalActions: [],
   });
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "More actions" }));
@@ -215,7 +225,7 @@ it("does not offer all-resource permissions to a recipient with only individual 
 it("opens a linked read-only permissions dialog for the current resource and preserves list filters on close", async () => {
   policy = { ...policy, resource: "skill", effectiveActions: ["read"] };
   navigation.search = "permissions=all&search=example";
-  renderActions({ resource: "skill" });
+  renderActions({ resource: "skill", globalActions: ["read"] });
   const dialog = await screen.findByRole("dialog", {
     name: "Permissions for all skills",
   });

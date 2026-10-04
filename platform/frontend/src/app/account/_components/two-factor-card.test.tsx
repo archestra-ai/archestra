@@ -61,7 +61,12 @@ describe("TwoFactorCard", () => {
 
     renderCard();
 
-    await user.click(await screen.findByRole("button", { name: "Enable 2FA" }));
+    const toggle = await screen.findByRole("switch", {
+      name: "Two-factor authentication",
+    });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await user.click(toggle);
+    expect(toggle).not.toBeChecked();
 
     // Same flow as mandatory enrollment, in place: the account page should
     // not hand the user off to /auth.
@@ -83,7 +88,7 @@ describe("TwoFactorCard", () => {
       ),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Enable 2FA" }),
+      screen.getByRole("switch", { name: "Two-factor authentication" }),
     ).toBeInTheDocument();
   });
 
@@ -92,9 +97,10 @@ describe("TwoFactorCard", () => {
 
     renderCard({ required: true });
 
-    expect(
-      await screen.findByRole("button", { name: "Disable 2FA" }),
-    ).toBeInTheDocument();
+    const toggle = await screen.findByRole("switch", {
+      name: "Two-factor authentication",
+    });
+    await waitFor(() => expect(toggle).toBeChecked());
     expect(
       screen.queryByText(
         "Your organization requires two-factor authentication. Set it up now to continue using the platform.",
@@ -118,8 +124,32 @@ describe("TwoFactorCard", () => {
     renderCard();
 
     expect(
-      await screen.findByRole("button", { name: "Disable 2FA" }),
+      await screen.findByRole("switch", { name: "Two-factor authentication" }),
     ).toBeInTheDocument();
+  });
+
+  it.each([
+    false,
+    true,
+  ])("keeps 2FA unchanged when its dialog is cancelled (enabled: %s)", async (enabled) => {
+    const user = userEvent.setup();
+    mockSession(enabled);
+    renderCard();
+    const toggle = await screen.findByRole("switch", {
+      name: "Two-factor authentication",
+    });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).toHaveAttribute("aria-checked", String(enabled));
+    await user.click(toggle);
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(toggle).toBeEnabled();
+    expect(toggle).toHaveAttribute("aria-checked", String(enabled));
+    expect(authClient.twoFactor.enable).not.toHaveBeenCalled();
+    expect(authClient.twoFactor.disable).not.toHaveBeenCalled();
   });
 
   it("disables 2FA with password confirmation", async () => {
@@ -132,9 +162,12 @@ describe("TwoFactorCard", () => {
 
     renderCard();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Disable 2FA" }),
-    );
+    const toggle = await screen.findByRole("switch", {
+      name: "Two-factor authentication",
+    });
+    await waitFor(() => expect(toggle).toBeChecked());
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
     await user.type(screen.getByLabelText("Password"), "hunter22");
     await user.click(screen.getByRole("button", { name: "Continue" }));
 

@@ -34,22 +34,20 @@ export const ScopedResourceSchema = z.enum([
   // create. They are granted at `*` and nowhere else, so they appear on the
   // organization Permissions screen and never on an object's own tab.
   "scheduledTask",
+  // Retained only to decode historical stored policies during migration.
   "log",
   "auditLog",
 ]);
 
-/**
- * Resources whose only legal scope is `*`.
- *
- * An action like `log:admin` was never about one object; it lifted a list from
- * "rows you created" to "every row". Converting it to a grant keeps that
- * meaning and makes it something a custom role can receive, which a role
- * action never could — role permission snapshots are frozen at creation.
- */
-export const ORGANIZATION_WIDE_RESOURCES = new Set<ScopedResource>([
-  "scheduledTask",
+/** Resource types whose policies can be managed through the current API. */
+export const ManagedResourceSchema = ScopedResourceSchema.exclude([
   "log",
   "auditLog",
+]);
+
+/** Resources with no individual object policy. Logs use role actions instead. */
+export const ORGANIZATION_WIDE_RESOURCES = new Set<ScopedResource>([
+  "scheduledTask",
 ]);
 
 export const ResourcePermissionActionSchema = z.enum([

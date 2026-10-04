@@ -73,46 +73,18 @@ describe("access-control", () => {
       expect(permissionDescriptions["auditLog:read"].length).toBeGreaterThan(0);
     });
 
-    test("auditLog only exposes the read action", () => {
-      expect(allAvailableActions.auditLog).toEqual(["read"]);
+    test("auditLog exposes own and organization-wide visibility", () => {
+      expect(allAvailableActions.auditLog).toEqual(["read", "admin"]);
     });
   });
 
-  describe("MCP deleted-resource lifecycle (manage-deleted)", () => {
-    // Soft-deleted MCP servers and catalog entries are viewable and restorable
-    // only through the dedicated manage-deleted capability. Of the predefined
-    // roles only admin holds it — delete (which members hold for their own
-    // uninstalls) must not unlock the org-wide tombstone view.
-    test("admin role has manage-deleted on both MCP resources", () => {
-      const admin = predefinedPermissionsMap[ADMIN_ROLE_NAME];
-      expect(admin.mcpServerInstallation).toContain("manage-deleted");
-      expect(admin.mcpRegistry).toContain("manage-deleted");
+  test("restoring installs uses delete while catalog restore authorizes the resolved object", () => {
+    expect(requiredEndpointPermissionsMap[RouteId.RestoreMcpServer]).toEqual({
+      mcpServerInstallation: ["delete"],
     });
-
-    test("editor role does not have manage-deleted", () => {
-      expect(editorPermissions.mcpServerInstallation).not.toContain(
-        "manage-deleted",
-      );
-      expect(editorPermissions.mcpRegistry).not.toContain("manage-deleted");
-    });
-
-    test("member role does not have manage-deleted", () => {
-      expect(memberPermissions.mcpServerInstallation).not.toContain(
-        "manage-deleted",
-      );
-      expect(memberPermissions.mcpRegistry).not.toContain("manage-deleted");
-    });
-
-    test("restore routes require manage-deleted", () => {
-      expect(requiredEndpointPermissionsMap[RouteId.RestoreMcpServer]).toEqual({
-        mcpServerInstallation: ["manage-deleted"],
-      });
-      expect(
-        requiredEndpointPermissionsMap[RouteId.RestoreInternalMcpCatalogItem],
-      ).toEqual({
-        mcpRegistry: ["manage-deleted"],
-      });
-    });
+    expect(
+      requiredEndpointPermissionsMap[RouteId.RestoreInternalMcpCatalogItem],
+    ).toEqual({});
   });
 
   describe("complete-onboarding route", () => {
@@ -342,14 +314,13 @@ describe("buildForbiddenErrorMessage", () => {
   });
 });
 
-describe("own-vs-all log split (log/auditLog read vs a grant at *)", () => {
-  // Seeing every member's rows is `read` on the resource at `*`, a grant; the
-  // role action only covers the caller's own rows.
-  test("read is the only role action on both resources", () => {
-    expect(allAvailableActions.log).toEqual(["read"]);
-    expect(allAvailableActions.auditLog).toEqual(["read"]);
-    expect(permissionDescriptions["log:admin"]).toBeUndefined();
-    expect(permissionDescriptions["auditLog:admin"]).toBeUndefined();
+describe("own-vs-all log split (Read and Admin role actions)", () => {
+  // Read covers own rows; Admin expands organization-wide visibility.
+  test("Read and Admin are the only role actions on both resources", () => {
+    expect(allAvailableActions.log).toEqual(["read", "admin"]);
+    expect(allAvailableActions.auditLog).toEqual(["read", "admin"]);
+    expect(permissionDescriptions["log:admin"]).toBeDefined();
+    expect(permissionDescriptions["auditLog:admin"]).toBeDefined();
   });
 
   test("editor sees only own logs; member has neither log resource", () => {
@@ -390,6 +361,8 @@ describe("platform_admin predefined role", () => {
       expect.arrayContaining([
         "member:impersonate",
         "openappaDiagnostics:admin",
+        "log:admin",
+        "auditLog:admin",
       ]),
     );
     // …while granting its own role or member stays possible.

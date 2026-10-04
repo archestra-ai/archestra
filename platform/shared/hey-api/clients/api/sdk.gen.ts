@@ -5027,7 +5027,7 @@ export const deleteInternalMcpCatalogItemByName = <ThrowOnError extends boolean 
  *
  * Authorization:
  *
- * `mcpRegistry:manage-deleted`: View and restore soft-deleted MCP registry entries
+ * None (no additional RBAC permission required)
  */
 export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<RestoreInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).post<RestoreInternalMcpCatalogItemResponses, RestoreInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/restore', ...options });
 
@@ -6872,7 +6872,7 @@ export const installMcpServer = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * `mcpServerInstallation:delete`: Uninstall MCP servers
+ * `mcpServerInstallation:delete`: Uninstall, view deleted, and restore MCP servers within your access
  */
 export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpServerResponses, DeleteMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}', ...options });
 
@@ -6918,7 +6918,7 @@ export const reauthenticateMcpServer = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `mcpServerInstallation:delete`: Uninstall MCP servers
+ * `mcpServerInstallation:delete`: Uninstall, view deleted, and restore MCP servers within your access
  */
 export const bulkDeleteMcpServers = <ThrowOnError extends boolean = false>(options: Options<BulkDeleteMcpServersData, ThrowOnError>) => (options.client ?? client).delete<BulkDeleteMcpServersResponses, BulkDeleteMcpServersErrors, ThrowOnError>({
     url: '/api/mcp_server/bulk',
@@ -6938,7 +6938,7 @@ export const bulkDeleteMcpServers = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `mcpServerInstallation:manage-deleted`: View and restore soft-deleted (uninstalled) MCP servers
+ * `mcpServerInstallation:delete`: Uninstall, view deleted, and restore MCP servers within your access
  */
 export const restoreMcpServer = <ThrowOnError extends boolean = false>(options: Options<RestoreMcpServerData, ThrowOnError>) => (options.client ?? client).post<RestoreMcpServerResponses, RestoreMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/restore', ...options });
 

@@ -36,7 +36,9 @@ On a fresh install, the page asks you to create a policy. A chat drafts one from
 
 From then on, administrators can turn enforcement off and on with a switch. The policy stays as it is. Ask about the policy explains what it does.
 
-Turning enforcement on also applies to sessions that are already running. If a subagent in such a session finished while enforcement was off, the proxy refuses the session's later requests. Start a new session to continue — or rewind the conversation to before the subagent ran.
+OpenAPPA checks only what it sees while enforcement is on. A session that started while enforcement was off stays unchecked after you turn it on, and so do its subagents and teammates. Start a new session to work under the policy.
+
+A session that was checked before keeps its check when you turn enforcement off and on again. OpenAPPA ignores what the session did while enforcement was off — tool results, subagent answers, and messages from that time reach the model as they are.
 
 ## Subagents and Teammates
 
@@ -48,13 +50,13 @@ A free-text message reaches its receiver directly when it adds no restrictions. 
 
 A structured team message is shown directly only when that same send adds no restrictions. If it adds restrictions, Guardrails hold the body and show that message id. Guardrails do not attach it to a different held message. If the text is not that send, and not an older recorded receipt, Guardrails withhold it. Use the inbox tools to read a held message.
 
-Claude Code's own team notices, such as a teammate going idle, carry no agent text. They stay as Claude Code wrote them, even when other messages are held.
+A teammate's or lead's message sent while enforcement was off passes as it is, unless a message from the same sender passed the check before. Claude Code's own team notices, such as a teammate going idle, carry no agent text. They stay as Claude Code wrote them, even when other messages are held.
 
 The inbox tools require a connection to the [Archestra MCP Gateway](./platform-claude-code-example). Pending messages remain discoverable after conversation compaction. Expired messages cannot be read.
 
-Messages without a recorded release stay withheld. This includes messages from unrelated sessions and messages from before enforcement started. Sending the same text again does not authorize it.
+Messages without a recorded release stay withheld. This includes messages from unrelated sessions. Sending the same text again does not authorize it.
 
-A teammate that started while enforcement was off cannot be checked. OpenAPPA refuses its requests and does not send it messages. Start a new teammate, under a new name, to continue its work. OpenAPPA checks each teammate from its own spawn, so it refuses a second teammate under a name the session already used.
+A teammate that started while enforcement was off stays unchecked. A checked lead does not send it messages. Start a new teammate, under a new name, to continue its work under the policy. OpenAPPA checks each teammate from its own spawn, so it refuses a second teammate under a name the session already used.
 
 ## Client Support Matrix
 

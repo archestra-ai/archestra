@@ -1,5 +1,5 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=All constraints and indexes target the empty tables created in this migration. No existing application rows need deduplication or validation.
+-- drizzle-migration-linter: reason=All constraints and indexes target the empty tables created in this migration. No existing rows need deduplication, and no existing writer is blocked by these indexes.
 CREATE TABLE "openappa_embedded_peer_messages" (
 	"seq" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "openappa_embedded_peer_messages_seq_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
 	"id" text NOT NULL,

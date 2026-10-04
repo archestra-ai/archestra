@@ -27,7 +27,7 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
 });
 afterAll(() => server.close());
-it("reveals direct and team sources when a permission badge is focused", async () => {
+it("reveals direct and team sources when a matrix permission is focused", async () => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -41,13 +41,15 @@ it("reveals direct and team sources when a permission badge is focused", async (
       <PermissionsCard />
     </QueryClientProvider>,
   );
-  await user.click(await screen.findByRole("button", { name: "Expand all" }));
+  const readPermission = await screen.findByRole("button", {
+    name: "LLM & MCP Logs Read granted",
+  });
   expect(
     screen.queryByText("Log Reader · Direct assignment"),
   ).not.toBeInTheDocument();
   await user.tab();
-  // Focus the badge with the keyboard; its provenance is available without a pointer.
-  screen.getByText("Read").focus();
+  // Focus the permission with the keyboard; its provenance is available without a pointer.
+  readPermission.focus();
   const tooltip = await screen.findByRole("tooltip");
   expect(tooltip).toHaveTextContent("Log Reader · Direct assignment");
   expect(tooltip).toHaveTextContent("Operations · Team: Support");

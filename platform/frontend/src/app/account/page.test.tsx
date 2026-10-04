@@ -61,10 +61,9 @@ describe("AccountProfilePage", () => {
 
     const teamsHeading = screen.getByRole("heading", { name: "My Teams" });
     expect(teamsHeading).toBeInTheDocument();
-    // My Teams follows Profile in document order.
-    const profileHeading = screen.getByRole("heading", { name: "Profile" });
+    // My Teams follows the profile fields in document order.
     expect(
-      profileHeading.compareDocumentPosition(teamsHeading) &
+      screen.getByLabelText("Name").compareDocumentPosition(teamsHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 

@@ -17,9 +17,8 @@ export const actions = [
   "cancel",
   "enable",
   "query",
-  "execute",
-  "manage",
   "impersonate",
+  "full-view",
   "admin",
 ] as const;
 
@@ -76,7 +75,6 @@ export const resources = [
   "auditLog",
   "accessPolicies",
   "simpleView",
-  "chatFullView",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -118,7 +116,6 @@ export const resourceLabels: Record<Resource, string> = {
   organizationSettings: "Organization Settings",
   scheduledTask: "Scheduled Tasks",
   simpleView: "Simple View",
-  chatFullView: "Full Chat View",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -167,8 +164,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   knowledgeSource:
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
   simpleView: "Collapse the app sidebar by default",
-  chatFullView:
-    "Show the agent picker, model and API key selectors, and expandable tool calls in chat. Without it, chat shows a simpler view",
   organization: "Organization (internal, used by authentication system)",
 };
 
@@ -203,7 +198,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   OpenAPPA: ["openappaPolicy", "openappaDiagnostics"],
   Knowledge: ["knowledgeSource"],
   Logs: ["log", "auditLog"],
-  Other: ["chat", "project", "simpleView", "chatFullView"],
+  Other: ["chat", "project", "simpleView"],
   Administration: [
     "accessPolicies",
     "member",

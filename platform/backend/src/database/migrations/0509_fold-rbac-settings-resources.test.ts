@@ -71,7 +71,7 @@ test("invitations follow member:create and repeated runs change nothing", async 
   });
 });
 
-test("the three chat view toggles become one, granted when any was held", async ({
+test("the three chat view toggles become chat:full-view, granted when any was held", async ({
   makeOrganization,
   makeCustomRole,
 }) => {
@@ -94,11 +94,8 @@ test("the three chat view toggles become one, granted when any was held", async 
   await db.execute(sql.raw(migration));
 
   expect(await permissions(pickerOnly.id)).toEqual({
-    chat: ["read"],
-    chatFullView: ["enable"],
+    chat: ["read", "full-view"],
   });
-  expect(await permissions(allThree.id)).toEqual({
-    chatFullView: ["enable"],
-  });
+  expect(await permissions(allThree.id)).toEqual({ chat: ["full-view"] });
   expect(await permissions(simpleChat.id)).toEqual({ chat: ["read"] });
 });

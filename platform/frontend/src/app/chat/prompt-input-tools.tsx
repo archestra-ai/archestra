@@ -311,7 +311,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // RBAC: the full chat view shows the agent picker and provider settings;
   // without it, chat is the simpler view.
   const { data: canSeeFullView } = useHasPermissions({
-    chatFullView: ["enable"],
+    chat: ["full-view"],
   });
   const canShowProviderSettings = !runtimeMode && canSeeFullView === true;
 

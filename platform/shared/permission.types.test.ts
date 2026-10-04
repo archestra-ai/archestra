@@ -31,7 +31,7 @@ describe("permission.types", () => {
   });
 
   test("no category contains internal resources except UI behavior resources", () => {
-    const uiBehaviorResources = ["simpleView", "chatFullView"];
+    const uiBehaviorResources = ["simpleView"];
     const allCategorizedResources = Object.values(resourceCategories).flat();
     for (const internal of internalResources) {
       if (uiBehaviorResources.includes(internal)) continue;

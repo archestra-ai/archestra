@@ -140,7 +140,7 @@ describe("chat composer typing performance", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
-          data: "chatFullView" in permissions,
+          data: permissions.chat?.includes("full-view") === true,
           isPending: false,
           isLoading: false,
         }) as ReturnType<typeof useHasPermissions>,

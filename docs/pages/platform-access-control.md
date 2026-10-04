@@ -68,7 +68,7 @@ Full access to core resources, but cannot change organization settings or manage
 | OpenAPPA Policy | `read`, `update` |
 | OpenAPPA Diagnostics | `read`, `update` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
-| Chats | `read`, `create`, `update`, `delete` |
+| Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |
 | LLM & MCP Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
@@ -77,7 +77,6 @@ Full access to core resources, but cannot change organization settings or manage
 | Teams | `read` |
 | Identity Providers | `read` |
 | Secrets | `read` |
-| Full Chat View | `enable` |
 
 ### Member
 
@@ -103,12 +102,11 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Credentials | `read` |
 | OpenAPPA Policy | `read` |
 | Knowledge Sources | `read`, `query` |
-| Chats | `read`, `create`, `update`, `delete` |
+| Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
 | Simple View | `enable` |
-| Full Chat View | `enable` |
 
 
 ## Custom Roles
@@ -171,7 +169,7 @@ The following table lists all available permissions that can be assigned to cust
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
 | `chat:delete` | Delete chat conversations |
-| `chatFullView:enable` | Show the agent picker, model and API key selectors, and expandable tool calls in chat |
+| `chat:full-view` | Show the full chat: the agent picker, model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view |
 | `credential:read` | View saved credentials |
 | `credential:create` | Create saved credentials |
 | `credential:update` | Modify saved credentials |
@@ -451,9 +449,9 @@ Chat access is controlled separately from optional chat UI controls:
 
 - `chat:read` allows access to chat itself
 - `agent:read` is also required because chat is agent-backed and a user must be able to access at least one agent/profile context to start or use chat
-- `chatFullView:enable` shows the full chat: the agent picker, the model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view
+- `chat:full-view` shows the full chat: the agent picker, the model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view
 
-`chatFullView` is a UI toggle. It is independent of core chat access and does not grant access to provider credentials or model catalogs on its own.
+`chat:full-view` is a UI toggle. It is independent of core chat access and does not grant access to provider credentials or model catalogs on its own.
 
 ### MCP Registry And Installation Records
 

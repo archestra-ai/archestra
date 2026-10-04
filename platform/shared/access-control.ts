@@ -66,7 +66,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   knowledgeSource: ["read", "create", "update", "delete", "query"],
 
   // Other
-  chat: ["read", "create", "update", "delete"],
+  chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
   log: ["read", "admin"],
 
@@ -87,7 +87,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // UI behavior resources
   simpleView: ["enable"],
-  chatFullView: ["enable"],
 
   // Administration
 
@@ -129,7 +128,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   knowledgeSource: ["read", "create", "update", "delete", "query"],
 
   // Other
-  chat: ["read", "create", "update", "delete"],
+  chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
   // Editors see only their own logs; org-wide visibility is log:admin,
   // reserved for admin-tier roles.
@@ -152,7 +151,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // UI behavior resources
   simpleView: [],
-  chatFullView: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -200,7 +198,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // spends LLM budget across a whole grid, so running is an editor action.
 
   // Other
-  chat: ["read", "create", "update", "delete"],
+  chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
   log: [],
 
@@ -221,7 +219,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // UI behavior resources
   simpleView: ["enable"],
-  chatFullView: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -242,7 +239,7 @@ export function findUngrantablePermissions(
   granterPermissions: Permissions,
   rolePermissions: Permissions,
 ): string[] {
-  const exemptUiResources: Resource[] = ["simpleView", "chatFullView"];
+  const exemptUiResources: Resource[] = ["simpleView"];
 
   const missing: string[] = [];
   for (const [resource, actions] of Object.entries(rolePermissions)) {
@@ -459,6 +456,8 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:create": "Start new chat conversations",
   "chat:update": "Edit chat messages and conversation settings",
   "chat:delete": "Delete chat conversations",
+  "chat:full-view":
+    "Show the full chat: the agent picker, model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view",
   "project:read": "View projects and your own sessions inside them",
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
@@ -515,8 +514,6 @@ export const permissionDescriptions: Record<string, string> = {
 
   // UI behavior
   "simpleView:enable": "Collapse the app sidebar by default",
-  "chatFullView:enable":
-    "Show the agent picker, model and API key selectors, and expandable tool calls in chat",
 
   // Administration
 };

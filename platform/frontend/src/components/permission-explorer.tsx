@@ -11,7 +11,10 @@ import {
   resourceDescriptions,
   resourceLabels,
 } from "@archestra/shared";
-import { allAvailableActions } from "@archestra/shared/access-control";
+import {
+  allAvailableActions,
+  permissionDescriptions,
+} from "@archestra/shared/access-control";
 import { Check, Info } from "lucide-react";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -366,7 +369,10 @@ function PermissionAction({
         )}
       </TooltipTrigger>
       <TooltipContent className="max-w-xs space-y-1">
-        <p className="font-mono text-[11px]">
+        {permissionDescriptions[`${resource}:${action}`] && (
+          <p>{permissionDescriptions[`${resource}:${action}`]}</p>
+        )}
+        <p className="font-mono text-[11px] opacity-70">
           {resource}:{action}
         </p>
         {editable && disabled ? <p>{UNGRANTABLE_PERMISSION_TOOLTIP}</p> : null}
@@ -399,8 +405,7 @@ const actionLabels: Record<Action, string> = {
   cancel: "Cancel",
   enable: "Enable",
   query: "Query",
-  execute: "Execute",
-  manage: "Manage",
   impersonate: "Impersonate",
+  "full-view": "Full view",
   admin: "Admin",
 };

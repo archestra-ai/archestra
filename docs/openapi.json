@@ -337698,9 +337698,8 @@
                                   "cancel",
                                   "enable",
                                   "query",
-                                  "execute",
-                                  "manage",
                                   "impersonate",
+                                  "full-view",
                                   "admin"
                                 ]
                               }
@@ -338055,9 +338054,8 @@
                           "cancel",
                           "enable",
                           "query",
-                          "execute",
-                          "manage",
                           "impersonate",
+                          "full-view",
                           "admin"
                         ]
                       }
@@ -338110,9 +338108,8 @@
                             "cancel",
                             "enable",
                             "query",
-                            "execute",
-                            "manage",
                             "impersonate",
+                            "full-view",
                             "admin"
                           ]
                         }
@@ -338455,9 +338452,8 @@
                             "cancel",
                             "enable",
                             "query",
-                            "execute",
-                            "manage",
                             "impersonate",
+                            "full-view",
                             "admin"
                           ]
                         }
@@ -338764,9 +338760,8 @@
                           "cancel",
                           "enable",
                           "query",
-                          "execute",
-                          "manage",
                           "impersonate",
+                          "full-view",
                           "admin"
                         ]
                       }
@@ -338841,9 +338836,8 @@
                             "cancel",
                             "enable",
                             "query",
-                            "execute",
-                            "manage",
                             "impersonate",
+                            "full-view",
                             "admin"
                           ]
                         }
@@ -415814,9 +415808,8 @@
                               "cancel",
                               "enable",
                               "query",
-                              "execute",
-                              "manage",
                               "impersonate",
+                              "full-view",
                               "admin"
                             ]
                           }
@@ -416096,9 +416089,8 @@
                         "cancel",
                         "enable",
                         "query",
-                        "execute",
-                        "manage",
                         "impersonate",
+                        "full-view",
                         "admin"
                       ]
                     }

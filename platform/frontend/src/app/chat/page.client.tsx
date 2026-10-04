@@ -357,7 +357,7 @@ export function ChatPageContent({
   });
   const { data: canSeeAgentPicker, isLoading: isAgentPickerPermissionLoading } =
     useHasPermissions({
-      chatFullView: ["enable"],
+      chat: ["full-view"],
     });
   const { data: canCreateProjectPerm } = useHasPermissions({
     project: ["create"],

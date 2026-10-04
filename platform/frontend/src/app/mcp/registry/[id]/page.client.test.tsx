@@ -13,6 +13,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useHasPermissions,
   useMissingPermissions,
+  useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -196,6 +197,16 @@ function section(name: string) {
 
 describe("McpCatalogItemDetailPage overview", () => {
   beforeEach(() => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        "read",
+        "use",
+        "update",
+        "delete",
+        "manage-permissions",
+        "configure-deployment-spec",
+      ].map((action) => ({ resource: "mcpRegistry", scope: "*", action })),
+    } as ReturnType<typeof useScopedCapabilities>);
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
@@ -327,19 +338,60 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByText("Support")).toBeNull();
   });
 
-  it("keeps one Edit in the header, and points Overview at the same place", () => {
+  it("keeps the header's Edit as the only way into the configuration", () => {
     renderPage();
 
     expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
       "href",
       "/mcp/registry/cat-1/edit?step=configuration",
     );
-    expect(
-      section("Overview").getByRole("link", { name: /Configuration/ }),
-    ).toHaveAttribute("href", "/mcp/registry/cat-1/edit?step=configuration");
-    expect(
-      section("Overview").queryByRole("link", { name: /^Edit\b/ }),
-    ).toBeNull();
+    expect(section("Overview").queryByRole("link")).toBeNull();
+  });
+
+  it("allows template editing before installation without a competing configuration Edit action", () => {
+    useMcpServers.mockReturnValue({ data: [] });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=yaml") as ReturnType<typeof useSearchParams>,
+    );
+    renderPage();
+    expect(screen.getByRole("link", { name: "K8s YAML" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+  });
+
+  it.each([
+    "edit",
+    "full-access",
+    "other-entry",
+  ])("ignores a YAML deep link for %s access", (access) => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: (access === "edit"
+        ? ["read", "use", "update"]
+        : access === "full-access"
+          ? ["read", "use", "update", "delete", "manage-permissions"]
+          : [
+              "read",
+              "use",
+              "update",
+              "delete",
+              "manage-permissions",
+              "configure-deployment-spec",
+            ]
+      ).map((action) => ({
+        organizationId: "org",
+        resource: "mcpRegistry",
+        scope: access === "other-entry" ? "cat-other" : "cat-1",
+        action,
+      })),
+    } as ReturnType<typeof useScopedCapabilities>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=yaml") as ReturnType<typeof useSearchParams>,
+    );
+    renderPage();
+    expect(screen.queryByRole("link", { name: "K8s YAML" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
   });
 
   it("hides managed Playwright configuration actions and ignores YAML deep links", () => {

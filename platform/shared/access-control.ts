@@ -904,9 +904,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetDeploymentYamlPreview]: {
     mcpRegistry: ["read"],
   },
-  [RouteId.ValidateDeploymentYaml]: {
-    mcpRegistry: ["read"],
-  },
+  [RouteId.ValidateDeploymentYaml]: { mcpRegistry: ["read"] },
   [RouteId.ResetDeploymentYaml]: {
     mcpRegistry: ["update"],
   },

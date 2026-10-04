@@ -3013,13 +3013,15 @@ describe("AgentForm save payload and failure handling", () => {
         activeSection="configuration"
       />,
     );
-    expect(panelOf(screen.getByTestId("agent-runtime"))).toHaveClass("hidden");
+    // The runtime fields render their own sections, so the panel is the
+    // wrapper directly around them.
+    const runtimePanel = () =>
+      screen.getByTestId("agent-runtime").parentElement;
+    expect(runtimePanel()).toHaveClass("hidden");
     rerender(
       <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
     );
-    expect(panelOf(screen.getByTestId("agent-runtime"))).not.toHaveClass(
-      "hidden",
-    );
+    expect(runtimePanel()).not.toHaveClass("hidden");
   });
 
   it("opens the shared provider-key dialog from the agent picker", async () => {
@@ -4806,6 +4808,35 @@ describe("AgentForm save payload and failure handling", () => {
     await waitFor(() => expect(bulkUpdateTools).toHaveBeenCalled());
     expect(updateAgent).not.toHaveBeenCalled();
     expect(refetchAgentTools).not.toHaveBeenCalled();
+  });
+
+  it("creates an agent directly from Configuration with untouched setup defaults", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    render(
+      <AgentForm
+        agentType="agent"
+        activeSection="configuration"
+        submitEnabled
+        onCreated={onCreated}
+      />,
+    );
+    await user.type(
+      screen.getByPlaceholderText("Enter agent name"),
+      "Quick setup agent",
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() =>
+      expect(onCreated).toHaveBeenCalledWith({
+        id: "created-agent",
+        name: "New Agent",
+      }),
+    );
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      name: "Quick setup agent",
+      accessAllTools: true,
+      initialGrants: [],
+    });
   });
 
   it("keeps every step's editors mounted while one step shows, and submits only when told to", async () => {

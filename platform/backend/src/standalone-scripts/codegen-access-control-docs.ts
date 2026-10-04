@@ -160,12 +160,13 @@ Each permission is evaluated as one complete action-and-scope pair. The scope id
 | \`update\` | Edit its configuration |
 | \`delete\` | Delete the resource |
 | \`manage-permissions\` | Change its direct grants, within the caller's own authority |
+| \`configure-deployment-spec\` | MCP registry only: view and change how a self-hosted server is deployed (deployment spec, service account, secret sources) |
 
 Viewing a resource does not by itself grant execution. Uncatalogued model IDs require a model \`use\` grant on \`*\`. For example, a model read grant does not bypass its invocation restrictions; use a model use grant to permit invocation. Disabled apps remain private to their author, even when another recipient has a grant. Editing configuration does not grant permission to share the resource. Creation continues to require the resource's organization-level \`create\` permission because the object does not exist yet.
 
 For example, a service account can have \`read\` on all MCP registry entries and \`update\` on one entry. Those grants allow it to view every entry and edit only that one. The evaluator does not combine the wildcard from the first grant with the update action from the second.
 
-The editor offers **Can view**, **Can use**, **Can edit**, and **Full access** presets. Full access includes deletion and permission management. Each recipient can have a different permission level. OAuth clients have no **Can use** level, because nothing is used through a client registration.
+The editor offers **Can view**, **Can use**, **Can edit**, and **Full access** presets. Full access includes deletion and permission management. MCP registry entries add **Full access + deployment**, which also allows \`configure-deployment-spec\`. Admin and Platform Admin hold it on every entry by default; a creator's own Full access does not include it. Each recipient can have a different permission level. OAuth clients have no **Can use** level, because nothing is used through a client registration.
 
 Public marketplace link management remains organization-wide. Creating, listing, rotating, or revoking skill marketplace links requires skill \`read\`, \`use\`, and \`manage-permissions\` on \`*\`. Editing a skill alone does not authorize public distribution. A link contains the skills selected when it is created; it does not automatically include future skills.
 

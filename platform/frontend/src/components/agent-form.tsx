@@ -919,6 +919,11 @@ export interface AgentFormFooterState {
    * shows nothing at all.
    */
   readOnly: boolean;
+  /**
+   * The agent runs in its own container: opening it in Chat starts a run
+   * rather than a foreground conversation.
+   */
+  hasRuntime: boolean;
 }
 
 /** Editable values a create flow may seed from a catalog template. */
@@ -2919,6 +2924,7 @@ export function AgentForm({
     isDirty,
     canSubmit,
     readOnly,
+    hasRuntime: runtime !== null,
   };
   // Keep the popover portaled: choosing a credential changes the model control
   // while Radix closes its focus scope, and reconciling both in the form tree
@@ -3226,15 +3232,15 @@ export function AgentForm({
                     </IdentityFields>
                   )}
 
-                  {showsModelControl &&
-                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
-                    modelBlock}
-
                   {/* Description (hidden for built-in agents) */}
                   {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
                     <div className="space-y-2">
                       <Label htmlFor="agentDescription">Description</Label>
+                      <FieldDescription id="agent-description-hint">
+                        An internal description of what this agent does.
+                      </FieldDescription>
                       <Textarea
+                        aria-describedby="agent-description-hint"
                         id="agentDescription"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
@@ -3243,6 +3249,10 @@ export function AgentForm({
                       />
                     </div>
                   )}
+
+                  {showsModelControl &&
+                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
+                    modelBlock}
 
                   {/* Instructions: what the agent is told to do. Saved with the
                       rest of this panel, so one Save covers the whole tab. */}
@@ -3275,16 +3285,6 @@ export function AgentForm({
                         }
                       />
                     </div>
-                  )}
-
-                  {!agent && agentType !== "llm_proxy" && (
-                    <InitialResourcePermissions
-                      resource={
-                        agentType === "mcp_gateway" ? "mcpGateway" : "agent"
-                      }
-                      grants={initialGrants}
-                      onChange={setInitialGrants}
-                    />
                   )}
 
                   {!agent && isInternalAgent && agentRuntimeEnabled && (
@@ -3871,16 +3871,12 @@ export function AgentForm({
             agentType === "agent" &&
             agentRuntimeEnabled &&
             !isBuiltIn && (
-              <SettingsSectionGroup
-                className={cn(!isActiveSection("runtime") && "hidden")}
-              >
-                <SettingsSection aria-label="Agent runtime">
-                  <AgentRuntimeFields
-                    value={runtime}
-                    onChange={setAgentRuntime}
-                  />
-                </SettingsSection>
-              </SettingsSectionGroup>
+              <div className={cn(!isActiveSection("runtime") && "hidden")}>
+                <AgentRuntimeFields
+                  value={runtime}
+                  onChange={setAgentRuntime}
+                />
+              </div>
             )}
 
           {/* The Advanced step: security, passthrough
@@ -3890,6 +3886,16 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("advanced") && "hidden")}
             >
+              {!agent && agentType !== "llm_proxy" && (
+                <InitialResourcePermissions
+                  layout="settings"
+                  resource={
+                    agentType === "mcp_gateway" ? "mcpGateway" : "agent"
+                  }
+                  grants={initialGrants}
+                  onChange={setInitialGrants}
+                />
+              )}
               {/* Skills served over MCP (SEP-2640). Gateways only, behind the
                   draft-extension feature flag. It sits in Advanced rather than
                   beside Tools & Knowledge: these are resources the gateway

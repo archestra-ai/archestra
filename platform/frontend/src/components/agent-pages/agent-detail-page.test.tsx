@@ -62,6 +62,10 @@ vi.mock("@/components/agent-form", () => ({
 vi.mock("./agent-connect-content", () => ({
   AgentConnectContent: () => <div>connect content</div>,
 }));
+// One recorded run, so the Runs section is offered wherever runs are enabled.
+vi.mock("@/lib/agent-runtime.query", () => ({
+  useAgentRuns: () => ({ data: [{ id: "run-1" }], isError: false }),
+}));
 vi.mock("./agent-runs", () => ({
   AgentRuns: () => <div>run history</div>,
 }));

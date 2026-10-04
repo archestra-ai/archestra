@@ -37,6 +37,7 @@ import {
   AddResourceAccessDialog,
   ResourceAccessPicker,
 } from "@/components/add-resource-access-dialog";
+import { PermissionsSettingsSection } from "@/components/permissions-settings-section";
 import { QueryLoadError } from "@/components/query-load-error";
 import { getPermissionSafetyPreview } from "@/components/resource-permission-safety-preview";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -96,6 +97,7 @@ export function ResourcePermissions({
   showInherited = true,
   registerSave,
   standalone = false,
+  layout = "default",
 }: {
   resource: ScopedResource;
   scope: string;
@@ -112,6 +114,7 @@ export function ResourcePermissions({
   registerSave?: (save: (() => Promise<void>) | null) => void;
   /** The section is a pane of its own, so it draws no separating rule. */
   standalone?: boolean;
+  layout?: "default" | "settings";
 }) {
   const policy = useResourcePermissions(resource, scope);
   if (policy.isPending)
@@ -154,6 +157,7 @@ export function ResourcePermissions({
       showInherited={showInherited}
       registerSave={registerSave}
       standalone={standalone}
+      layout={layout}
     />
   );
 }
@@ -278,6 +282,7 @@ function PermissionsEditor({
   showInherited,
   registerSave,
   standalone = false,
+  layout = "default",
 }: {
   policy: Policy;
   refreshFailed: boolean;
@@ -289,6 +294,7 @@ function PermissionsEditor({
   showInherited: boolean;
   registerSave?: (save: (() => Promise<void>) | null) => void;
   standalone?: boolean;
+  layout?: "default" | "settings";
 }) {
   const form = useForm<{ revision: number; grants: Policy["grants"] }>({
     defaultValues: { revision: policy.revision, grants: policy.grants },
@@ -480,6 +486,148 @@ function PermissionsEditor({
   // enabled once something changed.
   const pageFooter =
     !embedded && footerContainer === undefined && !dialog && !registerSave;
+  const accessRows = (
+    <div className={layout === "settings" ? "divide-y border-t" : "divide-y"}>
+      {layout !== "settings" && (fields.length > 0 || indirect.length > 0) && (
+        <div className="hidden items-center gap-3 pb-2 text-xs font-medium text-muted-foreground sm:flex">
+          <span className="flex-1">Recipient</span>
+          <span className="w-48 border border-transparent px-3">
+            Permission
+          </span>
+          <span className="size-8" />
+        </div>
+      )}
+      {fields.length === 0 && indirect.length === 0 && (
+        <p className="py-3 text-sm text-muted-foreground">
+          Nobody has access yet.
+        </p>
+      )}
+      {fields.map((grant, index) => (
+        <div
+          key={grant.id}
+          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-3 sm:flex sm:gap-3 sm:py-2"
+        >
+          <SubjectIcon type={grant.subject.type} />
+          <div className="col-span-2 flex min-w-0 flex-1 flex-col items-start gap-x-2 sm:flex-row sm:flex-wrap sm:items-baseline">
+            <p className="break-words text-sm font-medium">{grant.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {subjectLabels[grant.subject.type]}
+            </p>
+          </div>
+          <Select
+            disabled={!canManage || mutation.isPending}
+            value={presetFor(grant.actions, policy.resource)}
+            onValueChange={(preset) => {
+              const choice = Object.entries(presets).find(
+                ([key]) => key === preset,
+              )?.[1];
+              if (choice)
+                update(index, { ...grant, actions: [...choice.actions] });
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              className="h-11 min-h-11 w-full min-w-0 text-left shadow-none hover:bg-muted sm:h-8 sm:min-h-8 sm:w-48 sm:shrink-0 sm:border-transparent dark:bg-transparent dark:hover:bg-muted"
+              aria-label={`Permission for ${grant.name}`}
+              title={actionDetail(grant.actions, policy.resource)}
+            >
+              <SelectValue>
+                {actionSummary(grant.actions, policy.resource)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(presets).map(([key, preset]) => (
+                <SelectItem
+                  key={key}
+                  value={key}
+                  disabled={preset.actions.some(
+                    (action) => !policy.effectiveActions.includes(action),
+                  )}
+                >
+                  <span className="block font-medium">{preset.label}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {presetDescription(key, policy.resource)}
+                  </span>
+                </SelectItem>
+              ))}
+              {presetFor(grant.actions, policy.resource) === "custom" && (
+                <SelectItem value="custom" disabled>
+                  {actionSummary(grant.actions, policy.resource)}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-11 shrink-0 text-muted-foreground sm:size-8"
+            disabled={!canManage || mutation.isPending}
+            aria-label={`Remove direct access for ${grant.name}`}
+            onClick={() => remove(index)}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      ))}
+      {indirect.map((grant) => (
+        <div
+          key={grant.key}
+          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-3 text-muted-foreground sm:flex sm:gap-3 sm:py-2"
+        >
+          <SubjectIcon type={grant.type} />
+          <div className="col-span-2 flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+            <p className="break-words text-sm font-medium">{grant.name}</p>
+            <span className="text-xs">{subjectLabels[grant.type]}</span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
+                  aria-label={`Why ${grant.name} has access: ${grant.via}`}
+                >
+                  <span>{grant.via}</span>
+                  <Info className="size-3" aria-hidden="true" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-72 max-w-[calc(100vw-2rem)] px-3 py-2 text-xs leading-relaxed"
+                aria-label={`Access source for ${grant.name}`}
+              >
+                <p>
+                  <span>{grant.explanation}</span>
+                  {canEditAll && (
+                    <span>
+                      {" Edit in "}
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0 text-xs underline underline-offset-2"
+                        onClick={() => setAllPermissionsOpen(true)}
+                      >
+                        permissions for all{" "}
+                        {resourcePluralNames[policy.resource]}
+                      </Button>
+                      .
+                    </span>
+                  )}
+                </p>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <p
+            className="min-w-0 text-sm sm:w-48 sm:shrink-0 sm:truncate sm:border sm:border-transparent sm:px-3"
+            title={actionDetail(grant.actions, policy.resource)}
+          >
+            {actionSummary(grant.actions, policy.resource)}
+          </p>
+          <span className="hidden size-8 shrink-0 sm:block" />
+        </div>
+      ))}
+    </div>
+  );
   return (
     <>
       <Container
@@ -500,14 +648,15 @@ function PermissionsEditor({
               </InlineNoticeText>
             </InlineNotice>
           )}
-          {title === null &&
+          {layout !== "settings" &&
+            title === null &&
             addAccessButton &&
             (headerContainer ? (
               createPortal(addAccessButton, headerContainer)
             ) : (
               <div className="flex justify-end">{addAccessButton}</div>
             ))}
-          {title !== null && (
+          {layout !== "settings" && title !== null && (
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 space-y-1">
                 <h2 className="text-sm font-semibold">
@@ -562,152 +711,18 @@ function PermissionsEditor({
             </InlineNotice>
           )}
 
-          <div className="divide-y">
-            {(fields.length > 0 || indirect.length > 0) && (
-              <div className="hidden items-center gap-3 pb-2 text-xs font-medium text-muted-foreground sm:flex">
-                <span className="flex-1">Recipient</span>
-                <span className="w-36 border border-transparent px-3">
-                  Permission
-                </span>
-                <span className="size-8" />
-              </div>
-            )}
-            {fields.length === 0 && indirect.length === 0 && (
-              <p className="py-3 text-sm text-muted-foreground">
-                Nobody has access yet.
-              </p>
-            )}
-            {fields.map((grant, index) => (
-              <div
-                key={grant.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-3 sm:flex sm:gap-3 sm:py-1.5"
-              >
-                <SubjectIcon type={grant.subject.type} />
-                <div className="col-span-2 flex min-w-0 flex-1 flex-col items-start gap-x-2 sm:flex-row sm:flex-wrap sm:items-baseline">
-                  <p className="break-words text-sm font-medium">
-                    {grant.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {subjectLabels[grant.subject.type]}
-                  </p>
-                </div>
-                <Select
-                  disabled={!canManage || mutation.isPending}
-                  value={presetFor(grant.actions, policy.resource)}
-                  onValueChange={(preset) => {
-                    const choice = Object.entries(presets).find(
-                      ([key]) => key === preset,
-                    )?.[1];
-                    if (choice)
-                      update(index, { ...grant, actions: [...choice.actions] });
-                  }}
-                >
-                  <SelectTrigger
-                    size="sm"
-                    className="h-11 min-h-11 w-full min-w-0 text-left shadow-none hover:bg-muted sm:h-8 sm:min-h-8 sm:w-36 sm:shrink-0 sm:border-transparent dark:bg-transparent dark:hover:bg-muted"
-                    aria-label={`Permission for ${grant.name}`}
-                    title={actionDetail(grant.actions, policy.resource)}
-                  >
-                    <SelectValue>
-                      {actionSummary(grant.actions, policy.resource)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(presets).map(([key, preset]) => (
-                      <SelectItem
-                        key={key}
-                        value={key}
-                        disabled={preset.actions.some(
-                          (action) => !policy.effectiveActions.includes(action),
-                        )}
-                      >
-                        <span className="block font-medium">
-                          {preset.label}
-                        </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {presetDescription(key, policy.resource)}
-                        </span>
-                      </SelectItem>
-                    ))}
-                    {presetFor(grant.actions, policy.resource) === "custom" && (
-                      <SelectItem value="custom" disabled>
-                        {actionSummary(grant.actions, policy.resource)}
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="size-11 shrink-0 text-muted-foreground sm:size-8"
-                  disabled={!canManage || mutation.isPending}
-                  aria-label={`Remove direct access for ${grant.name}`}
-                  onClick={() => remove(index)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-            {indirect.map((grant) => (
-              <div
-                key={grant.key}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-3 text-muted-foreground sm:flex sm:gap-3 sm:py-1.5"
-              >
-                <SubjectIcon type={grant.type} />
-                <div className="col-span-2 flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
-                  <p className="break-words text-sm font-medium">
-                    {grant.name}
-                  </p>
-                  <span className="text-xs">{subjectLabels[grant.type]}</span>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
-                        aria-label={`Why ${grant.name} has access: ${grant.via}`}
-                      >
-                        <span>{grant.via}</span>
-                        <Info className="size-3" aria-hidden="true" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      align="start"
-                      className="w-72 max-w-[calc(100vw-2rem)] px-3 py-2 text-xs leading-relaxed"
-                      aria-label={`Access source for ${grant.name}`}
-                    >
-                      <p>
-                        <span>{grant.explanation}</span>
-                        {canEditAll && (
-                          <span>
-                            {" Edit in "}
-                            <Button
-                              type="button"
-                              variant="link"
-                              className="h-auto p-0 text-xs underline underline-offset-2"
-                              onClick={() => setAllPermissionsOpen(true)}
-                            >
-                              permissions for all{" "}
-                              {resourcePluralNames[policy.resource]}
-                            </Button>
-                            .
-                          </span>
-                        )}
-                      </p>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <p
-                  className="min-w-0 text-sm sm:w-36 sm:shrink-0 sm:truncate sm:border sm:border-transparent sm:px-3"
-                  title={actionDetail(grant.actions, policy.resource)}
-                >
-                  {actionSummary(grant.actions, policy.resource)}
-                </p>
-                <span className="hidden size-8 shrink-0 sm:block" />
-              </div>
-            ))}
-          </div>
+          {layout === "settings" ? (
+            <PermissionsSettingsSection
+              resourceName={noun}
+              directCount={fields.length}
+              inheritedCount={indirect.length}
+              action={addAccessButton}
+            >
+              {accessRows}
+            </PermissionsSettingsSection>
+          ) : (
+            accessRows
+          )}
 
           {canManage &&
             dirty &&
@@ -854,7 +869,9 @@ function PermissionsEditor({
               (action) => !policy.effectiveActions.includes(action),
             ),
           }))}
-          onAdd={(grants) => append(grants)}
+          onAdd={(grants) => {
+            append(grants);
+          }}
         />
       )}
     </>
@@ -928,6 +945,8 @@ export function presetDescription(preset: string, resource: ScopedResource) {
     if (preset === "manage")
       return "Also delete the client and manage permissions";
   }
+  if (preset === "deploy" && resource === "mcpRegistry")
+    return "Also view and change how the server is deployed";
   if (
     preset === "manage" &&
     (resource === "conversation" || resource === "agentRun")
@@ -985,6 +1004,7 @@ const actionLabels: Record<ResourcePermissionAction, string> = {
   update: "Edit",
   delete: "Delete",
   "manage-permissions": "Manage permissions",
+  "configure-deployment-spec": "Configure deployment spec",
 };
 
 export const resourcePluralNames: Record<ScopedResource, string> = {

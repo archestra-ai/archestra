@@ -51224,7 +51224,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -51233,7 +51233,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -62114,7 +62115,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -62123,7 +62124,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -90468,7 +90470,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -90477,7 +90479,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -241145,7 +241148,8 @@
                             "use",
                             "update",
                             "delete",
-                            "manage-permissions"
+                            "manage-permissions",
+                            "configure-deployment-spec"
                           ]
                         }
                       }
@@ -242096,7 +242100,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -242105,7 +242109,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -250152,7 +250157,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Generate a deployment YAML template preview for a catalog item\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Generate a deployment YAML template preview. Requires configure-deployment-spec on this MCP registry entry.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -250428,7 +250433,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Validate a deployment YAML template\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Validate a deployment YAML template. Requires configure-deployment-spec on the supplied catalogId, or on all MCP registry entries when catalogId is omitted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -250436,6 +250441,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "catalogId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "yaml": {
                     "type": "string",
                     "minLength": 1
@@ -250725,7 +250735,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Reset the deployment YAML to default by clearing the custom YAML\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Reset the deployment YAML to default by clearing the custom YAML. Requires configure-deployment-spec on this MCP registry entry.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
         "parameters": [
           {
             "schema": {
@@ -257473,7 +257483,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -257482,7 +257492,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -263027,7 +263038,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -263036,7 +263047,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -277969,7 +277981,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -277978,7 +277990,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -278914,7 +278927,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -278923,7 +278936,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -289771,7 +289785,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -289780,7 +289794,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -293115,7 +293130,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -293124,7 +293139,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -298584,7 +298600,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -298593,7 +298609,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -301268,9 +301285,6 @@
                   },
                   "isByosVault": {
                     "type": "boolean"
-                  },
-                  "serviceAccount": {
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -305765,9 +305779,6 @@
                   },
                   "isByosVault": {
                     "type": "boolean"
-                  },
-                  "serviceAccount": {
-                    "type": "string"
                   },
                   "hibernationMode": {
                     "type": "string",
@@ -358556,7 +358567,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -358565,7 +358576,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -359893,7 +359905,7 @@
                             },
                             "actions": {
                               "minItems": 1,
-                              "maxItems": 5,
+                              "maxItems": 6,
                               "type": "array",
                               "items": {
                                 "type": "string",
@@ -359902,7 +359914,8 @@
                                   "use",
                                   "update",
                                   "delete",
-                                  "manage-permissions"
+                                  "manage-permissions",
+                                  "configure-deployment-spec"
                                 ]
                               }
                             }
@@ -361187,7 +361200,7 @@
                             },
                             "actions": {
                               "minItems": 1,
-                              "maxItems": 5,
+                              "maxItems": 6,
                               "type": "array",
                               "items": {
                                 "type": "string",
@@ -361196,7 +361209,8 @@
                                   "use",
                                   "update",
                                   "delete",
-                                  "manage-permissions"
+                                  "manage-permissions",
+                                  "configure-deployment-spec"
                                 ]
                               }
                             }
@@ -367805,7 +367819,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -367814,7 +367828,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -384969,7 +384984,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -384978,7 +384993,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -392159,7 +392175,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -392168,7 +392184,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -399891,7 +399908,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -399900,7 +399917,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -418787,7 +418805,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -418796,7 +418814,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -431033,7 +431052,8 @@
                           "use",
                           "update",
                           "delete",
-                          "manage-permissions"
+                          "manage-permissions",
+                          "configure-deployment-spec"
                         ]
                       }
                     },
@@ -431953,7 +431973,7 @@
                           },
                           "actions": {
                             "minItems": 1,
-                            "maxItems": 5,
+                            "maxItems": 6,
                             "type": "array",
                             "items": {
                               "type": "string",
@@ -431962,7 +431982,8 @@
                                 "use",
                                 "update",
                                 "delete",
-                                "manage-permissions"
+                                "manage-permissions",
+                                "configure-deployment-spec"
                               ]
                             }
                           },
@@ -432092,7 +432113,7 @@
                           },
                           "actions": {
                             "minItems": 1,
-                            "maxItems": 5,
+                            "maxItems": 6,
                             "type": "array",
                             "items": {
                               "type": "string",
@@ -432101,7 +432122,8 @@
                                 "use",
                                 "update",
                                 "delete",
-                                "manage-permissions"
+                                "manage-permissions",
+                                "configure-deployment-spec"
                               ]
                             }
                           },
@@ -432141,7 +432163,8 @@
                           "use",
                           "update",
                           "delete",
-                          "manage-permissions"
+                          "manage-permissions",
+                          "configure-deployment-spec"
                         ]
                       }
                     }
@@ -432523,7 +432546,7 @@
                         },
                         "actions": {
                           "minItems": 1,
-                          "maxItems": 5,
+                          "maxItems": 6,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -432532,7 +432555,8 @@
                               "use",
                               "update",
                               "delete",
-                              "manage-permissions"
+                              "manage-permissions",
+                              "configure-deployment-spec"
                             ]
                           }
                         }
@@ -432774,7 +432798,7 @@
                           },
                           "actions": {
                             "minItems": 1,
-                            "maxItems": 5,
+                            "maxItems": 6,
                             "type": "array",
                             "items": {
                               "type": "string",
@@ -432783,7 +432807,8 @@
                                 "use",
                                 "update",
                                 "delete",
-                                "manage-permissions"
+                                "manage-permissions",
+                                "configure-deployment-spec"
                               ]
                             }
                           },
@@ -432913,7 +432938,7 @@
                           },
                           "actions": {
                             "minItems": 1,
-                            "maxItems": 5,
+                            "maxItems": 6,
                             "type": "array",
                             "items": {
                               "type": "string",
@@ -432922,7 +432947,8 @@
                                 "use",
                                 "update",
                                 "delete",
-                                "manage-permissions"
+                                "manage-permissions",
+                                "configure-deployment-spec"
                               ]
                             }
                           },
@@ -432962,7 +432988,8 @@
                           "use",
                           "update",
                           "delete",
-                          "manage-permissions"
+                          "manage-permissions",
+                          "configure-deployment-spec"
                         ]
                       }
                     }

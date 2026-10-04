@@ -33,16 +33,18 @@ describe("wildcard policy shape", () => {
       subject: { type: "role", id },
       actions: [...MANAGE],
     }));
-    for (const resource of [
-      "agent",
-      "mcpGateway",
-      "mcpRegistry",
-      "skill",
-      "app",
-    ] as const)
+    for (const resource of ["agent", "mcpGateway", "skill", "app"] as const)
       expect(
         await read(resource as "agent" | "mcpGateway" | "mcpRegistry"),
       ).toEqual(adminTiers);
+    // The registry's widest level adds deployment-spec configuration, so the
+    // admin tiers can configure every entry, as on a newly provisioned org.
+    expect(await read("mcpRegistry")).toEqual(
+      ["admin", "platform_admin"].map((id) => ({
+        subject: { type: "role", id },
+        actions: ["configure-deployment-spec", ...MANAGE],
+      })),
+    );
     // The model catalog is the one resource where Editor held wildcard
     // authority of its own. It never included delete, but no preset holds
     // manage-permissions without delete, so the grant widens to Full access.

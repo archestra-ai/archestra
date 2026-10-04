@@ -56,6 +56,11 @@ export const ResourcePermissionActionSchema = z.enum([
   "update",
   "delete",
   "manage-permissions",
+  // MCP registry only: view and change how a self-hosted server is deployed
+  // (deployment spec, service account, secret sources). It reaches past the
+  // server into the cluster it runs on, so it sits above Full access rather
+  // than inside it, and a creator's automatic Full access never carries it.
+  "configure-deployment-spec",
 ]);
 
 /** Every selector is local to one resource type and one organization. */
@@ -74,7 +79,7 @@ export const PermissionSubjectSchema = z.discriminatedUnion("type", [
 
 export const ResourcePermissionGrantSchema = z.object({
   subject: PermissionSubjectSchema,
-  actions: z.array(ResourcePermissionActionSchema).min(1).max(5),
+  actions: z.array(ResourcePermissionActionSchema).min(1).max(6),
 });
 
 export type ScopedResource = z.infer<typeof ScopedResourceSchema>;
@@ -180,7 +185,27 @@ export function resourcePermissionPresetsFor(
       },
     };
   }
+  if (resource === "mcpRegistry") {
+    return {
+      ...resourcePermissionPresets,
+      deploy: {
+        label: "Full access + deployment",
+        actions: [
+          ...resourcePermissionPresets.manage.actions,
+          "configure-deployment-spec",
+        ],
+      },
+    };
+  }
   return resourcePermissionPresets;
+}
+
+/** The widest preset a resource offers: what its administrators hold. */
+export function topResourcePermissionPreset(
+  resource?: ScopedResource,
+): ResourcePermissionPreset {
+  const presets = Object.values(resourcePermissionPresetsFor(resource));
+  return presets[presets.length - 1];
 }
 
 /**

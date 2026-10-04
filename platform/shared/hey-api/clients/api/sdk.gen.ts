@@ -5032,7 +5032,7 @@ export const deleteInternalMcpCatalogItemByName = <ThrowOnError extends boolean 
 export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<RestoreInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).post<RestoreInternalMcpCatalogItemResponses, RestoreInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/restore', ...options });
 
 /**
- * Generate a deployment YAML template preview for a catalog item
+ * Generate a deployment YAML template preview. Requires configure-deployment-spec on this MCP registry entry.
  *
  * Authentication:
  *
@@ -5045,7 +5045,7 @@ export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = fal
 export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentYamlPreviewData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentYamlPreviewResponses, GetDeploymentYamlPreviewErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/deployment-yaml-preview', ...options });
 
 /**
- * Validate a deployment YAML template
+ * Validate a deployment YAML template. Requires configure-deployment-spec on the supplied catalogId, or on all MCP registry entries when catalogId is omitted.
  *
  * Authentication:
  *
@@ -5065,7 +5065,7 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
- * Reset the deployment YAML to default by clearing the custom YAML
+ * Reset the deployment YAML to default by clearing the custom YAML. Requires configure-deployment-spec on this MCP registry entry.
  *
  * Authentication:
  *

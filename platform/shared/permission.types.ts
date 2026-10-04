@@ -176,7 +176,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   agentSettings:
     "Agent settings (default model, default agent, default tool guardrails, chat file uploads)",
   llmCost: "Organization-wide LLM usage and cost analytics",
-  mcpRegistry: "MCP server registry management",
+  mcpRegistry:
+    "MCP server registry management. Deployment settings are granted per entry, on the entry's Permissions tab.",
   mcpSettings: "MCP settings (online catalog availability)",
   skillsSettings: "Skills settings (online catalog availability)",
   mcpServerInstallation: "Installed MCP servers and their runtime",

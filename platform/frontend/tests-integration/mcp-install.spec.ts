@@ -48,7 +48,9 @@ test.describe("Add Remote MCP Server", () => {
 
     await page.getByRole("button", { name: "Add MCP Server" }).click();
     await page.getByRole("button", { name: "Start from scratch" }).click();
-    await page.getByRole("button", { name: /^Remote/ }).click();
+    await page
+      .locator("label", { has: page.getByRole("radio", { name: /^Remote/ }) })
+      .click();
 
     await page
       .getByRole("textbox", { name: "Name *" })
@@ -141,7 +143,9 @@ test.describe("Add Remote MCP Server", () => {
 
     await page.getByRole("button", { name: "Add MCP Server" }).click();
     await page.getByRole("button", { name: "Start from scratch" }).click();
-    await page.getByRole("button", { name: /^Remote/ }).click();
+    await page
+      .locator("label", { has: page.getByRole("radio", { name: /^Remote/ }) })
+      .click();
 
     await page
       .getByRole("textbox", { name: "Name *" })

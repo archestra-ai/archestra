@@ -7,8 +7,8 @@ import {
   type ResourcePermissionGrant,
   type ResourcePermissionScope,
   resourcePermissionPresets,
-  resourcePermissionPresetsFor,
   type ScopedResource,
+  topResourcePermissionPreset,
   widenToPreset,
 } from "@archestra/shared";
 import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
@@ -160,10 +160,10 @@ export default class ResourcePermissionPolicyModel {
             grants: [
               ...["admin", "platform_admin"].map((id) => ({
                 subject: { type: "role" as const, id },
-                // OAuth registrations offer every action except `use`.
-                actions: [
-                  ...resourcePermissionPresetsFor(resource).manage.actions,
-                ],
+                // Each resource's widest preset: OAuth registrations offer
+                // every action except `use`, and only the MCP registry adds
+                // deployment-spec configuration above Full access.
+                actions: [...topResourcePermissionPreset(resource).actions],
               })),
               ...(resource === "llmModel"
                 ? [

@@ -113,25 +113,26 @@ describe("AgentRuntimeFields", () => {
     expect(screen.getByLabelText("Container image")).toHaveValue("");
     expect(screen.getByLabelText("Inference API")).toBeVisible();
     expect(screen.getByLabelText("Steering")).toBeVisible();
-    expect(
-      screen.queryByLabelText("Maximum duration (hours)"),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Advanced$/ }));
-    expect(screen.getByLabelText("Maximum duration (hours)")).toHaveAttribute(
+    expect(screen.getByLabelText("Maximum duration")).toHaveAttribute(
       "placeholder",
-      "36 (Installation Default)",
+      "36 (default)",
     );
-    expect(screen.getByLabelText("Idle timeout (minutes)")).toHaveAttribute(
+    expect(screen.getByLabelText("Idle timeout")).toHaveAttribute(
       "placeholder",
-      "45 (Installation Default)",
+      "45 (default)",
+    );
+    expect(screen.getByLabelText("Metered LLM budget")).toHaveAttribute(
+      "placeholder",
+      "No limit (default)",
+    );
+    // Resources, ports, and privileged mode stay closed behind a summary.
+    expect(screen.queryByLabelText("Memory limit")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /Resources and access/ }),
     );
     expect(screen.getByLabelText("Memory limit")).toHaveAttribute(
       "placeholder",
-      "6Gi (Installation Default)",
-    );
-    expect(screen.getByLabelText("Metered LLM budget (USD)")).toHaveAttribute(
-      "placeholder",
-      "No limit (Installation Default)",
+      "6Gi (default)",
     );
     expect(screen.getByLabelText("Ports to forward")).toHaveValue("");
     await user.type(screen.getByLabelText("Ports to forward"), "3000, 9000");
@@ -157,7 +158,7 @@ describe("AgentRuntimeFields", () => {
       JSON.parse(screen.getByTestId("config").textContent ?? "{}").ports,
     ).toEqual([3000, 9000]);
     expect(
-      screen.getByText(/delivers follow-up instructions between Agent turns/i),
+      screen.getByText(/Follow-ups are delivered between turns/i),
     ).toBeVisible();
     expect(
       screen.getByText(/Stops the run after it finishes a task/i),
@@ -171,7 +172,7 @@ describe("AgentRuntimeFields", () => {
     fireEvent.change(screen.getByLabelText("Arguments (one per line)"), {
       target: { value: "--permission-mode\nbypassPermissions" },
     });
-    await user.type(screen.getByLabelText("Maximum duration (hours)"), "12");
+    await user.type(screen.getByLabelText("Maximum duration"), "12");
     await user.type(screen.getByLabelText("Memory limit"), "8Gi");
     await user.click(screen.getByRole("button", { name: "Add variable" }));
     const variableDialog = screen.getByRole("dialog");

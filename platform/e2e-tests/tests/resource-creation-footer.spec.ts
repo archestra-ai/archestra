@@ -302,6 +302,13 @@ async function expectReachableActions({
   page: Page;
   actions: Locator[];
 }) {
+  // Forms that tuck their last fields (labels) under a collapsed Advanced
+  // section expand it, so the check below still reaches the real last field.
+  const advanced = page.getByRole("button", { name: /^Advanced/ });
+  const expandsAdvanced =
+    (await advanced.count()) > 0 &&
+    (await advanced.getAttribute("aria-expanded")) === "false";
+  if (expandsAdvanced) await toggleSection(page, advanced);
   const viewport = page.viewportSize();
   const mobile = !!viewport && viewport.width < 640;
   const scroll =
@@ -340,6 +347,28 @@ async function expectReachableActions({
   await scroll.evaluate((element) => {
     element.scrollTop = 0;
   });
+  // Leave the form as it was found for the checks that follow.
+  if (expandsAdvanced) await toggleSection(page, advanced);
+}
+
+/** Opens or closes a collapsible section and waits for it to settle. */
+async function toggleSection(page: Page, trigger: Locator) {
+  await trigger.click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter(
+              (animation) =>
+                animation.playState === "running" &&
+                animation.effect?.getComputedTiming().iterations !==
+                  Number.POSITIVE_INFINITY,
+            ).length,
+      ),
+    )
+    .toBe(0);
 }
 
 async function footerStyle(button: Locator) {

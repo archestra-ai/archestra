@@ -425,7 +425,7 @@ describe("McpServerIssueNotice", () => {
     expect(screen.getByText(/at main/)).toBeTruthy();
   });
 
-  it("panel: keeps the pill, the fix prose and both verbs", () => {
+  it("panel: keeps the pill, the fix prose and both verbs", async () => {
     renderWithQuery(
       <McpServerIssueNotice
         item={item}
@@ -441,6 +441,11 @@ describe("McpServerIssueNotice", () => {
     expect(
       screen.getByRole("button", { name: "Edit configuration" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show details" })).toBeTruthy();
+    // The raw message stays collapsed until asked for.
+    expect(screen.queryByText("exit code 1")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByText("exit code 1")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Hide details" }));
+    expect(screen.queryByText("exit code 1")).toBeNull();
   });
 });

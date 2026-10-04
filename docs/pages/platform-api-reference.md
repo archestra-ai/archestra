@@ -1,14 +1,14 @@
 ---
 title: "API Reference"
 category: Archestra Platform
-description: "Interactive API documentation for Archestra"
+description: "Authenticate platform API requests and explore the endpoint reference."
 order: 6
-lastUpdated: 2026-09-04
+lastUpdated: 2026-10-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Explore the Archestra API using the interactive documentation below.
+Use the platform API to manage Archestra resources from scripts and integrations. The interactive reference below lists endpoints, request parameters, and responses.
 
 ## Authentication
 
@@ -22,17 +22,17 @@ Use personal keys for local scripts, development tools, and user-owned automatio
 
 ### Service Accounts
 
-Service accounts are organization-owned identities for automation. Create them
-from **Settings → Service Accounts**, assign a role, and create an API key.
+Service accounts are organization-owned identities for automation. Create them from **Settings → Service Accounts**, assign a role, and create an API key.
 
-Service account requests authorize from the service account's assigned role.
-Disable or delete the service account to stop all of its keys, or delete an
-individual key when rotating credentials.
+Service account requests authorize from the service account's assigned role. Disable or delete the service account to stop all its keys. Delete an individual key when rotating credentials.
 
-See [LLM API Permissions](platform-access-control#llm-api-permissions) for cost and log export roles.
+See [LLM API Permissions](/docs/platform-access-control#llm-api-permissions) for cost and log export roles.
 
-Use service accounts for CI, scheduled jobs, shared integrations, and production
-automation that should not depend on an individual user remaining active.
+Use service accounts for CI, scheduled jobs, and shared integrations. These credentials remain independent of individual users.
+
+## Endpoints
+
+For model requests and MCP tools, see [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) and [MCP Authentication](/docs/mcp-authentication).
 
 :::swagger-ui
 :::

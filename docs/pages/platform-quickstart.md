@@ -2,106 +2,78 @@
 title: Quickstart
 category: Archestra Platform
 order: 1
-description: Get started with Archestra Platform using Docker
-lastUpdated: 2026-07-03
+description: Run Archestra locally and ask your first agent a question.
+lastUpdated: 2026-10-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-## Run it locally to try!
+This tutorial uses the all-in-one Docker image for a local evaluation. For a production installation, use the [Deployment guide](/docs/platform-deployment).
 
-We've prepared an all-in-one Docker image to make trying Archestra for the first time simple.
+## Before You Start
+
+You need Docker running on your machine and credentials for a supported [model provider](/docs/platform-supported-llm-providers). The example agent also needs internet access to read the documentation.
+
+<span id="run-it-locally-to-try"></span>
+
+## Run Archestra
 
 **Linux / macOS:**
 
 ```bash
-docker pull archestra/platform:latest;
+docker pull archestra/platform:latest
 docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
    -e ARCHESTRA_QUICKSTART=true \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \
-   archestra/platform;
+   archestra/platform:latest
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-docker pull archestra/platform:latest;
+docker pull archestra/platform:latest
 docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 `
    -e ARCHESTRA_QUICKSTART=true `
    -v /var/run/docker.sock:/var/run/docker.sock `
    -v archestra-postgres-data:/var/lib/postgresql/data `
    -v archestra-app-data:/app/data `
-   archestra/platform;
+   archestra/platform:latest
 ```
 
-The UI and API are bound to `127.0.0.1`, so you can open them locally at http://localhost:3000 and http://localhost:9000.
+Open [http://localhost:3000](http://localhost:3000) when the container is ready. The API listens at [http://localhost:9000](http://localhost:9000). Both ports bind to your local machine.
 
-Once it's up, follow http://localhost:3000
+The named volumes preserve your database and application data between container runs.
 
-## Build Your First Agent `Easy`
+## Connect a Model Provider
 
-1. Go to **MCP Registry**, search for `microsoft__playwright-mcp`, install it.
-2. Archestra runs the MCP server in a Kubernetes cluster. To verify, run `kubectl get pods`.
-3. Go to **Agents** and create "Archestra Docs Reader Agent" with this system prompt: `You're using playwright to answer questions about Archestra based on /docs/`
-4. While editing the agent, make sure to enable all `microsoft__playwright-mcp` tools for it.
-5. Go to **Model Providers** (in the Studio sidebar) and add your preferred provider. You can connect commercial providers like OpenAI, Anthropic, or Google Gemini. For a free option, use [Cerebras](https://cerebras.ai/) or a local [Ollama](https://ollama.com/) instance.
-6. Go to **Chat**, choose the "Archestra Docs Reader Agent" and ask "How could I deploy Archestra?"
-   ![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.webp)
-   The agent navigates the website to answer the question.
+Switch to **Studio** and open **Model Providers**. Add your provider credentials before using Chat. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for provider-specific setup.
 
-## Connect to Your Agent via MCP Gateway `Advanced`
+<span id="build-your-first-agent-easy"></span>
 
-Archestra is not just a Chat UI, it's a very capable MCP Gateway. Let's connect our "Archestra Docs Reader Agent" to **Claude Code** to make sure we can trigger it as an MCP server!
+## Create a Docs Reader Agent
 
-```mermaid
-graph LR
-    A[Claude] --> B[Archestra]
-    subgraph B[Archestra]
-        B1[MCP Gateway] --> B2[MCP Orchestrator in K8S]
-        subgraph B2[MCP Orchestrator in K8S]
-            B3[Playwright Headless Browser]
-        end
-    end
-```
+This example uses a browser tool to answer questions about Archestra documentation.
 
-1. Go to **MCP Gateways**, create a new one.
-2. Make sure to set "Archestra Docs Reader Agent" as a sub-agent.
-3. Save changes and Copy MCP configuration.
-4. Add MCP Gateway to your Claude. Here is my archestra config (your auth key will be different!):
+1. In **MCP Registry**, search for `microsoft__playwright-mcp` and install it.
+2. In **Agents**, create an agent named **Archestra Docs Reader**.
+3. Set its instructions to: `Use Playwright to read https://archestra.ai/docs/ and answer questions about Archestra. Cite the documentation pages you use.`
+4. Enable the installed Playwright tools for the agent and save it.
+5. Switch to **AI**, open **Chat**, and select the agent and a model.
+6. Ask: `How can I deploy Archestra?`
 
-```
-{
-  "mcpServers": {
-    "archestra": {
-      "url": "http://localhost:9000/v1/mcp/e1b0272c-3839-4575-a49d-aabb864d638d",
-      "headers": {
-        "Authorization": "Bearer arch_119220a7bfc485d66b678d3e9fb2db36"
-      }
-    }
-  }
-}
-```
+The agent uses its browser tools to read the docs, then returns an answer. You can inspect the tool calls in the chat.
 
-I converted it to the command for claude:
+![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.webp)
 
-```
-claude mcp add archestra "http://localhost:9000/v1/mcp/e1b0272c-3839-4575-a49d-aabb864d638d" --transport http --header "Authorization: Bearer arch_119220a7bfc485d66b678d3e9fb2db36"
-```
+<span id="connect-to-your-agent-via-mcp-gateway-advanced"></span>
+<span id="whats-next"></span>
 
-Now ask Claude:
+## Next Steps
 
-```
-Ask archestra to give you all the deployment options.
-```
-
-## What's next?
-
-- [Chat Interface](/docs/platform-chat) - Interact with AI agents using MCP tools
-- [Agents](/docs/platform-agents) - Build autonomous agents with no-code
-- [LLM Proxy](/docs/platform-llm-proxy) - Secure your AI applications
-- [MCP Gateway](/docs/platform-mcp-gateway) - Connect external systems to agents
-- [Deployment](/docs/platform-deployment) - Deploy Archestra in production
-- [Brew By Weight? Brew By AI!](https://archestra.ai/blog/brew-by-ai) - Fun post about building MCP, running it in Archestra to get the perfect espresso.
-- [Join our Slack Community](https://archestra.ai/join-slack) - Connect with other users and the team
+- [Chat](/docs/platform-chat): Continue working with your agent.
+- [Agents](/docs/platform-agents): Configure tools, sub-agents, and triggers.
+- [MCP Gateway](/docs/platform-mcp-gateway): Connect external clients to selected tools.
+- [Connect to Archestra](/docs/platform-connection): Configure applications and MCP clients.
+- [Deployment](/docs/platform-deployment): Run Archestra for your team.

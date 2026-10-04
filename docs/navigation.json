@@ -1,0 +1,85 @@
+{
+  "Get Started": [
+    "platform-overview",
+    "platform-quickstart",
+    "platform-connection",
+    "platform-migrate-from-claude-openclaw-hermes",
+    "platform-pricing-model"
+  ],
+  "Workspace": [
+    "platform-chat",
+    "platform-projects",
+    "platform-apps",
+    "platform-knowledge"
+  ],
+  "Agents": [
+    "platform-agents",
+    "platform-agent-runtime",
+    "platform-agent-skills",
+    "platform-agent-skills-sharing",
+    "platform-agent-plugins",
+    "platform-built-in-subagents",
+    "platform-code-sandbox",
+    "platform-agent-hooks",
+    "platform-outbound-a2a-agents",
+    "platform-agent-triggers-webhook-a2a",
+    "platform-agent-triggers-email",
+    "platform-slack",
+    "platform-ms-teams",
+    "platform-telegram"
+  ],
+  "Integrations": [
+    "platform-mcp",
+    "platform-private-registry",
+    "platform-orchestrator",
+    "platform-mcp-gateway",
+    "platform-mcp-gateway-skills",
+    "mcp-authentication",
+    "platform-llm-proxy",
+    "platform-llm-proxy-authentication",
+    "platform-claude-code-example",
+    "platform-claude-desktop-example",
+    "platform-n8n-example",
+    "platform-openwebui-example",
+    "platform-vercel-ai-example",
+    "platform-pydantic-example",
+    "platform-mastra-example",
+    "platform-foundry",
+    "platform-model-router-client-credentials-example",
+    "platform-model-router-user-oauth-example"
+  ],
+  "Administration & Operations": [
+    "platform-deployment",
+    "platform-access-control",
+    "platform-ai-tool-guardrails",
+    "platform-costs-and-limits",
+    "platform-observability",
+    "platform-performance-benchmarks",
+    "platform-environments",
+    "platform-identity-providers",
+    "platform-sso",
+    "platform-sso-role-mapping",
+    "platform-sso-team-sync",
+    "platform-enterprise-managed-auth",
+    "platform-entra-obo-setup",
+    "platform-okta-setup",
+    "platform-content-encryption",
+    "platform-secrets-management",
+    "platform-credentials",
+    "platform-two-factor-authentication",
+    "platform-reset-user-password"
+  ],
+  "Reference": [
+    "platform-api-reference",
+    "platform-supported-llm-providers",
+    "platform-archestra-mcp-server"
+  ],
+  "Contributing": [
+    "contributing",
+    "platform-developer-quickstart",
+    "platform-adding-llm-providers",
+    "platform-adding-knowledge-connectors",
+    "platform-adding-knowledge-retrieval-backends",
+    "security"
+  ]
+}

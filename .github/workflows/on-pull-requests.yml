@@ -184,6 +184,11 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Validate docs navigation and its regression tests
+        run: |
+          python3 .github/scripts/check-docs-navigation.py
+          python3 -m unittest discover -s .github/scripts -p 'test_docs_navigation.py'
+
       - name: Check internal doc links and asset embeds resolve
         run: python3 .github/scripts/check-docs-links.py
 

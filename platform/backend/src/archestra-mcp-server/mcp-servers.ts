@@ -934,6 +934,7 @@ async function handleEditMcpConfig(
       await assertCanWriteMcpDeploymentYaml({
         userId: context.userId,
         organizationId,
+        catalogId: existing.id,
         requested: args.deploymentSpecYaml,
         requestedLocalConfig: {
           envFrom: args.envFrom ?? existing.localConfig?.envFrom,

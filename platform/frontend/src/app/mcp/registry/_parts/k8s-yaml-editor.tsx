@@ -61,7 +61,7 @@ export function K8sYamlEditor({
     let active = true;
     const timeoutId = setTimeout(() => {
       validateYaml.mutate(
-        { yaml: value },
+        { yaml: value, catalogId },
         {
           onSuccess: (result) => {
             if (!active) return;
@@ -79,7 +79,7 @@ export function K8sYamlEditor({
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [value, onValidationChange]);
+  }, [value, catalogId, onValidationChange]);
 
   const handleEditorChange = useCallback(
     (newValue: string | undefined) => {
@@ -148,13 +148,19 @@ export function K8sYamlEditor({
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Deployment YAML</span>
-            {readOnly && (
-              <span className="text-xs text-muted-foreground">Read only</span>
-            )}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Deployment YAML</span>
+              {readOnly && (
+                <span className="text-xs text-muted-foreground">Read only</span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Customize the Kubernetes deployment to mount secrets or volumes,
+              adjust resources, or add labels and annotations.
+            </p>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             {help}
             {!readOnly && (
               <Button

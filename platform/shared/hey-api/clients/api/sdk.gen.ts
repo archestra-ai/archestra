@@ -5032,7 +5032,7 @@ export const deleteInternalMcpCatalogItemByName = <ThrowOnError extends boolean 
 export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<RestoreInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).post<RestoreInternalMcpCatalogItemResponses, RestoreInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/restore', ...options });
 
 /**
- * Generate a deployment YAML template preview for a catalog item
+ * Generate a deployment YAML template preview. Requires Full access to this MCP registry entry.
  *
  * Authentication:
  *
@@ -5040,13 +5040,12 @@ export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `mcpAdvancedSettings:read`: View the Kubernetes deployment YAML of self-hosted MCP servers
  * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentYamlPreviewData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentYamlPreviewResponses, GetDeploymentYamlPreviewErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/deployment-yaml-preview', ...options });
 
 /**
- * Validate a deployment YAML template
+ * Validate a deployment YAML template. Requires Full access to the supplied catalogId, or to all MCP registry entries when catalogId is omitted.
  *
  * Authentication:
  *
@@ -5054,7 +5053,7 @@ export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `mcpAdvancedSettings:read`: View the Kubernetes deployment YAML of self-hosted MCP servers
+ * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ValidateDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ValidateDeploymentYamlResponses, ValidateDeploymentYamlErrors, ThrowOnError>({
     url: '/api/internal_mcp_catalog/validate-deployment-yaml',
@@ -5066,7 +5065,7 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
- * Reset the deployment YAML to default by clearing the custom YAML
+ * Reset the deployment YAML to default by clearing the custom YAML. Requires Full access to this MCP registry entry.
  *
  * Authentication:
  *
@@ -5074,8 +5073,6 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `mcpAdvancedSettings:read`: View the Kubernetes deployment YAML of self-hosted MCP servers
- * `mcpAdvancedSettings:update`: Edit Kubernetes deployment YAML, Secret/ConfigMap references, and service accounts of self-hosted MCP servers
  * `mcpRegistry:update`: Modify MCP registry entries
  */
 export const resetDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ResetDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ResetDeploymentYamlResponses, ResetDeploymentYamlErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/reset-deployment-yaml', ...options });

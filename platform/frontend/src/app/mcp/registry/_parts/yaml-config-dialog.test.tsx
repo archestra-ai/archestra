@@ -15,7 +15,10 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { YamlConfigContent } from "./yaml-config-dialog";
 
 vi.mock("@/lib/auth/auth.query");
@@ -79,6 +82,11 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 beforeEach(() => {
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: ["read", "use", "update", "delete", "manage-permissions"].map(
+      (action) => ({ resource: "mcpRegistry", scope: "*", action }),
+    ),
+  } as ReturnType<typeof useScopedCapabilities>);
   saved.length = 0;
   resetCount = 0;
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
@@ -152,10 +160,10 @@ describe("deployment YAML workflow", () => {
     );
   });
 
-  it("lets a read-only role inspect the template and help without edit or reset controls", async () => {
-    vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-      typeof useHasPermissions
-    >);
+  it("disables edit and reset controls when deployment authority is absent", async () => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     renderEditor();
     const editor = await screen.findByRole("textbox", {
       name: "Deployment YAML",

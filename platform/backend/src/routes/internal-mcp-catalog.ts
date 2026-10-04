@@ -58,7 +58,10 @@ import {
   assertValuesMatchEnvironmentRegex,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
-import { assertCanWriteMcpDeploymentYaml } from "@/services/mcp-advanced-settings";
+import {
+  assertCanManageMcpDeployment,
+  assertCanWriteMcpDeploymentYaml,
+} from "@/services/mcp-advanced-settings";
 import {
   extractLocalConfigSecrets,
   getCatalogClientSecretValues,
@@ -1029,6 +1032,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await assertCanWriteMcpDeploymentYaml({
         userId: request.user.id,
         organizationId: request.organizationId,
+        catalogId: id,
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
         current: originalCatalogItem.deploymentSpecYaml,
@@ -1916,7 +1920,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetDeploymentYamlPreview,
         description:
-          "Generate a deployment YAML template preview for a catalog item",
+          "Generate a deployment YAML template preview. Requires Full access to this MCP registry entry.",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,
@@ -1926,6 +1930,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
+      await assertCanManageMcpDeployment({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId: id,
+      });
       const isAdmin = await isMcpInstallationAdmin({
         userId: request.user.id,
         organizationId: request.organizationId,
@@ -1986,15 +1995,23 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.ValidateDeploymentYaml,
-        description: "Validate a deployment YAML template",
+        description:
+          "Validate a deployment YAML template. Requires Full access to the supplied catalogId, or to all MCP registry entries when catalogId is omitted.",
         tags: ["MCP Catalog"],
         body: z.object({
+          catalogId: UuidIdSchema.optional(),
           yaml: z.string().min(1, "YAML content is required"),
         }),
         response: constructResponseSchema(DeploymentYamlValidationSchema),
       },
     },
-    async ({ body: { yaml } }, reply) => {
+    async (request, reply) => {
+      const { yaml, catalogId } = request.body;
+      await assertCanManageMcpDeployment({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId,
+      });
       const result = validateDeploymentYaml(yaml);
       return reply.send(result);
     },
@@ -2006,7 +2023,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ResetDeploymentYaml,
         description:
-          "Reset the deployment YAML to default by clearing the custom YAML",
+          "Reset the deployment YAML to default by clearing the custom YAML. Requires Full access to this MCP registry entry.",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,
@@ -2016,6 +2033,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
+      await assertCanManageMcpDeployment({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId: id,
+      });
       const isAdmin = await isMcpInstallationAdmin({
         userId: request.user.id,
         organizationId: request.organizationId,

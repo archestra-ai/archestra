@@ -3,12 +3,14 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-29
+lastUpdated: 2026-10-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Agents are reusable AI workers with instructions, tool access, and optional knowledge retrieval. You can invoke the same agent from chat, external integrations, or automation without rebuilding the workflow each time.
+
+Create an agent from its name, instructions, and runtime to open it directly in chat. Continue setup to configure tools, messaging, and advanced settings before creating it.
 
 An agent can include:
 

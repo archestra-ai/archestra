@@ -11,11 +11,9 @@ import {
   Ban,
   Code,
   ExternalLink,
-  Globe,
   IdCard,
   KeyRound,
   Plus,
-  Server,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -44,6 +42,12 @@ import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
 import { IdentityFields } from "@/components/identity-fields";
 import { InitialResourcePermissions } from "@/components/initial-resource-permissions";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -70,11 +74,6 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
@@ -85,6 +84,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
+import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import {
@@ -244,9 +244,9 @@ export function McpCatalogForm({
     DocsPage.McpAuthentication,
     "upstream-identity-provider-jwt-jwks",
   );
-  const { data: canUpdateAdvancedSettings } = useHasPermissions({
-    mcpAdvancedSettings: ["update"],
-  });
+  const { data: canUpdateAdvancedSettings } = useMcpDeploymentPermission(
+    initialValues?.id,
+  );
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
@@ -665,6 +665,10 @@ export function McpCatalogForm({
     }
   }
   const hasEnvRuleViolations = envRuleViolations.length > 0;
+  const [advancedOpen, setAdvancedOpen] = useState("");
+  useEffect(() => {
+    if (hasEnvRuleViolations) setAdvancedOpen("advanced");
+  }, [hasEnvRuleViolations]);
   const enterpriseAuthDisabledReason: ReactNode | null =
     !isEnterpriseCoreEnabled
       ? "Available with the Enterprise Core license."
@@ -990,30 +994,6 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
-              {mode === "create" && (
-                <FormField
-                  control={form.control}
-                  name="initialGrants"
-                  render={({ field }) => (
-                    <InitialResourcePermissions
-                      resource="mcpRegistry"
-                      grants={field.value ?? []}
-                      onChange={field.onChange}
-                    />
-                  )}
-                />
-              )}
-              <FormField
-                control={form.control}
-                name="environmentId"
-                render={({ field }) => (
-                  <EnvironmentSelector
-                    value={field.value ?? null}
-                    onChange={field.onChange}
-                    resource="mcpRegistry"
-                  />
-                )}
-              />
               {hasEnvRuleViolations && (
                 <div
                   role="alert"
@@ -1039,133 +1019,38 @@ export function McpCatalogForm({
               )}
               {mode === "create" && (
                 <div className="space-y-2">
-                  <Label>Server Type</Label>
-                  <div className="flex rounded-lg border border-border overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => form.setValue("serverType", "remote")}
-                      className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors ${
-                        currentServerType === "remote"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <Globe className="h-4 w-4" />
-                        Remote
-                      </span>
-                      <span
-                        className={`text-xs font-normal ${currentServerType === "remote" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                      >
-                        Orchestrated externally
-                      </span>
-                    </button>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            isLocalMcpEnabled &&
-                            form.setValue("serverType", "local")
-                          }
-                          disabled={!isLocalMcpEnabled}
-                          className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
-                            !isLocalMcpEnabled
-                              ? "bg-background text-muted-foreground/50 cursor-not-allowed"
-                              : currentServerType === "local"
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
-                          }`}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Server className="h-4 w-4" />
-                            Self-hosted
-                          </span>
-                          <span
-                            className={`text-xs font-normal ${!isLocalMcpEnabled ? "text-muted-foreground/50" : currentServerType === "local" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                          >
-                            Orchestrated in Kubernetes
-                          </span>
-                        </button>
-                      </TooltipTrigger>
-                      {!isLocalMcpEnabled && (
-                        <TooltipContent>
-                          <p className="max-w-xs">
-                            {LOCAL_MCP_DISABLED_MESSAGE}
-                          </p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </div>
-                </div>
-              )}
-              {currentServerType === "local" && (
-                <div className="space-y-2">
-                  <Label>Tenancy</Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div
-                        className={`flex rounded-lg border border-border overflow-hidden ${
-                          isTenancyLocked ? "opacity-60" : ""
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          disabled={isTenancyLocked}
-                          onClick={() => handleMultitenantChange(false)}
-                          className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors ${
-                            isTenancyLocked ? "cursor-not-allowed" : ""
-                          } ${
-                            !isMultitenant
-                              ? "bg-primary text-primary-foreground"
-                              : `bg-background text-muted-foreground ${
-                                  isTenancyLocked
-                                    ? ""
-                                    : "hover:text-foreground hover:bg-muted"
-                                }`
-                          }`}
-                        >
-                          <span>Single-tenant</span>
-                          <span
-                            className={`text-xs font-normal ${!isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                          >
-                            Dedicated deployment per installation
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isTenancyLocked}
-                          onClick={() => handleMultitenantChange(true)}
-                          className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
-                            isTenancyLocked ? "cursor-not-allowed" : ""
-                          } ${
-                            isMultitenant
-                              ? "bg-primary text-primary-foreground"
-                              : `bg-background text-muted-foreground ${
-                                  isTenancyLocked
-                                    ? ""
-                                    : "hover:text-foreground hover:bg-muted"
-                                }`
-                          }`}
-                        >
-                          <span>Multi-tenant</span>
-                          <span
-                            className={`text-xs font-normal ${isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                          >
-                            Shared deployment, Gateway adds caller identity
-                          </span>
-                        </button>
-                      </div>
-                    </TooltipTrigger>
-                    {isTenancyLocked && (
-                      <TooltipContent>
-                        <p className="max-w-xs">
-                          Tenancy cannot be changed after the server is created.
-                          Delete and recreate the server to switch tenancy mode.
-                        </p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
+                  <Label id="server-type-label">Server Type</Label>
+                  <RadioGroup
+                    aria-labelledby="server-type-label"
+                    value={currentServerType}
+                    onValueChange={(value) =>
+                      form.setValue("serverType", value as "local" | "remote")
+                    }
+                    className="flex flex-wrap gap-6"
+                  >
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem id="server-type-remote" value="remote" />
+                      <Label htmlFor="server-type-remote">Remote</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem
+                        id="server-type-local"
+                        value="local"
+                        disabled={!isLocalMcpEnabled}
+                      />
+                      <Label htmlFor="server-type-local">Self-hosted</Label>
+                    </div>
+                  </RadioGroup>
+                  <p className="text-sm text-muted-foreground">
+                    {currentServerType === "remote"
+                      ? "Connect to a server running externally."
+                      : "Run this server in Kubernetes."}
+                  </p>
+                  {!isLocalMcpEnabled && (
+                    <p className="text-sm text-muted-foreground">
+                      {LOCAL_MCP_DISABLED_MESSAGE}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -2393,27 +2278,95 @@ export function McpCatalogForm({
               </div>
             )}
 
-            <Separator />
-            <div className={embedded ? "mb-4" : ""}>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-base">Labels</h3>
-                  {labels.length > 0 && (
-                    <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                      {labels.length}
-                    </span>
+            <Accordion
+              type="single"
+              collapsible
+              value={advancedOpen}
+              onValueChange={setAdvancedOpen}
+            >
+              <AccordionItem value="advanced">
+                <AccordionTrigger>Advanced</AccordionTrigger>
+                <AccordionContent className="space-y-6">
+                  {mode === "create" && (
+                    <FormField
+                      control={form.control}
+                      name="initialGrants"
+                      render={({ field }) => (
+                        <InitialResourcePermissions
+                          resource="mcpRegistry"
+                          grants={field.value ?? []}
+                          onChange={field.onChange}
+                        />
+                      )}
+                    />
                   )}
-                </div>
-              </div>
-              <div className="pt-4">
-                <ProfileLabels
-                  ref={labelsRef}
-                  labels={labels}
-                  onLabelsChange={setLabels}
-                  showLabel={false}
-                />
-              </div>
-            </div>
+                  <FormField
+                    control={form.control}
+                    name="environmentId"
+                    render={({ field }) => (
+                      <EnvironmentSelector
+                        value={field.value ?? null}
+                        onChange={field.onChange}
+                        resource="mcpRegistry"
+                      />
+                    )}
+                  />
+                  {currentServerType === "local" && (
+                    <div className="space-y-2">
+                      <Label id="tenancy-label">Tenancy</Label>
+                      <RadioGroup
+                        aria-labelledby="tenancy-label"
+                        value={isMultitenant ? "multi" : "single"}
+                        onValueChange={(value) =>
+                          handleMultitenantChange(value === "multi")
+                        }
+                        disabled={isTenancyLocked}
+                        className="flex flex-wrap gap-6"
+                      >
+                        <div className="flex items-center gap-2">
+                          <RadioGroupItem id="tenancy-single" value="single" />
+                          <Label htmlFor="tenancy-single">Single-tenant</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <RadioGroupItem id="tenancy-multi" value="multi" />
+                          <Label htmlFor="tenancy-multi">Multi-tenant</Label>
+                        </div>
+                      </RadioGroup>
+                      <p className="text-sm text-muted-foreground">
+                        {isMultitenant
+                          ? "Shared deployment; the gateway adds caller identity."
+                          : "Dedicated deployment per installation."}
+                      </p>
+                      {isTenancyLocked && (
+                        <p className="text-sm text-muted-foreground">
+                          Tenancy cannot be changed after the server is created.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <div className={embedded ? "mb-4" : ""}>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-base">Labels</h3>
+                        {labels.length > 0 && (
+                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                            {labels.length}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="pt-4">
+                      <ProfileLabels
+                        ref={labelsRef}
+                        labels={labels}
+                        onLabelsChange={setLabels}
+                        showLabel={false}
+                      />
+                    </div>
+                  </div>{" "}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
         </fieldset>
 

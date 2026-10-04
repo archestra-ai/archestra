@@ -63875,6 +63875,7 @@ export type GetDeploymentYamlPreviewResponse = GetDeploymentYamlPreviewResponses
 
 export type ValidateDeploymentYamlData = {
     body: {
+        catalogId?: string;
         yaml: string;
     };
     path?: never;

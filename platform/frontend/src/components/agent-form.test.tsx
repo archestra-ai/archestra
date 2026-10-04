@@ -4808,6 +4808,35 @@ describe("AgentForm save payload and failure handling", () => {
     expect(refetchAgentTools).not.toHaveBeenCalled();
   });
 
+  it("creates an agent directly from Configuration with untouched setup defaults", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    render(
+      <AgentForm
+        agentType="agent"
+        activeSection="configuration"
+        submitEnabled
+        onCreated={onCreated}
+      />,
+    );
+    await user.type(
+      screen.getByPlaceholderText("Enter agent name"),
+      "Quick setup agent",
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() =>
+      expect(onCreated).toHaveBeenCalledWith({
+        id: "created-agent",
+        name: "New Agent",
+      }),
+    );
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      name: "Quick setup agent",
+      accessAllTools: true,
+      initialGrants: [],
+    });
+  });
+
   it("keeps every step's editors mounted while one step shows, and submits only when told to", async () => {
     // The create wizard walks one form across its steps: what a hidden step
     // holds (the tools picked on it) must survive the step change, and Enter

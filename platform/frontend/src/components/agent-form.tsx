@@ -3277,16 +3277,6 @@ export function AgentForm({
                     </div>
                   )}
 
-                  {!agent && agentType !== "llm_proxy" && (
-                    <InitialResourcePermissions
-                      resource={
-                        agentType === "mcp_gateway" ? "mcpGateway" : "agent"
-                      }
-                      grants={initialGrants}
-                      onChange={setInitialGrants}
-                    />
-                  )}
-
                   {!agent && isInternalAgent && agentRuntimeEnabled && (
                     <div className="space-y-4 border-t pt-6">
                       <AgentRuntimePicker
@@ -3890,6 +3880,15 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("advanced") && "hidden")}
             >
+              {!agent && agentType !== "llm_proxy" && (
+                <InitialResourcePermissions
+                  resource={
+                    agentType === "mcp_gateway" ? "mcpGateway" : "agent"
+                  }
+                  grants={initialGrants}
+                  onChange={setInitialGrants}
+                />
+              )}
               {/* Skills served over MCP (SEP-2640). Gateways only, behind the
                   draft-extension feature flag. It sits in Advanced rather than
                   beside Tools & Knowledge: these are resources the gateway

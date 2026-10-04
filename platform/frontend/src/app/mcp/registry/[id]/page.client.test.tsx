@@ -13,6 +13,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useHasPermissions,
   useMissingPermissions,
+  useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -196,6 +197,11 @@ function section(name: string) {
 
 describe("McpCatalogItemDetailPage overview", () => {
   beforeEach(() => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: ["read", "use", "update", "delete", "manage-permissions"].map(
+        (action) => ({ resource: "mcpRegistry", scope: "*", action }),
+      ),
+    } as ReturnType<typeof useScopedCapabilities>);
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
@@ -353,6 +359,29 @@ describe("McpCatalogItemDetailPage overview", () => {
       "page",
     );
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+  });
+
+  it.each([
+    "edit",
+    "other-entry",
+  ])("ignores a YAML deep link for %s access", (access) => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: (access === "edit"
+        ? ["read", "use", "update"]
+        : ["read", "use", "update", "delete", "manage-permissions"]
+      ).map((action) => ({
+        organizationId: "org",
+        resource: "mcpRegistry",
+        scope: access === "edit" ? "cat-1" : "cat-other",
+        action,
+      })),
+    } as ReturnType<typeof useScopedCapabilities>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=yaml") as ReturnType<typeof useSearchParams>,
+    );
+    renderPage();
+    expect(screen.queryByRole("link", { name: "K8s YAML" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
   });
 
   it("hides managed Playwright configuration actions and ignores YAML deep links", () => {

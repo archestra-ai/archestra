@@ -18,12 +18,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useGetDeploymentYamlPreview,
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
 import { K8sYamlEditor } from "./k8s-yaml-editor";
 
 type CatalogItem =
@@ -57,9 +57,7 @@ export function YamlConfigContent({
 }: YamlConfigContentProps) {
   const appName = useAppName();
   const updateMutation = useUpdateInternalMcpCatalogItem();
-  const { data: canEditYaml } = useHasPermissions({
-    mcpAdvancedSettings: ["update"],
-  });
+  const { data: canEditYaml } = useMcpDeploymentPermission(item?.id);
 
   // Fetch the deployment YAML preview (generates default if not stored)
   const { data: yamlPreview, isLoading: isLoadingYaml } =

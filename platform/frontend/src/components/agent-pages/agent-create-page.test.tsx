@@ -366,14 +366,31 @@ describe("AgentCreatePage", () => {
     );
   });
 
-  it("opens the newly created agent’s summary", async () => {
+  it("opens chat with the newly created agent selected", async () => {
     const user = userEvent.setup();
     renderAgentCreatePage();
     await user.click(
       screen.getByRole("button", { name: /start from scratch/i }),
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
-    expect(push).toHaveBeenCalledWith("/agents/new-1/created");
+    expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
+  });
+
+  it("opens the agent details when the creator can read agents but cannot chat", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({ data: !("chat" in permissions), isPending: false }) as ReturnType<
+          typeof useHasPermissions
+        >,
+    );
+    renderAgentCreatePage();
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
+    expect(screen.getByRole("button", { name: "Create Agent" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "fire created" }));
+    expect(push).toHaveBeenCalledWith("/agents/new-1");
   });
 
   it("keeps a newly created MCP gateway on its connection instructions", async () => {
@@ -383,7 +400,7 @@ describe("AgentCreatePage", () => {
     expect(push).toHaveBeenCalledWith("/mcp/gateways/new-1");
   });
 
-  it("opens the summary for a newly created Claude Code agent", async () => {
+  it("opens chat with a newly created Claude Code agent", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
       feature === "agentRuntime" ? true : undefined,
@@ -393,7 +410,7 @@ describe("AgentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: /claude code/i }));
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
-    expect(push).toHaveBeenCalledWith("/agents/new-1/created");
+    expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
   });
 
   it("stays put with a success state when the creator may not read what it made", async () => {
@@ -439,7 +456,7 @@ describe("AgentCreatePage", () => {
     rerender(
       <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
     );
-    expect(push).toHaveBeenCalledWith("/agents/new-1/created");
+    expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
   });
 
   it("shows the success state when the pending permission settles to a no", async () => {

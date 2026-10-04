@@ -5,6 +5,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   BUILT_IN_AGENT_IDS,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  resourcePermissionPresets,
   TOOL_CREATE_MCP_SERVER_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
@@ -16,6 +17,7 @@ import {
   InternalMcpCatalogModel,
   OrganizationModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { createRestrictedEnvironment } from "@/test/environments";
 import type { Agent } from "@/types";
@@ -354,6 +356,25 @@ spec:
     const org = await fixtures.makeOrganization();
     const user = await fixtures.makeUser();
     await fixtures.makeMember(user.id, org.id, { role });
+    if (role === "editor") {
+      const policy = {
+        organizationId: org.id,
+        resource: "mcpRegistry" as const,
+        scope: "*",
+      };
+      const previous = await ResourcePermissionPolicyModel.find(policy);
+      await ResourcePermissionPolicyModel.replace({
+        ...policy,
+        revision: previous?.revision ?? 0,
+        grants: [
+          ...(previous?.grants ?? []),
+          {
+            subject: { type: "role", id: "editor" },
+            actions: [...resourcePermissionPresets.edit.actions],
+          },
+        ],
+      });
+    }
     const agent = await fixtures.makeAgent({ organizationId: org.id });
     const context: ArchestraContext = {
       agent: { id: agent.id, name: agent.name },
@@ -379,7 +400,6 @@ spec:
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       serverType: "local",
-      authorId: userId,
     });
 
     const result = await executeArchestraTool(
@@ -389,9 +409,7 @@ spec:
     );
 
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      "mcpAdvancedSettings:update",
-    );
+    expect(JSON.stringify(result.content)).toContain("Full access");
     const persisted = await InternalMcpCatalogModel.findById(catalog.id, {
       expandSecrets: false,
     });
@@ -423,9 +441,7 @@ spec:
     );
 
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      "mcpAdvancedSettings:update",
-    );
+    expect(JSON.stringify(result.content)).toContain("Full access");
     expect(
       await InternalMcpCatalogModel.findRootByNameInOrg({
         name: "Editor Yaml Server",
@@ -452,7 +468,7 @@ spec:
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
-      authorId: userId,
+
       serverType: "local",
     });
     const result = await executeArchestraTool(
@@ -470,9 +486,7 @@ spec:
       context,
     );
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      "mcpAdvancedSettings:update",
-    );
+    expect(JSON.stringify(result.content)).toContain("Full access");
     expect(
       (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
         ?.envFrom ?? [],

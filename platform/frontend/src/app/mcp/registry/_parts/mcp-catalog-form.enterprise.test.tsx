@@ -285,13 +285,15 @@ describe("McpCatalogForm enterprise gating", () => {
     expect(fireEvent.cut(clientSecret)).toBe(false);
   });
 
-  it("shows a disabled default environment selector when no custom environments are available", () => {
+  it("reveals the disabled default environment selector under Advanced when no custom environments are available", async () => {
     vi.mocked(useEnvironments).mockReturnValue({
       data: { environments: [], defaultAssignedCatalogCount: 0 },
     } as never);
 
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
+    expect(screen.queryByText("Environment")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
     expect(screen.getByText("Environment")).toBeInTheDocument();
     expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
     expect(

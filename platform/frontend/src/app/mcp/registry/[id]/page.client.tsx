@@ -71,6 +71,7 @@ import {
   useMcpServers,
 } from "@/lib/mcp/mcp-server.query";
 import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
+import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import {
   useDefaultEnvironment,
@@ -269,9 +270,9 @@ function CatalogItemDetails({
   const { data: userCanCreateCatalogItem } = useHasPermissions({
     mcpRegistry: ["create"],
   });
-  const { data: userCanViewDeploymentYaml } = useHasPermissions({
-    mcpAdvancedSettings: ["read"],
-  });
+  const { data: userCanViewDeploymentYaml } = useMcpDeploymentPermission(
+    item.id,
+  );
 
   const { data: allMcpServers } = useMcpServers();
   const { statuses: deploymentStatuses, state: deploymentFeedState } =

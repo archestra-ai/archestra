@@ -255,6 +255,33 @@ describe("OpenAPPA tool execution", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
+  test("a signed proof from one organization cannot read another organization's inbox", async ({
+    makeOrganization,
+    makeMember,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const userId = mockContext.userId;
+    if (!userId) throw new Error("Missing authenticated fixture user");
+    await makeMember(userId, otherOrganization.id, { role: "admin" });
+    const read = vi.spyOn(openappaService, "readPeerMessage");
+
+    await expect(
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+        { message_id: "message-1", peer_proof: peerProof() },
+        {
+          ...mockContext,
+          organizationId: otherOrganization.id,
+          openappaSession: {
+            organization_id: otherOrganization.id,
+            session_id: "other-session",
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(read).not.toHaveBeenCalled();
+  });
+
   test("listing held messages does not expose content digests or sender-supplied identities", async () => {
     const session = {
       organization_id: orgId,

@@ -2312,6 +2312,9 @@ async function admitPeerArrival(params: {
     params.arrival.replace(WITHHELD_RELAY);
     return;
   }
+  // Name resolution is only a hint. The runtime checks the immutable release
+  // and recipient's live label under its family lock; later sender activity
+  // cannot relabel the stored body or authorize a different sender.
   const admitted = await admitPeerMessage({
     session: params.session,
     messageId: trailer.messageId,

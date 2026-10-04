@@ -56,8 +56,8 @@ This tool takes no arguments.
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `list_peer_messages` | List unread messages held for this OpenAPPA session without reading their bodies or changing its label. | None (no additional RBAC permission required) |
-| `read_peer_message` | Read one message held for this OpenAPPA session. | None (no additional RBAC permission required) |
+| `list_peer_messages` | List held messages as JSON: {"messages":[{"message_id":"id","expires_at":"ISO-8601"}]}. | None (no additional RBAC permission required) |
+| `read_peer_message` | Return a held message as text, or refusal feedback with remedy offers. | None (no additional RBAC permission required) |
 | `get_openappa_yell` | Read a saved OpenAPPA report from the current organization, including its originating user or service account. | `openappaDiagnostics:read` |
 | `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | `openappaSettings:update` |
 | `yell` | Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |

@@ -89,6 +89,9 @@ async fn execute(
     let leased = state.lease().await?;
     let pg = postgres_store(&leased.state.store)?;
     let _lock = SessionLock::acquire(pg, root.clone())?;
+    // The family shares a log and operation journal. An interrupted receipt can
+    // leave its projection incomplete, so non-recovery operations fail closed
+    // across the root; ordinary open tool dispatches are not pending receipts.
     if kind != PeerKind::Read
         && leased
             .state
@@ -345,16 +348,17 @@ fn list_result(notices: &[Value]) -> Value {
             })
         })
         .collect();
-    let text = json!({ "messages": messages }).to_string();
+    // One serialization serves the replay receipt and the MCP transport view.
+    let approved_output = json!({ "messages": messages }).to_string();
     json!({
         "decision": "mcp_result",
         "peer_list": true,
         "notices": notices,
-        "approved_output": text,
+        "approved_output": approved_output,
         "output_source": "runtime",
         "result": {
             "isError": false,
-            "content": [{ "type": "text", "text": text }],
+            "content": [{ "type": "text", "text": approved_output }],
         },
     })
 }
@@ -841,6 +845,9 @@ fn resolve_recipient(
         return Ok(Recipient::Foreign);
     };
     opaque_id(parent_id, "recipient parent", 1024)?;
+    // The parent prefix is structural, not authority. The remaining native id
+    // is opaque and may contain ':'; opaque_id rejects control characters.
+    // The same-root parent and retained allowed spawn below authorize binding.
     if !session_id.starts_with(&format!("{parent_id}:")) || session_id.len() == parent_id.len() + 1
     {
         return Ok(Recipient::Foreign);

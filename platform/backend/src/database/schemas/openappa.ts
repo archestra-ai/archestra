@@ -57,6 +57,69 @@ export const openappaPolicyFilesTable = pgTable("openappa_policy_files", {
   bytes: bytea("bytes").notNull(),
 });
 
+/** Required by the shared runtime's PostgreSQL store, including embedded hosts. */
+export const openappaHeldPeerMessagesTable = pgTable(
+  "openappa_held_peer_messages",
+  {
+    seq: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    id: text().notNull().unique(),
+    receiver: text().notNull(),
+    digest: text().notNull(),
+    label: jsonb().notNull(),
+    body: text().notNull(),
+    expiresAt: bigint({ mode: "number" }).notNull(),
+    notified: boolean().notNull().default(false),
+  },
+  (table) => [
+    index("openappa_held_peer_messages_receiver_idx").on(
+      table.receiver,
+      table.seq,
+    ),
+  ],
+);
+
+/** Runtime-owned peer values. Label capture and admission stay inside OpenAPPA. */
+export const openappaEmbeddedPeerMessagesTable = pgTable(
+  "openappa_embedded_peer_messages",
+  {
+    seq: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    id: text().notNull().unique(),
+    root: text().notNull(),
+    sender: text().notNull(),
+    recipient: text().notNull(),
+    pendingSpawn: text(),
+    dispatch: text().notNull(),
+    digest: text().notNull(),
+    label: jsonb().notNull(),
+    body: text(),
+    status: text().notNull(),
+    readCallId: text(),
+    readArguments: text(),
+    decision: jsonb(),
+    expiresAt: bigint({ mode: "number" }).notNull(),
+    createdAt: bigint({ mode: "number" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("openappa_embedded_peer_dispatch_uidx").on(
+      table.root,
+      table.sender,
+      table.dispatch,
+    ),
+    index("openappa_embedded_peer_recipient_idx").on(
+      table.root,
+      table.recipient,
+      table.status,
+    ),
+    uniqueIndex("openappa_embedded_peer_read_call_uidx")
+      .on(table.root, table.recipient, table.readCallId)
+      .where(sql`${table.readCallId} IS NOT NULL`),
+    check(
+      "openappa_embedded_peer_status",
+      sql`${table.status} IN ('held', 'direct', 'read')`,
+    ),
+  ],
+);
+
 const scope = () => ({
   organizationId: text("organization_id").notNull(),
   // Optional audit attribution; participants share one session.

@@ -175,6 +175,17 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     return claudeCodeRelayArrivals(requestBody);
   }
 
+  launchIdentity(
+    text: string,
+  ): { name: string; childNativeId: string } | undefined {
+    if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) return undefined;
+    const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
+    const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
+    if (!id || !name || !isChildId(id) || !isChildId(name)) return undefined;
+    if (id !== name && !id.startsWith(`${name}@`)) return undefined;
+    return { name, childNativeId: id };
+  }
+
   teammateLaunches(requestBody: unknown): Map<string, AppaTeammateLaunch> {
     const launches = new Map<string, AppaTeammateLaunch>();
     for (const { text, callId, teammate } of spawnResultTexts(requestBody)) {

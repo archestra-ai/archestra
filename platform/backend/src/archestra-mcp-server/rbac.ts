@@ -33,6 +33,8 @@ export const TOOL_PERMISSIONS: Record<
   execute_remedy_plan: null,
   yell: null,
   get_remedy_plans: null,
+  list_peer_messages: null,
+  read_peer_message: null,
   get_openappa_yell: { resource: "openappaDiagnostics", action: "read" },
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   list_guardrails_battery_fits: { resource: "openappaPolicy", action: "read" },

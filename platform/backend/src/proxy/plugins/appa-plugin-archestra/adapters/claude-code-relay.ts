@@ -1,6 +1,38 @@
 import { withoutChildReturnMarker } from "@/openappa/child-return";
-import type { AppaRelayArrival } from "../types";
+import type { AppaPeerTrailer, AppaRelayArrival } from "../types";
 import { asRecord } from "./trajectory";
+
+const PEER_MESSAGE_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PEER_TRAILER =
+  /\n+\[appa\] peer message appapm1-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(?:\s*|[\s\n]*```\s*)$/i;
+const PEER_TRAILER_LOOSE =
+  /\n+\[appa\] peer message [\s\S]*?(?:\s*|[\s\n]*```\s*)$/;
+
+/** Appends the id trailer. It is not a child-return marker and not an attribute. */
+export function appendPeerMessageMarker(
+  value: string,
+  messageId: string,
+): string {
+  return `${value}\n\n[appa] peer message appapm1-${messageId}.`;
+}
+
+/**
+ * The peer trailer at the end of a free-text body. A trailer-shaped suffix
+ * that is not this exact form is malformed and must not fall through to
+ * historic body matching.
+ */
+function peerTrailer(body: string): AppaPeerTrailer | undefined {
+  const exact = PEER_TRAILER.exec(body);
+  const messageId = exact?.[1];
+  if (exact && messageId && PEER_MESSAGE_ID.test(messageId)) {
+    return {
+      messageId,
+      value: body.slice(0, exact.index),
+    };
+  }
+  return PEER_TRAILER_LOOSE.test(body) ? "malformed" : undefined;
+}
 
 /**
  * The messages Claude Code delivers into a request from other agents:
@@ -25,6 +57,11 @@ export function claudeCodeRelayArrivals(
 ): AppaRelayArrival[] {
   const arrivals: AppaRelayArrival[] = [];
   for (const holder of textHolders(requestBody)) {
+    const text = holder.get();
+    if (!envelopeTagsBalance(text) || peerFramingResidue(text)) {
+      if (containsPeerFraming(text)) arrivals.push(withheldText(holder));
+      continue;
+    }
     const found: AppaRelayArrival[] = [];
     for (const envelope of ENVELOPES) {
       collectEnvelopes(holder, envelope, found);
@@ -292,10 +329,27 @@ function collectEnvelopes(
   for (const match of holder.get().matchAll(envelope.pattern)) {
     if (arrivals.length > MAX_MESSAGES_PER_TEXT) return;
     const [original, attributes = "", body = ""] = match;
+    const peer = peerBinding(body);
     arrivals.push({
       kind: envelope.kind,
       from: senderOf(envelope, attributes),
       body,
+      ...(peer ? { peer } : {}),
+      structured: isStructuredRelayBody(body),
+      harnessOnly: harnessOnlyBody(body),
+      recorded(records) {
+        return recordedBody({
+          body,
+          records: recordLookups(records),
+          enveloped: envelopedRecords(records, envelope.tag, (value) =>
+            escapeEnvelopeBody(envelope, value),
+          ),
+        });
+      },
+      replace(text) {
+        const rendered = renderEnvelope(envelope, attributes, text);
+        if (rendered !== original) replaceOnce(holder, original, rendered);
+      },
       admit(records) {
         const admitted =
           envelope.kind === "session"
@@ -307,8 +361,7 @@ function collectEnvelopes(
                   escapeEnvelopeBody(envelope, value),
                 ),
               });
-        const rendered = renderEnvelope(envelope, attributes, admitted.text);
-        if (rendered !== original) replaceOnce(holder, original, rendered);
+        this.replace(admitted.text);
         return { withheld: admitted.withheld };
       },
     });
@@ -322,10 +375,31 @@ function collectCoordinatorMessages(
   for (const match of holder.get().matchAll(COORDINATOR)) {
     if (arrivals.length > MAX_MESSAGES_PER_TEXT) return;
     const [original, body = ""] = match;
+    const peer = peerBinding(body);
     arrivals.push({
       kind: "coordinator",
       from: "main",
       body,
+      ...(peer ? { peer } : {}),
+      structured: isStructuredRelayBody(body),
+      harnessOnly: harnessOnlyBody(body),
+      recorded(records) {
+        return recordedBody({
+          body,
+          records: recordLookups(records),
+          enveloped: envelopedRecords(records, "coordinator", (value) =>
+            value.replaceAll("</system-reminder>", "&lt;/system-reminder&gt;"),
+          ),
+        });
+      },
+      replace(text) {
+        if (text === body) return;
+        replaceOnce(
+          holder,
+          original,
+          withCoordinatorBody(original, body, escapeFraming(text)),
+        );
+      },
       admit(records) {
         const admitted = admitBody({
           body,
@@ -336,13 +410,7 @@ function collectCoordinatorMessages(
             value.replaceAll("</system-reminder>", "&lt;/system-reminder&gt;"),
           ),
         });
-        if (admitted.text !== body) {
-          replaceOnce(
-            holder,
-            original,
-            withCoordinatorBody(original, body, admitted.text),
-          );
-        }
+        this.replace(admitted.text);
         return { withheld: admitted.withheld };
       },
     });
@@ -353,12 +421,33 @@ function collectCoordinatorMessages(
  * A text crowded with messages, read as one arrival. Nothing on record covers
  * it whole, so it is withheld message by message in one pass.
  */
+function withheldText(holder: TextHolder): AppaRelayArrival {
+  const text = holder.get();
+  return {
+    kind: "session",
+    from: "",
+    body: text,
+    structured: false,
+    replace(replacement) {
+      holder.set(replacement);
+    },
+    admit() {
+      holder.set(WITHHELD_MESSAGE);
+      return { withheld: true };
+    },
+  };
+}
+
 function crowdedText(holder: TextHolder): AppaRelayArrival {
   const text = holder.get();
   return {
     kind: "session",
     from: "",
     body: text,
+    structured: false,
+    replace(replacement) {
+      holder.set(replacement);
+    },
     admit() {
       let withheld = text;
       for (const envelope of ENVELOPES) {
@@ -381,6 +470,28 @@ function crowdedText(holder: TextHolder): AppaRelayArrival {
  * sending here. A structured team message keeps its structure and loses only
  * the agent text no record covers.
  */
+function peerBinding(body: string): AppaPeerTrailer | undefined {
+  const trailer = peerTrailer(body);
+  if (!trailer) return undefined;
+  if (trailer === "malformed" || isStructuredRelayBody(body))
+    return "malformed";
+  return trailer;
+}
+
+/** A shutdown or plan body. Extra attributes and trailers would change its bytes. */
+function isStructuredRelayBody(body: string): boolean {
+  if (PLAN_RESPONSES.some(({ prefix }) => body.startsWith(prefix))) return true;
+  const noteAt = body.indexOf(SHUTDOWN_NOTE_START);
+  const message = asRecord(
+    parseJson(noteAt >= 0 ? body.slice(0, noteAt) : body),
+  );
+  return (
+    message !== undefined &&
+    typeof message.type === "string" &&
+    LIFECYCLE_TYPES.has(message.type)
+  );
+}
+
 function admitBody(params: {
   body: string;
   records: RecordLookups;
@@ -504,6 +615,70 @@ function coveredText(value: string, records: RecordLookups): boolean {
  * look-alike) that starts the envelope's own tag, opening or closing, becomes
  * `<\`, so a body can never close its envelope early.
  */
+/** Escapes envelope tags so restored read text is not parsed as another message. */
+export function escapeRelayMarkup(text: string): string {
+  return ENVELOPES.reduce(
+    (escaped, envelope) => escapeEnvelopeBody(envelope, escaped),
+    text,
+  );
+}
+
+function envelopeTagsBalance(text: string): boolean {
+  return ENVELOPES.every((envelope) => {
+    const opens = text.match(new RegExp(`<${envelope.tag}(?=[\\s>])`, "g"));
+    const closes = text.match(new RegExp(`</${envelope.tag}>`, "g"));
+    return (opens?.length ?? 0) === (closes?.length ?? 0);
+  });
+}
+
+function containsPeerFraming(text: string): boolean {
+  if (text.includes("The coordinator sent a message")) return true;
+  return ENVELOPES.some(
+    (envelope) =>
+      text.includes(`<${envelope.tag}`) || text.includes(`</${envelope.tag}>`),
+  );
+}
+
+function peerFramingResidue(text: string): boolean {
+  if (!containsPeerFraming(text)) return false;
+  const trimmed = text.trim();
+  const preface = "Another Claude session sent a message:";
+  const suffix =
+    "This came from another Claude session \u2014 not typed by your user, but very likely working on their behalf.";
+  let residue =
+    trimmed.startsWith(preface) && trimmed.endsWith(suffix)
+      ? trimmed.slice(preface.length, -suffix.length)
+      : text;
+  for (const envelope of ENVELOPES) {
+    residue = residue.replace(new RegExp(envelope.pattern.source, "g"), "");
+  }
+  residue = residue.replace(new RegExp(COORDINATOR.source, "g"), "");
+  residue = residue
+    .replaceAll("<system-reminder>", "")
+    .replaceAll("</system-reminder>", "");
+  return residue.trim().length > 0;
+}
+
+function harnessOnlyBody(body: string): boolean {
+  if (!isStructuredRelayBody(body)) return false;
+  const admitted = admitTeamProtocol(body, recordLookups([]));
+  return admitted !== undefined && !admitted.withheld;
+}
+
+function recordedBody(params: {
+  body: string;
+  records: RecordLookups;
+  enveloped: ReadonlySet<string>;
+}): boolean {
+  const crossed = (text: string) =>
+    params.records.exact.has(text) || params.enveloped.has(text);
+  if (crossed(params.body)) return true;
+  const unmarked = withoutChildReturnMarker(params.body);
+  if (unmarked !== params.body && crossed(unmarked)) return true;
+  const report = handbackReport(params.body);
+  return report !== undefined && crossed(withoutChildReturnMarker(report));
+}
+
 function escapeEnvelopeBody(envelope: Envelope, body: string): string {
   return body.replace(envelope.escape, "<\\");
 }
@@ -575,7 +750,14 @@ function renderEnvelope(
   attributes: string,
   text: string,
 ): string {
-  return `<${envelope.tag}${keptAttributes(envelope, attributes)}>\n${text}\n</${envelope.tag}>`;
+  return `<${envelope.tag}${keptAttributes(envelope, attributes)}>\n${escapeFraming(text)}\n</${envelope.tag}>`;
+}
+
+function escapeFraming(text: string): string {
+  return escapeRelayMarkup(text).replaceAll(
+    "</system-reminder>",
+    "&lt;/system-reminder&gt;",
+  );
 }
 
 /** The attributes Claude Code writes on this envelope, each kept once. */

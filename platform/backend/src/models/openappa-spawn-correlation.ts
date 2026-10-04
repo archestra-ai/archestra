@@ -4,6 +4,13 @@ import db, { schema } from "@/database";
 const operations = schema.openappaOperationsTable;
 const sessions = schema.openappaSessionsTable;
 
+export type AllowedSpawnAlias = {
+  spawnCallId: string;
+  name?: string;
+  description?: string;
+  launchText?: string;
+};
+
 class OpenAppaSpawnCorrelationModel {
   /**
    * Recovers only the signed spawn binding stored with a child's own event.
@@ -59,6 +66,66 @@ class OpenAppaSpawnCorrelationModel {
     return allowed ? rows[0].toolCallId : null;
   }
 
+  /**
+   * Names a parent is on record for giving the agents it was allowed to
+   * start. Request history can drop these after compaction; the spawn
+   * operation's semantic arguments do not.
+   */
+  static async allowedSpawnAliases(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    parentSessionId: string;
+  }): Promise<AllowedSpawnAlias[]> {
+    const results = schema.openappaProcessedResultsTable;
+    const rows = await db
+      .select({
+        operationId: operations.operationId,
+        arguments: sql<unknown>`COALESCE(${operations.input}->'semantic'->'arguments', ${operations.input}->'context'->'arguments', ${operations.input}->'arguments')`,
+        launchText: results.approvedOutput,
+      })
+      .from(operations)
+      .leftJoin(
+        results,
+        and(
+          eq(results.organizationId, operations.organizationId),
+          eq(results.sessionId, operations.sessionId),
+          eq(results.status, "complete"),
+          eq(
+            results.toolCallId,
+            sql`substring(${operations.operationId} from 6)`,
+          ),
+          params.callerId
+            ? eq(results.callerId, params.callerId)
+            : isNull(results.callerId),
+        ),
+      )
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.parentSessionId),
+          eq(operations.status, "complete"),
+          params.callerId
+            ? eq(operations.callerId, params.callerId)
+            : isNull(operations.callerId),
+          sql`COALESCE(${operations.input}->'semantic'->>'spawn', ${operations.input}->>'spawn') = 'true'`,
+          sql`${operations.decision}->>'decision' = 'allow_call'`,
+          sql`${operations.operationId} LIKE 'call:%'`,
+        ),
+      );
+    return rows.flatMap((row) => {
+      const alias = aliasFromArguments(row.arguments);
+      if (!alias.name && !alias.description && !row.launchText) return [];
+      return [
+        {
+          spawnCallId: row.operationId.slice("call:".length),
+          ...(alias.name ? { name: alias.name } : {}),
+          ...(alias.description ? { description: alias.description } : {}),
+          ...(row.launchText ? { launchText: row.launchText } : {}),
+        },
+      ];
+    });
+  }
+
   /** Whether the runtime allowed `spawnCallId` as a spawn in the parent session. */
   static async allowedSpawn(params: {
     organizationId: string;
@@ -85,6 +152,44 @@ class OpenAppaSpawnCorrelationModel {
       .limit(1);
     return spawn !== undefined;
   }
+}
+
+function aliasFromArguments(value: unknown): {
+  name?: string;
+  description?: string;
+} {
+  const record =
+    typeof value === "string"
+      ? parseJson(value)
+      : isRecord(value)
+        ? value
+        : undefined;
+  if (!record) return {};
+  const name = stringField(record.name);
+  const description = stringField(record.description);
+  return {
+    ...(name ? { name } : {}),
+    ...(description ? { description } : {}),
+  };
+}
+
+function parseJson(value: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
 }
 
 export default OpenAppaSpawnCorrelationModel;

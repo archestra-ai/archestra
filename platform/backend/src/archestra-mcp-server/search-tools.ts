@@ -2,7 +2,9 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   isAlwaysExposedArchestraToolShortName,
   parseFullToolName,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -338,7 +340,9 @@ async function openappaSearchTools(): Promise<
     if (!isOpenappaTool(shortName)) return [];
     if (
       (shortName === "get_remedy_plans" ||
-        shortName === "execute_remedy_plan") &&
+        shortName === "execute_remedy_plan" ||
+        shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+        shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME) &&
       !remediesActive
     ) {
       return [];

@@ -119,9 +119,15 @@ class OpenAppaHelperBridge {
       name: install.batteryName,
       packageHash: install.packageHash,
     });
-    const external = battery?.externals.find(
-      (candidate) => candidate.name === params.externalName,
-    );
+    const matches =
+      battery?.externals.filter(
+        (candidate) => candidate.name === params.externalName,
+      ) ?? [];
+    const kind = consultKind(params.request);
+    const external =
+      matches.length === 1
+        ? matches[0]
+        : matches.find((candidate) => candidate.kind === sectionForKind(kind));
     if (!battery || !external) return { kind: "not_found" };
     if (
       archestraAudience.serves({
@@ -277,6 +283,32 @@ const HELPER_EXEC_TIMEOUT_SECONDS = 4;
  * silent NoAnswer upstream.
  */
 const HELPER_DEADLINE_MS = HELPER_EXEC_TIMEOUT_SECONDS * 1000 + 500;
+
+function consultKind(request: string): string | undefined {
+  try {
+    const parsed = JSON.parse(request) as { kind?: unknown };
+    return typeof parsed.kind === "string" ? parsed.kind : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sectionForKind(kind: string | undefined): string | undefined {
+  switch (kind) {
+    case "annotation":
+      return "annotators";
+    case "authority":
+      return "authorities";
+    case "sanitizer":
+      return "sanitizers";
+    case "audience":
+      return "audience";
+    case "context":
+      return "context";
+    default:
+      return undefined;
+  }
+}
 
 function helperConsultCap(): number {
   return Math.max(1, Math.floor(config.daggerRuntime.maxConcurrent / 2));

@@ -7,6 +7,8 @@ import {
   isSeededAppRenderToolResult,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 } from "@archestra/shared";
 import {
   type CallToolResult,
@@ -1197,31 +1199,6 @@ export async function approveSpawnReturn(params: {
   }
 }
 
-/**
- * A parent addresses a child it started, as a lead does when it sends its
- * teammate a message. The runtime flows the parent's current label into the
- * child before the child reads the message, and retains the message so the
- * child's side can verify it arrived from this parent.
- */
-export async function addressChild(params: {
-  session: OpenAppaSession;
-  operationId: string;
-  childSessionId: string;
-  value: string;
-}): Promise<{ addressed: true } | { addressed: false; feedback: string }> {
-  const decision = await dispatch(params.session, {
-    event: "child_address",
-    operation_id: params.operationId,
-    spawned_id: params.childSessionId,
-    output: params.value,
-  });
-  // A child that ended, or one the runtime never forked, cannot take the
-  // parent's label, so the message must not reach it. The parent's model is
-  // told why; the rest of its turn stands.
-  if (decision.decision === "ack") return { addressed: true };
-  return { addressed: false, feedback: decisionMessage(decision) };
-}
-
 function runtimeToolResult(decision: NativeDecision): CallToolResult {
   if (decision.decision !== "mcp_result")
     return {
@@ -1400,6 +1377,200 @@ export async function loadChildAddresses(params: {
 }
 
 /**
+ * Sends one peer message. The runtime mints the id and captures the sender
+ * label. `released` means the send was stored, not that the recipient may
+ * read the body.
+ */
+export async function sendPeerMessage(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  recipientSessionId: string;
+  recipientParentId?: string;
+  recipientNativeId?: string;
+  recipientSpawnCallId?: string;
+  value: string;
+}): Promise<
+  { kind: "released"; messageId: string } | { kind: "denied"; feedback: string }
+> {
+  const parsed = await peerResponse(
+    params.session,
+    (module, policy) =>
+      module.sendPeerMessage(
+        JSON.stringify({
+          ...peerActor(params.session),
+          operation_id: params.operationId,
+          recipient_session_id: params.recipientSessionId,
+          ...(params.recipientParentId
+            ? { recipient_parent_id: params.recipientParentId }
+            : {}),
+          ...(params.recipientNativeId
+            ? { recipient_native_id: params.recipientNativeId }
+            : {}),
+          ...(params.recipientSpawnCallId
+            ? { recipient_spawn_call_id: params.recipientSpawnCallId }
+            : {}),
+          value: params.value,
+        }),
+        policy,
+      ),
+    z.discriminatedUnion("kind", [
+      z
+        .object({ kind: z.literal("released"), message_id: z.string().min(1) })
+        .strict(),
+      z
+        .object({ kind: z.literal("denied"), feedback: z.string().min(1) })
+        .strict(),
+    ]),
+  );
+  return parsed.kind === "released"
+    ? { kind: "released", messageId: parsed.message_id }
+    : { kind: "denied", feedback: parsed.feedback };
+}
+
+/**
+ * Checks one arrival against the authenticated recipient. A direct body is the
+ * runtime's retained bytes after a live label recheck. Missing or ambiguous
+ * identity is unverified, never the earliest digest match.
+ */
+export async function admitPeerMessage(params: {
+  session: OpenAppaSession;
+  messageId?: string;
+  senderSessionId?: string;
+  value?: string;
+  digest?: string;
+  structured?: boolean;
+}): Promise<
+  | { kind: "admitted"; messageId: string; value: string }
+  | { kind: "held"; notices: PeerNotice[] }
+  | { kind: "unverified" }
+> {
+  const parsed = await peerResponse(
+    params.session,
+    (module, policy) =>
+      module.admitPeerMessage(
+        JSON.stringify({
+          ...peerActor(params.session),
+          ...(params.messageId ? { message_id: params.messageId } : {}),
+          ...(params.senderSessionId
+            ? { sender_session_id: params.senderSessionId }
+            : {}),
+          ...(params.value !== undefined ? { value: params.value } : {}),
+          ...(params.digest ? { digest: params.digest } : {}),
+          ...(params.structured !== undefined
+            ? { structured: params.structured }
+            : {}),
+        }),
+        policy,
+      ),
+    z.discriminatedUnion("kind", [
+      z
+        .object({
+          kind: z.literal("admitted"),
+          message_id: z.string().min(1),
+          value: z.string().min(1),
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal("held"),
+          notices: z.array(PeerNoticeWireSchema),
+        })
+        .strict(),
+      z.object({ kind: z.literal("unverified") }).strict(),
+    ]),
+  );
+  if (parsed.kind === "admitted") {
+    return {
+      kind: "admitted",
+      messageId: parsed.message_id,
+      value: parsed.value,
+    };
+  }
+  if (parsed.kind === "held") {
+    return { kind: "held", notices: parsed.notices.map(peerNotice) };
+  }
+  return { kind: "unverified" };
+}
+
+/**
+ * Lists held notices for the authenticated session. Digest and session ids are
+ * binding material for the caller; a model-facing surface must not print them.
+ * `toolCallId`, when the gateway has one, retains that call's metadata so a
+ * later client tool result cannot replace it.
+ */
+export async function listPeerMessages(params: {
+  session: OpenAppaSession;
+  toolCallId?: string;
+}): Promise<PeerNotice[]> {
+  const parsed = await peerResponse(
+    params.session,
+    (module, policy) =>
+      module.listPeerMessages(
+        JSON.stringify({
+          ...peerActor(params.session),
+          ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
+          tool: archestraMcpBranding.getToolName(
+            TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+          ),
+        }),
+        policy,
+      ),
+    z.object({ notices: z.array(PeerNoticeWireSchema) }),
+  );
+  return parsed.notices.map(peerNotice);
+}
+
+/**
+ * Reads one message through the runtime's stored label. The returned tool
+ * result is the retained native result for this tool call.
+ */
+export async function readPeerMessage(params: {
+  session: OpenAppaSession;
+  toolCallId: string;
+  args: { message_id: string };
+}): Promise<CallToolResult> {
+  const decision = await withRuntime(
+    params.session.organization_id,
+    (module, policy) =>
+      module.readPeerMessage(
+        JSON.stringify({
+          ...peerActor(params.session),
+          tool_call_id: params.toolCallId,
+          message_id: params.args.message_id,
+          tool: archestraMcpBranding.getToolName(
+            TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+          ),
+        }),
+        policy,
+      ),
+  );
+  if (decision.decision === "mcp_result" && decision.result) {
+    return decision.result;
+  }
+  if (decision.decision === "ack") {
+    throw openappaFailure(
+      new Error("OpenAPPA acknowledged a peer read without a body"),
+    );
+  }
+  if (decision.decision === "deny_call") {
+    return {
+      isError: true,
+      content: [{ type: "text", text: decision.feedback }],
+      structuredContent: {
+        decision: "deny_call",
+        peer_read_denied: true,
+        offers: decision.offers ?? [],
+        review: decision.review ?? [],
+      },
+    };
+  }
+  return {
+    isError: true,
+    content: [{ type: "text", text: decisionMessage(decision) }],
+  };
+}
+
+/**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the verified offer claims.
  */
@@ -1504,4 +1675,73 @@ function isPlatformUserQuestion(
     archestraMcpBranding.getToolShortName(canonical) ===
     TOOL_ASK_USER_SHORT_NAME
   );
+}
+
+type PeerNotice = {
+  messageId: string;
+  senderSessionId: string;
+  recipientSessionId: string;
+  /** SHA-256 of the body, 64 lowercase hex. Internal binding material. */
+  digest: string;
+  expiresAt: string;
+};
+
+const PeerNoticeWireSchema = z
+  .object({
+    message_id: z.string().min(1),
+    sender_session_id: z.string().min(1),
+    recipient_session_id: z.string().min(1),
+    digest: z.string().regex(/^[0-9a-f]{64}$/),
+    expires_at: z.string().min(1),
+  })
+  .strict();
+
+function peerNotice(value: z.infer<typeof PeerNoticeWireSchema>): PeerNotice {
+  return {
+    messageId: value.message_id,
+    senderSessionId: value.sender_session_id,
+    recipientSessionId: value.recipient_session_id,
+    digest: value.digest,
+    expiresAt: value.expires_at,
+  };
+}
+
+function peerActor(session: OpenAppaSession) {
+  return {
+    organization_id: session.organization_id,
+    session_id: session.session_id,
+    ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+    ...(session.parent_id ? { parent_id: session.parent_id } : {}),
+  };
+}
+
+async function peerResponse<T>(
+  session: OpenAppaSession,
+  call: (
+    module: Awaited<ReturnType<typeof binding>>,
+    policy: DispatchPolicy,
+  ) => Promise<string>,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  try {
+    return schema.parse(await peerJson(session, call));
+  } catch (error) {
+    throw openappaFailure(error);
+  }
+}
+
+async function peerJson(
+  session: OpenAppaSession,
+  call: (
+    module: Awaited<ReturnType<typeof binding>>,
+    policy: DispatchPolicy,
+  ) => Promise<string>,
+): Promise<unknown> {
+  try {
+    const policy = await effectivePolicy(session.organization_id);
+    const module = await binding();
+    return JSON.parse(await call(module, policy));
+  } catch (error) {
+    throw openappaFailure(error);
+  }
 }

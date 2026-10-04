@@ -332655,7 +332655,8 @@
                 "sanitizer",
                 "annotator",
                 "audience_source",
-                "input"
+                "input",
+                "context_provider"
               ]
             },
             "in": "query",
@@ -332807,7 +332808,8 @@
                               "sanitizer",
                               "annotator",
                               "audience_source",
-                              "input"
+                              "input",
+                              "context_provider"
                             ]
                           },
                           "externalName": {

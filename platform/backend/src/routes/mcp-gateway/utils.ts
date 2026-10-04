@@ -19,9 +19,11 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -276,10 +278,12 @@ const rawArchestraTokenCache =
     defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
   });
 
-/** Remedy tools are advertised only while Guardrails v2 is active. */
+/** Runtime tools are advertised only while Guardrails v2 is active. */
 const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 ]);
 const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   "get_guardrails_policy",
@@ -298,7 +302,7 @@ const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
 
 /**
  * The tools the gateway advertises to every OpenAPPA session without an
- * assignment: the control and notice tools always, and `yell` while agent
+ * assignment: the control, notice and inbox tools, and `yell` while agent
  * reporting is on.
  */
 function isImplicitOpenAppaTool(shortName: string | null | undefined): boolean {

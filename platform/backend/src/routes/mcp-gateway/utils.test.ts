@@ -1614,7 +1614,7 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
-  test("lists APPA notice and remedy tools for an unassigned agent when OpenAPPA is enabled", async ({
+  test("lists APPA notice, remedy and inbox tools for an unassigned agent when OpenAPPA is enabled", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1665,6 +1665,12 @@ describe("createAgentServer tools/list", () => {
     expect(names).toContain(
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
     );
+    for (const inboxTool of [
+      "list_peer_messages",
+      "read_peer_message",
+    ] as const) {
+      expect(names).toContain(archestraMcpBranding.getToolName(inboxTool));
+    }
     for (const policyTool of [
       "get_guardrails_policy",
       "list_guardrails_battery_fits",
@@ -1739,6 +1745,12 @@ describe("createAgentServer tools/list", () => {
     expect(names).not.toContain(
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
     );
+    for (const inboxTool of [
+      "list_peer_messages",
+      "read_peer_message",
+    ] as const) {
+      expect(names).not.toContain(archestraMcpBranding.getToolName(inboxTool));
+    }
     expect(names).toContain(
       archestraMcpBranding.getToolName("get_guardrails_policy"),
     );
@@ -1769,9 +1781,17 @@ describe("createAgentServer tools/list", () => {
     expect(enabledNames).toContain(
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
     );
+    for (const inboxTool of [
+      "list_peer_messages",
+      "read_peer_message",
+    ] as const) {
+      expect(enabledNames).toContain(
+        archestraMcpBranding.getToolName(inboxTool),
+      );
+    }
   });
 
-  test("refuses both remedy tools when the deployment switch is off", async ({
+  test("refuses remedy and inbox tools when the deployment switch is off", async ({
     makeAgent,
     makeOrganization,
   }) => {
@@ -1793,6 +1813,8 @@ describe("createAgentServer tools/list", () => {
     for (const name of [
       archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+      archestraMcpBranding.getToolName("list_peer_messages"),
+      archestraMcpBranding.getToolName("read_peer_message"),
     ]) {
       await expect(
         handler(

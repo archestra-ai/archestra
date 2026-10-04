@@ -3550,6 +3550,13 @@
       "when": 1790979396089,
       "tag": "0506_openappa-unenforced-records",
       "breakpoints": true
+    },
+    {
+      "idx": 507,
+      "version": "7",
+      "when": 1791074452370,
+      "tag": "0507_peer-message-inbox",
+      "breakpoints": true
     }
   ]
 }

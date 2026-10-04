@@ -93,7 +93,7 @@ function classify(error: unknown): {
     };
   // Every later request of the subagent fails the same way: no fork exists
   // for it to open, whatever the retry.
-  if (message.includes(UNFORKED_CHILD))
+  if (message.includes(UNFORKED_CHILD) || message === UNSTARTED_PARENT)
     return {
       statusCode: 409,
       detail:
@@ -104,6 +104,7 @@ function classify(error: unknown): {
 
 /** The runtime's refusal of a child that no approved spawn prepared. */
 const UNFORKED_CHILD = "no prepared fork to open this child";
+const UNSTARTED_PARENT = "parent session has not started";
 
 /** One line, bounded, with any URL credentials removed. */
 function summarize(message: string): string {

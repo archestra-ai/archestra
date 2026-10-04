@@ -182,7 +182,7 @@ fn role_name(role: ExternalRole) -> &'static str {
         ExternalRole::Sanitizer => "sanitizer",
         ExternalRole::Annotator => "annotator",
         ExternalRole::AudienceSource => "audience_source",
-        ExternalRole::Input => "input",
+        ExternalRole::ContextProvider => "context_provider",
     }
 }
 
@@ -277,7 +277,7 @@ mod tests {
             ExternalRole::Sanitizer,
             ExternalRole::Annotator,
             ExternalRole::AudienceSource,
-            ExternalRole::Input,
+            ExternalRole::ContextProvider,
         ] {
             assert_eq!(serde_json::to_value(role).unwrap(), json!(role_name(role)));
         }

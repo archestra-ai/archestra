@@ -324,7 +324,8 @@ mod tests {
                 arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
                 cwd: None,
             },
-            spawn: false,
+            spawn: None,
+            prompt: None,
             ruling: None,
         }
     }
@@ -344,6 +345,8 @@ mod tests {
                 HookEvent::SessionStart {
                     root: actor.root.clone(),
                     principal: None,
+                    address: None,
+                    title: None,
                 }
             )
             .await,
@@ -392,7 +395,8 @@ mod tests {
                 .unwrap(),
                 cwd: None,
             },
-            spawn: false,
+            spawn: None,
+            prompt: None,
             ruling: None,
         };
         assert!(matches!(
@@ -444,7 +448,8 @@ requires = { audience = { within = ["internal"] } }
                             .unwrap(),
                         cwd: None,
                     },
-                    spawn: false,
+                    spawn: None,
+                    prompt: None,
                     ruling: None,
                 }
             )
@@ -560,6 +565,43 @@ delta = {}
             hooks::handle(&runtime, call(&fresh, "github_prod__get_file_contents")).await,
             HookDecision::Refuse { .. }
         ));
+    }
+
+    /// A stored policy that already names one helper under two kinds restores
+    /// without rewriting those bytes. The open trajectory keeps that document.
+    #[tokio::test]
+    async fn a_stored_cross_kind_helper_policy_restores_without_rewriting_it() {
+        let stored = "\
+[policy]
+version = 2
+[[policy.tool]]
+name = \"mcp/github/get_file_contents\"
+delta = {}
+[externals.context.github]
+url = \"http://127.0.0.1:9000/api/openappa/helpers/install-1/github\"
+token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"
+[externals.audience.github]
+url = \"http://127.0.0.1:9000/api/openappa/helpers/install-1/github\"
+token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"
+";
+        // SAFETY: the stored document names the bridge token; the host resolves
+        // it at compile time and does not rewrite the policy bytes.
+        unsafe { std::env::set_var("APPA_ARCHESTRA_BRIDGE_TOKEN", "bridge-token") };
+        compile(stored).expect("stored bytes compile without being rewritten");
+        let runtime = memory_runtime(stored);
+        let opened = started(&runtime, "restored-cross-kind").await;
+        assert!(matches!(
+            hooks::handle(&runtime, call(&opened, "github__get_file_contents")).await,
+            HookDecision::AllowCall { .. }
+        ));
+        runtime.reload(compile(stored).unwrap()).unwrap();
+        assert!(
+            matches!(
+                hooks::handle(&runtime, call(&opened, "github__get_file_contents")).await,
+                HookDecision::AllowCall { .. }
+            ),
+            "restoring the same bytes does not rewrite the open root"
+        );
     }
 
     /// The `[[policy.tool]]` rules of a composed document, in the order it states them.
@@ -821,6 +863,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         // SAFETY: as above.
         unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
         let jev = crate::batteries::bundled()
+            .expect("bundled batteries validate")
             .iter()
             .find(|battery| battery.name == "jev")
             .expect("the jev battery is bundled");

@@ -42,7 +42,7 @@ Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, `
 
 ### Editor
 
-Full access to core resources and settings, but cannot manage users, roles, or identity providers
+Full access to core resources, but cannot change organization settings or manage users, roles, or identity providers
 
 | Resource | Actions |
 |----------|--------|
@@ -50,8 +50,6 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Skills | `read`, `create`, `update`, `delete` |
 | Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create`, `update`, `delete` |
-| Code Sandbox | `execute` |
-| Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create`, `update`, `delete` |
@@ -68,7 +66,6 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Environments | `read`, `create`, `update`, `delete` |
 | Credentials | `read`, `create`, `update`, `delete` |
 | OpenAPPA Policy | `read`, `update` |
-| OpenAPPA Settings | `read` |
 | OpenAPPA Diagnostics | `read`, `update` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
@@ -76,18 +73,11 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Files | `manage` |
 | LLM & MCP Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
-| LLM Settings | `read`, `update` |
-| MCP Settings | `read`, `update` |
-| Skills Settings | `read`, `update` |
-| Knowledge Settings | `read`, `update` |
 | Users | `read` |
-| Invitations | `read` |
 | Roles | `read` |
 | Teams | `read` |
 | Identity Providers | `read` |
 | Secrets | `read` |
-| Organization Settings | `read`, `update` |
-| Site Notifications | `read` |
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
 | Chat Expand Tool Calls | `enable` |
@@ -101,7 +91,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Agents | `read`, `create`, `update`, `delete` |
 | Skills | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create`, `update`, `delete` |
-| Code Sandbox | `execute` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read` |
 | LLM Provider API Keys | `read` |
@@ -116,14 +105,12 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Environments | `read` |
 | Credentials | `read` |
 | OpenAPPA Policy | `read` |
-| OpenAPPA Settings | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
 | Files | `manage` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
-| Site Notifications | `read` |
 | Simple View | `enable` |
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
@@ -173,16 +160,10 @@ The following table lists all available permissions that can be assigned to cust
 | `ac:delete` | Delete custom roles |
 | `accessPolicies:read` | View access policies for all resource types |
 | `accessPolicies:update` | Edit access policies and grant access across all resource types |
-| `agent:read` | View and list agents |
+| `agent:read` | View and list agents, and run commands in their code sandboxes |
 | `agent:create` | Create new agents |
 | `agent:update` | Modify agent configuration and settings |
 | `agent:delete` | Delete agents |
-| `agentSettings:read` | View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
-| `agentSettings:update` | Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
-| `agentTrigger:read` | View agent trigger configurations (Slack, MS Teams, email) |
-| `agentTrigger:create` | Set up new agent triggers |
-| `agentTrigger:update` | Modify agent trigger configurations |
-| `agentTrigger:delete` | Remove agent triggers |
 | `apiKey:read` | View API keys |
 | `apiKey:create` | Create API keys |
 | `apiKey:delete` | Delete API keys |
@@ -212,10 +193,6 @@ The following table lists all available permissions that can be assigned to cust
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |
 | `identityProvider:delete` | Remove identity providers |
-| `invitation:create` | Send invitations to new users |
-| `invitation:cancel` | Cancel pending invitations |
-| `knowledgeSettings:read` | View knowledge settings (embedding and reranking models) |
-| `knowledgeSettings:update` | Modify knowledge settings (embedding and reranking models) |
 | `knowledgeSource:read` | View Knowledge Bases and Connectors |
 | `knowledgeSource:create` | Create Knowledge Bases and Connectors |
 | `knowledgeSource:update` | Modify Knowledge Bases and Connectors |
@@ -238,8 +215,6 @@ The following table lists all available permissions that can be assigned to cust
 | `llmProviderApiKey:delete` | Remove LLM provider API keys |
 | `llmProxy:read` | View the LLM Proxy and its connection details |
 | `llmProxy:update` | Modify LLM Proxy configuration |
-| `llmSettings:read` | View LLM settings |
-| `llmSettings:update` | Modify LLM settings |
 | `llmVirtualKey:read` | View LLM virtual keys |
 | `llmVirtualKey:create` | Create LLM virtual keys |
 | `llmVirtualKey:update` | Modify LLM virtual keys and their visibility |
@@ -262,10 +237,8 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |
 | `mcpServerInstallation:delete` | Uninstall, view deleted, and restore MCP servers within your access |
-| `mcpSettings:read` | View MCP settings (online catalog availability) |
-| `mcpSettings:update` | Modify MCP settings |
 | `member:read` | View organization members and their roles |
-| `member:create` | Add new members to the organization |
+| `member:create` | Add new members to the organization and manage invitations |
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
 | `member:impersonate` | Temporarily sign in as another member to see the app with their access (role debugging) |
@@ -274,10 +247,8 @@ The following table lists all available permissions that can be assigned to cust
 | `openappaDiagnostics:admin` | Read consult logs across the organization |
 | `openappaPolicy:read` | View OpenAPPA policy, batteries, and coverage |
 | `openappaPolicy:update` | Validate and edit OpenAPPA policy and manage batteries |
-| `openappaSettings:read` | View OpenAPPA enforcement settings and GitHub sync |
-| `openappaSettings:update` | Manage OpenAPPA enforcement settings and GitHub sync |
-| `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
-| `organizationSettings:update` | Customize organization appearance, authentication, etc |
+| `organizationSettings:read` | View every organization settings page, including messaging channels |
+| `organizationSettings:update` | Change organization settings, messaging channels, and site notifications |
 | `plugin:read` | View plugins and their file metadata |
 | `plugin:create` | Create plugins |
 | `plugin:update` | Modify plugin metadata and files |
@@ -286,7 +257,6 @@ The following table lists all available permissions that can be assigned to cust
 | `project:create` | Create projects |
 | `project:update` | Edit project descriptions, instructions, and sharing |
 | `project:delete` | Delete projects |
-| `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
 | `scheduledTask:read` | View scheduled tasks and their run history |
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |
 | `scheduledTask:update` | Modify scheduled task configuration |
@@ -298,16 +268,10 @@ The following table lists all available permissions that can be assigned to cust
 | `serviceAccount:update` | Modify service accounts |
 | `serviceAccount:delete` | Delete service accounts |
 | `simpleView:enable` | Collapse the app sidebar by default |
-| `siteNotification:read` | View site-wide notifications |
-| `siteNotification:create` | Create new site notifications |
-| `siteNotification:update` | Modify site notifications |
-| `siteNotification:delete` | Delete site notifications |
 | `skill:read` | View agent skills allowed by your resource grants |
 | `skill:create` | Create new agent skills |
 | `skill:update` | Modify agent skill content allowed by your resource grants |
 | `skill:delete` | Delete agent skills |
-| `skillsSettings:read` | View Skills settings (online catalog availability) |
-| `skillsSettings:update` | Modify Skills settings |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |

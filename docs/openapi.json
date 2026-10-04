@@ -41904,7 +41904,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -42188,7 +42188,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -42815,7 +42815,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Resolve and validate an outbound A2A Agent Card without saving it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Resolve and validate an outbound A2A Agent Card without saving it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -43279,7 +43279,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -43290,7 +43290,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "List configured outbound A2A agents.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List configured outbound A2A agents.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
         "parameters": [
           {
             "schema": {
@@ -43872,7 +43872,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Configure an outbound A2A agent and its default connection.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Configure an outbound A2A agent and its default connection.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -44580,7 +44580,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -44591,7 +44591,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Get one configured outbound A2A agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Get one configured outbound A2A agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
         "parameters": [
           {
             "schema": {
@@ -45143,7 +45143,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Update an outbound A2A agent, refresh its card, or rotate its credential.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Update an outbound A2A agent, refresh its card, or rotate its credential.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -45857,7 +45857,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "organizationSettings:update"
           ]
         }
       },
@@ -45866,7 +45866,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Delete an outbound A2A agent and remove its subagent assignments.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Delete an outbound A2A agent and remove its subagent assignments.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "parameters": [
           {
             "schema": {
@@ -46131,7 +46131,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -46142,7 +46142,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:read`: View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "parameters": [
           {
             "schema": {
@@ -46546,7 +46546,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:read"
+            "organizationSettings:read"
           ]
         }
       }
@@ -47433,7 +47433,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "List internal and external A2A agents for the Agents page.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `agent:read`; when `status=deleted`, requires `agent:delete`. External A2A rows are limited to agents visible to the caller unless they have `agentSettings:update`; when `selectableOnly=true`, external rows are omitted unless the caller has that permission.",
+        "description": "List internal and external A2A agents for the Agents page.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `agent:read`; when `status=deleted`, requires `agent:delete`. External A2A rows are limited to agents visible to the caller unless they have `organizationSettings:update`; when `selectableOnly=true`, external rows are omitted unless the caller has that permission.",
         "parameters": [
           {
             "schema": {
@@ -49070,7 +49070,7 @@
         },
         "x-required-permissions": {
           "kind": "dynamic",
-          "note": "Requires `agent:read`; when `status=deleted`, requires `agent:delete`. External A2A rows are limited to agents visible to the caller unless they have `agentSettings:update`; when `selectableOnly=true`, external rows are omitted unless the caller has that permission.",
+          "note": "Requires `agent:read`; when `status=deleted`, requires `agent:delete`. External A2A rows are limited to agents visible to the caller unless they have `organizationSettings:update`; when `selectableOnly=true`, external rows are omitted unless the caller has that permission.",
           "permissions": []
         }
       }
@@ -139194,7 +139194,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Get chatops provider configuration status\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "Get chatops provider configuration status\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -139521,7 +139521,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:read"
+            "organizationSettings:read"
           ]
         }
       }
@@ -139532,7 +139532,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "List chatops channel bindings with pagination\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "List chatops channel bindings with pagination\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "parameters": [
           {
             "schema": {
@@ -140052,7 +140052,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:read"
+            "organizationSettings:read"
           ]
         }
       },
@@ -140061,7 +140061,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Bulk-update agent assignment for multiple channel bindings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Bulk-update agent assignment for multiple channel bindings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -140450,7 +140450,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -140461,7 +140461,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Delete a chatops channel binding\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:delete`: Remove agent triggers",
+        "description": "Delete a chatops channel binding\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "parameters": [
           {
             "schema": {
@@ -140726,7 +140726,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:delete"
+            "organizationSettings:update"
           ]
         }
       },
@@ -140735,7 +140735,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update a chatops channel binding\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Update a chatops channel binding\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -141102,7 +141102,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -141113,7 +141113,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:create`: Set up new agent triggers",
+        "description": "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -141478,7 +141478,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:create"
+            "organizationSettings:update"
           ]
         }
       }
@@ -141489,7 +141489,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Atomically apply ChatOps assignments, channel settings, and pending direct-message bindings for an agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents\n`agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Atomically apply ChatOps assignments, channel settings, and pending direct-message bindings for an agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -141903,7 +141903,7 @@
           "kind": "static",
           "permissions": [
             "agent:read",
-            "agentTrigger:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -141914,7 +141914,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update MS Teams chatops configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Update MS Teams chatops configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -142197,7 +142197,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -142208,7 +142208,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Connect an ngrok tunnel for inbound chatops webhooks\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Connect an ngrok tunnel for inbound chatops webhooks\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -142485,7 +142485,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:update"
+            "organizationSettings:update"
           ]
         }
       },
@@ -142494,7 +142494,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Stop the ngrok tunnel and clear its credentials\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Stop the ngrok tunnel and clear its credentials\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -142747,7 +142747,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:update"
+            "organizationSettings:update"
           ]
         }
       },
@@ -142756,7 +142756,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Get saved ngrok configuration (token redacted)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "Get saved ngrok configuration (token redacted)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -143013,7 +143013,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:read"
+            "organizationSettings:read"
           ]
         }
       }
@@ -143024,7 +143024,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update Slack chatops configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Update Slack chatops configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -143315,7 +143315,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -143326,7 +143326,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update Telegram chatops configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Update Telegram chatops configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -143598,7 +143598,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -144159,7 +144159,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Refresh channel discovery cache for a chatops provider\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "Refresh channel discovery cache for a chatops provider\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "requestBody": {
           "required": true,
           "content": {
@@ -144435,7 +144435,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:read"
+            "organizationSettings:read"
           ]
         }
       }
@@ -165527,10 +165527,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaSettings:read"
+            "organizationSettings:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:read`: View OpenAPPA enforcement settings and GitHub sync"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels"
       },
       "put": {
         "operationId": "updateGuardrailsDeployment",
@@ -165827,10 +165827,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaSettings:update"
+            "organizationSettings:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications"
       }
     },
     "/api/guardrails-policy/annotators/noop": {
@@ -168977,7 +168977,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Get the current incoming email webhook subscription status\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "Get the current incoming email webhook subscription status\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -169262,7 +169262,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:read"
+            "organizationSettings:read"
           ]
         }
       }
@@ -169273,7 +169273,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Setup or renew incoming email webhook subscription\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:create`: Set up new agent triggers",
+        "description": "Setup or renew incoming email webhook subscription\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -169556,7 +169556,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:create"
+            "organizationSettings:update"
           ]
         }
       }
@@ -169567,7 +169567,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Renew the incoming email webhook subscription\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Renew the incoming email webhook subscription\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -169831,7 +169831,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -169842,7 +169842,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Delete the incoming email webhook subscription\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:delete`: Remove agent triggers",
+        "description": "Delete the incoming email webhook subscription\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -170095,7 +170095,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:delete"
+            "organizationSettings:update"
           ]
         }
       }
@@ -321709,7 +321709,7 @@
         "tags": [
           "Onboarding"
         ],
-        "description": "Whether the first-login onboarding survey should be shown: unlicensed instance, no LLM/MCP activity yet, not already submitted for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Whether the first-login onboarding survey should be shown: unlicensed instance, no LLM/MCP activity yet, not already submitted for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -321973,7 +321973,7 @@
         "tags": [
           "Onboarding"
         ],
-        "description": "Submit the first-login onboarding survey; forwarded to the website and recorded once per organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Submit the first-login onboarding survey; forwarded to the website and recorded once per organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -322278,7 +322278,7 @@
         "tags": [
           "Onboarding"
         ],
-        "description": "When the instance got activated for the feedback pop-up: an MCP server connected AND a successful tool call routed. Null until both happened, and always null on enterprise-licensed instances.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "When the instance got activated for the feedback pop-up: an MCP server connected AND a successful tool call routed. Null until both happened, and always null on enterprise-licensed instances.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -333568,10 +333568,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaSettings:read"
+            "organizationSettings:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:read`: View OpenAPPA enforcement settings and GitHub sync"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels"
       },
       "put": {
         "operationId": "configureAppaGithubSync",
@@ -334002,10 +334002,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaSettings:update"
+            "organizationSettings:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications"
       },
       "patch": {
         "operationId": "updateAppaGithubSync",
@@ -334443,10 +334443,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaSettings:update"
+            "organizationSettings:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications"
       }
     },
     "/api/openappa/github-sync/repository": {
@@ -334863,10 +334863,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaSettings:update"
+            "organizationSettings:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaSettings:update`: Manage OpenAPPA enforcement settings and GitHub sync"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications"
       }
     },
     "/api/openappa/github-sync/accept-held": {
@@ -340330,7 +340330,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update appearance settings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Update appearance settings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -341809,7 +341809,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update security settings (default tool guardrails, chat file uploads, Apps Hackathon recorder)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Update security settings (default tool guardrails, chat file uploads, Apps Hackathon recorder)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -342779,7 +342779,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -342790,7 +342790,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update MCP settings (online catalog availability, idle hibernation)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpSettings:update`: Modify MCP settings",
+        "description": "Update MCP settings (online catalog availability, idle hibernation)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -343733,7 +343733,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -343744,7 +343744,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update Skills settings (online catalog availability)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skillsSettings:update`: Modify Skills settings",
+        "description": "Update Skills settings (online catalog availability)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -344687,7 +344687,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "skillsSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -344698,7 +344698,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -345653,7 +345653,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -345664,7 +345664,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update /connection admin settings (default gateway, hidden clients, skills/LLM proxy availability)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Update /connection admin settings (default gateway, hidden clients, skills/LLM proxy availability)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -346693,7 +346693,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or popular agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or popular agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -348761,7 +348761,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update organization Auth settings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Update organization Auth settings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -349729,7 +349729,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update knowledge settings (embedding model)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "description": "Update knowledge settings (embedding model)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -350717,7 +350717,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -350728,7 +350728,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "description": "Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -351653,7 +351653,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -351664,7 +351664,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Test the embedding connection by embedding a sample text\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "description": "Test the embedding connection by embedding a sample text\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -351945,7 +351945,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -351956,7 +351956,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Test the reranker connection with a sample structured-output call\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "description": "Test the reranker connection with a sample structured-output call\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -352237,7 +352237,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -352248,7 +352248,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Where BM25 keyword ranking stands for the organization: whether its corpus statistics cover every language with indexed documents (until they do, keyword search ranks that language with PostgreSQL's built-in ts_rank), when they were last rebuilt and when the next rebuild is due\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSettings:read`: View knowledge settings (embedding and reranking models)",
+        "description": "Where BM25 keyword ranking stands for the organization: whether its corpus statistics cover every language with indexed documents (until they do, keyword search ranks that language with PostgreSQL's built-in ts_rank), when they were last rebuilt and when the next rebuild is due\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -352528,7 +352528,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSettings:read"
+            "organizationSettings:read"
           ]
         }
       }
@@ -352539,7 +352539,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Test the OCR configuration by sending a synthetic PDF page to the model\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "description": "Test the OCR configuration by sending a synthetic PDF page to the model\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -352820,7 +352820,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSettings:update"
+            "organizationSettings:update"
           ]
         }
       }
@@ -352831,7 +352831,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Mark organization onboarding as complete\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Mark organization onboarding as complete\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -372906,7 +372906,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents\n`project:read`: View projects and your own sessions inside them",
+        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -388597,7 +388597,7 @@
         "tags": [
           "Site Notification"
         ],
-        "description": "Get the active site notification for the current organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:read`: View site-wide notifications",
+        "description": "Get the active site notification for the current organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -388866,10 +388866,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "siteNotification:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -388877,7 +388876,7 @@
         "tags": [
           "Site Notification"
         ],
-        "description": "Create a new site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:create`: Create new site notifications",
+        "description": "Create a new site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -389171,7 +389170,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "siteNotification:create"
+            "organizationSettings:update"
           ]
         }
       }
@@ -389182,7 +389181,7 @@
         "tags": [
           "Site Notification"
         ],
-        "description": "Get the latest site notification for settings management\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:read`: View site-wide notifications",
+        "description": "Get the latest site notification for settings management\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -389453,7 +389452,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "siteNotification:read"
+            "organizationSettings:read"
           ]
         }
       }
@@ -389464,7 +389463,7 @@
         "tags": [
           "Site Notification"
         ],
-        "description": "Update an existing site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:update`: Modify site notifications",
+        "description": "Update an existing site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -389769,7 +389768,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "siteNotification:update"
+            "organizationSettings:update"
           ]
         }
       },
@@ -389778,7 +389777,7 @@
         "tags": [
           "Site Notification"
         ],
-        "description": "Delete a site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:delete`: Delete site notifications",
+        "description": "Delete a site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "parameters": [
           {
             "schema": {
@@ -390034,7 +390033,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "siteNotification:delete"
+            "organizationSettings:update"
           ]
         }
       }
@@ -398425,7 +398424,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Enable the Agent Skill tools (`list_skills`, `load_skill`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Enable the Agent Skill tools (`list_skills`, `load_skill`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -400448,7 +400447,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images and real PDFs, so the browser can preview them; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images and real PDFs, so the browser can preview them; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
         "parameters": [
           {
             "schema": {
@@ -400468,7 +400467,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "sandbox:execute"
+            "agent:read"
           ]
         }
       },
@@ -400477,7 +400476,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Delete a persistent file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "Delete a persistent file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
         "parameters": [
           {
             "schema": {
@@ -400744,7 +400743,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "sandbox:execute"
+            "agent:read"
           ]
         }
       }
@@ -400755,7 +400754,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Overwrite the full text content of a row-backed Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "Overwrite the full text content of a row-backed Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
         "requestBody": {
           "required": true,
           "content": {
@@ -401058,7 +401057,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "sandbox:execute"
+            "agent:read"
           ]
         }
       }
@@ -401069,7 +401068,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List the artifact files produced in a conversation's sandbox.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "List the artifact files produced in a conversation's sandbox.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
         "parameters": [
           {
             "schema": {
@@ -401379,7 +401378,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "sandbox:execute"
+            "agent:read"
           ]
         }
       }

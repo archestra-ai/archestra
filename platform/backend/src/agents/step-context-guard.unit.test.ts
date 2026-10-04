@@ -233,6 +233,61 @@ describe("createStepContextGuard — summarization compaction", () => {
       expect(result[firstToolIndex - 1]?.role).toBe("assistant");
     }
   });
+
+  test("summarizes remedy calls without the offers, receipts and signatures the proxy wrote", async () => {
+    const summarize = vi.fn(
+      async (_p: SummarizeParams): Promise<string | null> => "sum",
+    );
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeTranscript: summarize,
+    });
+    const call = (toolCallId: string, toolName: string, input: object) =>
+      ({
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId, toolName, input }],
+      }) as ModelMessage;
+    await guard({
+      messages: [
+        { role: "user", content: "u".repeat(600) },
+        call("call_notice", "archestra__get_remedy_plans", {
+          tool: "read_file",
+          arguments: { path: "/srv/report.txt" },
+          ruling: "Blocked: the file is outside the workspace.",
+          notice: { v: 1, call_id: "call_notice" },
+          offers: ["eyJhbGciOiJIUzI1NiJ9.offer.signature"],
+        }),
+        call("call_remedy", "mcp__gw__archestra__execute_remedy_plan", {
+          offer_id: "offer-1",
+          plan: { kind: "allow_once" },
+          execution: { call_id: "call_remedy" },
+          protected: "eyJhbGciOiJIUzI1NiJ9",
+          payload: "receipt-payload",
+          signature: "receipt-signature",
+        }),
+        call("call_question", "archestra__ask_user", {
+          question: "Approve the plan?",
+          remedy_offers: ["eyJhbGciOiJIUzI1NiJ9.question.signature"],
+        }),
+        { role: "user", content: "v".repeat(300) },
+      ],
+    });
+
+    const { transcript } = summarize.mock.calls[0][0];
+    expect(transcript).toContain("/srv/report.txt");
+    expect(transcript).toContain("Blocked: the file is outside the workspace.");
+    expect(transcript).toContain('"offer_id":"offer-1"');
+    expect(transcript).toContain("Approve the plan?");
+    for (const written of [
+      "eyJhbGciOiJIUzI1NiJ9",
+      '"notice"',
+      '"execution"',
+      "receipt-payload",
+      "receipt-signature",
+    ]) {
+      expect(transcript).not.toContain(written);
+    }
+  });
 });
 
 describe("createStepContextGuard — prompt cache breakpoint", () => {

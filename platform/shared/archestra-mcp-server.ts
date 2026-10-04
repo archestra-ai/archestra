@@ -1149,7 +1149,7 @@ export function buildElicitationMandateInstruction(params?: {
     tools.length > 1
       ? `${tools[0]} (or ${tools[1]})`
       : (tools[0] ?? TOOL_ASK_USER_SHORT_NAME);
-  return `When you ask the user a question, clarification, preference, or approval, call ${toolName}. Never ask multiple-choice questions or request user decisions in plain text.`;
+  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.`;
 }
 
 /**

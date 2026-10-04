@@ -2615,9 +2615,16 @@ fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
 /// short name every spelling keeps. Which question tool to use follows
 /// ask_user's own description: the client's own first. A plan is carried out
 /// by the call the ruling shows for it, which is not always the remedy tool (a
-/// redispatch plan names another tool to run first).
-const UNEXECUTED_CALL_HINT: &str = "The tool was not executed. If the ruling offers a plan, choose one yourself and make the call it shows now, exactly as shown. If only the user can make this choice, ask them with a question tool (the client's own if it has one, otherwise ask_user), never as a plain-text question. In questions and replies, describe the block and any plan only in the ruling's own words, and never guess who the readers are or how access would change. If no plan is offered, explain the ruling.";
+/// redispatch plan names another tool to run first). The hint says what to do
+/// and who decides; provider safety classifiers refused requests that told the
+/// model to skip the user.
+const UNEXECUTED_CALL_HINT: &str = "The tool did not run. If the ruling offers a plan that fits the user's request, apply that plan with the exact call that the ruling shows for it. If only the user can make this choice, ask the user with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. In questions and replies, describe the block and any plan in the ruling's own words, and do not guess who the readers are or how access would change. If the ruling offers no plan, explain the ruling to the user.";
 
+/// A result for a call this session never released. The code tells the proxy
+/// that nothing ran on the runtime's side: a remedy the gateway never ran
+/// comes back this way, and the proxy shows the model what the client returned
+/// instead of this text. It is a separate field because callers read `reason`
+/// as the text of a block.
 fn unknown_result_response() -> Value {
     let approved_output =
         "[appa] Tool output withheld: this result has no record of releasing a call.".to_owned();
@@ -2626,8 +2633,11 @@ fn unknown_result_response() -> Value {
         "feedback": approved_output,
         "approved_output": approved_output,
         "output_source": OutputSource::Runtime,
+        "code": UNRELEASED_CALL_CODE,
     })
 }
+
+const UNRELEASED_CALL_CODE: &str = "unreleased_call";
 
 fn cancellation_operation(call_id: &str) -> String {
     format!("cancel:{call_id}")
@@ -2918,7 +2928,7 @@ mod typed_tests {
     use super::{
         OfferId, OfferOwner, RemedyAct, RemedyOutcome, RemedyPresentation,
         authoritative_unexecuted_response, owner_can_be_spent_by, presentation_offer_ids,
-        render_released_call, render_remedy_outcome,
+        render_released_call, render_remedy_outcome, unknown_result_response,
     };
     use appa_runtime_api::OfferedRemedy;
     use serde_json::Value;
@@ -3062,16 +3072,33 @@ mod typed_tests {
         let text = response["approved_output"].as_str().unwrap();
         // The ruling stays verbatim and first: it is the only account of the
         // block the model has.
-        assert!(text.starts_with(&format!("{ruling}\n\nThe tool was not executed.")));
+        assert!(text.starts_with(&format!("{ruling}\n\nThe tool did not run.")));
         // A plan is carried out by the call the ruling shows, which for a
         // redispatch plan is another tool rather than the remedy tool.
-        assert!(text.contains("choose one yourself and make the call it shows now"));
+        assert!(text.contains("apply that plan with the exact call that the ruling shows for it"));
         assert!(!text.contains("remedy tool"));
         // The same order of question tools as ask_user's own description.
-        assert!(text.contains("the client's own if it has one, otherwise ask_user"));
-        assert!(text.contains("never as a plain-text question"));
-        assert!(text.contains("only in the ruling's own words"));
-        assert!(text.contains("never guess who the readers are"));
+        assert!(text.contains("the client's own question tool if it has one, otherwise ask_user"));
+        assert!(text.contains("not in plain text"));
+        assert!(text.contains("in the ruling's own words"));
+        assert!(text.contains("do not guess who the readers are"));
+        // Who decides, not an instruction to skip the user.
+        assert!(!text.contains("choose one yourself"));
+    }
+
+    #[test]
+    fn an_unreleased_result_is_withheld_and_says_why() {
+        let response = unknown_result_response();
+
+        assert_eq!(response["decision"], "block");
+        assert_eq!(response["output_source"], "runtime");
+        assert_eq!(response["code"], "unreleased_call");
+        // Callers read `reason` as the text of a block, so the code stays out of it.
+        assert!(response.get("reason").is_none());
+        assert_eq!(
+            response["approved_output"],
+            "[appa] Tool output withheld: this result has no record of releasing a call."
+        );
     }
 
     #[test]

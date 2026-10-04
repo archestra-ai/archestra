@@ -280,9 +280,10 @@ export function getAllArchestraMcpTools() {
 /**
  * JSON input schema of a built-in Archestra tool, resolved by its published
  * (branding-aware) full name or canonical `archestra__` name — derived from the
- * same zod schema `tools/list` advertises. Returns undefined for names that are
- * not built-ins (agent delegations, third-party names). Consumed by run_tool's
- * schema-aware envelope repair.
+ * handler's full zod schema, which `tools/list` advertises unless the tool has
+ * a `publicSchema`. Returns undefined for names that are not built-ins (agent
+ * delegations, third-party names). Consumed by run_tool's schema-aware
+ * envelope repair.
  */
 export function getArchestraToolInputSchema(
   toolName: string,
@@ -337,11 +338,11 @@ export async function executeArchestraTool(
   // Agent delegation tools are dynamic (one per agent) and not in TOOL_PERMISSIONS,
   // so they bypass centralized RBAC. They enforce team-based access checks internally.
   if (isAgentTool(toolName)) {
-    const parsedArgs = validateToolArgs(
-      delegationToolArgsSchema,
+    const parsedArgs = validateToolArgs({
+      schema: delegationToolArgsSchema,
       args,
       toolName,
-    );
+    });
     if ("error" in parsedArgs) {
       return parsedArgs.error;
     }
@@ -352,11 +353,11 @@ export async function executeArchestraTool(
   // agent-designated skill. Like agent delegation, they bypass centralized
   // RBAC and enforce skill + agent access checks internally.
   if (isSkillTool(toolName)) {
-    const parsedArgs = validateToolArgs(
-      delegationToolArgsSchema,
+    const parsedArgs = validateToolArgs({
+      schema: delegationToolArgsSchema,
       args,
       toolName,
-    );
+    });
     if ("error" in parsedArgs) {
       return parsedArgs.error;
     }
@@ -603,7 +604,12 @@ async function admitArchestraToolCall(params: {
     };
   }
 
-  const parsedArgs = validateToolArgs(toolEntry.schema, args, toolName);
+  const parsedArgs = validateToolArgs({
+    schema: toolEntry.schema,
+    publicSchema: toolEntry.publicSchema,
+    args,
+    toolName,
+  });
   if ("error" in parsedArgs) return parsedArgs;
   return { toolEntry, resolvedToolName, args: parsedArgs.value };
 }
@@ -650,11 +656,18 @@ export const __test = {
   zodValidationErrorResult,
 };
 
-function validateToolArgs(
-  schema: ZodType,
-  args: Record<string, unknown> | undefined,
-  toolName: string,
-): { value: Record<string, unknown> } | { error: CallToolResult } {
+function validateToolArgs(params: {
+  schema: ZodType;
+  /**
+   * The advertised schema. Errors describe it rather than `schema`, so a
+   * malformed call never shows the model members only the proxy writes.
+   */
+  publicSchema?: ZodType;
+  args: Record<string, unknown> | undefined;
+  toolName: string;
+}): { value: Record<string, unknown> } | { error: CallToolResult } {
+  const { schema, args, toolName } = params;
+  const describedSchema = params.publicSchema ?? schema;
   const parsed = schema.safeParse(args ?? {});
 
   if (parsed.success) {
@@ -680,13 +693,17 @@ function validateToolArgs(
       error: zodValidationErrorResult({
         toolName,
         error: reparsed.error,
-        schema,
+        schema: describedSchema,
       }),
     };
   }
 
   return {
-    error: zodValidationErrorResult({ toolName, error: parsed.error, schema }),
+    error: zodValidationErrorResult({
+      toolName,
+      error: parsed.error,
+      schema: describedSchema,
+    }),
   };
 }
 

@@ -68,8 +68,8 @@ This tool takes no arguments.
 | `preview_guardrails_policy_change` | Validate and show a reviewable diff for a proposed organization.appa.toml. | `openappaPolicy:read` |
 | `update_guardrails_policy` | Publish a validated change to organization.appa.toml. | `openappaPolicy:update` |
 | `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. | `openappaPolicy:read` |
-| `get_remedy_plans` | Read why the guardrails policy blocked a tool call and which remedy plans it offers. | None (no additional RBAC permission required) |
-| `execute_remedy_plan` | Execute a remedy plan offered by the guardrails policy for a blocked call. | None (no additional RBAC permission required) |
+| `get_remedy_plans` | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None (no additional RBAC permission required) |
+| `execute_remedy_plan` | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None (no additional RBAC permission required) |
 | `list_runtime_credentials` | List reusable credential definitions visible to the caller, including whether a personal or organization connection is configured. | `credential:read` |
 | `get_runtime_credential` | Read one reusable credential definition and its usage. | `credential:read` |
 | `create_runtime_credential` | Create credential metadata. | `credential:create` |
@@ -236,10 +236,6 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `notice.call_id` | `string` | Yes |  |
 | `notice.namespace` | `string` | No |  |
 | `notice.custom` | `true` | No |  |
-| `offers` | `object[]` | No |  |
-| `offers[].protected` | `string` | Yes |  |
-| `offers[].payload` | `string` | Yes |  |
-| `offers[].signature` | `string` | Yes |  |
 
 
 #### execute_remedy_plan
@@ -256,16 +252,6 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `label.trust` | `string` | No |  |
 | `label.audience` | `string[]` | No |  |
 | `return_schema` | `object` | No |  |
-| `execution` | `object` | No | Transport record added by the proxy for retry identity and exact history restoration. It does not authorize the remedy. |
-| `execution.v` | `1` | Yes |  |
-| `execution.kind` | `"appa_remedy"` | Yes |  |
-| `execution.call_id` | `string` | Yes |  |
-| `execution.tool_name` | `string` | Yes |  |
-| `execution.namespace` | `string` | No | Optional MCP namespace of the remedy tool. |
-| `execution.original_arguments` | `string` | Yes |  |
-| `protected` | `string` | No | Flattened JWS protected header (RFC 7515). Added by the proxy. |
-| `payload` | `string` | No | Flattened JWS unencoded payload (RFC 7797). Added by the proxy. |
-| `signature` | `string` | No | Flattened JWS signature (RFC 7515). Added by the proxy. |
 
 
 #### list_runtime_credentials

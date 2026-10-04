@@ -27,7 +27,11 @@ import {
   consumeHitlRuling,
   stageHitlReview,
 } from "@/openappa/hitl-review";
-import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
+import {
+  NoticeArguments,
+  NoticePublicArguments,
+  RemedyExecutionSchema,
+} from "@/openappa/notice";
 import {
   OfferJwsSchema,
   signOfferClaims,
@@ -596,8 +600,10 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_REMEDY_PLANS_SHORT_NAME,
     title: "Read a blocked call's ruling and remedy plans",
     description:
-      "Read why the guardrails policy blocked a tool call and which remedy plans it offers. The platform gives you this call in place of a blocked call. It runs nothing and changes nothing. The plans are for you. When the ruling offers a plan, choose the appropriate plan and immediately call execute_remedy_plan with the offer_id and plan from the ruling. Do not ask the user for permission first. The execute_remedy_plan tool opens required human reviews directly. Then retry the original call. If the ruling offers no plan, explain the block.",
+      "Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. The platform puts this call in the place of the blocked call. It runs nothing and changes nothing. When the ruling offers a plan that fits the user's request, apply that plan with execute_remedy_plan. Use the offer_id and plan from the ruling. execute_remedy_plan asks the user for approval when the policy requires it. After the plan is authorized, retry the original call. If the ruling offers no plan, explain the ruling to the user.",
     schema: NoticeArguments,
+    // The advertised schema leaves out the signed offers only the proxy writes.
+    publicSchema: NoticePublicArguments,
     async handler({ args }) {
       // The ruling the runtime already made, carried by the call itself. This
       // opens no root, emits no OpenAPPA event and reads no policy: the runtime
@@ -610,25 +616,23 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Execute a remedy plan offered by the guardrails policy for a blocked call. Call this tool as soon as a ruling offers the plan. Do not ask the user for permission first. Pass the exact offer_id and plan description from the ruling. If the result says review_required, immediately call the declared ask_user tool with that offer ID. Do not ask the user in plain text. After approval, call execute_remedy_plan again with the same offer and plan. After execution succeeds, retry the original call or use the admitted output. If review is denied, canceled, unavailable, or unanswered, stop and state that the action remains blocked.",
+      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is canceled, unavailable, or unanswered, tell the user that the action stays blocked.",
+    // The proxy alone writes these members. They have no `.describe()` text,
+    // so no rendering of the full schema can show the model their prose:
+    // - execution: the transport record for retry identity and exact history
+    //   restoration; it does not authorize the remedy.
+    // - protected/payload/signature: the flattened JWS of the offer (RFC 7515,
+    //   with the RFC 7797 unencoded payload).
     schema: RemedyPlanArgumentsSchema.extend({
-      execution: RemedyExecutionSchema.optional().describe(
-        "Transport record added by the proxy for retry identity and exact history restoration. It does not authorize the remedy.",
-      ),
-      protected: OfferJwsSchema.shape.protected
-        .optional()
-        .describe(
-          "Flattened JWS protected header (RFC 7515). Added by the proxy.",
-        ),
-      payload: OfferJwsSchema.shape.payload
-        .optional()
-        .describe(
-          "Flattened JWS unencoded payload (RFC 7797). Added by the proxy.",
-        ),
-      signature: OfferJwsSchema.shape.signature
-        .optional()
-        .describe("Flattened JWS signature (RFC 7515). Added by the proxy."),
+      execution: RemedyExecutionSchema.optional(),
+      protected: OfferJwsSchema.shape.protected.optional(),
+      payload: OfferJwsSchema.shape.payload.optional(),
+      signature: OfferJwsSchema.shape.signature.optional(),
     }),
+    // The model writes only these arguments. The proxy stamps the receipt and
+    // the signed offer onto the released call, so the advertised schema leaves
+    // them out; it is not strict, so a validating client accepts the stamp.
+    publicSchema: RemedyPlanArgumentsSchema,
     async handler({ args, context }) {
       const {
         execution,
@@ -837,7 +841,7 @@ function nativeReviewRequiredResult(offerId: string): CallToolResult {
     outcome: "review_required",
     offer_id: offerId,
     instruction:
-      "Call the declared ask_user tool now with this offer ID in remedy_offer_ids. Do not ask the user in plain text. The platform will show the exact review and fixed Approve/Deny choices in the client's native question UI when available. Follow the ask_user result. Call execute_remedy_plan again only after an Approve answer.",
+      "The policy needs the user's approval for this plan. Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with fixed Approve and Deny choices in the client's question interface when one is available. Call execute_remedy_plan again only after the user approves.",
   });
 }
 

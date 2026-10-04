@@ -66,6 +66,8 @@ const ResultDecisionFields = {
   approved_output: z.string().optional(),
   output_source: z.enum(["tool", "runtime"]).optional(),
   reason: z.string().optional(),
+  /** Machine-readable, never shown: why the runtime answered as it did. */
+  code: z.string().optional(),
 };
 
 /** Structured remedy offers from the native runtime. */
@@ -173,6 +175,7 @@ type ProcessedToolResult = {
   content: string;
   outputSource: OutputSource;
   reason?: RuntimeReason;
+  code?: string;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -599,12 +602,70 @@ async function approveToolResult(params: {
     ("reason" in decision && decision.reason ? "runtime" : "tool");
   const reason =
     "reason" in decision && decision.reason ? decision.reason : undefined;
+  const code = "code" in decision && decision.code ? decision.code : undefined;
   return {
     content,
     outputSource,
     ...(reason ? { reason } : {}),
+    ...(code ? { code } : {}),
   };
 }
+
+/**
+ * A remedy call whose remedy never ran: the client declined it (a permission
+ * prompt the user rejected, an auto-mode classifier block), or the gateway
+ * refused it before the remedy (no live offer). Only a remedy that runs leaves
+ * a record, so the runtime would withhold this result, and the model would
+ * lose what it says, such as the client's instruction to stop and let the
+ * user decide. A client or the gateway wrote it, not a tool, so it goes
+ * through after a line that says the plan is not applied.
+ *
+ * The closing line says how to ask when the user must decide. Claude Code's
+ * auto-mode classifier accepts the plan only after the user, shown what was
+ * blocked, approves it: a question that quotes the ruling gives the user
+ * that, where a bare "approve" typed in chat did not.
+ */
+function unexecutedControlResult(content: unknown): ProcessedToolResult {
+  const text = toolResultText(content);
+  return {
+    content: `[appa] The remedy did not run, so the plan is not applied. The result the client returned:\n\n${truncated(text, MAX_UNEXECUTED_RESULT_CHARS)}\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}`,
+    outputSource: "runtime",
+  };
+}
+
+const UNEXECUTED_REMEDY_QUESTION_HINT =
+  "[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
+
+function toolResultText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (content === null || content === undefined) return "";
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part && typeof part === "object" && "text" in part) {
+          const text = (part as { text: unknown }).text;
+          return typeof text === "string" ? text : JSON.stringify(text);
+        }
+        return "";
+      })
+      .filter((text) => text.length > 0)
+      .join("\n");
+  }
+  return JSON.stringify(content);
+}
+
+/** Cuts at `limit` code units, never between the halves of a surrogate pair. */
+function truncated(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const code = text.charCodeAt(limit - 1);
+  const end = code >= 0xd800 && code <= 0xdbff ? limit - 1 : limit;
+  return `${text.slice(0, end)}…`;
+}
+
+/** The runtime's code for a result that matches no released call. */
+const UNRELEASED_CALL_CODE = "unreleased_call";
+const MAX_UNEXECUTED_RESULT_CHARS = 4000;
 
 function isOutputDecision(
   decision: NativeDecision,
@@ -630,6 +691,12 @@ export async function processProxyResults(params: {
   /** The proxy verifies that this exact result belongs to an issued question. */
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
+  /**
+   * Whether a result answers this request's own remedy call, and is not a
+   * pending review. When the runtime has no record of such a result, its
+   * remedy never ran, and the model reads what the client returned.
+   */
+  isControlResult?: (result: CommonToolResult) => boolean;
   trustedChat?: boolean;
   /** How a client-side spawn launch ended. */
   classifySpawnResult?: (
@@ -666,7 +733,11 @@ export async function processProxyResults(params: {
       controlToolName: params.controlToolName,
       policy,
     });
-    updates[result.id] = approved;
+    updates[result.id] =
+      approved.code === UNRELEASED_CALL_CODE &&
+      params.isControlResult?.(result) === true
+        ? unexecutedControlResult(result.content)
+        : approved;
   }
   return {
     toolResultUpdates: updates,

@@ -73,19 +73,53 @@ test("remedy tools open human review without asking for prior consent", () => {
   );
 
   expect(getPlans?.description).toContain(
-    "immediately call execute_remedy_plan",
+    "apply that plan with execute_remedy_plan",
   );
   expect(getPlans?.description).toContain(
-    "Do not ask the user for permission first",
+    "execute_remedy_plan asks the user for approval when the policy requires it",
   );
   expect(getPlans?.description).not.toContain("use ask_user");
-  expect(executePlan?.description).toContain("result says review_required");
+  expect(executePlan?.description).toContain("the result is review_required");
   expect(executePlan?.description).toContain(
-    "immediately call the declared ask_user tool",
+    "Ask the user with the declared ask_user tool",
   );
   expect(executePlan?.description).not.toContain(
     "review it before approving the call",
   );
+  // Both say who decides instead of telling the model to skip the user.
+  for (const description of [getPlans?.description, executePlan?.description]) {
+    expect(description).not.toContain("Do not ask the user");
+    expect(description).not.toMatch(/immediately/i);
+  }
+});
+
+test("remedy tools advertise only the arguments the model writes", () => {
+  const tools = getAllArchestraMcpTools();
+  const getPlans = tools.find((tool) =>
+    tool.name.endsWith(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+  );
+  const executePlan = tools.find((tool) =>
+    tool.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+  );
+
+  expect(Object.keys(executePlan?.inputSchema.properties ?? {}).sort()).toEqual(
+    ["label", "offer_id", "plan", "return_schema"],
+  );
+  expect(Object.keys(getPlans?.inputSchema.properties ?? {})).not.toContain(
+    "offers",
+  );
+  for (const tool of [getPlans, executePlan]) {
+    // A client that forwards the tool list never shows its model the signed
+    // members the proxy stamps.
+    expect(JSON.stringify(tool?.inputSchema)).not.toMatch(
+      /JWS|RFC 7515|signature/,
+    );
+    // Not strict: a validating client must still accept a stamped call.
+    expect(
+      (tool?.inputSchema as { additionalProperties?: unknown })
+        .additionalProperties,
+    ).not.toBe(false);
+  }
 });
 
 test("policy reads advertise a read-only annotation but policy writes do not", () => {
@@ -454,6 +488,24 @@ describe("OpenAPPA tool execution", () => {
       ),
     ).rejects.toMatchObject({ statusCode: 403 });
     expect(read).not.toHaveBeenCalled();
+  });
+
+  test("a malformed remedy call is shown the advertised arguments, not the proxy's", async () => {
+    const result = await executeArchestraTool(
+      toolFullName,
+      { plan: "Accept restriction" },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    const text = result.content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("\n");
+    expect(text).toContain('"offer_id"');
+    // The members the proxy stamps never appear in the model's error text.
+    for (const member of ["execution", "protected", "payload", "signature"]) {
+      expect(text).not.toContain(`"${member}"`);
+    }
   });
 
   test("executes unreviewed remedy offer immediately without prompting", async () => {

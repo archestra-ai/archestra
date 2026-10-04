@@ -369,6 +369,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       controlToolName:
         binding.request.tools?.control.name ??
         binding.request.historicalControlToolName,
+      isControlResult: (answer) => isOwnControlResult(binding, answer),
       trustedChat: binding.chat,
     });
     const toolResultUpdates = {
@@ -3520,14 +3521,15 @@ function withoutStampedArguments(params: {
 const QUESTION_CONTINUATION_GUIDANCE = [
   "Question tools collect the user's decisions.",
   "A selected answer delivered by a recognized question tool is the user's interactive reply.",
-  "It satisfies an instruction to wait for the user's answer; do not require a second free-text answer or reconfirm the same decision.",
+  "That reply answers an instruction to wait for the user, so the same decision needs no second free-text answer or repeat confirmation.",
   "Carrying out the user's explicitly selected remedy is following that decision, not choosing a remedy yourself.",
   "If the requested task still has unfinished work, continue using that answer in this turn rather than ending with only an acknowledgment.",
   "If the user asked only to record a decision, do not perform extra actions.",
   "A form's accept/submitted status is not by itself agreement with a remedy: follow the selected answer.",
   "Only if the answer explicitly accepts a currently offered, unexecuted remedy, call the declared execute_remedy_plan tool for that offer.",
-  "Retry the blocked call once only after the remedy reports successful authorization.",
-  "If the remedy fails, its result is withheld, or the retry is blocked again, stop and report that failure; do not apply new offers or repeat the workflow under the earlier acceptance.",
+  "Retry the blocked call once, after execute_remedy_plan reports that the plan is authorized.",
+  "If the remedy fails, its result is withheld, or the retry is blocked again, stop and tell the user about that failure.",
+  "Do not apply new offers or repeat the workflow under the earlier acceptance.",
   "For a tool discovered through search_tools that is not directly declared, execute that retry using the same gateway's declared run_tool: put the discovered tool name in tool_name and the original arguments in tool_args.",
   "Resource listing is not tool execution. Do not substitute list_mcp_resources for that retry.",
   "Never invent a plan, treat an error or missing answer as consent, or repeat a completed remedy or retry.",
@@ -3537,8 +3539,12 @@ const QUESTION_CONTINUATION_GUIDANCE = [
   "Revisit a rejected decision only after a new user request.",
 ].join(" ");
 
-const REMEDY_OFFER_CONTINUATION_GUIDANCE =
-  "The get_remedy_plans result immediately above offers a remedy for the blocked call. Do not reply to the user and do not ask whether to continue. Immediately call execute_remedy_plan with the exact offer_id and plan from that result. The control call opens the human review when required.";
+const REMEDY_OFFER_CONTINUATION_GUIDANCE = [
+  "The ruling above offers a remedy plan for the blocked call.",
+  "If the plan fits the user's request, continue the task and apply the plan with execute_remedy_plan.",
+  "Use the offer_id and plan from the ruling.",
+  "execute_remedy_plan asks the user for approval when the policy requires it.",
+].join(" ");
 
 const NATIVE_DELEGATION_GUIDANCE_MARKER =
   "collaboration.spawn_agent is declared.";
@@ -3598,8 +3604,18 @@ function appendNativeDelegationGuidance(
   });
 }
 
-const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE =
-  "When get_remedy_plans offers a remedy for a blocked call, do not ask the user whether to submit it. Immediately call execute_remedy_plan with the exact offer_id and plan from that ruling. If execute_remedy_plan returns outcome review_required, do not reply that review is pending. Immediately call the declared ask_user tool with that offer ID in remedy_offer_ids, header Approval, and options Approve and Deny. The platform supplies the exact review text. Wait for successful authorization before retrying the blocked tool.";
+const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
+  "The organization's guardrails policy can block a tool call and offer remedy plans in its ruling.",
+  "A remedy plan is the policy's own way to continue, and execute_remedy_plan applies the plan through the policy.",
+  "When a ruling offers a plan that fits the user's request, apply that plan with execute_remedy_plan.",
+  "Use the offer_id and plan from the ruling.",
+  "The policy decides when the user must approve a plan.",
+  "In that case, execute_remedy_plan returns review_required.",
+  "Then ask the user with the declared ask_user tool.",
+  "Put the offer ID in remedy_offer_ids, and use the header Approval and the options Approve and Deny.",
+  "The platform shows the user the exact review.",
+  "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
+].join(" ");
 
 const NATIVE_QUESTION_ID_PATTERN =
   /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
@@ -3974,6 +3990,29 @@ function nativeQuestionTag(params: {
     .subarray(0, 16);
 }
 
+/**
+ * Whether a result answers this request's declared remedy call: the same tool
+ * in the same namespace, as the request's identity resolves it. A pending
+ * review is the gateway's own answer to that call, and the HITL flow handles
+ * it.
+ */
+function isOwnControlResult(
+  binding: AppaPluginBinding,
+  result: { name: string; namespace?: string; content: unknown },
+): boolean {
+  const control = binding.request.tools?.control;
+  if (!control) return false;
+  const namespace =
+    result.namespace ?? binding.request.tools?.namespaces?.get(result.name);
+  if (namespace !== control.namespace) return false;
+  if (
+    binding.identity.canonicalize(result.name, namespace) !==
+    binding.identity.canonicalize(control.name, control.namespace)
+  )
+    return false;
+  return reviewRequiredOfferId(result.content, 0) === null;
+}
+
 async function pendingNativeHitlOfferIds(params: {
   binding: AppaPluginBinding;
   results: LlmProxyToolResultsContext["toolResults"];
@@ -4115,11 +4154,10 @@ function reviewRequiredOfferId(value: unknown, depth: number): string | null {
 
 function hitlQuestionGuidance(offerIds: readonly string[]): string {
   return [
-    "The last execute_remedy_plan result requires human review.",
-    "Do not reply to the user and do not ask for approval in plain text.",
-    "Immediately call the declared ask_user tool once for each offer ID below.",
-    "For each call, use question 'Open the pending HITL review.', header 'Approval', options Approve and Deny, and remedy_offer_ids containing only that offer ID.",
-    "The platform replaces that placeholder text with the reviewed tool call and displays the client native question UI when available.",
+    "The policy needs the user's approval for the last execute_remedy_plan result.",
+    "Ask the user with the declared ask_user tool, one call for each offer ID below.",
+    "In each call, use the question 'Open the pending HITL review.', the header 'Approval', the options Approve and Deny, and remedy_offer_ids with only that offer ID.",
+    "The platform replaces the question text with the exact review, and shows it in the client's question interface when one is available.",
     `Offer IDs: ${JSON.stringify(offerIds)}.`,
   ].join(" ");
 }
@@ -4132,17 +4170,16 @@ function hitlDecisionGuidance(
     .map((entry) => entry.offerId);
   if (approved.length > 0) {
     return [
-      `The verified human answer approved OpenAPPA offer IDs ${JSON.stringify(approved)}.`,
-      "Your next and only tool calls must be execute_remedy_plan calls for those offers, using the plan shown earlier in the conversation.",
-      "Do not call or retry the blocked tool in the same response.",
-      "Wait for execute_remedy_plan to report successful authorization. Only then retry the blocked tool in a new response.",
-      "Do not ask another question and do not describe this step in prose.",
+      `The user approved OpenAPPA offer IDs ${JSON.stringify(approved)} in the question tool.`,
+      "In your next response, call only execute_remedy_plan, once for each approved offer, with the plan shown earlier in the conversation.",
+      "Retry the blocked call in a later response, after execute_remedy_plan reports that the plan is authorized.",
+      "The user already answered, so do not ask about the same plan again.",
     ].join(" ");
   }
   return [
-    "The verified human answer did not approve the pending OpenAPPA review.",
-    "Do not call execute_remedy_plan and do not retry the blocked tool.",
-    "State briefly that the action remains blocked, then stop that action.",
+    "The user did not approve the pending OpenAPPA review.",
+    "Do not call execute_remedy_plan for it, and do not retry the blocked call.",
+    "Tell the user briefly that the action stays blocked, and stop that action.",
   ].join(" ");
 }
 

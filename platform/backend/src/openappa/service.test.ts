@@ -947,6 +947,159 @@ describe("APPA feature boundary", () => {
     );
   });
 
+  describe("a remedy call the gateway never ran", () => {
+    const CONTROL = "mcp__gw__archestra__execute_remedy_plan";
+    const WITHHELD =
+      "[appa] Tool output withheld: this result has no record of releasing a call.";
+    const REFUSAL =
+      "Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Auto-Mode Bypass]. STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed.";
+    const NOT_APPLIED =
+      "[appa] The remedy did not run, so the plan is not applied. The result the client returned:\n\n";
+    const ASK =
+      "\n\n[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
+    const isControlResult = (result: { name: string }) =>
+      result.name === CONTROL;
+
+    beforeEach(() => {
+      // The runtime released no call under these ids.
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        return JSON.stringify(
+          event.event === "tool_result"
+            ? {
+                decision: "block",
+                feedback: WITHHELD,
+                approved_output: WITHHELD,
+                output_source: "runtime",
+                code: "unreleased_call",
+              }
+            : { decision: "ack" },
+        );
+      });
+    });
+
+    const process = (result: {
+      name: string;
+      content: unknown;
+      isError: boolean;
+    }) =>
+      processProxyResults({
+        session,
+        canonicalize: (name) => name,
+        controlToolName: CONTROL,
+        isControlResult,
+        results: [{ id: "remedy", ...result }],
+      });
+
+    test("shows the model the client's refusal and says the plan is not applied", async () => {
+      const result = await process({
+        name: CONTROL,
+        content: [{ type: "text", text: REFUSAL }],
+        isError: true,
+      });
+
+      expect(result.toolResultUpdates.remedy).toEqual({
+        content: `${NOT_APPLIED}${REFUSAL}${ASK}`,
+        outputSource: "runtime",
+      });
+    });
+
+    test("shows the gateway's own refusal the same way", async () => {
+      const result = await process({
+        name: CONTROL,
+        content: "[appa] No live offer with this id is available.",
+        isError: true,
+      });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(
+        `${NOT_APPLIED}[appa] No live offer with this id is available.${ASK}`,
+      );
+    });
+
+    test("needs no error flag, which OpenAI wires never set", async () => {
+      const result = await process({
+        name: CONTROL,
+        content: "The user rejected this tool call.",
+        isError: false,
+      });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(
+        `${NOT_APPLIED}The user rejected this tool call.${ASK}`,
+      );
+    });
+
+    test("still withholds a result that is not this request's remedy call", async () => {
+      const result = await process({
+        name: "mcp__other__archestra__execute_remedy_plan",
+        content: REFUSAL,
+        isError: true,
+      });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(WITHHELD);
+    });
+
+    test.each([
+      {
+        label: "a list of strings",
+        content: ["denied by hook"],
+        shown: "denied by hook",
+      },
+      { label: "no content", content: null, shown: "" },
+      {
+        label: "a text part that is not a string",
+        content: [{ type: "text", text: { reason: "denied" } }],
+        shown: '{"reason":"denied"}',
+      },
+    ])("keeps the text of $label", async ({ content, shown }) => {
+      const result = await process({ name: CONTROL, content, isError: true });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(
+        `${NOT_APPLIED}${shown}${ASK}`,
+      );
+    });
+
+    test("cuts a long result without splitting a character", async () => {
+      const result = await process({
+        name: CONTROL,
+        content: `${"a".repeat(3999)}\u{1F600}tail`,
+        isError: true,
+      });
+
+      const shown = (result.toolResultUpdates.remedy?.content ?? "").slice(
+        NOT_APPLIED.length,
+      );
+      expect(shown).toBe(`${"a".repeat(3999)}…${ASK}`);
+    });
+
+    test("keeps the runtime's answer for a remedy the gateway ran", async () => {
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        return JSON.stringify(
+          event.event === "tool_result"
+            ? {
+                decision: "mcp_result",
+                result: {
+                  content: [{ type: "text", text: "[appa] Authorized." }],
+                },
+                approved_output: "[appa] Authorized.",
+                output_source: "runtime",
+              }
+            : { decision: "ack" },
+        );
+      });
+
+      const result = await process({
+        name: CONTROL,
+        content: "[appa] Authorized.",
+        isError: false,
+      });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(
+        "[appa] Authorized.",
+      );
+    });
+  });
+
   test("does not exempt an unrelated MCP question from tool-call evaluation", async () => {
     await evaluateToolCalls(
       session,
@@ -1793,7 +1946,7 @@ describe("APPA feature boundary", () => {
               feedback:
                 "tool archestra__download_file is not declared in this policy; the call is refused",
               approved_output:
-                "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool was not executed.",
+                "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool did not run.",
               output_source: "runtime",
             }
           : { decision: "ack" },
@@ -1813,7 +1966,7 @@ describe("APPA feature boundary", () => {
     });
     expect(result.toolResultUpdates.denied_call).toEqual({
       content:
-        "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool was not executed.",
+        "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool did not run.",
       outputSource: "runtime",
     });
   });

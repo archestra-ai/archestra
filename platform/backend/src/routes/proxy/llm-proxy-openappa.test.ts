@@ -1536,6 +1536,349 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
   });
 
+  /** An offer the proxy signed for one of this caller's sessions. */
+  const remedyOffer = (offerSessionId: string) =>
+    signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        sessionId: offerSessionId,
+        offerId: "offer-1",
+      }),
+      config.openappa.offerSigningSecret,
+    );
+  const remedyQuestion = {
+    question: "Apply the offered fix?",
+    options: [{ label: "Approve" }, { label: "Deny" }],
+    remedy_offer_ids: ["offer-1"],
+  };
+  /**
+   * A remedied turn as a governed client sends it back, each exchange a call
+   * and its result: the notice that carried the signed offer, the ask_user
+   * call the proxy gave that offer, and the control call it stamped with its
+   * receipt and the offer's JWS. `wireId` is the id the client was handed.
+   */
+  const remediedTurn = (
+    offer: ReturnType<typeof signOfferClaims>,
+    wireId: (callId: string) => string = (callId) => callId,
+  ) => {
+    const exchange = (
+      callId: string,
+      name: string,
+      input: unknown,
+      result: string,
+    ) => [
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: wireId(callId), name, input }],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: wireId(callId), content: result },
+        ],
+      },
+    ];
+    return {
+      notice: exchange(
+        "toolu_denied_weather",
+        "archestra__get_remedy_plans",
+        buildNoticeArguments({
+          id: "toolu_denied_weather",
+          tool: "get_weather",
+          arguments: { location: "SF" },
+          result: "[appa] Blocked",
+          offers: [offer],
+        }),
+        "rendered for the user",
+      ),
+      askUser: exchange(
+        "toolu_ask_user",
+        "archestra__ask_user",
+        { ...remedyQuestion, remedy_offers: [offer] },
+        "Approve",
+      ),
+      remedy: exchange(
+        "toolu_remedy",
+        "archestra__execute_remedy_plan",
+        {
+          offer_id: "offer-1",
+          execution: {
+            v: 1,
+            kind: "appa_remedy",
+            call_id: "toolu_remedy",
+            tool_name: "archestra__execute_remedy_plan",
+            original_arguments: JSON.stringify({ offer_id: "offer-1" }),
+          },
+          ...offer,
+        },
+        "Applied",
+      ),
+    };
+  };
+  /** The same calls as the model wrote them: all the provider is shown. */
+  const restoredCalls = {
+    notice: {
+      type: "tool_use",
+      id: "toolu_denied_weather",
+      name: "get_weather",
+      input: { location: "SF" },
+    },
+    askUser: {
+      type: "tool_use",
+      id: "toolu_ask_user",
+      name: "archestra__ask_user",
+      input: remedyQuestion,
+    },
+    remedy: {
+      type: "tool_use",
+      id: "toolu_remedy",
+      name: "archestra__execute_remedy_plan",
+      input: { offer_id: "offer-1" },
+    },
+  };
+  /** A member only the proxy writes, or a trajectory stamp. */
+  const PROXY_PAYLOAD =
+    /"offers"|"signature"|"protected"|"execution"|"remedy_offers"|"notice":|appat1/;
+  const assistantTurns = (request: unknown) =>
+    (request as { messages: { role: string }[] }).messages.filter(
+      (message) => message.role === "assistant",
+    );
+
+  test.each([
+    "the deployment switch is off",
+    "an unsupported client is bypassed",
+  ])("forwards a governed turn's history without signed offers, receipts or stamps when %s", async (condition) => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    const claudeSession = "3b7e9f2a-6c1d-4e8b-9a5f-0d2c4b6e8a1f";
+    const switchedOff = condition === "the deployment switch is off";
+    // Claude Code is governed while the switch is on, so turning it off is
+    // what lets its turn through; a client with no adapter is bypassed by
+    // default with the switch on.
+    if (switchedOff) await GuardrailsDeploymentModel.setEnabled(false);
+    const clientHeaders = switchedOff
+      ? {
+          ...externalClientHeaders(),
+          "user-agent": "claude-code/2.1.286",
+          "x-claude-code-session-id": claudeSession,
+        }
+      : externalClientHeaders();
+    // The ids the client holds are the ones the proxy stamped for the session
+    // while it was governed.
+    const stamped = (callId: string) =>
+      stampToolCallId({
+        callId,
+        sessionId: claudeSession,
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        secret: config.openappa.offerSigningSecret,
+      });
+    const turn = remediedTurn(
+      remedyOffer(`user:${userId}|${claudeSession}`),
+      stamped,
+    );
+    const body = payload(false, [
+      { role: "user", content: "Check the weather" },
+      ...turn.notice,
+      ...turn.askUser,
+      ...turn.remedy,
+      // Claude Code names a background agent's spawn call by the id it holds.
+      {
+        role: "user",
+        content: `<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>${stamped("toolu_background_agent")}</tool-use-id>\n<status>killed</status>\n</task-notification>`,
+      },
+    ]);
+    body.tools.push({
+      name: "archestra__ask_user",
+      description: "Ask the user",
+      input_schema: { type: "object", properties: {} },
+    });
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: clientHeaders,
+      payload: body as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(events).toEqual([]);
+    const sent = providerRequests.at(-1) as {
+      messages: { role: string; content: unknown }[];
+    };
+    expect(JSON.stringify(sent)).not.toMatch(PROXY_PAYLOAD);
+    // The denied call comes back with the ruling the client was shown in its
+    // place; the question and the remedy as the model asked them.
+    expect(assistantTurns(sent)).toEqual([
+      { role: "assistant", content: [restoredCalls.notice] },
+      { role: "assistant", content: [restoredCalls.askUser] },
+      { role: "assistant", content: [restoredCalls.remedy] },
+    ]);
+    expect(sent.messages[2].content).toEqual([
+      expect.objectContaining({
+        type: "tool_result",
+        tool_use_id: "toolu_denied_weather",
+        is_error: true,
+        content: "[appa] Blocked",
+      }),
+    ]);
+    expect(sent.messages.at(-1)).toEqual({
+      role: "user",
+      content:
+        "<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>toolu_background_agent</tool-use-id>\n<status>killed</status>\n</task-notification>",
+    });
+  });
+
+  test("shows the provider the same calls on either side of the deployment switch", async () => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    const turn = remediedTurn(remedyOffer(sessionId));
+    const history = payload(false, [
+      { role: "user", content: "Check the weather" },
+      ...turn.notice,
+      ...turn.remedy,
+    ]);
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+
+    const governed = await post(history);
+    expect(governed.statusCode, governed.body).toBe(200);
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const ungoverned = await post(history);
+    expect(ungoverned.statusCode, ungoverned.body).toBe(200);
+
+    // A governed turn's results pass the runtime and its notice tool goes
+    // undeclared, so those differ by design. The calls the model reads back
+    // are the same either way.
+    expect(providerRequests).toHaveLength(2);
+    expect(assistantTurns(providerRequests[0])).toEqual([
+      { role: "assistant", content: [restoredCalls.notice] },
+      { role: "assistant", content: [restoredCalls.remedy] },
+    ]);
+    expect(assistantTurns(providerRequests[1])).toEqual(
+      assistantTurns(providerRequests[0]),
+    );
+    expect(JSON.stringify(providerRequests)).not.toMatch(PROXY_PAYLOAD);
+  });
+
+  test("drops what restoration cannot put back on a governed turn", async () => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    const offer = remedyOffer(sessionId);
+    const patch =
+      "*** Begin Patch\n*** Update File: deploy.yml\n-replicas: 1\n+replicas: 3\n*** End Patch";
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+
+    const response = await post(
+      payload(false, [
+        { role: "user", content: "Scale the deployment" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_denied_patch",
+              name: "archestra__get_remedy_plans",
+              // A free-form custom call has no shape on this wire to come
+              // back as, so the notice stays where it stood.
+              input: buildNoticeArguments({
+                id: "toolu_denied_patch",
+                tool: "apply_patch",
+                arguments: { input: patch },
+                result: "[appa] Blocked",
+                custom: true,
+                offers: [offer],
+              }),
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_denied_patch",
+              content: "rendered for the user",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_remedy",
+              name: "archestra__execute_remedy_plan",
+              // Edited after the proxy stamped it: the receipt vouches for
+              // offer-1, not for the arguments the call now carries.
+              input: {
+                offer_id: "edited",
+                execution: {
+                  v: 1,
+                  kind: "appa_remedy",
+                  call_id: "toolu_remedy",
+                  tool_name: "archestra__execute_remedy_plan",
+                  original_arguments: JSON.stringify({ offer_id: "offer-1" }),
+                },
+                ...offer,
+              },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_remedy",
+              content: "Applied",
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.statusCode, response.body).toBe(200);
+    const sent = providerRequests.at(-1);
+    expect(assistantTurns(sent)).toEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_denied_patch",
+            name: "archestra__get_remedy_plans",
+            input: {
+              tool: "apply_patch",
+              arguments: { input: patch },
+              ruling: "[appa] Blocked",
+            },
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_remedy",
+            name: "archestra__execute_remedy_plan",
+            input: { offer_id: "edited" },
+          },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(sent)).not.toMatch(PROXY_PAYLOAD);
+  });
+
   test.each([
     true,
     false,
@@ -1960,6 +2303,90 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
     expect(toolEcho.statusCode, toolEcho.body).toBe(200);
     expect(toolEcho.body).not.toContain("protected session");
+  });
+
+  test("keeps the session mark off a client's tool-less side call", async () => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-context-secret-with-32-characters",
+    };
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const headers = {
+      ...externalClientHeaders(),
+      "user-agent": "claude-cli/2.1.288 (external, cli)",
+      "x-claude-code-session-id": "5f1c2a3b-8e9d-4c7b-a6f5-0e1d2c3b4a59",
+    };
+
+    // The agent loop opens the session with a reply that has no text, so the
+    // mark is still owed when the side calls come.
+    options = { ...options, responseText: "" };
+    const opening = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: payload(false),
+    });
+    expect(opening.statusCode, opening.body).toBe(200);
+    expect(opening.body).not.toContain("protected session");
+    await drainBackgroundWork();
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+
+    // Claude Code's auto-mode classifier asks about the next action with no
+    // tools, and parses the reply itself: the user never sees it.
+    const classifier = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: {
+        model: "claude-sonnet-5",
+        max_tokens: 64,
+        stream: false,
+        stop_sequences: ["</severity>"],
+        messages: [
+          {
+            role: "user",
+            content: '<transcript>{"user":"Check the weather"}</transcript>',
+          },
+        ],
+      },
+    });
+    expect(classifier.statusCode, classifier.body).toBe(200);
+    expect(classifier.body).not.toContain("protected session");
+    await drainBackgroundWork();
+
+    // Its next-prompt suggestion declares the tools, but shows its reply only
+    // as a hint in the input box.
+    const suggestion = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: payload(false, [
+        { role: "user", content: "Check the weather" },
+        { role: "assistant", content: "It is sunny." },
+        {
+          role: "user",
+          content:
+            "[SUGGESTION MODE: Suggest what the user might naturally type next.]",
+        },
+      ]),
+    });
+    expect(suggestion.statusCode, suggestion.body).toBe(200);
+    expect(suggestion.body).not.toContain("protected session");
+    await drainBackgroundWork();
+
+    // The session's next reply in the agent loop carries the mark instead.
+    const reply = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: payload(false),
+    });
+    expect(reply.statusCode, reply.body).toBe(200);
+    expect(reply.body).toContain("protected session");
   });
 
   test("marks a Claude Code root whose native session is in metadata only", async () => {

@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-27
+lastUpdated: 2026-10-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -2158,7 +2158,7 @@ With OpenAPPA disabled, existing Tool Guardrails run unchanged. When enabled, Op
 
 Notice restoration supports Anthropic Messages, OpenAI Responses, and OpenAI Chat Completions. Bedrock InvokeModel uses Anthropic restoration. Other protocols evaluate calls and results, but notices stay in history.
 
-Remedy routing is a signed plaintext claim on the notice and control call. Any backend replica verifies the HMAC and reconstructs the session. The event log is the authority for whether the offer still stands.
+Remedy routing is a signed plaintext claim on the notice and control call. Any backend replica verifies the HMAC and reconstructs the session. The event log is the authority for whether the offer still stands. The proxy removes these claims before it forwards history to a provider, even while the enforcement switch is off.
 
 The proxy attaches the provider tool call ID to the remedy call. Standard MCP clients return this ID unchanged. Submitting the same ID and arguments returns the saved result. Submitting changed arguments under that ID is refused. Spent offers return terminal feedback.
 

@@ -262,7 +262,7 @@ describe("checkToolPermission", () => {
     expect(await checkToolPermission(t("download_file"), ctx)).toBeNull();
   });
 
-  test("agent:read alone does not grant the file-store tools", async ({
+  test("the file-store tools follow agent:read", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -270,54 +270,19 @@ describe("checkToolPermission", () => {
     makeAgent,
   }) => {
     const org = await makeOrganization();
-    const user = await makeUser();
-    const role = await makeCustomRole(org.id, {
-      permission: { agent: ["read"] },
-    });
-    await makeMember(user.id, org.id, { role: role.role });
-    const agent = await makeAgent({ name: "Sandbox Agent" });
-
-    const ctx: ArchestraContext = {
-      agent: { id: agent.id, name: agent.name },
-      organizationId: org.id,
-      userId: user.id,
-    };
-
-    for (const tool of [
-      "search_files",
-      "read_file",
-      "save_file",
-      "edit_file",
-      "delete_file",
-    ]) {
-      const denied = await checkToolPermission(t(tool), ctx);
-      expect(denied, tool).not.toBeNull();
-      expect((denied?.content[0] as any).text).toContain(
-        "do not have permission",
-      );
-    }
-  });
-
-  test("file:manage allows the file-store tools but not run_command", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeCustomRole,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const role = await makeCustomRole(org.id, {
-      permission: { file: ["manage"] },
-    });
-    await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({ name: "Files Agent" });
-
-    const ctx: ArchestraContext = {
-      agent: { id: agent.id, name: agent.name },
-      organizationId: org.id,
-      userId: user.id,
+    const contextFor = async (permission: Record<string, string[]>) => {
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, { permission });
+      await makeMember(user.id, org.id, { role: role.role });
+      return {
+        agent: { id: agent.id, name: agent.name },
+        organizationId: org.id,
+        userId: user.id,
+      } satisfies ArchestraContext;
     };
+    const agentUser = await contextFor({ agent: ["read"] });
+    const chatOnly = await contextFor({ chat: ["read"] });
 
     for (const tool of [
       "search_files",
@@ -326,9 +291,9 @@ describe("checkToolPermission", () => {
       "edit_file",
       "delete_file",
     ]) {
-      expect(await checkToolPermission(t(tool), ctx), tool).toBeNull();
+      expect(await checkToolPermission(t(tool), agentUser), tool).toBeNull();
+      expect(await checkToolPermission(t(tool), chatOnly), tool).not.toBeNull();
     }
-    expect(await checkToolPermission(t("run_command"), ctx)).not.toBeNull();
   });
 
   test("returns null for non-Archestra tool names", async () => {

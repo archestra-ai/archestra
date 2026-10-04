@@ -274,7 +274,7 @@ export function ChatMessages({
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const { data: canExpandToolCalls } = useHasPermissions({
-    chatExpandToolCalls: ["enable"],
+    chatFullView: ["enable"],
   });
   const { data: canReadToolPolicy } = useHasPermissions({
     toolPolicy: ["read"],

@@ -308,15 +308,12 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
       );
   }, [showEncryptedChatToggle, toggleEncryptedChat]);
 
-  // RBAC: check if user can see agent picker and provider settings in chat
-  const { data: canSeeAgentPicker } = useHasPermissions({
-    chatAgentPicker: ["enable"],
+  // RBAC: the full chat view shows the agent picker and provider settings;
+  // without it, chat is the simpler view.
+  const { data: canSeeFullView } = useHasPermissions({
+    chatFullView: ["enable"],
   });
-  const { data: canSeeProviderSettings } = useHasPermissions({
-    chatProviderSettings: ["enable"],
-  });
-  const canShowProviderSettings =
-    !runtimeMode && canSeeProviderSettings === true;
+  const canShowProviderSettings = !runtimeMode && canSeeFullView === true;
 
   const focusTextarea = useCallback(() => {
     // Popover restores focus to its trigger as it closes. Wait until that
@@ -346,7 +343,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">
       {!runtimeMode &&
-        canSeeProviderSettings === false &&
+        canSeeFullView === false &&
         subscriptionConnectRequired &&
         (conversationId || onApiKeyChange) && (
           <div className="hidden">
@@ -398,7 +395,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </PopoverTrigger>
             <PopoverContent side="top" align="start" className="w-auto p-3">
               <div className="flex flex-col gap-3">
-                {canSeeAgentPicker &&
+                {canSeeFullView &&
                   selectorAgentId !== undefined &&
                   onAgentChange && (
                     <div>
@@ -503,7 +500,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   </>
                 )}
                 {!runtimeMode &&
-                  canSeeProviderSettings === false &&
+                  canSeeFullView === false &&
                   subscriptionConnectRequired &&
                   onSubscriptionConnect && (
                     <Button
@@ -699,16 +696,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
       {/* Wide: inline toolbar items */}
       {!isNarrow && (
         <>
-          {canSeeAgentPicker &&
-            selectorAgentId !== undefined &&
-            onAgentChange && (
-              <InitialAgentSelector
-                currentAgentId={selectorAgentId}
-                onAgentChange={handleAgentChange}
-              />
-            )}
+          {canSeeFullView && selectorAgentId !== undefined && onAgentChange && (
+            <InitialAgentSelector
+              currentAgentId={selectorAgentId}
+              onAgentChange={handleAgentChange}
+            />
+          )}
           {!runtimeMode &&
-            canSeeProviderSettings === false &&
+            canSeeFullView === false &&
             subscriptionConnectRequired &&
             onSubscriptionConnect && (
               <Button

@@ -299,7 +299,6 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
       body: {
         ...permissions,
         chat: ["read"],
-        file: [],
         openappaPolicy: [],
         organizationSettings: [],
         openappaDiagnostics: ["read"],
@@ -376,7 +375,6 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
   await expect(tooltip).toContainText("Missing permissions");
   await expect(tooltip).toContainText("Chats: create");
   await expect(tooltip).toContainText("OpenAPPA Policy: read");
-  await expect(tooltip).toContainText("Files: manage");
   await expect(tooltip).not.toContainText("Diagnostics");
   const table = await page.getByRole("table").boundingBox();
   const download = await page

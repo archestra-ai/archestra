@@ -43,7 +43,6 @@ export const resources = [
   "credential",
   "chat",
   "project",
-  "file",
   "llmCost",
   "llmLimit",
   "llmProviderApiKey",
@@ -77,9 +76,7 @@ export const resources = [
   "auditLog",
   "accessPolicies",
   "simpleView",
-  "chatAgentPicker",
-  "chatProviderSettings",
-  "chatExpandToolCalls",
+  "chatFullView",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -107,7 +104,6 @@ export const resourceLabels: Record<Resource, string> = {
   ac: "Roles",
   chat: "Chats",
   project: "Projects",
-  file: "Files",
   llmCost: "LLM Cost Analytics",
   llmLimit: "LLM Limits",
   llmProviderApiKey: "LLM Provider API Keys",
@@ -122,9 +118,7 @@ export const resourceLabels: Record<Resource, string> = {
   organizationSettings: "Organization Settings",
   scheduledTask: "Scheduled Tasks",
   simpleView: "Simple View",
-  chatAgentPicker: "Chat Agent Picker",
-  chatProviderSettings: "Chat Provider Settings",
-  chatExpandToolCalls: "Chat Expand Tool Calls",
+  chatFullView: "Full Chat View",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -143,7 +137,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   chat: "Chat conversations",
   project:
     "Projects — shared collections of chats, Agent Runtime runs, and files",
-  file: "Files produced and used in chats and projects",
   scheduledTask: "Scheduled agent tasks that run on a schedule",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
@@ -173,11 +166,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   knowledgeSource:
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
   simpleView: "Collapse the app sidebar by default",
-  chatAgentPicker: "Controls visibility of the agent picker in chat",
-  chatProviderSettings:
-    "Controls visibility of model and API key selectors in chat",
-  chatExpandToolCalls:
-    "Controls ability to expand and view tool call details in chat",
+  chatFullView:
+    "Show the agent picker, model and API key selectors, and expandable tool calls in chat. Without it, chat shows a simpler view",
   organization: "Organization (internal, used by authentication system)",
 };
 
@@ -212,15 +202,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   OpenAPPA: ["openappaPolicy", "openappaDiagnostics"],
   Knowledge: ["knowledgeSource"],
   Logs: ["log", "auditLog"],
-  Other: [
-    "chat",
-    "project",
-    "file",
-    "simpleView",
-    "chatAgentPicker",
-    "chatProviderSettings",
-    "chatExpandToolCalls",
-  ],
+  Other: ["chat", "project", "simpleView", "chatFullView"],
   Administration: [
     "accessPolicies",
     "member",

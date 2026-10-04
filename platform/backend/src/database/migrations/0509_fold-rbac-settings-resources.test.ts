@@ -70,3 +70,35 @@ test("invitations follow member:create and repeated runs change nothing", async 
     organizationSettings: ["read", "update"],
   });
 });
+
+test("the three chat view toggles become one, granted when any was held", async ({
+  makeOrganization,
+  makeCustomRole,
+}) => {
+  const org = await makeOrganization();
+  const pickerOnly = await makeCustomRole(org.id, {
+    permission: { chat: ["read"], chatAgentPicker: ["enable"] },
+  });
+  const allThree = await makeCustomRole(org.id, {
+    permission: {
+      chatAgentPicker: ["enable"],
+      chatProviderSettings: ["enable"],
+      chatExpandToolCalls: ["enable"],
+    },
+  });
+  const simpleChat = await makeCustomRole(org.id, {
+    permission: { chat: ["read"], chatProviderSettings: [] },
+  });
+
+  await db.execute(sql.raw(migration));
+  await db.execute(sql.raw(migration));
+
+  expect(await permissions(pickerOnly.id)).toEqual({
+    chat: ["read"],
+    chatFullView: ["enable"],
+  });
+  expect(await permissions(allThree.id)).toEqual({
+    chatFullView: ["enable"],
+  });
+  expect(await permissions(simpleChat.id)).toEqual({ chat: ["read"] });
+});

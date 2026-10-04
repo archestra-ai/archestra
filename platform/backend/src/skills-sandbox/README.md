@@ -154,7 +154,7 @@ enabled because npm/uv/npx require it.
 
 The execution MCP tools (`run_command`, `upload_file`, `download_file`) are
 gated by `agent:read`; the file tools (`search_files`, `read_file`,
-`save_file`, `edit_file`, `delete_file`) by `file:manage`
+`save_file`, `edit_file`, `delete_file`) by `agent:read` too
 (`backend/src/archestra-mcp-server/rbac.ts`). Sandboxes are scoped to the
 caller's organization + user + **conversation**: a `target: { id }` referencing
 a sandbox outside that scope is rejected.

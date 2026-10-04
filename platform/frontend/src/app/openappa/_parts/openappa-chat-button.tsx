@@ -92,7 +92,7 @@ export function useOpenAppaChatLaunch({
     ...(target?.kind === "mcp_gateway" ? { mcpGateway: ["read"] } : {}),
     ...(target?.kind === "mcp_server" ? { mcpRegistry: ["read"] } : {}),
     ...(yellId ? { openappaDiagnostics: ["read"] } : {}),
-    ...(hasArchive ? { file: ["manage"], agent: ["read"] } : {}),
+    ...(hasArchive ? { agent: ["read"] } : {}),
   };
 
   return {

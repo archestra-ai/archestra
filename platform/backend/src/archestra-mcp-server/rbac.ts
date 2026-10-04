@@ -259,19 +259,18 @@ export const TOOL_PERMISSIONS: Record<
   // permission; the handler additionally requires access to the target Agent
   // and refuses keys declared at organization scope.
   transfer_credential: { resource: "credential", action: "create" },
-  // Persistent file store — these operate on `skill_sandbox_files`, not the
-  // sandbox itself, so they gate on `file:manage`. Per-file authorization
+  // Persistent file store (`skill_sandbox_files`) — part of using an agent,
+  // like the sandbox itself, so `agent:read`. Per-file authorization
   // (authorship, project membership) stays in the handlers.
-  search_files: { resource: "file", action: "manage" },
-  read_file: { resource: "file", action: "manage" },
-  // Agent-side exchange with the chat's open app — pure PFS↔PFS, so file
-  // permission, not sandbox execution.
-  copy_file: { resource: "file", action: "manage" },
+  search_files: { resource: "agent", action: "read" },
+  read_file: { resource: "agent", action: "read" },
+  // Agent-side exchange with the chat's open app — pure PFS↔PFS.
+  copy_file: { resource: "agent", action: "read" },
   // App-runtime only (never seeded/agent-visible); still viewer-RBAC-checked.
-  read_file_raw: { resource: "file", action: "manage" },
-  save_file: { resource: "file", action: "manage" },
-  edit_file: { resource: "file", action: "manage" },
-  delete_file: { resource: "file", action: "manage" },
+  read_file_raw: { resource: "agent", action: "read" },
+  save_file: { resource: "agent", action: "read" },
+  edit_file: { resource: "agent", action: "read" },
+  delete_file: { resource: "agent", action: "read" },
 
   // MCP Apps. The data-store tools gate on app:read/update; the running app's
   // appId is route-bound (set by the app MCP proxy), so the permission check

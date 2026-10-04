@@ -463,7 +463,7 @@ describe("ArchestraPromptInput", () => {
       vi.mocked(useHasPermissions).mockImplementation(
         (permissions) =>
           ({
-            data: "chatAgentPicker" in permissions,
+            data: "chatFullView" in permissions,
             isPending: false,
             isLoading: false,
           }) as ReturnType<typeof useHasPermissions>,

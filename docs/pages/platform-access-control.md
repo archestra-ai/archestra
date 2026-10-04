@@ -70,7 +70,6 @@ Full access to core resources, but cannot change organization settings or manage
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
-| Files | `manage` |
 | LLM & MCP Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
 | Users | `read` |
@@ -78,9 +77,7 @@ Full access to core resources, but cannot change organization settings or manage
 | Teams | `read` |
 | Identity Providers | `read` |
 | Secrets | `read` |
-| Chat Agent Picker | `enable` |
-| Chat Provider Settings | `enable` |
-| Chat Expand Tool Calls | `enable` |
+| Full Chat View | `enable` |
 
 ### Member
 
@@ -108,13 +105,10 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
-| Files | `manage` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
 | Simple View | `enable` |
-| Chat Agent Picker | `enable` |
-| Chat Provider Settings | `enable` |
-| Chat Expand Tool Calls | `enable` |
+| Full Chat View | `enable` |
 
 
 ## Custom Roles
@@ -160,7 +154,7 @@ The following table lists all available permissions that can be assigned to cust
 | `ac:delete` | Delete custom roles |
 | `accessPolicies:read` | View access policies for all resource types |
 | `accessPolicies:update` | Edit access policies and grant access across all resource types |
-| `agent:read` | View and list agents, and run commands in their code sandboxes |
+| `agent:read` | View and list agents, and use their code sandboxes and files |
 | `agent:create` | Create new agents |
 | `agent:update` | Modify agent configuration and settings |
 | `agent:delete` | Delete agents |
@@ -177,9 +171,7 @@ The following table lists all available permissions that can be assigned to cust
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
 | `chat:delete` | Delete chat conversations |
-| `chatAgentPicker:enable` | Show agent picker in chat |
-| `chatExpandToolCalls:enable` | Allow expanding tool call details in chat |
-| `chatProviderSettings:enable` | Show model and API key selectors in chat |
+| `chatFullView:enable` | Show the agent picker, model and API key selectors, and expandable tool calls in chat |
 | `credential:read` | View saved credentials |
 | `credential:create` | Create saved credentials |
 | `credential:update` | Modify saved credentials |
@@ -188,7 +180,6 @@ The following table lists all available permissions that can be assigned to cust
 | `environment:create` | Create deployment environments |
 | `environment:update` | Modify deployment environments, including the org default environment |
 | `environment:delete` | Delete deployment environments |
-| `file:manage` | List, read, write, and delete files in chats and projects |
 | `identityProvider:read` | View identity provider configurations (SSO) |
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |
@@ -460,10 +451,9 @@ Chat access is controlled separately from optional chat UI controls:
 
 - `chat:read` allows access to chat itself
 - `agent:read` is also required because chat is agent-backed and a user must be able to access at least one agent/profile context to start or use chat
-- `chatAgentPicker:enable` controls whether the agent picker is visible
-- `chatProviderSettings:enable` controls whether model and API key selectors are visible
+- `chatFullView:enable` shows the full chat: the agent picker, the model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view
 
-The selector visibility permissions are UI toggles. They should be treated independently from core chat access and should not be assumed to grant access to provider credentials or model catalogs on their own.
+`chatFullView` is a UI toggle. It is independent of core chat access and does not grant access to provider credentials or model catalogs on its own.
 
 ### MCP Registry And Installation Records
 

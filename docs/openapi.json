@@ -43290,7 +43290,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "List configured outbound A2A agents.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
+        "description": "List configured outbound A2A agents.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
         "parameters": [
           {
             "schema": {
@@ -44591,7 +44591,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Get one configured outbound A2A agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
+        "description": "Get one configured outbound A2A agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
         "parameters": [
           {
             "schema": {
@@ -141489,7 +141489,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Atomically apply ChatOps assignments, channel settings, and pending direct-message bindings for an agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Atomically apply ChatOps assignments, channel settings, and pending direct-message bindings for an agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -371366,7 +371366,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own sessions inside them",
+        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -371676,7 +371676,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "file:manage",
             "project:read"
           ]
         }
@@ -371686,7 +371685,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own sessions inside them",
+        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "requestBody": {
           "required": true,
           "content": {
@@ -371989,7 +371988,6 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "file:manage",
             "project:read"
           ]
         }
@@ -372906,7 +372904,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes\n`project:read`: View projects and your own sessions inside them",
+        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -400447,7 +400445,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images and real PDFs, so the browser can preview them; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
+        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images and real PDFs, so the browser can preview them; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
         "parameters": [
           {
             "schema": {
@@ -400476,7 +400474,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Delete a persistent file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
+        "description": "Delete a persistent file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
         "parameters": [
           {
             "schema": {
@@ -400754,7 +400752,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Overwrite the full text content of a row-backed Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
+        "description": "Overwrite the full text content of a row-backed Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -401068,7 +401066,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List the artifact files produced in a conversation's sandbox.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and run commands in their code sandboxes",
+        "description": "List the artifact files produced in a conversation's sandbox.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
         "parameters": [
           {
             "schema": {

@@ -100,7 +100,7 @@ export const inspectA2aRemoteAgent = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and run commands in their code sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const listA2aRemoteAgents = <ThrowOnError extends boolean = false>(options?: Options<ListA2aRemoteAgentsData, ThrowOnError>) => (options?.client ?? client).get<ListA2aRemoteAgentsResponses, ListA2aRemoteAgentsErrors, ThrowOnError>({ url: '/api/a2a/remote-agents', ...options });
 
@@ -146,7 +146,7 @@ export const deleteA2aRemoteAgent = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and run commands in their code sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const getA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<GetA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).get<GetA2aRemoteAgentResponses, GetA2aRemoteAgentErrors, ThrowOnError>({ url: '/api/a2a/remote-agents/{id}', ...options });
 
@@ -3371,7 +3371,7 @@ export const createChatOpsDmBinding = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and run commands in their code sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const applyChatOpsBindingPlan = <ThrowOnError extends boolean = false>(options: Options<ApplyChatOpsBindingPlanData, ThrowOnError>) => (options.client ?? client).post<ApplyChatOpsBindingPlanResponses, ApplyChatOpsBindingPlanErrors, ThrowOnError>({
@@ -9304,7 +9304,6 @@ export const permanentlyDeleteProject = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `file:manage`: List, read, write, and delete files in chats and projects
  * `project:read`: View projects and your own sessions inside them
  */
 export const getProjectFiles = <ThrowOnError extends boolean = false>(options: Options<GetProjectFilesData, ThrowOnError>) => (options.client ?? client).get<GetProjectFilesResponses, GetProjectFilesErrors, ThrowOnError>({ url: '/api/projects/{id}/files', ...options });
@@ -9318,7 +9317,6 @@ export const getProjectFiles = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `file:manage`: List, read, write, and delete files in chats and projects
  * `project:read`: View projects and your own sessions inside them
  */
 export const uploadProjectFiles = <ThrowOnError extends boolean = false>(options: Options<UploadProjectFilesData, ThrowOnError>) => (options.client ?? client).post<UploadProjectFilesResponses, UploadProjectFilesErrors, ThrowOnError>({
@@ -9385,7 +9383,7 @@ export const getProjectConversations = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and run commands in their code sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  * `project:read`: View projects and your own sessions inside them
  */
 export const getProjectRuns = <ThrowOnError extends boolean = false>(options: Options<GetProjectRunsData, ThrowOnError>) => (options.client ?? client).get<GetProjectRunsResponses, GetProjectRunsErrors, ThrowOnError>({ url: '/api/projects/{id}/runs', ...options });
@@ -10489,7 +10487,7 @@ export const importGithubSkills = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and run commands in their code sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const deleteSkillSandboxArtifact = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillSandboxArtifactData, ThrowOnError>) => (options.client ?? client).delete<DeleteSkillSandboxArtifactResponses, DeleteSkillSandboxArtifactErrors, ThrowOnError>({ url: '/api/skill-sandbox/artifacts/{artifactId}', ...options });
 
@@ -10502,7 +10500,7 @@ export const deleteSkillSandboxArtifact = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and run commands in their code sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const getSkillSandboxArtifact = <ThrowOnError extends boolean = false>(options: Options<GetSkillSandboxArtifactData, ThrowOnError>) => (options.client ?? client).get<GetSkillSandboxArtifactResponses, unknown, ThrowOnError>({ url: '/api/skill-sandbox/artifacts/{artifactId}', ...options });
 
@@ -10515,7 +10513,7 @@ export const getSkillSandboxArtifact = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and run commands in their code sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const updateSkillSandboxArtifactContent = <ThrowOnError extends boolean = false>(options: Options<UpdateSkillSandboxArtifactContentData, ThrowOnError>) => (options.client ?? client).put<UpdateSkillSandboxArtifactContentResponses, UpdateSkillSandboxArtifactContentErrors, ThrowOnError>({
     url: '/api/skill-sandbox/artifacts/{artifactId}/content',
@@ -10535,7 +10533,7 @@ export const updateSkillSandboxArtifactContent = <ThrowOnError extends boolean =
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and run commands in their code sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const getSkillSandboxConversationArtifacts = <ThrowOnError extends boolean = false>(options: Options<GetSkillSandboxConversationArtifactsData, ThrowOnError>) => (options.client ?? client).get<GetSkillSandboxConversationArtifactsResponses, GetSkillSandboxConversationArtifactsErrors, ThrowOnError>({ url: '/api/skill-sandbox/conversations/{conversationId}/artifacts', ...options });
 

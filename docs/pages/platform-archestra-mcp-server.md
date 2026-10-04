@@ -3288,16 +3288,16 @@ These tools are served only when the code runtime is enabled — set `ARCHESTRA_
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `search_files` | List or search the conversation's persistent files. | `file:manage` |
-| `read_file` | Read a persistent file directly, without copying it into the sandbox. | `file:manage` |
-| `save_file` | Write bytes you are providing inline in this call — text or base64 included in the arguments — to the conversation's persistent files. | `file:manage` |
-| `edit_file` | Edit an existing persistent file by replacing a snippet, keeping its id and filename. | `file:manage` |
-| `delete_file` | Permanently delete a persistent file, identified by `id` (from search_files / save_file) or by `filename`. | `file:manage` |
-| `copy_file` | Exchange a file between this chat and the app the user has open: copy a chat/project file or a chat attachment INTO the open app's file store (so the app can load it), or copy a file OUT of the app... | `file:manage` |
+| `search_files` | List or search the conversation's persistent files. | `agent:read` |
+| `read_file` | Read a persistent file directly, without copying it into the sandbox. | `agent:read` |
+| `save_file` | Write bytes you are providing inline in this call — text or base64 included in the arguments — to the conversation's persistent files. | `agent:read` |
+| `edit_file` | Edit an existing persistent file by replacing a snippet, keeping its id and filename. | `agent:read` |
+| `delete_file` | Permanently delete a persistent file, identified by `id` (from search_files / save_file) or by `filename`. | `agent:read` |
+| `copy_file` | Exchange a file between this chat and the app the user has open: copy a chat/project file or a chat attachment INTO the open app's file store (so the app can load it), or copy a file OUT of the app... | `agent:read` |
 
 #### search_files
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3321,7 +3321,7 @@ Required RBAC permission: `file:manage`
 
 #### read_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3350,7 +3350,7 @@ Required RBAC permission: `file:manage`
 
 #### save_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3376,7 +3376,7 @@ Required RBAC permission: `file:manage`
 
 #### edit_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3401,7 +3401,7 @@ Required RBAC permission: `file:manage`
 
 #### delete_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3421,7 +3421,7 @@ Required RBAC permission: `file:manage`
 
 #### copy_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 

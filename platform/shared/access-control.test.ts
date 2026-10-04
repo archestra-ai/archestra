@@ -215,27 +215,14 @@ describe("access-control", () => {
   });
 
   describe("project file routes", () => {
-    // Project file surfaces combine project-level access with the files gate;
-    // agent:read, which gates sandbox execution, is not what grants them.
-    test("GetProjectFiles requires project:read + file:manage, not agent:read", () => {
-      const required = requiredEndpointPermissionsMap[RouteId.GetProjectFiles];
-      expect(required?.project).toContain("read");
-      expect(required?.file).toContain("manage");
-      expect(required?.agent).toBeUndefined();
-    });
-
-    test("UploadProjectFiles requires project:read + file:manage, not agent:read", () => {
-      const required =
-        requiredEndpointPermissionsMap[RouteId.UploadProjectFiles];
-      expect(required?.project).toContain("read");
-      expect(required?.file).toContain("manage");
-      expect(required?.agent).toBeUndefined();
-    });
-
-    test("all predefined roles have file:manage", () => {
-      for (const permissions of Object.values(predefinedPermissionsMap)) {
-        expect(permissions.file).toContain("manage");
-      }
+    // Project files follow project access; there is no separate files gate.
+    test.each([
+      RouteId.GetProjectFiles,
+      RouteId.UploadProjectFiles,
+    ])("%s requires only project:read", (routeId) => {
+      expect(requiredEndpointPermissionsMap[routeId]).toEqual({
+        project: ["read"],
+      });
     });
   });
 
@@ -327,10 +314,10 @@ describe("buildForbiddenErrorMessage", () => {
     expect(
       buildForbiddenErrorMessage({
         routeId: RouteId.UploadProjectFiles,
-        missingPermissions: { file: ["manage"] },
+        missingPermissions: { project: ["read"] },
       }),
     ).toBe(
-      "You don't have permission to upload project files. Missing permission: file:manage (List, read, write, and delete files in chats and projects).",
+      "You don't have permission to upload project files. Missing permission: project:read (View projects and your own sessions inside them).",
     );
   });
 
@@ -342,16 +329,16 @@ describe("buildForbiddenErrorMessage", () => {
 
   test("lists multiple missing permissions in stable order", () => {
     const message = buildForbiddenErrorMessage({
-      missingPermissions: { project: ["read"], file: ["manage"] },
+      missingPermissions: { project: ["read"], agent: ["read"] },
     });
     expect(message).toContain("Missing permissions:");
     expect(message).toContain(
-      "file:manage (List, read, write, and delete files in chats and projects)",
+      "agent:read (View and list agents, and use their code sandboxes and files)",
     );
     expect(message).toContain(
       "project:read (View projects and your own sessions inside them)",
     );
-    expect(message.indexOf("file:manage")).toBeLessThan(
+    expect(message.indexOf("agent:read")).toBeLessThan(
       message.indexOf("project:read"),
     );
   });

@@ -68,7 +68,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
-  file: ["manage"],
   log: ["read", "admin"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -88,9 +87,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // UI behavior resources
   simpleView: ["enable"],
-  chatAgentPicker: ["enable"],
-  chatProviderSettings: ["enable"],
-  chatExpandToolCalls: ["enable"],
+  chatFullView: ["enable"],
 
   // Administration
 
@@ -134,7 +131,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
-  file: ["manage"],
   // Editors see only their own logs; org-wide visibility is log:admin,
   // reserved for admin-tier roles.
   log: ["read"],
@@ -156,9 +152,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // UI behavior resources
   simpleView: [],
-  chatAgentPicker: ["enable"],
-  chatProviderSettings: ["enable"],
-  chatExpandToolCalls: ["enable"],
+  chatFullView: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -208,7 +202,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
-  file: ["manage"],
   log: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -228,9 +221,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // UI behavior resources
   simpleView: ["enable"],
-  chatAgentPicker: ["enable"],
-  chatProviderSettings: ["enable"],
-  chatExpandToolCalls: ["enable"],
+  chatFullView: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -251,11 +242,7 @@ export function findUngrantablePermissions(
   granterPermissions: Permissions,
   rolePermissions: Permissions,
 ): string[] {
-  const exemptUiResources: Resource[] = [
-    "simpleView",
-    "chatAgentPicker",
-    "chatProviderSettings",
-  ];
+  const exemptUiResources: Resource[] = ["simpleView", "chatFullView"];
 
   const missing: string[] = [];
   for (const [resource, actions] of Object.entries(rolePermissions)) {
@@ -384,8 +371,7 @@ export const permissionDescriptions: Record<string, string> = {
   "openappaDiagnostics:update": "Resolve and reopen organization yells",
   "openappaDiagnostics:admin": "Read consult logs across the organization",
   // Agents
-  "agent:read":
-    "View and list agents, and run commands in their code sandboxes",
+  "agent:read": "View and list agents, and use their code sandboxes and files",
   "agent:create": "Create new agents",
   "agent:update": "Modify agent configuration and settings",
   "agent:delete": "Delete agents",
@@ -477,7 +463,6 @@ export const permissionDescriptions: Record<string, string> = {
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
-  "file:manage": "List, read, write, and delete files in chats and projects",
   "log:read":
     "View your own LLM proxy and MCP tool call logs in the active organization",
 
@@ -530,9 +515,8 @@ export const permissionDescriptions: Record<string, string> = {
 
   // UI behavior
   "simpleView:enable": "Collapse the app sidebar by default",
-  "chatAgentPicker:enable": "Show agent picker in chat",
-  "chatProviderSettings:enable": "Show model and API key selectors in chat",
-  "chatExpandToolCalls:enable": "Allow expanding tool call details in chat",
+  "chatFullView:enable":
+    "Show the agent picker, model and API key selectors, and expandable tool calls in chat",
 
   // Administration
 };
@@ -1825,13 +1809,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.PermanentlyDeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   [RouteId.GetProjectRuns]: { project: ["read"], agent: ["read"] },
-  // Project file surfaces combine project-level access with the files gate:
-  // `file:manage` covers the file operations, while project membership is
-  // still enforced in the handler (projectService.listFiles/uploadFile ->
-  // requireReadable). Note the artifact byte endpoint that serves file
-  // contents (GetSkillSandboxArtifact) stays on `agent:read`.
-  [RouteId.GetProjectFiles]: { project: ["read"], file: ["manage"] },
-  [RouteId.UploadProjectFiles]: { project: ["read"], file: ["manage"] },
+  // Project files follow project access; membership is enforced in the
+  // handler (projectService.listFiles/uploadFile -> requireReadable). The
+  // artifact byte endpoint that serves file contents (GetSkillSandboxArtifact)
+  // stays on `agent:read`.
+  [RouteId.GetProjectFiles]: { project: ["read"] },
+  [RouteId.UploadProjectFiles]: { project: ["read"] },
   // Instructions are plain project metadata (not a sandbox byte surface), so the
   // GET needs only project read — every project reader can see the instructions
   // that steer the project's chats. Editing is owner-only, enforced in the

@@ -607,7 +607,7 @@ describe("custom role routes", () => {
 
   test("POST /api/roles creates role with multiple complex permissions", async () => {
     const complexPermissions = {
-      agent: ["read", "create", "update", "delete"],
+      agent: ["read", "create", "delete"],
       toolPolicy: ["read", "create", "update", "delete"],
       log: ["read"],
       mcpServerInstallation: ["read", "create", "delete"],

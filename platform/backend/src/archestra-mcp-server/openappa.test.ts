@@ -134,6 +134,22 @@ test("policy reads advertise a read-only annotation but policy writes do not", (
   ).not.toBe(true);
 });
 
+test("peer inbox tools hide transport proofs without rejecting proxy-stamped calls", () => {
+  const tools = getAllArchestraMcpTools();
+  const list = tools.find((tool) => tool.name.endsWith("list_peer_messages"));
+  const read = tools.find((tool) => tool.name.endsWith("read_peer_message"));
+
+  expect(Object.keys(list?.inputSchema.properties ?? {})).toEqual([]);
+  expect(Object.keys(read?.inputSchema.properties ?? {})).toEqual([
+    "message_id",
+  ]);
+  for (const tool of [list, read]) {
+    expect(tool).toBeDefined();
+    expect(JSON.stringify(tool?.inputSchema)).not.toContain("peer_proof");
+    expect(tool?.inputSchema.additionalProperties).not.toBe(false);
+  }
+});
+
 describe("OpenAPPA tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;

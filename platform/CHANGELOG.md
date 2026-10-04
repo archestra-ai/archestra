@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.4.0-rc.32](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.31...platform-v1.4.0-rc.32) (2026-10-04)
+
+
+### Features
+
+* **openappa:** govern native teammate messages at consumption ([#8421](https://github.com/archestra-ai/archestra/issues/8421)) ([11c7c7d](https://github.com/archestra-ai/archestra/commit/11c7c7d44607d62ca376240671a2574c8a169d61))
+* **openappa:** ignore what ran while Guardrails enforcement was off ([#8407](https://github.com/archestra-ai/archestra/issues/8407)) ([460448b](https://github.com/archestra-ai/archestra/commit/460448b624ef709969003166d8b3dccf25145e7d))
+
+
+### Bug Fixes
+
+* **agents:** cache Anthropic tool results between agent steps ([#8416](https://github.com/archestra-ai/archestra/issues/8416)) ([3c8240a](https://github.com/archestra-ai/archestra/commit/3c8240a65170ecd97c326a0ada508095ce0ee49b))
+* **chat:** hide unavailable APPA session status tab ([#8413](https://github.com/archestra-ai/archestra/issues/8413)) ([67357fe](https://github.com/archestra-ai/archestra/commit/67357fed3ed3c79ce409903ed0f6bf8df1066358))
+* **llm-proxy:** keep ChatGPT subscription requests on one prompt cache ([#8414](https://github.com/archestra-ai/archestra/issues/8414)) ([755dc53](https://github.com/archestra-ai/archestra/commit/755dc53128d6c3a0231254ec1a97466ccc9ca8f4))
+* **openappa:** keep Claude 5.5 safeguards from refusing remedy flows ([#8420](https://github.com/archestra-ai/archestra/issues/8420)) ([46cb337](https://github.com/archestra-ai/archestra/commit/46cb337165145b63941c3fbfcca87c06e5f6a78d))
+* **openappa:** keep native question answers in proxy-only sessions ([#8409](https://github.com/archestra-ai/archestra/issues/8409)) ([62a1e1c](https://github.com/archestra-ai/archestra/commit/62a1e1c562d1928885b6c564f6c95a8de420bb9b))
+
 ## [1.4.0-rc.31](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.30...platform-v1.4.0-rc.31) (2026-10-02)
 
 

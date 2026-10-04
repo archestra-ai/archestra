@@ -5,6 +5,7 @@ import {
   getArchestraToolFullName,
   getCreationDefaultArchestraToolShortNames,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
@@ -490,6 +491,44 @@ describe("Archestra Tools Dynamic Assignment", () => {
     } finally {
       sandboxConfig.enabled = originalSandbox;
       openappaConfig.enabled = originalOpenappa;
+      openappaConfig.yellEnabled = originalYell;
+    }
+  });
+
+  test("backfills required OpenAPPA tools once after the feature is enabled", async ({
+    makeAgent,
+  }) => {
+    const openappaConfig = config.openappa as {
+      enabled: boolean;
+      yellEnabled: boolean;
+    };
+    const originalEnabled = openappaConfig.enabled;
+    const originalYell = openappaConfig.yellEnabled;
+    try {
+      openappaConfig.enabled = false;
+      const agent = await makeAgent({ name: "Existing Agent" });
+      const before = await assignedToolNames(agent.id);
+      openappaConfig.enabled = true;
+      openappaConfig.yellEnabled = true;
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      openappaConfig.enabled = false;
+      await ToolModel.backfillOpenAppaToolsToAllAgents();
+      expect(await assignedToolNames(agent.id)).toEqual(before);
+
+      openappaConfig.enabled = true;
+      await ToolModel.backfillOpenAppaToolsToAllAgents();
+      await ToolModel.backfillOpenAppaToolsToAllAgents();
+      expect((await assignedToolNames(agent.id)).sort()).toEqual(
+        [
+          ...new Set([
+            ...before,
+            ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES.map(getArchestraToolFullName),
+          ]),
+        ].sort(),
+      );
+    } finally {
+      openappaConfig.enabled = originalEnabled;
       openappaConfig.yellEnabled = originalYell;
     }
   });

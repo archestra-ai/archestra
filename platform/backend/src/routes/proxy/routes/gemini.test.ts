@@ -24,6 +24,12 @@ import { vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import { ModelModel } from "@/models";
+import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
+import {
+  type OfferJws,
+  signOfferClaims,
+  unsignedOfferClaims,
+} from "@/openappa/offer-claims";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createGeminiTestClient } from "@/test/llm-provider-stubs";
 import { ApiError } from "@/types";
@@ -955,6 +961,117 @@ describe("Gemini countTokens passthrough", () => {
         },
       ],
     );
+  });
+
+  test("takes OpenAPPA's signed offers and remedy receipts out of a wrapped request", async () => {
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa.offerSigningSecret = secret;
+    const offer = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: "org-count-tokens",
+        callerId: "user:count-tokens",
+        sessionId: "user:count-tokens|count-tokens-session",
+        offerId: "offer-weather",
+      }),
+      secret,
+    );
+    const notice = (offers?: OfferJws[]) =>
+      buildNoticeArguments({
+        id: "call_weather",
+        tool: "get_weather",
+        arguments: { location: "SF" },
+        result: "[appa] get_weather is blocked until a plan is approved.",
+        ...(offers ? { offers } : {}),
+      });
+    const remedy = { offer_id: "offer-weather", plan: "approve" };
+    const execution = {
+      v: 1,
+      kind: "appa_remedy",
+      call_id: "call_remedy",
+      tool_name: "archestra__execute_remedy_plan",
+      original_arguments: JSON.stringify(remedy),
+    } satisfies RemedyExecution;
+    // Gemini calls carry no ids here, so nothing names its own call: only
+    // what this deployment signed proves a member is the proxy's.
+    const contents = (noticeArgs: object, remedyArgs: object) => [
+      { role: "user", parts: [{ text: "What's the weather in SF?" }] },
+      {
+        role: "model",
+        parts: [
+          {
+            functionCall: {
+              name: "archestra__get_remedy_plans",
+              args: noticeArgs,
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              name: "archestra__get_remedy_plans",
+              response: { result: "rendered for the user" },
+            },
+          },
+        ],
+      },
+      {
+        role: "model",
+        parts: [
+          {
+            functionCall: {
+              name: "archestra__execute_remedy_plan",
+              args: remedyArgs,
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              name: "archestra__execute_remedy_plan",
+              response: { result: "Plan authorized." },
+            },
+          },
+        ],
+      },
+    ];
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(geminiProxyRoutes);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/gemini/v1beta/models/gemini-2.5-pro:countTokens",
+        headers: { "content-type": "application/json" },
+        payload: {
+          generateContentRequest: {
+            contents: contents(notice([offer]), {
+              ...remedy,
+              execution,
+              ...offer,
+            }),
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+    expect(forwardedBodies).toHaveLength(1);
+    expect(forwardedBodies[0]).not.toMatch(
+      /"offers"|"execution"|"protected"|"signature"/,
+    );
+    expect(JSON.parse(forwardedBodies[0])).toEqual({
+      generateContentRequest: { contents: contents(notice(), remedy) },
+    });
   });
 });
 

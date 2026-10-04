@@ -317,7 +317,7 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     const released = textOf(outputFor(toolOutputs, retry.toolCallId));
     expect(released).not.toContain("[appa] Blocked");
     expect(released).not.toContain("Tool output withheld");
-    expect(released).not.toContain("The tool was not executed");
+    expect(released).not.toContain("The tool did not run. If the ruling");
 
     expect(assistantText(events)).toContain(finalAnswer);
 
@@ -577,7 +577,7 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     const released = textOf(outputFor(toolOutputs, retry.toolCallId));
     expect(released).not.toContain("[appa] Blocked");
     expect(released).not.toContain("Tool output withheld");
-    expect(released).not.toContain("The tool was not executed");
+    expect(released).not.toContain("The tool did not run. If the ruling");
 
     expect(assistantText(events)).toContain(finalAnswer);
   } finally {

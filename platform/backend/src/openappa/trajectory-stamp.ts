@@ -99,12 +99,38 @@ export function stampedSessions(params: {
   return [...sessions].reverse();
 }
 
+/**
+ * Puts the provider's call id back for every trajectory stamp standing in free
+ * text. Clients copy stamped ids into messages: Claude Code names a background
+ * agent's spawn call in its `<\task-notification>`. Like id restoration, this
+ * reads a stamp without verifying its tag: unverified or not, a stamp never
+ * reaches the provider. Text without a stamp comes back as the same string.
+ */
+export function restoreTrajectoryStampText(text: string): string {
+  if (!text.includes(STAMP_PREFIX)) return text;
+  return text.replace(STAMP_IN_TEXT, (token) => {
+    const callId = parseTrajectoryStamp(token)?.callId;
+    if (callId === undefined) return token;
+    return callId;
+  });
+}
+
+/** Whether a raw body could carry a trajectory stamp at all. */
+export function mayHoldTrajectoryStamp(raw: Buffer): boolean {
+  return raw.includes(STAMP_PREFIX);
+}
+
 // === Internal helpers ===
 
 const STAMP_PREFIX = "appat1";
 const TAG_LENGTH = 22;
 const TAG_DOMAIN = "openappa-trajectory-stamp-v1";
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
+/** A stamp standing alone in text: no id character on either side of it. */
+const STAMP_IN_TEXT = new RegExp(
+  `(?<![A-Za-z0-9_-])${STAMP_PREFIX}[A-Za-z0-9_-]{${TAG_LENGTH + 1},}(?![A-Za-z0-9_-])`,
+  "g",
+);
 
 function stampTag(params: {
   payload: string;

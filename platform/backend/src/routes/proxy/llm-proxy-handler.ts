@@ -103,7 +103,10 @@ import {
   stripDelegationMarkers,
 } from "@/openappa/delegation";
 import { forkedSession } from "@/openappa/lineage";
-import { prepareAppaRequest } from "@/openappa/request";
+import {
+  prepareAppaRequest,
+  sanitizeProviderBoundRequest,
+} from "@/openappa/request";
 import {
   APPA_PARENT_HEADER,
   isAppaChatSource,
@@ -114,14 +117,20 @@ import {
   sessionFromHeaders,
 } from "@/openappa/service";
 import { formatSessionReceipt } from "@/openappa/session-token";
-import { stampedSessions } from "@/openappa/trajectory-stamp";
+import {
+  restoreTrajectoryStampText,
+  stampedSessions,
+} from "@/openappa/trajectory-stamp";
 import { startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
   appendChildTrajectoryReceiptToResponse,
   appendSessionReceiptToResponse,
+  declaredToolEntries,
+  providerWire,
   restoreTrajectoryStamps,
+  restoreTrajectoryStampsInText,
   sessionReceiptEvidence,
   stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
@@ -481,6 +490,31 @@ function markSessionReceiptIssued(receipt: {
  * sites only so a large tool result cannot trigger a false re-issue and so
  * the body is never serialized just to search it.
  */
+/**
+ * Claude Code's next-prompt suggestion: after an answer, it asks the model
+ * what the user might type next, with the session's tools and history, and
+ * shows the reply as a hint in the input box. Its last user message carries
+ * this fixed instruction.
+ */
+function isClientPromptSuggestion(body: unknown): boolean {
+  const messages = asRecord(body)?.messages;
+  if (!Array.isArray(messages)) return false;
+  const content = asRecord(messages.at(-1))?.content;
+  const texts =
+    typeof content === "string"
+      ? [content]
+      : Array.isArray(content)
+        ? content.map((part) => asRecord(part)?.text)
+        : [];
+  return texts.some(
+    (text) =>
+      typeof text === "string" &&
+      text.trimStart().startsWith(PROMPT_SUGGESTION_INSTRUCTION),
+  );
+}
+
+const PROMPT_SUGGESTION_INSTRUCTION = "[SUGGESTION MODE:";
+
 function isClientCompactionRequest(params: {
   body: unknown;
   headers: Record<string, string | string[] | undefined>;
@@ -680,11 +714,15 @@ export async function handleLLMProxy<
     });
   }
   // Restores original provider call IDs before request processing, logging,
-  // or policy evaluation.
+  // or policy evaluation: the trajectory stamps first, then any stamp a
+  // client copied into text. Neither needs an OpenAPPA session, so no id the
+  // proxy gave a client reaches a provider with Guardrails off either.
   const trajectoryStamps = restoreTrajectoryStamps({
     interactionType: provider.interactionType,
     body,
   });
+  const wire = providerWire(provider.interactionType);
+  if (wire) restoreTrajectoryStampsInText({ wire, body });
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -2004,6 +2042,13 @@ export async function handleLLMProxy<
         hasNativeClientSession &&
         !isInternalChat &&
         !hasStructuredOutputConstraint(body) &&
+        // The agent loop declares its tools. A client's side calls (Claude
+        // Code's auto-mode classifier, its quota check, its next-prompt
+        // suggestion) are never shown as the session's reply, so the mark
+        // would be lost there and would alter what the client parses.
+        (clientCompaction ||
+          (declaredToolEntries(body).length > 0 &&
+            !isClientPromptSuggestion(body))) &&
         appaCallerId &&
         appaFamily &&
         config.openappa.offerSigningSecret.length > 0
@@ -2031,6 +2076,29 @@ export async function handleLLMProxy<
         };
       }
     }
+    // Nothing OpenAPPA wrote for the client and the gateway goes on to the
+    // provider, whether or not this request has a session (deployment switch
+    // off, a connection-setup or unsupported-client bypass, a delegated run)
+    // and whatever restoration above could not put back. Runs after
+    // prepareAppaRequest collected the notices' signed offers and the plugin
+    // read this request's results. A request without a session evaluates
+    // trusted data on the result, as a session does on its restored history.
+    // It changes no call id, so the tool-result updates below still land.
+    const providerBoundRewrites = sanitizeProviderBoundRequest({
+      body,
+      interactionType: provider.interactionType,
+      identity: toolIdentity,
+    });
+    if (providerBoundRewrites > 0) {
+      logger.debug(
+        {
+          resolvedAgentId,
+          rewrites: providerBoundRewrites,
+          openappaSession: openappaSession !== undefined,
+        },
+        `[${providerName}Proxy] Removed OpenAPPA transport members from the provider-bound request`,
+      );
+    }
     const trustedDataOutcome = connectionSetupBypass
       ? {
           toolResultUpdates: {},
@@ -2043,12 +2111,18 @@ export async function handleLLMProxy<
         (await evaluateLegacyTrust()));
     const { contextIsTrusted, dualLlmAnalyses, unsafeContextBoundary } =
       trustedDataOutcome;
-    const toolResultUpdates = {
-      ...("toolResultUpdates" in trustedDataOutcome
-        ? trustedDataOutcome.toolResultUpdates
-        : {}),
-      ...pluginToolResultsOutcome?.toolResultUpdates,
-    };
+    const toolResultUpdates = Object.fromEntries(
+      Object.entries({
+        ...("toolResultUpdates" in trustedDataOutcome
+          ? trustedDataOutcome.toolResultUpdates
+          : {}),
+        ...pluginToolResultsOutcome?.toolResultUpdates,
+      }).map(
+        // Approved outputs are rendered from results as the client sent them:
+        // a trajectory stamp one echoed still never reaches the provider.
+        ([id, content]) => [id, restoreTrajectoryStampText(content)],
+      ),
+    );
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);

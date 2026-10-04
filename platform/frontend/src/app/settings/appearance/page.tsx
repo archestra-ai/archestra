@@ -113,7 +113,7 @@ export default function AppearanceSettingsPage() {
   // Site-notification draft state is lifted here so the section's changes
   // save through the same floating save bar as the rest of the page.
   const { data: canReadNotifications } = useHasPermissions({
-    siteNotification: ["read"],
+    organizationSettings: ["read"],
   });
   const { data: notification } = useSiteNotification({
     enabled: canReadNotifications === true,

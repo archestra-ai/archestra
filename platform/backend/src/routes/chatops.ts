@@ -1482,11 +1482,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
       if (request.body.directMessages.length > 0) {
-        const { success: canCreateAgentTrigger } = await hasPermission(
-          { agentTrigger: ["create"] },
+        const { success: canManageMessagingChannels } = await hasPermission(
+          { organizationSettings: ["update"] },
           request.headers,
         );
-        if (!canCreateAgentTrigger) {
+        if (!canManageMessagingChannels) {
           throw new ApiError(403, "Forbidden");
         }
       }

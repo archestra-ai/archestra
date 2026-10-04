@@ -110,7 +110,7 @@ describe("POST /api/chat sandbox command turn", () => {
       organizationId = organization.id;
 
       const role = await makeCustomRole(organizationId, {
-        permission: { sandbox: ["execute"], chat: ["read", "create"] },
+        permission: { agent: ["read"], chat: ["read", "create"] },
       });
       await makeMember(user.id, organizationId, { role: role.role });
 

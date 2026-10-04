@@ -135,8 +135,9 @@ test("a non-admin cannot change unsupported client behavior", async () => {
     (permissions) =>
       ({
         data:
-          permissions.openappaSettings?.every((action) => action === "read") ??
-          false,
+          permissions.organizationSettings?.every(
+            (action) => action === "read",
+          ) ?? false,
       }) as ReturnType<typeof useHasPermissions>,
   );
   show();

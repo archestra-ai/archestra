@@ -955,11 +955,11 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Code-execution runtime tools. Gated by `sandbox:execute` and only seeded when
+ * Code-execution runtime tools. Gated by `agent:read` and only seeded when
  * the skills-sandbox runtime is on (`config.skillsSandbox.enabled`). They
  * materialize a Dagger container, so they genuinely need the runtime, and they
  * participate in the `search_tools`/`run_tool` dynamic tool access relaxation
- * (see `dynamic-tools.ts`) so a user with `sandbox:execute` can reach them
+ * (see `dynamic-tools.ts`) so a user with `agent:read` can reach them
  * without a manual assignment.
  */
 export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -969,7 +969,7 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Persistent-files ("My Files" / Projects) tools. Also gated by `sandbox:execute`,
+ * Persistent-files ("My Files" / Projects) tools. Also gated by `agent:read`,
  * but they operate purely on persistent file storage and never touch the Dagger
  * runtime — their exposure and dynamic-access participation follow the sandbox
  * runtime flag (`config.skillsSandbox.enabled`), like the runtime tools (see
@@ -1023,7 +1023,7 @@ export const APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
 
 /**
  * The full sandbox tool group (runtime + persistent-files). All share the
- * `sandbox:execute` RBAC permission and require the runtime to execute.
+ * `agent:read` RBAC permission and require the runtime to execute.
  */
 const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
   ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,

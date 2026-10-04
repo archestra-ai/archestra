@@ -61,7 +61,7 @@ export function AppaGithubSyncPanel() {
   const query = useAppaGithubSync();
   const update = useUpdateAppaGithubSync();
   const { data: canManage } = useHasPermissions({
-    openappaSettings: ["update"],
+    organizationSettings: ["update"],
   });
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);

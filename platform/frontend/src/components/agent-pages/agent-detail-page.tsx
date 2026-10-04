@@ -272,7 +272,7 @@ function AgentDetails({
   // section only exists for a reader who may see them — the same check the
   // editor's own host used to make inline.
   const { data: canReadAgentTriggers } = useHasPermissions({
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   });
 
   const showConnect = connectAction.visible;

@@ -124,7 +124,7 @@ function LegacySecuritySettingsPage() {
         }
       >
         <WithPermissions
-          permissions={{ agentSettings: ["update"] }}
+          permissions={{ organizationSettings: ["update"] }}
           noPermissionHandle="tooltip"
         >
           {({ hasPermission }) => (
@@ -170,7 +170,7 @@ function LegacySecuritySettingsPage() {
       <SettingsSaveBar
         hasChanges={hasChanges}
         isSaving={isSaving}
-        permissions={{ agentSettings: ["update"] }}
+        permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
         onCancel={handleCancel}
       />

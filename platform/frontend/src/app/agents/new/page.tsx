@@ -13,7 +13,7 @@ export default async function NewAgentPageServer() {
       serverHasPermissions({ agent: ["create"] }),
       serverHasPermissions({
         agent: ["read"],
-        agentSettings: ["update"],
+        organizationSettings: ["update"],
       }),
     ]);
 

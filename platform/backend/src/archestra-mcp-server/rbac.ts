@@ -50,7 +50,7 @@ export const TOOL_PERMISSIONS: Record<
     action: "read",
   },
   create_guardrails_repository: {
-    resource: "openappaSettings",
+    resource: "organizationSettings",
     action: "update",
   },
   list_runtime_credentials: { resource: "credential", action: "read" },
@@ -234,13 +234,13 @@ export const TOOL_PERMISSIONS: Record<
   update_plugin: { resource: "plugin", action: "update" },
   edit_plugin: { resource: "plugin", action: "update" },
   delete_plugin: { resource: "plugin", action: "delete" },
-  // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
-  // assignment. The implicit per-conversation sandbox is created lazily; the
-  // create step is not a tool. load_skill (skill:read) mounts a skill into
-  // the sandbox when the caller also has sandbox:execute.
-  run_command: { resource: "sandbox", action: "execute" },
-  download_file: { resource: "sandbox", action: "execute" },
-  upload_file: { resource: "sandbox", action: "execute" },
+  // Code execution sandbox — part of using an agent (`agent:read`) plus
+  // per-agent tool assignment. The implicit per-conversation sandbox is
+  // created lazily; the create step is not a tool. load_skill (skill:read)
+  // mounts a skill into the sandbox when the caller also has agent:read.
+  run_command: { resource: "agent", action: "read" },
+  download_file: { resource: "agent", action: "read" },
+  upload_file: { resource: "agent", action: "read" },
 
   // Runs are an Agent capability, including when an Agent opts into
   // Agent Runtime. Per-run ownership stays in the handlers.
@@ -259,19 +259,18 @@ export const TOOL_PERMISSIONS: Record<
   // permission; the handler additionally requires access to the target Agent
   // and refuses keys declared at organization scope.
   transfer_credential: { resource: "credential", action: "create" },
-  // Persistent file store — these operate on `skill_sandbox_files`, not the
-  // sandbox itself, so they gate on `file:manage`. Per-file authorization
+  // Persistent file store (`skill_sandbox_files`) — part of using an agent,
+  // like the sandbox itself, so `agent:read`. Per-file authorization
   // (authorship, project membership) stays in the handlers.
-  search_files: { resource: "file", action: "manage" },
-  read_file: { resource: "file", action: "manage" },
-  // Agent-side exchange with the chat's open app — pure PFS↔PFS, so file
-  // permission, not sandbox execution.
-  copy_file: { resource: "file", action: "manage" },
+  search_files: { resource: "agent", action: "read" },
+  read_file: { resource: "agent", action: "read" },
+  // Agent-side exchange with the chat's open app — pure PFS↔PFS.
+  copy_file: { resource: "agent", action: "read" },
   // App-runtime only (never seeded/agent-visible); still viewer-RBAC-checked.
-  read_file_raw: { resource: "file", action: "manage" },
-  save_file: { resource: "file", action: "manage" },
-  edit_file: { resource: "file", action: "manage" },
-  delete_file: { resource: "file", action: "manage" },
+  read_file_raw: { resource: "agent", action: "read" },
+  save_file: { resource: "agent", action: "read" },
+  edit_file: { resource: "agent", action: "read" },
+  delete_file: { resource: "agent", action: "read" },
 
   // MCP Apps. The data-store tools gate on app:read/update; the running app's
   // appId is route-bound (set by the app MCP proxy), so the permission check

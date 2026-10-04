@@ -57,7 +57,7 @@ export function OverviewSetupCards() {
     openappaDiagnostics: ["read"],
   });
   const { data: canReadSettings } = useHasPermissions({
-    openappaSettings: ["read"],
+    organizationSettings: ["read"],
   });
   if (isFresh === undefined) return null;
   if (isFresh) return <PolicyStep />;
@@ -136,7 +136,7 @@ function EnforcementCard({ next }: { next: boolean }) {
   const deployment = useGuardrailsDeployment();
   const update = useUpdateGuardrailsDeployment();
   const { data: canManage } = useHasPermissions({
-    openappaSettings: ["update"],
+    organizationSettings: ["update"],
   });
   const appName = useAppName();
   return (
@@ -197,7 +197,7 @@ function EnforcementCard({ next }: { next: boolean }) {
 function GithubSyncCard({ next }: { next: boolean }) {
   const sync = useAppaGithubSync();
   const { data: canManage } = useHasPermissions({
-    openappaSettings: ["update"],
+    organizationSettings: ["update"],
   });
   const appName = useAppName();
   const [editing, setEditing] = useState(false);

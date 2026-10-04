@@ -32,8 +32,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   skill: ["read", "create", "update", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create", "update", "delete"],
-  sandbox: ["execute"],
-  agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
@@ -62,16 +60,14 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // OpenAPPA
   openappaPolicy: ["read", "update"],
-  openappaSettings: ["read", "update"],
   openappaDiagnostics: ["read", "update", "admin"],
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
 
   // Other
-  chat: ["read", "create", "update", "delete"],
+  chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
-  file: ["manage"],
   log: ["read", "admin"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -79,27 +75,19 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   serviceAccount: ["read", "create", "update", "delete"],
   auditLog: ["read", "admin"],
   accessPolicies: ["read", "update"],
-  agentSettings: ["read", "update"],
-  llmSettings: ["read", "update"],
-  mcpSettings: ["read", "update"],
-  skillsSettings: ["read", "update"],
-  knowledgeSettings: ["read", "update"],
   member: ["read", "create", "update", "delete", "impersonate"],
+  // Never granted directly: Better Auth checks it when inviting or
+  // cancelling, and `withDerivedPermissions` fills it in from member:create.
   invitation: ["create", "cancel"],
   ac: ["read", "create", "update", "delete"],
   team: ["read", "create", "update", "delete"],
   identityProvider: ["read", "create", "update", "delete"],
-  secret: ["read", "update"],
   organizationSettings: ["read", "update"],
 
   // UI behavior resources
   simpleView: ["enable"],
-  chatAgentPicker: ["enable"],
-  chatProviderSettings: ["enable"],
-  chatExpandToolCalls: ["enable"],
 
   // Administration
-  siteNotification: ["read", "create", "update", "delete"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: ["update", "delete"],
@@ -111,8 +99,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   skill: ["read", "create", "update", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create", "update", "delete"],
-  sandbox: ["execute"],
-  agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
@@ -135,16 +121,14 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // OpenAPPA
   openappaPolicy: ["read", "update"],
-  openappaSettings: ["read"],
   openappaDiagnostics: ["read", "update"],
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
 
   // Other
-  chat: ["read", "create", "update", "delete"],
+  chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
-  file: ["manage"],
   // Editors see only their own logs; org-wide visibility is log:admin,
   // reserved for admin-tier roles.
   log: ["read"],
@@ -154,27 +138,17 @@ export const editorPermissions: Record<Resource, Action[]> = {
   serviceAccount: [],
   auditLog: [],
   accessPolicies: [],
-  agentSettings: [],
-  llmSettings: ["read", "update"],
-  mcpSettings: ["read", "update"],
-  skillsSettings: ["read", "update"],
-  knowledgeSettings: ["read", "update"],
   member: ["read"],
-  invitation: ["read"],
+  invitation: [],
   ac: ["read"],
   team: ["read"],
   identityProvider: ["read"],
-  secret: ["read"],
-  organizationSettings: ["read", "update"],
+  organizationSettings: [],
 
   // Administration
-  siteNotification: ["read"],
 
   // UI behavior resources
   simpleView: [],
-  chatAgentPicker: ["enable"],
-  chatProviderSettings: ["enable"],
-  chatExpandToolCalls: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -186,8 +160,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   skill: ["read", "create", "update", "delete"],
   plugin: [],
   app: ["read", "create", "update", "delete"],
-  sandbox: ["execute"],
-  agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
@@ -216,7 +188,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // OpenAPPA
   openappaPolicy: ["read"],
-  openappaSettings: ["read"],
   openappaDiagnostics: [],
 
   // Knowledge
@@ -225,9 +196,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // spends LLM budget across a whole grid, so running is an editor action.
 
   // Other
-  chat: ["read", "create", "update", "delete"],
+  chat: ["read", "create", "update", "delete", "full-view"],
   project: ["read", "create", "update", "delete"],
-  file: ["manage"],
   log: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -235,27 +205,17 @@ export const memberPermissions: Record<Resource, Action[]> = {
   serviceAccount: [],
   auditLog: [],
   accessPolicies: [],
-  agentSettings: [],
-  llmSettings: [],
-  mcpSettings: [],
-  skillsSettings: [],
-  knowledgeSettings: [],
   member: [],
   invitation: [],
   ac: [],
   team: ["read"],
   identityProvider: [],
-  secret: [],
   organizationSettings: [],
 
   // Administration
-  siteNotification: ["read"],
 
   // UI behavior resources
   simpleView: ["enable"],
-  chatAgentPicker: ["enable"],
-  chatProviderSettings: ["enable"],
-  chatExpandToolCalls: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -276,11 +236,7 @@ export function findUngrantablePermissions(
   granterPermissions: Permissions,
   rolePermissions: Permissions,
 ): string[] {
-  const exemptUiResources: Resource[] = [
-    "simpleView",
-    "chatAgentPicker",
-    "chatProviderSettings",
-  ];
+  const exemptUiResources: Resource[] = ["simpleView"];
 
   const missing: string[] = [];
   for (const [resource, actions] of Object.entries(rolePermissions)) {
@@ -290,8 +246,8 @@ export function findUngrantablePermissions(
     for (const action of actions ?? []) {
       // Actions outside the permission universe grant nothing (RBAC checks
       // resolve against allAvailableActions), so they cannot be escalation.
-      // Predefined sets carry a few such vestigial actions (e.g. the editor
-      // role's invitation:read); without this filter no one could grant them.
+      // Without this filter a stale action in a stored role could never be
+      // granted by anyone.
       if (!realActions.includes(action)) continue;
       if (!granterActions.includes(action)) {
         missing.push(`${resource}:${action}`);
@@ -299,6 +255,19 @@ export function findUngrantablePermissions(
     }
   }
   return missing;
+}
+
+/**
+ * Fills in the permissions no one grants directly. Inviting people is part of
+ * adding members, so a role's `invitation` actions always follow
+ * `member:create` — Better Auth still checks `invitation` itself, which is why
+ * the stored role carries it.
+ */
+export function withDerivedPermissions(permissions: Permissions): Permissions {
+  const { invitation: _invitation, ...granted } = permissions;
+  return granted.member?.includes("create")
+    ? { ...granted, invitation: [...allAvailableActions.invitation] }
+    : granted;
 }
 
 export const adminPermissions: Record<Resource, Action[]> = {
@@ -391,15 +360,12 @@ export const permissionDescriptions: Record<string, string> = {
   "openappaPolicy:read": "View OpenAPPA policy, batteries, and coverage",
   "openappaPolicy:update":
     "Validate and edit OpenAPPA policy and manage batteries",
-  "openappaSettings:read": "View OpenAPPA enforcement settings and GitHub sync",
-  "openappaSettings:update":
-    "Manage OpenAPPA enforcement settings and GitHub sync",
   "openappaDiagnostics:read":
     "Read all organization yells and your own consult logs",
   "openappaDiagnostics:update": "Resolve and reopen organization yells",
   "openappaDiagnostics:admin": "Read consult logs across the organization",
   // Agents
-  "agent:read": "View and list agents",
+  "agent:read": "View and list agents, and use their code sandboxes and files",
   "agent:create": "Create new agents",
   "agent:update": "Modify agent configuration and settings",
   "agent:delete": "Delete agents",
@@ -416,13 +382,6 @@ export const permissionDescriptions: Record<string, string> = {
   "app:update":
     "Modify MCP Apps and their tools allowed by your resource grants",
   "app:delete": "Delete MCP Apps",
-  "sandbox:execute":
-    "Run commands and upload/download files in code execution sandboxes",
-  "agentTrigger:read":
-    "View agent trigger configurations (Slack, MS Teams, email)",
-  "agentTrigger:create": "Set up new agent triggers",
-  "agentTrigger:update": "Modify agent trigger configurations",
-  "agentTrigger:delete": "Remove agent triggers",
   "scheduledTask:read": "View scheduled tasks and their run history",
   "scheduledTask:create": "Create new scheduled tasks and trigger runs",
   "scheduledTask:update": "Modify scheduled task configuration",
@@ -486,16 +445,6 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
   "llmLimit:delete": "Remove usage limits",
-  "llmSettings:read": "View LLM settings",
-  "llmSettings:update": "Modify LLM settings",
-  "mcpSettings:read": "View MCP settings (online catalog availability)",
-  "mcpSettings:update": "Modify MCP settings",
-  "skillsSettings:read": "View Skills settings (online catalog availability)",
-  "skillsSettings:update": "Modify Skills settings",
-  "agentSettings:read":
-    "View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
-  "agentSettings:update":
-    "Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
   "llmCost:read":
     "View organization-wide LLM usage cost statistics and analytics",
 
@@ -504,17 +453,18 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:create": "Start new chat conversations",
   "chat:update": "Edit chat messages and conversation settings",
   "chat:delete": "Delete chat conversations",
+  "chat:full-view":
+    "Show the full chat: the agent picker, model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view",
   "project:read": "View projects and your own sessions inside them",
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
-  "file:manage": "List, read, write, and delete files in chats and projects",
   "log:read":
     "View your own LLM proxy and MCP tool call logs in the active organization",
 
   // Administration
   "member:read": "View organization members and their roles",
-  "member:create": "Add new members to the organization",
+  "member:create": "Add new members to the organization and manage invitations",
   "member:update": "Change member roles and settings",
   "member:delete": "Remove members from the organization",
   "member:impersonate":
@@ -527,14 +477,10 @@ export const permissionDescriptions: Record<string, string> = {
   "team:create": "Create new teams",
   "team:update": "Modify team settings",
   "team:delete": "Delete teams",
-  "invitation:create": "Send invitations to new users",
-  "invitation:cancel": "Cancel pending invitations",
   "identityProvider:read": "View identity provider configurations (SSO)",
   "identityProvider:create": "Set up new identity providers",
   "identityProvider:update": "Modify identity provider settings",
   "identityProvider:delete": "Remove identity providers",
-  "secret:read": "View secrets manager configuration",
-  "secret:update": "Modify secrets manager settings and test connectivity",
   "apiKey:read": "View API keys",
   "apiKey:create": "Create API keys",
   "apiKey:delete": "Delete API keys",
@@ -551,31 +497,20 @@ export const permissionDescriptions: Record<string, string> = {
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",
   "organizationSettings:read":
-    "View organization settings (appearance, authentication, etc)",
+    "View every organization settings page, including messaging channels",
   "organizationSettings:update":
-    "Customize organization appearance, authentication, etc",
+    "Change organization settings, messaging channels, and site notifications",
   "knowledgeSource:read": "View Knowledge Bases and Connectors",
   "knowledgeSource:create": "Create Knowledge Bases and Connectors",
   "knowledgeSource:update": "Modify Knowledge Bases and Connectors",
   "knowledgeSource:delete":
     "Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
-  "knowledgeSettings:read":
-    "View knowledge settings (embedding and reranking models)",
-  "knowledgeSettings:update":
-    "Modify knowledge settings (embedding and reranking models)",
 
   // UI behavior
   "simpleView:enable": "Collapse the app sidebar by default",
-  "chatAgentPicker:enable": "Show agent picker in chat",
-  "chatProviderSettings:enable": "Show model and API key selectors in chat",
-  "chatExpandToolCalls:enable": "Allow expanding tool call details in chat",
 
   // Administration
-  "siteNotification:read": "View site-wide notifications",
-  "siteNotification:create": "Create new site notifications",
-  "siteNotification:update": "Modify site notifications",
-  "siteNotification:delete": "Delete site notifications",
 };
 
 /**
@@ -599,13 +534,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // visibility-filtered unless the caller can update Agent settings. Run
   // history includes caller and conversation identifiers, so it requires
   // Agent-settings read and intentionally permits organization-wide access.
-  [RouteId.InspectA2aRemoteAgent]: { agentSettings: ["update"] },
+  [RouteId.InspectA2aRemoteAgent]: { organizationSettings: ["update"] },
   [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
   [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
-  [RouteId.ListA2aRemoteAgentRuns]: { agentSettings: ["read"] },
-  [RouteId.CreateA2aRemoteAgent]: { agentSettings: ["update"] },
-  [RouteId.UpdateA2aRemoteAgent]: { agentSettings: ["update"] },
-  [RouteId.DeleteA2aRemoteAgent]: { agentSettings: ["update"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { organizationSettings: ["read"] },
+  [RouteId.CreateA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.UpdateA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.DeleteA2aRemoteAgent]: { organizationSettings: ["update"] },
 
   /**
    * Getting basic info about the organization requires the user to be
@@ -711,7 +646,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.TransferProjectOwnership]: { project: ["update"] },
   [RouteId.TransferAppOwnership]: { app: ["update"] },
   [RouteId.TransferMcpCatalogOwnership]: { mcpRegistry: ["update"] },
-  [RouteId.TransferRemoteAgentOwnership]: { agentSettings: ["update"] },
+  [RouteId.TransferRemoteAgentOwnership]: { organizationSettings: ["update"] },
   [RouteId.TransferAgentOwnership]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.BulkDeleteAgents]: {},
@@ -1332,16 +1267,16 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   },
   [RouteId.UpdateSecuritySettings]: {
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateMcpSettings]: {
-    mcpSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateSkillsSettings]: {
-    skillsSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateAgentSettings]: {
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateAuthSettings]: {
     organizationSettings: ["update"],
@@ -1407,22 +1342,22 @@ export const requiredEndpointPermissionsMap: Partial<
     credential: ["delete"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
-    knowledgeSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.DropEmbeddingConfig]: {
-    knowledgeSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.TestEmbeddingConnection]: {
-    knowledgeSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.TestRerankerConnection]: {
-    knowledgeSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.TestOcrConnection]: {
-    knowledgeSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.GetKeywordRankingStatus]: {
-    knowledgeSettings: ["read"],
+    organizationSettings: ["read"],
   },
 
   /**
@@ -1566,76 +1501,78 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Secrets Routes
   [RouteId.GetSecretsType]: {
-    secret: ["read"],
+    organizationSettings: ["read"],
   },
   [RouteId.CheckSecretsConnectivity]: {
-    secret: ["update"],
+    organizationSettings: ["update"],
   },
+  // Only returns Vault references (never values), for prefilling the MCP
+  // catalog form in BYOS mode — so it follows the form, not the settings.
   [RouteId.GetSecret]: {
-    secret: ["read"],
+    mcpRegistry: ["update"],
   },
 
   // Incoming Email Routes
   [RouteId.GetIncomingEmailStatus]: {
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   },
   [RouteId.SetupIncomingEmailWebhook]: {
-    agentTrigger: ["create"],
+    organizationSettings: ["update"],
   },
   [RouteId.RenewIncomingEmailSubscription]: {
-    agentTrigger: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.DeleteIncomingEmailSubscription]: {
-    agentTrigger: ["delete"],
+    organizationSettings: ["update"],
   },
   [RouteId.GetAgentEmailAddress]: {}, // Any authenticated user can view agent email addresses
 
   // ChatOps Routes
   [RouteId.GetChatOpsStatus]: {
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   },
   [RouteId.ListChatOpsBindings]: {
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   },
   [RouteId.DeleteChatOpsBinding]: {
-    agentTrigger: ["delete"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateChatOpsBinding]: {
-    agentTrigger: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.BulkUpdateChatOpsBindings]: {
-    agentTrigger: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.ApplyChatOpsBindingPlan]: {
     agent: ["read"],
-    agentTrigger: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.CreateChatOpsDmBinding]: {
-    agentTrigger: ["create"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateChatOpsConfigInQuickstart]: {
-    agentTrigger: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateSlackChatOpsConfig]: {
-    agentTrigger: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateTelegramChatOpsConfig]: {
-    agentTrigger: ["update"],
+    organizationSettings: ["update"],
   },
   // Any authenticated user can link their own Telegram account
   [RouteId.LinkTelegramChatOpsAccount]: {},
   [RouteId.GenerateTelegramLinkCode]: {},
   [RouteId.ConnectNgrok]: {
-    agentTrigger: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.DisconnectNgrok]: {
-    agentTrigger: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.GetNgrokConfig]: {
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   },
   [RouteId.RefreshChatOpsChannelDiscovery]: {
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   },
   // Schedule Trigger Routes
   [RouteId.GetScheduleTriggers]: {
@@ -1767,12 +1704,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // you past the trash.
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: {},
-  [RouteId.GetGuardrailsDeployment]: { openappaSettings: ["read"] },
-  [RouteId.UpdateGuardrailsDeployment]: { openappaSettings: ["update"] },
-  [RouteId.GetAppaGithubSync]: { openappaSettings: ["read"] },
-  [RouteId.ConfigureAppaGithubSync]: { openappaSettings: ["update"] },
-  [RouteId.CreateAppaGithubRepository]: { openappaSettings: ["update"] },
-  [RouteId.UpdateAppaGithubSync]: { openappaSettings: ["update"] },
+  [RouteId.GetGuardrailsDeployment]: { organizationSettings: ["read"] },
+  [RouteId.UpdateGuardrailsDeployment]: { organizationSettings: ["update"] },
+  [RouteId.GetAppaGithubSync]: { organizationSettings: ["read"] },
+  [RouteId.ConfigureAppaGithubSync]: { organizationSettings: ["update"] },
+  [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
+  [RouteId.UpdateAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.GetOpenappaBatteries]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaEffectivePolicy]: { openappaPolicy: ["read"] },
@@ -1839,10 +1776,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillVersions]: {},
   [RouteId.GetSkillVersion]: {},
   [RouteId.EnableSkillToolDefaults]: { organizationSettings: ["update"] },
-  // matches the `download_file` tool (sandbox:execute) that hands out this
+  // matches the `download_file` tool (agent:read) that hands out this
   // URL, so a role allowed to produce an artifact can also fetch it.
-  [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
-  [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
+  [RouteId.GetSkillSandboxArtifact]: { agent: ["read"] },
+  [RouteId.GetSkillSandboxConversationArtifacts]: { agent: ["read"] },
   [RouteId.CreateProject]: { project: ["create"] },
   // Owner-scoped: a caller may only convert their own chat, so `project:create`
   // is the capability gate (matching the create_project_from_conversation MCP
@@ -1866,13 +1803,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.PermanentlyDeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   [RouteId.GetProjectRuns]: { project: ["read"], agent: ["read"] },
-  // Project file surfaces combine project-level access with the files gate:
-  // `file:manage` covers the file operations, while project membership is
-  // still enforced in the handler (projectService.listFiles/uploadFile ->
-  // requireReadable). Note the artifact byte endpoint that serves file
-  // contents (GetSkillSandboxArtifact) stays on `sandbox:execute`.
-  [RouteId.GetProjectFiles]: { project: ["read"], file: ["manage"] },
-  [RouteId.UploadProjectFiles]: { project: ["read"], file: ["manage"] },
+  // Project files follow project access; membership is enforced in the
+  // handler (projectService.listFiles/uploadFile -> requireReadable). The
+  // artifact byte endpoint that serves file contents (GetSkillSandboxArtifact)
+  // stays on `agent:read`.
+  [RouteId.GetProjectFiles]: { project: ["read"] },
+  [RouteId.UploadProjectFiles]: { project: ["read"] },
   // Instructions are plain project metadata (not a sandbox byte surface), so the
   // GET needs only project read — every project reader can see the instructions
   // that steer the project's chats. Editing is owner-only, enforced in the
@@ -1887,10 +1823,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetProjectApps]: { project: ["read"], app: ["read"] },
   [RouteId.LinkProjectApp]: { project: ["read"], app: ["read"] },
   [RouteId.UnlinkProjectApp]: { project: ["read"], app: ["read"] },
-  [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
+  [RouteId.DeleteSkillSandboxArtifact]: { agent: ["read"] },
   // Editing a file's text content shares the delete path's authorization
   // (author / project access), enforced per-file in the store handler.
-  [RouteId.UpdateSkillSandboxArtifactContent]: { sandbox: ["execute"] },
+  [RouteId.UpdateSkillSandboxArtifactContent]: { agent: ["read"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {
@@ -1977,11 +1913,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConfig]: {},
 
   // Site Notification Routes
-  [RouteId.GetSiteNotification]: { siteNotification: ["read"] },
-  [RouteId.GetSiteNotificationSettings]: { siteNotification: ["read"] },
-  [RouteId.CreateSiteNotification]: { siteNotification: ["create"] },
-  [RouteId.UpdateSiteNotification]: { siteNotification: ["update"] },
-  [RouteId.DeleteSiteNotification]: { siteNotification: ["delete"] },
+  // Every signed-in user sees the active banner.
+  [RouteId.GetSiteNotification]: {},
+  [RouteId.GetSiteNotificationSettings]: { organizationSettings: ["read"] },
+  [RouteId.CreateSiteNotification]: { organizationSettings: ["update"] },
+  [RouteId.UpdateSiteNotification]: { organizationSettings: ["update"] },
+  [RouteId.DeleteSiteNotification]: { organizationSettings: ["update"] },
 
   // Hook File Routes
   [RouteId.GetHooks]: {},
@@ -2068,10 +2005,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Agents
   "/agents": { agent: ["read"] },
   "/agents/a2a": { agent: ["read"] },
-  "/messaging-channels": { agentTrigger: ["read"] },
-  "/messaging-channels/slack": { agentTrigger: ["read"] },
-  "/messaging-channels/ms-teams": { agentTrigger: ["read"] },
-  "/messaging-channels/email": { agentTrigger: ["read"] },
+  "/messaging-channels": { organizationSettings: ["read"] },
+  "/messaging-channels/slack": { organizationSettings: ["read"] },
+  "/messaging-channels/ms-teams": { organizationSettings: ["read"] },
+  "/messaging-channels/email": { organizationSettings: ["read"] },
   "/skills": { skill: ["read"] },
   "/skills/new": { skill: ["create"] },
   "/plugins": { plugin: ["read"] },
@@ -2130,28 +2067,28 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // custom role holding only one. The MCP half is gated inside the page
   // instead. Every predefined role grants the two together.
   "/settings/oauth-clients": { llmOauthClient: ["read"] },
-  "/settings/llm": { llmSettings: ["read"] },
-  "/settings/mcp": { mcpSettings: ["read"] },
-  "/settings/skills": { skillsSettings: ["read"] },
-  "/settings/agents": { agentSettings: ["read"] },
-  "/settings/messaging-channels": { agentTrigger: ["read"] },
-  "/settings/messaging-channels/slack": { agentTrigger: ["read"] },
-  "/settings/messaging-channels/ms-teams": { agentTrigger: ["read"] },
-  "/settings/messaging-channels/telegram": { agentTrigger: ["read"] },
-  "/settings/messaging-channels/email": { agentTrigger: ["read"] },
-  "/settings/apps": { agentSettings: ["read"] },
-  "/settings/security": { agentSettings: ["read"] },
+  "/settings/llm": { organizationSettings: ["read"] },
+  "/settings/mcp": { organizationSettings: ["read"] },
+  "/settings/skills": { organizationSettings: ["read"] },
+  "/settings/agents": { organizationSettings: ["read"] },
+  "/settings/messaging-channels": { organizationSettings: ["read"] },
+  "/settings/messaging-channels/slack": { organizationSettings: ["read"] },
+  "/settings/messaging-channels/ms-teams": { organizationSettings: ["read"] },
+  "/settings/messaging-channels/telegram": { organizationSettings: ["read"] },
+  "/settings/messaging-channels/email": { organizationSettings: ["read"] },
+  "/settings/apps": { organizationSettings: ["read"] },
+  "/settings/security": { organizationSettings: ["read"] },
   "/settings/environments": { environment: ["update"] },
-  "/settings/knowledge": { knowledgeSettings: ["read"] },
+  "/settings/knowledge": { organizationSettings: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
   // Type-wide grants are an access decision, not a role definition, so the
   // page answers to the same permission that opens the roles screen.
   "/settings/identity-providers": { identityProvider: ["read"] },
-  "/settings/secrets": { secret: ["read"] },
+  "/settings/secrets": { organizationSettings: ["read"] },
   "/settings/credentials": { credential: ["read"] },
-  "/settings/openappa": { openappaSettings: ["read"] },
+  "/settings/openappa": { organizationSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

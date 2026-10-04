@@ -153,7 +153,7 @@ The agent knows the open app's files too. Each turn lists them in its context, a
 
 An app's files are all an agent can see of it. It lists them to find what the app has produced, and it cannot observe what the app is showing you or doing. Name the file you want, and it copies that one.
 
-Reads need `file:manage`, and the transfer tools need `sandbox:execute`. The file tools require the sandbox runtime; deployments that run without it have no file store.
+Reads and the transfer tools need `agent:read`. The file tools require the sandbox runtime; deployments that run without it have no file store.
 
 ## Tools and auto-auth
 

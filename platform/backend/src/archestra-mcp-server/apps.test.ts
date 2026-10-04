@@ -4326,7 +4326,7 @@ describe("edit_app replacementHtmlSource", () => {
     const result = await editFromSource(appId, file.id, authorCtx);
 
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("file:manage");
+    expect((result.content[0] as any).text).toContain("agent:read");
     const head = await AppVersionModel.findByAppAndVersion(appId, 1);
     expect(head?.html).not.toBe(DOCUMENT);
   });

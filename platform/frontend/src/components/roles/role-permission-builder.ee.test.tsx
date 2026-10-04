@@ -11,7 +11,6 @@ describe("RolePermissionBuilder", () => {
       onChange: vi.fn(),
       userPermissions: {
         knowledgeSource: ["read", "create", "update", "delete", "query"],
-        knowledgeSettings: ["read", "update"],
       } as Permissions,
     };
     const { rerender } = render(
@@ -33,7 +32,7 @@ describe("RolePermissionBuilder", () => {
     rerender(
       <RolePermissionBuilder
         {...props}
-        permission={{ knowledgeSettings: ["read"] }}
+        permission={{ knowledgeSource: ["read"] }}
       />,
     );
     expect(
@@ -43,9 +42,9 @@ describe("RolePermissionBuilder", () => {
     ).not.toBeChecked();
     expect(
       screen.getByRole("checkbox", {
-        name: "Knowledge Settings permissions",
+        name: "Knowledge Sources Read",
       }),
-    ).toHaveAttribute("data-state", "indeterminate");
+    ).toBeChecked();
   });
 
   it("disables ungrantable actions and explains why", async () => {

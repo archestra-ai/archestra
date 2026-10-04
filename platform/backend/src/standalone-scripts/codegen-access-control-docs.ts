@@ -279,10 +279,9 @@ Chat access is controlled separately from optional chat UI controls:
 
 - \`chat:read\` allows access to chat itself
 - \`agent:read\` is also required because chat is agent-backed and a user must be able to access at least one agent/profile context to start or use chat
-- \`chatAgentPicker:enable\` controls whether the agent picker is visible
-- \`chatProviderSettings:enable\` controls whether model and API key selectors are visible
+- \`chat:full-view\` shows the full chat: the agent picker, the model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view
 
-The selector visibility permissions are UI toggles. They should be treated independently from core chat access and should not be assumed to grant access to provider credentials or model catalogs on their own.
+\`chat:full-view\` is a UI toggle. It is independent of core chat access and does not grant access to provider credentials or model catalogs on its own.
 
 ### MCP Registry And Installation Records
 

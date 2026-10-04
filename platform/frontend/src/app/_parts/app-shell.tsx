@@ -47,10 +47,6 @@ const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
   simpleView: ["enable"],
 };
 
-const SITE_NOTIFICATION_READ_PERMISSION: Permissions = {
-  siteNotification: ["read"],
-};
-
 interface AppShellProps {
   children: React.ReactNode;
 }
@@ -109,16 +105,9 @@ export function AppShell({ children }: AppShellProps) {
     shouldCollapse: shouldCollapse === true,
     permissionLoaded,
   });
-  const { data: canReadSiteNotification } = useHasPermissions(
-    SITE_NOTIFICATION_READ_PERMISSION,
-  );
+  // Every signed-in user sees the active banner.
   const { data: notification } = useActiveSiteNotification({
-    enabled:
-      canReadSiteNotification === true &&
-      !isAuthPage &&
-      !isBrowserPreview &&
-      !isAppRuntime &&
-      !isReview,
+    enabled: !isAuthPage && !isBrowserPreview && !isAppRuntime && !isReview,
   });
 
   const redirectingToTwoFactorSetup = useTwoFactorEnrollmentRedirect(

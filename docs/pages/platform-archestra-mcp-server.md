@@ -59,7 +59,7 @@ This tool takes no arguments.
 | `list_peer_messages` | List held messages as JSON: {"messages":[{"message_id":"id","expires_at":"ISO-8601"}]}. | None (no additional RBAC permission required) |
 | `read_peer_message` | Return a held message as text, or refusal feedback with remedy offers. | None (no additional RBAC permission required) |
 | `get_openappa_yell` | Read a saved OpenAPPA report from the current organization, including its originating user or service account. | `openappaDiagnostics:read` |
-| `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | `openappaSettings:update` |
+| `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | `organizationSettings:update` |
 | `yell` | Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `openappaPolicy:read` |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | `openappaPolicy:read` |
@@ -108,7 +108,7 @@ Required RBAC permission: `openappaDiagnostics:read`
 
 #### create_guardrails_repository
 
-Required RBAC permission: `openappaSettings:update`
+Required RBAC permission: `organizationSettings:update`
 
 ##### Input
 
@@ -3187,13 +3187,13 @@ These tools are served only when the code runtime is enabled — set `ARCHESTRA_
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `run_command` | Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). | `sandbox:execute` |
-| `download_file` | Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files. | `sandbox:execute` |
-| `upload_file` | Place a file into the conversation's sandbox at a path, from a chat attachment, inline base64, inline text, or one of your persistent files. | `sandbox:execute` |
+| `run_command` | Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). | `agent:read` |
+| `download_file` | Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files. | `agent:read` |
+| `upload_file` | Place a file into the conversation's sandbox at a path, from a chat attachment, inline base64, inline text, or one of your persistent files. | `agent:read` |
 
 #### run_command
 
-Required RBAC permission: `sandbox:execute`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3225,7 +3225,7 @@ Required RBAC permission: `sandbox:execute`
 
 #### download_file
 
-Required RBAC permission: `sandbox:execute`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3252,7 +3252,7 @@ Required RBAC permission: `sandbox:execute`
 
 #### upload_file
 
-Required RBAC permission: `sandbox:execute`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3288,16 +3288,16 @@ These tools are served only when the code runtime is enabled — set `ARCHESTRA_
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `search_files` | List or search the conversation's persistent files. | `file:manage` |
-| `read_file` | Read a persistent file directly, without copying it into the sandbox. | `file:manage` |
-| `save_file` | Write bytes you are providing inline in this call — text or base64 included in the arguments — to the conversation's persistent files. | `file:manage` |
-| `edit_file` | Edit an existing persistent file by replacing a snippet, keeping its id and filename. | `file:manage` |
-| `delete_file` | Permanently delete a persistent file, identified by `id` (from search_files / save_file) or by `filename`. | `file:manage` |
-| `copy_file` | Exchange a file between this chat and the app the user has open: copy a chat/project file or a chat attachment INTO the open app's file store (so the app can load it), or copy a file OUT of the app... | `file:manage` |
+| `search_files` | List or search the conversation's persistent files. | `agent:read` |
+| `read_file` | Read a persistent file directly, without copying it into the sandbox. | `agent:read` |
+| `save_file` | Write bytes you are providing inline in this call — text or base64 included in the arguments — to the conversation's persistent files. | `agent:read` |
+| `edit_file` | Edit an existing persistent file by replacing a snippet, keeping its id and filename. | `agent:read` |
+| `delete_file` | Permanently delete a persistent file, identified by `id` (from search_files / save_file) or by `filename`. | `agent:read` |
+| `copy_file` | Exchange a file between this chat and the app the user has open: copy a chat/project file or a chat attachment INTO the open app's file store (so the app can load it), or copy a file OUT of the app... | `agent:read` |
 
 #### search_files
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3321,7 +3321,7 @@ Required RBAC permission: `file:manage`
 
 #### read_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3350,7 +3350,7 @@ Required RBAC permission: `file:manage`
 
 #### save_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3376,7 +3376,7 @@ Required RBAC permission: `file:manage`
 
 #### edit_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3401,7 +3401,7 @@ Required RBAC permission: `file:manage`
 
 #### delete_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 
@@ -3421,7 +3421,7 @@ Required RBAC permission: `file:manage`
 
 #### copy_file
 
-Required RBAC permission: `file:manage`
+Required RBAC permission: `agent:read`
 
 ##### Input
 

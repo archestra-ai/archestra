@@ -399,13 +399,13 @@ async function assertCanManageTeamVaultFolder(params: {
   headers: Parameters<typeof hasPermission>[1];
 }) {
   const { success } = await hasPermission(
-    { secret: ["update"] },
+    { organizationSettings: ["update"] },
     params.headers,
   );
   if (!success) {
     throw new ApiError(
       403,
-      "You need permission to manage secrets to access this team's Vault folder",
+      "You need permission to change organization settings to access this team's Vault folder",
     );
   }
 }

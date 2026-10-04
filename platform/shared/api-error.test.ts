@@ -4,7 +4,7 @@ import { getUserFacingApiErrorMessage } from "./api-error";
 describe("getUserFacingApiErrorMessage", () => {
   test("returns a descriptive server message unchanged", () => {
     const message =
-      "You don't have permission to upload project files. Missing permission: file:manage (List, read, write, and delete files in chats and projects).";
+      "You don't have permission to upload project files. Missing permission: project:read (View projects and your own sessions inside them).";
     expect(
       getUserFacingApiErrorMessage({
         error: { message, type: "api_authorization_error" },

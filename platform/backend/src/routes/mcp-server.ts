@@ -2314,7 +2314,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // pins the SHARED pod awake for everyone. Owning one connection must not
       // authorize an action with shared blast radius — the same rationale as
       // hard-reset — and the org-wide toggle this would override already takes
-      // mcpSettings:update to change.
+      // organizationSettings:update to change.
       if (hibernationMode !== undefined && catalogItem.multitenant) {
         const isMcpServerInstallationAdmin = await isMcpInstallationAdmin({
           userId: user.id,

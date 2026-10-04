@@ -925,7 +925,7 @@ describe("guardrails batteries", () => {
     const manager = await makeUser();
     const role = await makeCustomRole(organizationId, {
       permission: {
-        openappaSettings: ["update"],
+        organizationSettings: ["update"],
         openappaPolicy: ["read", "update"],
       },
     });

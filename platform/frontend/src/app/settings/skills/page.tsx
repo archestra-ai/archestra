@@ -77,7 +77,7 @@ export default function SkillsSettingsPage() {
         description="Let people discover and import skills from the public online catalog — the popular-repository list, the skill index search, and GitHub-repo imports on the add-skill page. When disabled, the add-skill page opens the blank-template editor directly, and the catalog and GitHub-import API endpoints are refused too, so scripts and agents cannot reach around the setting. Writing skills by hand stays available."
         control={
           <WithPermissions
-            permissions={{ skillsSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -112,7 +112,7 @@ export default function SkillsSettingsPage() {
         description="How clients authenticate against the shared marketplace URL on the Connect page. With a token, each person clones as themselves and installs the skills they can see. Anonymous clones need no credential at all and expose the organization-wide skills to anyone who can reach this deployment; personal and team skills are never included."
         control={
           <WithPermissions
-            permissions={{ skillsSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -145,7 +145,7 @@ export default function SkillsSettingsPage() {
       <SettingsSaveBar
         hasChanges={hasChanges}
         isSaving={updateSkillsSettingsMutation.isPending}
-        permissions={{ skillsSettings: ["update"] }}
+        permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
         onCancel={handleCancel}
       />

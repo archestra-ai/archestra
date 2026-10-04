@@ -419,7 +419,7 @@ export async function executeA2AMessage(
     // one is usable for this caller. Resolved only when there are attachments, so
     // text-only turns (the common case) skip the permission/DB chain. Skip the
     // lookup for the synthetic "system" actor (external A2A v2) — it can never
-    // hold `sandbox:execute`.
+    // hold `agent:read`.
     const sandboxAvailable =
       (attachments?.length ?? 0) > 0 && userId && userId !== "system"
         ? await isSkillSandboxAvailableForAgent({

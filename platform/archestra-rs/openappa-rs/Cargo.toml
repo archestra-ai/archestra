@@ -14,6 +14,7 @@ appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAP
 appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c1e1ef36aa07604b421c48be266d7397557656" }
 appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c1e1ef36aa07604b421c48be266d7397557656", features = ["postgres"] }
 appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c1e1ef36aa07604b421c48be266d7397557656" }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
@@ -33,7 +34,6 @@ tokio = { version = "1", features = ["rt", "test-util"] }
 proptest = "1"
 # Building a consult record by hand: the runtime's own id and clock types.
 uuid = { version = "1", features = ["v7"] }
-chrono = { version = "0.4", default-features = false, features = ["std"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 # Cross-builds need OpenSSL compiled for musl. The Docker builder uses its

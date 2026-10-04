@@ -854,7 +854,9 @@ fn resolve_recipient(
     // The parent prefix is structural, not authority. The remaining native id
     // is opaque and may contain ':'; opaque_id rejects control characters.
     // The same-root parent and retained allowed spawn below authorize binding.
-    if !session_id.starts_with(&format!("{parent_id}:")) || session_id.len() == parent_id.len() + 1
+    if !session_id
+        .strip_prefix(parent_id)
+        .is_some_and(|suffix| suffix.starts_with(':') && suffix.len() > 1)
     {
         return Ok(Recipient::Foreign);
     }
@@ -1170,28 +1172,12 @@ fn pick_admit<'a>(
 }
 
 fn iso8601(time: SystemTime) -> String {
-    let secs = time
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0);
-    let days = i64::try_from(secs / 86_400).unwrap_or(0);
-    let tod = secs % 86_400;
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let mut year = i64::try_from(yoe).unwrap_or(0) + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    if month <= 2 {
-        year += 1;
-    }
-    let hour = tod / 3600;
-    let minute = (tod % 3600) / 60;
-    let second = tod % 60;
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+    time.duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_secs()).ok())
+        .and_then(|secs| chrono::DateTime::from_timestamp(secs, 0))
+        .unwrap_or(chrono::DateTime::UNIX_EPOCH)
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
 #[derive(Deserialize)]
@@ -1239,8 +1225,16 @@ mod tests {
     fn epoch_formats_as_utc() {
         assert_eq!(iso8601(UNIX_EPOCH), "1970-01-01T00:00:00Z");
         assert_eq!(
+            iso8601(UNIX_EPOCH - Duration::from_secs(1)),
+            "1970-01-01T00:00:00Z"
+        );
+        assert_eq!(
             iso8601(UNIX_EPOCH + Duration::from_secs(1_700_000_000)),
             "2023-11-14T22:13:20Z"
+        );
+        assert_eq!(
+            iso8601(UNIX_EPOCH + Duration::from_millis(1_709_164_800_999)),
+            "2024-02-29T00:00:00Z"
         );
     }
 

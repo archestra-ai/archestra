@@ -324,12 +324,18 @@ mod tests {
             )))
             .is_err()
         );
-        assert!(
-            inspect(&files(format!(
-                "{annotator}[externals.authorities.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n"
-            )))
-            .is_err()
-        );
+        let shared = inspect(&files(format!(
+            "{annotator}[externals.authorities.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n"
+        )))
+        .expect("two kinds may use the same packaged helper");
+        assert_eq!(shared.externals.len(), 2);
+        for kind in ["annotators", "authorities"] {
+            assert!(shared.externals.iter().any(|external| {
+                external.kind == kind
+                    && external.name == "tagger.call"
+                    && external.command == ["python3", "tag.py"]
+            }));
+        }
         assert!(
             inspect(&files(
                 "[policy]\nversion = 2\n[externals.annotators.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n".to_owned()
@@ -382,9 +388,23 @@ mod tests {
                 .to_owned();
         assert!(inspect(&selected).is_ok());
         let mut same_name = files();
+        same_name[0]
+            .text
+            .push_str("helpers = [\"a.py\", \"b.py\"]\n");
+        same_name.extend(["a.py", "b.py"].map(|path| BatteryFile {
+            path: path.to_owned(),
+            text: "print('{}')\n".to_owned(),
+        }));
         same_name[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.authorities.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
         let same = inspect(&same_name).expect("two kinds may share a helper name");
         assert_eq!(same.externals.len(), 2);
+        for (kind, helper) in [("annotators", "a.py"), ("authorities", "b.py")] {
+            assert!(same.externals.iter().any(|external| {
+                external.kind == kind
+                    && external.name == "foo"
+                    && external.command == ["python3", helper]
+            }));
+        }
         same_name[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.annotators.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
         assert!(inspect(&same_name).is_err());
         let mut host_variable = files();

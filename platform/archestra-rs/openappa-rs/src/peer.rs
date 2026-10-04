@@ -258,7 +258,7 @@ async fn admit(
         Ok(EmbeddedPeerArrival::Direct { id, body }) => {
             if body.is_empty() {
                 return Err(error(
-                    "OpenAPPA returned an empty peer body for a direct admission",
+                    "OpenAPPA returned an empty body for direct peer admission. No content was delivered. Check the peer inbox receipt and runtime storage.",
                 ));
             }
             Ok(json!({

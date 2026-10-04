@@ -324,6 +324,18 @@ context_control = true
   assert.equal(denialRow.rows[0].decision.value, undefined);
   assert.equal(denialRow.rows[0].approved_output.includes('narrowed note'), false);
 
+  const logicalList = await native
+    .listPeerMessages(
+      JSON.stringify({
+        ...child,
+        tool_call_id: 'logical-list-1',
+        tool: 'acme__list_peer_messages',
+      }),
+      policy,
+    )
+    .then(JSON.parse);
+  assert.ok(logicalList.notices.some((notice) => notice.message_id === held.message_id));
+
   const delivered = await read(child, 'read-new-provider', held.message_id);
   assert.equal(delivered.decision, 'mcp_result', JSON.stringify(delivered));
   assert.equal(delivered.result.isError, false);
@@ -391,17 +403,11 @@ context_control = true
     () => read(child, 'read-long-id', 'm'.repeat(129)),
     /invalid peer message id/,
   );
-  const logicalList = await native
-    .listPeerMessages(
-      JSON.stringify({
-        ...child,
-        tool_call_id: 'logical-list-1',
-        tool: 'acme__list_peer_messages',
-      }),
-      policy,
-    )
-    .then(JSON.parse);
-  assert.ok(logicalList.notices.some((notice) => notice.message_id === held.message_id));
+  const consumedInbox = await list(child);
+  assert.equal(
+    consumedInbox.notices.some((notice) => notice.message_id === held.message_id),
+    false,
+  );
   const replayedList = await native
     .listPeerMessages(
       JSON.stringify({

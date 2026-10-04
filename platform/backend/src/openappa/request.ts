@@ -529,8 +529,7 @@ export function sanitizeForwardedRequest(body: object): boolean {
   }).length;
   return (
     marks ||
-    stamps + sanitizeProviderBoundRequest({ body: target, interactionType }) >
-      0
+    stamps + sanitizeProviderBoundRequest({ body: target, interactionType }) > 0
   );
 }
 

@@ -472,8 +472,12 @@ FROM merged WHERE p.organization_id = merged.organization_id AND p.resource = me
 WITH resources(resource) AS (
   VALUES ('agent'), ('mcpGateway'), ('mcpRegistry'), ('skill'), ('app'), ('llmModel')
 ), role_actions AS (
+  -- The registry adds deployment-spec configuration above Full access, the
+  -- same widest preset initializeOrganization seeds.
   SELECT o.id AS organization_id, r.resource, builtin.id AS subject_id,
-    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
+    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']
+      || CASE WHEN r.resource = 'mcpRegistry'
+        THEN ARRAY['configure-deployment-spec'] ELSE ARRAY[]::text[] END) AS action
   FROM organization o CROSS JOIN resources r
   CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
   WHERE NOT EXISTS (

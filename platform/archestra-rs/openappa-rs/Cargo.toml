@@ -9,13 +9,11 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Published base 4debcfb (0.31.1). Peer capture is not in that revision.
-# Builds use an untracked cargo config outside this repo. Do not treat a
-# build without that local patch as success.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4debcfb695f4f74d0d9a92ebdad15ebcc578c991" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4debcfb695f4f74d0d9a92ebdad15ebcc578c991" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4debcfb695f4f74d0d9a92ebdad15ebcc578c991", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4debcfb695f4f74d0d9a92ebdad15ebcc578c991" }
+# Actor-scoped peer messaging from OpenAPPA #593.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c1e1ef36aa07604b421c48be266d7397557656" }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c1e1ef36aa07604b421c48be266d7397557656" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c1e1ef36aa07604b421c48be266d7397557656", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c7c1e1ef36aa07604b421c48be266d7397557656" }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }

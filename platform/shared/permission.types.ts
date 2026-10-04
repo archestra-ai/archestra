@@ -150,7 +150,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   environment: "Deployment environments (namespace) for catalog items",
   credential:
     "Reusable custom secrets, GitHub tokens, and GitHub Apps across the platform",
-  member: "Users and role assignments",
+  member:
+    "People in the organization: inviting them, changing their roles, and removing them",
   ac: "Custom RBAC roles",
   team: "Teams for organizing users and access control",
   invitation: "User invitations",

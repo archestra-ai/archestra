@@ -16,7 +16,8 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 const PAGE_DESCRIPTIONS: Record<string, React.ReactNode> = {
   "/account": "Settings that apply only to you, not your organization.",
   "/account/api-keys": <ApiKeysDescription />,
-  "/account/sessions": "Manage where your account is signed in.",
+  "/account/sessions":
+    "The browsers and devices you're signed in on. Sign out of any you don't recognize.",
 };
 
 const ACCOUNT_TABS = accountSections.map(({ label, href }) => ({
@@ -28,7 +29,7 @@ function ApiKeysDescription() {
   const apiDocsUrl = getFrontendDocsUrl("platform-api-reference");
   return (
     <>
-      Keys that let scripts and integrations call the{" "}
+      Personal keys that let your scripts and integrations call the{" "}
       {apiDocsUrl ? (
         <ExternalDocsLink
           href={apiDocsUrl}

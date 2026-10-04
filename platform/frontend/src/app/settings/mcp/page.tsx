@@ -39,7 +39,9 @@ const TOGGLE_OPTION_LABELS = {
   disabled: "Disabled",
 } as const;
 
-const MCP_SETTINGS_PERMISSIONS: Permissions = { organizationSettings: ["update"] };
+const MCP_SETTINGS_PERMISSIONS: Permissions = {
+  organizationSettings: ["update"],
+};
 
 export default function McpSettingsPage() {
   const { data: organization, isPending } = useOrganization();

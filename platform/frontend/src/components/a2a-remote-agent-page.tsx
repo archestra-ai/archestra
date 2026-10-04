@@ -95,7 +95,9 @@ export function CreateA2aRemoteAgentPage() {
             <CardContent className="py-6">
               <PermissionRequirementHint
                 message="Connecting external A2A agents requires"
-                permissions={[{ resource: "organizationSettings", action: "update" }]}
+                permissions={[
+                  { resource: "organizationSettings", action: "update" },
+                ]}
               />
             </CardContent>
           </Card>

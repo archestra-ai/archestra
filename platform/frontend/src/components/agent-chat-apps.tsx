@@ -39,7 +39,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
   useApplyChatOpsBindingPlan,

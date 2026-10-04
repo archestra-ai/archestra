@@ -9,7 +9,9 @@ import {
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export function useAppaGithubSync() {
-  const { data: canRead } = useHasPermissions({ organizationSettings: ["read"] });
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   return useQuery({
     enabled: canRead === true,
     queryKey: appaGithubSyncQueryKey,

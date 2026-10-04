@@ -121,8 +121,9 @@ test("read-only users see status without mutation controls", async () => {
     (permissions) =>
       ({
         data:
-          permissions.organizationSettings?.every((action) => action === "read") ??
-          false,
+          permissions.organizationSettings?.every(
+            (action) => action === "read",
+          ) ?? false,
       }) as ReturnType<typeof useHasPermissions>,
   );
   show();

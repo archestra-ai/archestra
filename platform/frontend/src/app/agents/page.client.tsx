@@ -578,7 +578,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     (canManageExternalAgents
       ? (catalogResponse?.totals.externalAgents ?? 0)
       : 0);
-  const bulkVisibilityPermissions = { organizationSettings: ["update" as const] };
+  const bulkVisibilityPermissions = {
+    organizationSettings: ["update" as const],
+  };
   const showBulkVisibility =
     selectedExternalAgents.length > 0 && selectedRegularAgents.length === 0;
   const bulkDeletePermissions = {

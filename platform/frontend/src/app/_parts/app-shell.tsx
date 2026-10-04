@@ -107,11 +107,7 @@ export function AppShell({ children }: AppShellProps) {
   });
   // Every signed-in user sees the active banner.
   const { data: notification } = useActiveSiteNotification({
-    enabled:
-      !isAuthPage &&
-      !isBrowserPreview &&
-      !isAppRuntime &&
-      !isReview,
+    enabled: !isAuthPage && !isBrowserPreview && !isAppRuntime && !isReview,
   });
 
   const redirectingToTwoFactorSetup = useTwoFactorEnrollmentRedirect(

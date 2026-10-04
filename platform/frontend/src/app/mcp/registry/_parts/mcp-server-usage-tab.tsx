@@ -44,10 +44,12 @@ export function McpServerUsageTab({
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-12 text-center">
         <Bot className="h-6 w-6 text-muted-foreground" />
-        <p className="text-sm font-medium">No agents use this server yet</p>
+        <p className="text-sm font-medium">
+          No agents or MCP gateways use this server yet
+        </p>
         <p className="max-w-md text-sm text-muted-foreground">
-          Agents reach a server by having its tools assigned, or by running in
-          auto mode with access to all tools.
+          Agents and MCP gateways reach a server by having its tools assigned.
+          They can also reach it in auto mode with access to all tools.
         </p>
       </div>
     );
@@ -56,9 +58,10 @@ export function McpServerUsageTab({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        {all.length} {all.length === 1 ? "agent" : "agents"} can reach this
-        server — {assigned.length} with assigned tools, {autoOnly.length} in
-        auto mode.
+        {all.length}{" "}
+        {all.length === 1 ? "agent or gateway" : "agents and gateways"} can
+        reach this server — {assigned.length} with assigned tools,{" "}
+        {autoOnly.length} in auto mode.
       </p>
       <div className="rounded-lg border">
         <Table>

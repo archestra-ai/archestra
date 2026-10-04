@@ -9,9 +9,10 @@ import { cn } from "@/lib/utils/tailwind";
  * provider's response — collapsed behind a "Show details" toggle so the
  * notice stays one line tall until someone asks for it.
  *
- * The toggle sits on the notice's row, beside any trailing action. The opened
- * text always takes the last row, in monospace, coloured by the notice's
- * variant like everything else in it.
+ * Place it last inside the notice. Its presence turns the notice into a grid:
+ * the toggle sits under the message, aligned with the text after the icon,
+ * the trailing action is centred across those two lines, and the opened text
+ * takes its own row below in monospace, coloured by the notice's variant.
  */
 export function InlineNoticeDetails({
   children,
@@ -26,7 +27,8 @@ export function InlineNoticeDetails({
     <>
       <button
         type="button"
-        className="underline underline-offset-2 opacity-80 hover:opacity-100"
+        data-slot="inline-notice-details-toggle"
+        className="col-start-2 row-start-2 justify-self-start underline underline-offset-2 opacity-80 hover:opacity-100"
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((value) => !value)}
@@ -38,7 +40,7 @@ export function InlineNoticeDetails({
           id={id}
           data-slot="inline-notice-details"
           className={cn(
-            "order-last max-h-40 basis-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background/60 px-2 py-1.5 font-mono text-[11px] leading-relaxed",
+            "col-start-2 col-end-4 row-start-3 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background/60 px-2 py-1.5 font-mono text-[11px] leading-relaxed",
             className,
           )}
         >

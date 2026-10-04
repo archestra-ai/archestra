@@ -425,7 +425,7 @@ describe("McpServerIssueNotice", () => {
     expect(screen.getByText(/at main/)).toBeTruthy();
   });
 
-  it("panel: keeps the pill, the fix prose and both verbs", async () => {
+  it("panel: keeps the fix prose and both verbs, without a status pill", async () => {
     renderWithQuery(
       <McpServerIssueNotice
         item={item}
@@ -435,7 +435,8 @@ describe("McpServerIssueNotice", () => {
       />,
     );
 
-    expect(screen.getByText("Failed to start")).toBeTruthy();
+    // The message already says what failed, so the panel carries no pill.
+    expect(screen.queryByText("Failed to start")).toBeNull();
     expect(screen.getByText(/Check the logs for the error/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "View logs" })).toBeTruthy();
     expect(

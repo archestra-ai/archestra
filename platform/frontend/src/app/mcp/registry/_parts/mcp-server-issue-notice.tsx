@@ -48,7 +48,6 @@ import {
 import { mcpServerAlertTarget } from "./mcp-server-alert-target";
 import { describeMcpIssueActionOwners } from "./mcp-server-attention-owner";
 import type { CatalogItem, InstalledServer } from "./mcp-server-card";
-import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { humanizeOAuthErrorCode } from "./oauth-reauth-detail";
 import {
   UninstallServerDialog,
@@ -495,22 +494,15 @@ export function McpServerIssueNotice({
         data-testid={`mcp-registry-attention-row-${item.name}`}
       >
         <CircleAlert aria-hidden />
-        {!hideName && (
-          <Link
-            href={detailHref()}
-            className="font-medium underline-offset-2 hover:underline"
-          >
-            {item.name}
-          </Link>
-        )}
-        {explained.map((issue) => (
-          <McpServerIssueBadge
-            key={issue.kind}
-            issue={issue}
-            showDetail={false}
-          />
-        ))}
-        <InlineNoticeText className="basis-full space-y-0.5">
+        <InlineNoticeText className="flex-1 space-y-0.5">
+          {!hideName && (
+            <Link
+              href={detailHref()}
+              className="font-medium underline-offset-2 hover:underline"
+            >
+              {item.name}
+            </Link>
+          )}
           {explained.map((issue) => {
             const guidance = describeMcpServerIssue(issue);
             const actionOwner = describeMcpIssueActionOwners({
@@ -535,10 +527,10 @@ export function McpServerIssueNotice({
             );
           })}
         </InlineNoticeText>
-        {disclosedDetail && (
-          <InlineNoticeDetails>{disclosedDetail}</InlineNoticeDetails>
-        )}
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        <div
+          data-slot="inline-notice-action"
+          className="ml-auto flex flex-wrap items-center gap-1.5"
+        >
           {panelActions === "dismiss-only" ? (
             dismissTargets.length > 0 && (
               <Button
@@ -621,6 +613,9 @@ export function McpServerIssueNotice({
             </>
           )}
         </div>
+        {disclosedDetail && (
+          <InlineNoticeDetails>{disclosedDetail}</InlineNoticeDetails>
+        )}
       </InlineNotice>
       <DismissAlertDialog
         open={dismissOpen}

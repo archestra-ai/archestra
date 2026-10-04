@@ -187,7 +187,9 @@ export function PermissionExplorer({
                               }
                             />
                           )}
-                          <span className="min-w-0 text-[13px] font-medium">
+                          {/* The label takes the slack so every row's info
+                              icon lands in the same column. */}
+                          <span className="min-w-0 flex-1 text-[13px] font-medium">
                             {label}
                           </span>
                           <Tooltip>

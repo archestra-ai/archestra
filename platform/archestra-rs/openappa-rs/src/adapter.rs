@@ -71,7 +71,7 @@ const HOST_NAMESPACE: &str = "archestra";
 fn identify_tool(raw: &str) -> Result<IdentifiedTool, ParseRefusal> {
     Ok(IdentifiedTool {
         canonical: canonical(raw)?,
-        spawn: false,
+        spawn: None,
     })
 }
 
@@ -158,7 +158,7 @@ mod tests {
         ] {
             let derived = derived(raw).unwrap_or_else(|refusal| panic!("{raw} maps: {refusal:?}"));
             assert_eq!(derived.canonical.as_str(), expected, "{raw}");
-            assert!(!derived.spawn, "{raw}");
+            assert!(derived.spawn.is_none(), "{raw}");
             assert_eq!(
                 (adapter().spell)(&derived.canonical).as_deref(),
                 Some(raw),

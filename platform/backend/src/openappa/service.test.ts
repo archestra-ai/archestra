@@ -21,9 +21,12 @@ import {
   evaluateToolCalls,
   executeRemedyByOffer,
   executeYell,
+  listPeerMessages,
   loadChildReturns,
   loadOfferReview,
   processProxyResults,
+  readPeerMessage,
+  sendPeerMessage,
   sessionFromHeaders,
 } from "./service";
 import { rememberYellSession } from "./yell-session";
@@ -47,6 +50,10 @@ const native = vi.hoisted(() => ({
   executeRemedyByOffer: vi.fn(),
   loadChildReturns: vi.fn(),
   loadOfferReview: vi.fn(),
+  sendPeerMessage: vi.fn(),
+  admitPeerMessage: vi.fn(),
+  listPeerMessages: vi.fn(),
+  readPeerMessage: vi.fn(),
   // No batteries declared: the composed policy is the root alone.
   listBundledOpenappaBatteries: vi.fn(async () => []),
   parseOpenappaDeclarations: vi.fn(async () => ({
@@ -92,6 +99,10 @@ beforeEach(async ({ makeOrganization }) => {
   );
   native.loadOfferReview.mockReset();
   native.loadChildReturns.mockReset();
+  native.sendPeerMessage.mockReset();
+  native.admitPeerMessage.mockReset();
+  native.listPeerMessages.mockReset();
+  native.readPeerMessage.mockReset();
   native.executeRemedyByOffer.mockReset();
   native.executeRemedyByOffer.mockResolvedValue(
     JSON.stringify({
@@ -2630,5 +2641,121 @@ describe("remedy by offer", () => {
         supports_delegation: false,
       },
     });
+  });
+
+  test("a peer send passes opaque ids and returns the runtime message id", async () => {
+    native.sendPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({ kind: "released", message_id: "msg-1" }),
+    );
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:call-1",
+        recipientSessionId: "conversation:worker",
+        recipientSpawnCallId: "spawn-1",
+        value: "hello",
+      }),
+    ).resolves.toEqual({ kind: "released", messageId: "msg-1" });
+    const wire = JSON.parse(native.sendPeerMessage.mock.calls[0][0]);
+    expect(wire).toEqual({
+      organization_id: organizationId,
+      caller_id: "user:alice",
+      session_id: "conversation",
+      operation_id: "peer_send:call-1",
+      recipient_session_id: "conversation:worker",
+      recipient_spawn_call_id: "spawn-1",
+      value: "hello",
+    });
+    expect(wire.label).toBeUndefined();
+  });
+
+  test("a peer send does not invent a release when the runtime fails", async () => {
+    native.sendPeerMessage.mockRejectedValueOnce(new Error("storage down"));
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:call-2",
+        recipientSessionId: "conversation:worker",
+        value: "hello",
+      }),
+    ).rejects.toThrow("OpenAPPA");
+  });
+
+  test("a denied peer read keeps its offers for the remedy path", async () => {
+    native.readPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "[appa] Blocked: the label narrows.",
+        offers: [{ offer_id: "offer-1" }],
+      }),
+    );
+    await expect(
+      readPeerMessage({
+        session,
+        toolCallId: "read-deny",
+        args: { message_id: "msg-1" },
+      }),
+    ).resolves.toEqual({
+      isError: true,
+      content: [{ type: "text", text: "[appa] Blocked: the label narrows." }],
+      structuredContent: {
+        decision: "deny_call",
+        peer_read_denied: true,
+        offers: [{ offer_id: "offer-1" }],
+        review: [],
+      },
+    });
+  });
+
+  test("a peer read returns the retained native result and not a caller label", async () => {
+    native.readPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "retained body" }] },
+      }),
+    );
+    await expect(
+      readPeerMessage({
+        session,
+        toolCallId: "read-1",
+        args: { message_id: "msg-1" },
+      }),
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "retained body" }],
+    });
+    const wire = JSON.parse(native.readPeerMessage.mock.calls[0][0]);
+    expect(wire.tool_call_id).toBe("read-1");
+    expect(wire.message_id).toBe("msg-1");
+    expect(wire.session_id).toBe("conversation");
+    expect(wire.label).toBeUndefined();
+    expect(wire.tool).toBe("archestra__read_peer_message");
+  });
+
+  test("a peer list keeps binding metadata for the caller and the authenticated session", async () => {
+    native.listPeerMessages.mockResolvedValueOnce(
+      JSON.stringify({
+        notices: [
+          {
+            message_id: "msg-1",
+            sender_session_id: "conversation:lead",
+            recipient_session_id: "conversation",
+            digest: "ab".repeat(32),
+            expires_at: "2026-10-03T00:00:00Z",
+          },
+        ],
+      }),
+    );
+    await expect(listPeerMessages({ session })).resolves.toEqual([
+      {
+        messageId: "msg-1",
+        senderSessionId: "conversation:lead",
+        recipientSessionId: "conversation",
+        digest: "ab".repeat(32),
+        expiresAt: "2026-10-03T00:00:00Z",
+      },
+    ]);
+    expect(
+      JSON.parse(native.listPeerMessages.mock.calls[0][0]).session_id,
+    ).toBe("conversation");
   });
 });

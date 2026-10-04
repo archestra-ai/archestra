@@ -171,6 +171,13 @@ export type AppaClientAdapter = {
   relayArrivals?(requestBody: unknown): AppaRelayArrival[];
   /** The teammates the history's launch receipts name, by name. */
   teammateLaunches?(requestBody: unknown): Map<string, AppaTeammateLaunch>;
+  /**
+   * The teammate a durable launch receipt names. Used when compaction has
+   * dropped the receipt from the request but the runtime still retained it.
+   */
+  launchIdentity?(
+    text: string,
+  ): { name: string; childNativeId: string } | undefined;
   /** The name a spawn call gives the teammate it starts, if it names one. */
   teammateName?(call: { name: string; arguments: unknown }): string | undefined;
   /**
@@ -242,6 +249,11 @@ export type AppaTeammateLaunch = { childNativeId: string; spawnCallId: string };
  * teammate's or the lead's message, a subagent's message or hand-back, the
  * main conversation's word to a background agent, or another session's.
  */
+/** A free-text peer trailer. Malformed trailers must not use historic matching. */
+export type AppaPeerTrailer =
+  | { messageId: string; value: string }
+  | "malformed";
+
 export type AppaRelayArrival = {
   kind: "teammate" | "agent" | "coordinator" | "session";
   /** The sender as the client names it. */
@@ -249,10 +261,23 @@ export type AppaRelayArrival = {
   /** The message as its envelope carries it. */
   body: string;
   /**
+   * A peer-message trailer at the end of the body. Present only for new
+   * sends. Historic matching must not run when this is set.
+   */
+  peer?: AppaPeerTrailer;
+  /** A shutdown or plan body. It has no safe id slot and must stay byte-stable. */
+  structured: boolean;
+  /** Harness fields only, with no agent text. The proxy leaves this body unchanged. */
+  harnessOnly?: boolean;
+  /** Exact retained receipt. A field that merely equals an older string does not count. */
+  recorded?(records: readonly string[]): boolean;
+  /**
    * Keeps the text the records show its sender sent here, and withholds the
    * rest in the request the model reads. Records are the retained values.
    */
   admit(records: readonly string[]): { withheld: boolean };
+  /** Replaces the text the model reads. Does not decide whether it crossed. */
+  replace(text: string): void;
 };
 
 /** The arguments of the platform's ask_user tool. */

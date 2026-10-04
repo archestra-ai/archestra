@@ -39,41 +39,45 @@ pub(crate) struct BatteryInfo {
 }
 
 /// Every bundled battery this host serves, inspected once per process.
-pub(crate) fn bundled() -> &'static [BatteryInfo] {
-    static BUNDLED: OnceLock<Vec<BatteryInfo>> = OnceLock::new();
-    BUNDLED.get_or_init(|| {
-        bundled_batteries()
-            .iter()
-            .filter(|battery| match battery.manifest() {
-                Ok(package) => match &package.role {
-                    Role::Battery(declared) => battery
-                        .file(declared.policy.as_str())
-                        .and_then(|policy| toml::from_str::<toml::Table>(policy).ok())
-                        .is_none_or(|document| serves_this_host(&document)),
-                    Role::Plugin(_) => false,
-                },
-                // A bundle this host cannot read is not quietly left out: inspection
-                // below names what is wrong with it.
-                Err(_) => true,
-            })
-            .map(|battery| {
-                let files = battery
-                    .files
-                    .iter()
-                    .map(|file| BatteryFile {
-                        path: file.path.to_owned(),
-                        text: file.text.to_owned(),
-                    })
-                    .collect::<Vec<_>>();
-                inspect(&files).unwrap_or_else(|error| {
-                    panic!(
-                        "bundled battery {} does not validate: {error}",
-                        battery.name
-                    )
+/// A bundle that fails validation is an error naming that battery, not a panic.
+pub(crate) fn bundled() -> Result<&'static [BatteryInfo], String> {
+    static BUNDLED: OnceLock<Result<Vec<BatteryInfo>, String>> = OnceLock::new();
+    match BUNDLED.get_or_init(load_bundled) {
+        Ok(batteries) => Ok(batteries),
+        Err(error) => Err(error.clone()),
+    }
+}
+
+fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
+    bundled_batteries()
+        .iter()
+        .filter(|battery| match battery.manifest() {
+            Ok(package) => match &package.role {
+                Role::Battery(declared) => battery
+                    .file(declared.policy.as_str())
+                    .and_then(|policy| toml::from_str::<toml::Table>(policy).ok())
+                    .is_none_or(|document| serves_this_host(&document)),
+                Role::Plugin(_) => false,
+            },
+            Err(_) => true,
+        })
+        .map(|battery| {
+            let files = battery
+                .files
+                .iter()
+                .map(|file| BatteryFile {
+                    path: file.path.to_owned(),
+                    text: file.text.to_owned(),
                 })
+                .collect::<Vec<_>>();
+            inspect(&files).map_err(|error| {
+                format!(
+                    "bundled battery {} does not validate: {error}",
+                    battery.name
+                )
             })
-            .collect()
-    })
+        })
+        .collect()
 }
 
 /// Validate a battery package from its files and read what the host needs from it.
@@ -140,7 +144,7 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
         policy,
         helpers: battery.helpers.iter().map(ToString::to_string).collect(),
         credentials: battery.credentials.clone(),
-        setup: battery.setup.clone(),
+        setup: (!battery.setup.is_empty()).then(|| battery.setup.join("\n")),
         files: files.to_vec(),
     })
 }
@@ -183,10 +187,15 @@ fn helper_externals(document: &toml::Table) -> Result<Vec<HelperExternal>, Strin
         let Some(command) = entry.get("command").and_then(toml::Value::as_array) else {
             continue;
         };
-        // The helper bridge addresses an external by name alone.
-        if externals.iter().any(|external| external.name == name) {
+        // The same name may serve two kinds. The consult body names the kind,
+        // and the helper bridge uses that to pick the command. The same kind
+        // and name twice is still one binding pretending to be two.
+        if externals
+            .iter()
+            .any(|external| external.kind == kind && external.name == name)
+        {
             return Err(format!(
-                "external {name:?} is declared under more than one kind; helper names must be unique"
+                "external {name:?} is declared twice under {kind}; a kind names each helper once"
             ));
         }
         externals.push(HelperExternal {
@@ -214,6 +223,7 @@ mod tests {
     #[test]
     fn the_bundled_github_battery_is_served_with_its_helpers_and_credential() {
         let github = bundled()
+            .expect("bundled batteries validate")
             .iter()
             .find(|battery| battery.name == "github")
             .expect("the github battery governs MCP tools");
@@ -238,9 +248,22 @@ mod tests {
                 && external.name == "github.repository-visibility"
                 && external.token_env.as_deref() == Some("APPA_PROVIDER_GITHUB_TOKEN")
         }));
+        assert!(
+            github
+                .externals
+                .iter()
+                .any(|external| { external.kind == "context" && external.name == "github" })
+        );
+        assert!(
+            github
+                .externals
+                .iter()
+                .any(|external| { external.kind == "audience" && external.name == "github" })
+        );
         assert!(github.files.iter().any(|file| file.path == MANIFEST_FILE));
         assert!(
             bundled()
+                .expect("bundled batteries validate")
                 .iter()
                 .all(|battery| battery.name != "claude-code")
         );
@@ -249,6 +272,7 @@ mod tests {
     #[test]
     fn the_bundled_jev_battery_is_served_as_annotators_alone() {
         let jev = bundled()
+            .expect("bundled batteries validate")
             .iter()
             .find(|battery| battery.name == "jev")
             .expect("an annotator-only battery is served");
@@ -359,6 +383,9 @@ mod tests {
         assert!(inspect(&selected).is_ok());
         let mut same_name = files();
         same_name[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.authorities.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
+        let same = inspect(&same_name).expect("two kinds may share a helper name");
+        assert_eq!(same.externals.len(), 2);
+        same_name[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.annotators.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
         assert!(inspect(&same_name).is_err());
         let mut host_variable = files();
         host_variable[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.authorities.review]\ncommand = [\"python3\", \"review.py\"]\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned();

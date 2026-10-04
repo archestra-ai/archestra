@@ -6,6 +6,8 @@ mod batteries;
 mod consults;
 mod declarations;
 mod deployments;
+#[allow(dead_code)]
+mod peer;
 mod policy;
 
 use appa_eventlog::{
@@ -21,8 +23,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnRef,
-    ToolOutcome, TrajectoryId, WireDecision,
+    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind,
+    SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -811,13 +813,11 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
 #[napi(js_name = "listBundledOpenappaBatteries")]
 pub async fn list_bundled_openappa_batteries() -> napi::Result<Vec<BatteryPackage>> {
     tokio::task::spawn_blocking(|| {
-        std::panic::catch_unwind(|| {
-            batteries::bundled()
-                .iter()
-                .map(BatteryPackage::from)
-                .collect()
-        })
-        .map_err(|_| error("bundled OpenAPPA batteries failed to load"))
+        let loaded = std::panic::catch_unwind(batteries::bundled)
+            .map_err(|_| error("bundled OpenAPPA batteries failed to load"))?;
+        loaded
+            .map_err(error)
+            .map(|batteries| batteries.iter().map(BatteryPackage::from).collect())
     })
     .await
     .map_err(error)?
@@ -1649,6 +1649,8 @@ impl State {
                 HookEvent::SessionStart {
                     root: actor.root.clone(),
                     principal: input.principal.clone(),
+                    address: None,
+                    title: None,
                 }
             };
             let decision = hooks::handle(&self.runtime, start).await;
@@ -1774,7 +1776,8 @@ impl State {
                     actor: actor.clone(),
                     call,
                     call_id: None,
-                    spawn: false,
+                    spawn: None,
+                    prompt: None,
                     ruling,
                 },
             )
@@ -1905,12 +1908,16 @@ impl State {
                     actor: actor.clone(),
                     call: proposed(&input)?,
                     call_id: Some(operation.clone()),
-                    spawn: input.spawn,
+                    spawn: input.spawn.then_some(SpawnKind::Single),
+                    prompt: None,
                     ruling: None,
                 },
                 HookEventKind::Prompt => HookEvent::Prompt {
                     actor: actor.clone(),
                     text: String::new(),
+                    settles: None,
+                    peer: None,
+                    title: None,
                 },
                 HookEventKind::TurnEnd => HookEvent::TurnEnd {
                     actor: actor.clone(),
@@ -2007,6 +2014,9 @@ impl State {
         actor: &Actor,
     ) -> napi::Result<Value> {
         let call_id = required(&input.tool_call_id, "tool_call_id")?.to_owned();
+        if let Some(withheld) = peer::forged_read_result(pg, input, &call_id)? {
+            return Ok(withheld);
+        }
         let key = processed_result_key(input, call_id.clone());
         match self
             .store

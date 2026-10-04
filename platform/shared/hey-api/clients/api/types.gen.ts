@@ -86081,7 +86081,7 @@ export type GetOpenappaExternalConsultsData = {
     path?: never;
     query?: {
         externalName?: string;
-        role?: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+        role?: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
         outcome?: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
         /**
          * Recorded on or after this time (ISO 8601)
@@ -86181,7 +86181,7 @@ export type GetOpenappaExternalConsultsResponses = {
             createdAt: string;
             startedAt: string;
             durationMs: number;
-            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
             externalName: string;
             backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl';
             request: unknown;

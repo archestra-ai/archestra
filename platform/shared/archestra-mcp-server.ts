@@ -23,6 +23,8 @@ export const ARCHESTRA_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_T
 
 export const TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME = "execute_remedy_plan";
 export const TOOL_GET_REMEDY_PLANS_SHORT_NAME = "get_remedy_plans";
+export const TOOL_LIST_PEER_MESSAGES_SHORT_NAME = "list_peer_messages";
+export const TOOL_READ_PEER_MESSAGE_SHORT_NAME = "read_peer_message";
 export const TOOL_WHOAMI_SHORT_NAME = "whoami";
 export const TOOL_CREATE_AGENT_SHORT_NAME = "create_agent";
 export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
@@ -248,6 +250,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "get_guardrails_policy",
   "get_openappa_yell",
   "list_guardrails_battery_fits",
@@ -466,6 +470,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   execute_remedy_plan: "openappa",
   yell: "openappa",
   get_remedy_plans: "openappa",
+  list_peer_messages: "openappa",
+  read_peer_message: "openappa",
   get_guardrails_policy: "openappa",
   get_openappa_yell: "openappa",
   list_guardrails_battery_fits: "openappa",
@@ -852,6 +858,8 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
 export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "yell",
 ] as const satisfies readonly ArchestraToolShortName[];
 
@@ -1152,6 +1160,8 @@ export function buildElicitationMandateInstruction(params?: {
  */
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
   [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers"],
+  [TOOL_LIST_PEER_MESSAGES_SHORT_NAME]: ["peer_proof"],
+  [TOOL_READ_PEER_MESSAGE_SHORT_NAME]: ["peer_proof"],
   [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
     "execution",
     "protected",

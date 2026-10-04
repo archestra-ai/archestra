@@ -10,7 +10,9 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
@@ -315,7 +317,9 @@ export async function executeArchestraTool(
   const remedyShortName = archestraMcpBranding.getToolShortName(toolName);
   if (
     (remedyShortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
-      remedyShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME) &&
+      remedyShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
+      remedyShortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+      remedyShortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME) &&
     !(await isGuardrailsV2Active())
   ) {
     throw { code: -32601, message: "Guardrails v2 is disabled" };
@@ -524,6 +528,8 @@ async function resolveToolAssignment(
   if (
     (shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
       shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
+      shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+      shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME ||
       (shortName === "yell" && openappaYellEnabled())) &&
     (await isGuardrailsV2Active())
   )

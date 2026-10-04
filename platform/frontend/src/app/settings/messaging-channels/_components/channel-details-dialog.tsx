@@ -210,7 +210,7 @@ export function ChannelDetailsDialog({
             {!readOnly && (
               <PermissionButton
                 type="button"
-                permissions={{ agentTrigger: ["update"] }}
+                permissions={{ organizationSettings: ["update"] }}
                 disabled={!changed || overLimit || isSaving}
                 onClick={() =>
                   onSave({

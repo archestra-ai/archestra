@@ -1660,7 +1660,7 @@ describe("MCP Gateway (stateless mode)", () => {
 
     try {
       const org = await makeOrganization();
-      // sandbox tools are gated by sandbox:execute — authenticate as an admin so
+      // sandbox tools are gated by agent:read — authenticate as an admin so
       // RBAC does not strip them before exposure filtering runs.
       const adminUser = await makeUser();
       await makeMember(adminUser.id, org.id, { role: "admin" });

@@ -16,6 +16,7 @@ import {
 } from "@archestra/shared";
 import {
   allAvailableActions,
+  withDerivedPermissions,
   findUngrantablePermissions,
   predefinedPermissionsMap,
 } from "@archestra/shared/access-control";
@@ -127,7 +128,7 @@ class OrganizationRoleModel {
       }
     }
 
-    return sanitizedPermissions;
+    return withDerivedPermissions(sanitizedPermissions);
   }
 
   static invalidatePermissionsCacheForRole(

@@ -1304,7 +1304,7 @@ async function requireRuntimeCredentialAdmin(
   const permitted = await userHasPermission(
     request.user.id,
     request.organizationId,
-    "agentSettings",
+    "organizationSettings",
     "update",
   );
   if (!permitted) {

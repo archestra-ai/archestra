@@ -6,7 +6,7 @@ import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const queryKey = ["guardrails-deployment"];
 export function useGuardrailsDeployment() {
-  const { data: canRead } = useHasPermissions({ openappaSettings: ["read"] });
+  const { data: canRead } = useHasPermissions({ organizationSettings: ["read"] });
   return useQuery({
     enabled: canRead === true,
     queryKey,

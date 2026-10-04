@@ -3033,7 +3033,7 @@ export function ChatPageContent({
   // suppresses it while the org record is still loading — so a returning admin
   // who already has a default never flashes the step during that window.
   const { data: canSetDefaultModel } = useHasPermissions({
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
   const [firstKeyAdded, setFirstKeyAdded] = useState(false);
   const showDefaultModelStep =

@@ -513,7 +513,7 @@ const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
 // isDynamicallyAvailableArchestraTool passes (feature gates, per-agent
 // exclusions, and the query_knowledge_sources connector check) — nothing is
 // assigned. RBAC already ran before this gate, so e.g. the sandbox tools
-// still require sandbox:execute.
+// still require agent:read.
 async function resolveToolAssignment(
   toolName: string,
   context: ArchestraContext,

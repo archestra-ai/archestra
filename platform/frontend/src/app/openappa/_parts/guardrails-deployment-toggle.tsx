@@ -61,7 +61,7 @@ export function UnsupportedClientActionSelect({
   const query = useGuardrailsDeployment();
   const update = useUpdateUnsupportedClientAction();
   const { data: canManage } = useHasPermissions({
-    openappaSettings: ["update"],
+    organizationSettings: ["update"],
   });
   if (!query.data || query.isError) return null;
 

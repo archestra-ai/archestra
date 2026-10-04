@@ -7,9 +7,11 @@ import {
   findUngrantablePermissions,
   memberPermissions,
   permissionDescriptions,
+  platformAdminPermissions,
   predefinedPermissionsMap,
   requiredEndpointPermissionsMap,
   requiredPagePermissionsMap,
+  withDerivedPermissions,
 } from "./access-control";
 import {
   type Action,
@@ -128,7 +130,7 @@ describe("access-control", () => {
       expect(requiredPagePermissionsMap["/agents/new"]).toBeUndefined();
     });
 
-    test("credential-bearing configuration mutations require agent settings administration", () => {
+    test("credential-bearing configuration mutations require organization settings administration", () => {
       for (const routeId of [
         RouteId.InspectA2aRemoteAgent,
         RouteId.CreateA2aRemoteAgent,
@@ -136,7 +138,7 @@ describe("access-control", () => {
         RouteId.DeleteA2aRemoteAgent,
       ]) {
         expect(requiredEndpointPermissionsMap[routeId]).toEqual({
-          agentSettings: ["update"],
+          organizationSettings: ["update"],
         });
       }
     });
@@ -144,43 +146,90 @@ describe("access-control", () => {
     test("run metadata is restricted while approved target summaries remain assignable", () => {
       expect(
         requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgentRuns],
-      ).toEqual({ agentSettings: ["read"] });
+      ).toEqual({ organizationSettings: ["read"] });
       expect(
         requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgents],
       ).toEqual({ agent: ["read"] });
-      expect(memberPermissions.agentSettings).toEqual([]);
-      expect(editorPermissions.agentSettings).toEqual([]);
+      expect(memberPermissions.organizationSettings).toEqual([]);
+      expect(editorPermissions.organizationSettings).toEqual([]);
+    });
+  });
+
+  describe("organization settings", () => {
+    test("only admin roles can see or change organization settings", () => {
+      expect(adminPermissions.organizationSettings).toEqual(["read", "update"]);
+      expect(platformAdminPermissions.organizationSettings).toEqual([
+        "read",
+        "update",
+      ]);
+      expect(editorPermissions.organizationSettings).toEqual([]);
+      expect(memberPermissions.organizationSettings).toEqual([]);
+    });
+
+    test("every signed-in user sees the site notification banner, admins manage it", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.GetSiteNotification],
+      ).toEqual({});
+      for (const routeId of [
+        RouteId.CreateSiteNotification,
+        RouteId.UpdateSiteNotification,
+        RouteId.DeleteSiteNotification,
+      ]) {
+        expect(requiredEndpointPermissionsMap[routeId]).toEqual({
+          organizationSettings: ["update"],
+        });
+      }
+    });
+  });
+
+  describe("invitations follow member:create", () => {
+    test("a role that can add members can invite and cancel invitations", () => {
+      expect(
+        withDerivedPermissions({ member: ["read", "create"] }).invitation,
+      ).toEqual(["create", "cancel"]);
+    });
+
+    test("a stored invitation grant without member:create is dropped", () => {
+      expect(
+        withDerivedPermissions({
+          member: ["read"],
+          invitation: ["create", "cancel"],
+        }),
+      ).toEqual({ member: ["read"] });
+    });
+
+    test("invitations are hidden from the role editor", () => {
+      expect(internalResources).toContain("invitation");
     });
   });
 
   describe("sandbox artifact route", () => {
-    // the download_file tool (sandbox:execute) hands out this artifact URL, so
+    // the download_file tool (agent:read) hands out this artifact URL, so
     // the fetch route must require the same permission — otherwise a role that
     // produced an artifact gets a 403 on a URL it just earned.
-    test("getSkillSandboxArtifact requires sandbox:execute", () => {
+    test("getSkillSandboxArtifact requires agent:read", () => {
       const required =
         requiredEndpointPermissionsMap[RouteId.GetSkillSandboxArtifact];
-      expect(required?.sandbox).toContain("execute");
+      expect(required).toEqual({ agent: ["read"] });
     });
   });
 
   describe("project file routes", () => {
     // Project file surfaces combine project-level access with the files gate;
-    // the sandbox permission is reserved for actual sandbox execution
-    // (run_command/upload_file/download_file).
-    test("GetProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
+    // agent:read, which gates sandbox execution, is not what grants them.
+    test("GetProjectFiles requires project:read + file:manage, not agent:read", () => {
       const required = requiredEndpointPermissionsMap[RouteId.GetProjectFiles];
       expect(required?.project).toContain("read");
       expect(required?.file).toContain("manage");
-      expect(required?.sandbox).toBeUndefined();
+      expect(required?.agent).toBeUndefined();
     });
 
-    test("UploadProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
+    test("UploadProjectFiles requires project:read + file:manage, not agent:read", () => {
       const required =
         requiredEndpointPermissionsMap[RouteId.UploadProjectFiles];
       expect(required?.project).toContain("read");
       expect(required?.file).toContain("manage");
-      expect(required?.sandbox).toBeUndefined();
+      expect(required?.agent).toBeUndefined();
     });
 
     test("all predefined roles have file:manage", () => {

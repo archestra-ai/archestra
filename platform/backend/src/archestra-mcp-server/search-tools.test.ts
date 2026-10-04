@@ -819,7 +819,7 @@ describe("search_tools", () => {
   // the model can discover and run them dynamically); assigned always-exposed
   // tools stay out (they are already top-level). Sandbox built-ins additionally
   // require their feature flag, and every result is RBAC-filtered — so they
-  // only surface for callers who can actually run them (sandbox:execute).
+  // only surface for callers who can actually run them (agent:read).
   // Seeded but not assigned here to exercise that path.
   describe("sandbox built-in discovery", () => {
     async function searchSandboxTools(
@@ -836,7 +836,7 @@ describe("search_tools", () => {
       ).tools.map((tool) => tool.toolName);
     }
 
-    test("surfaces an unassigned sandbox tool to a user with sandbox:execute", async ({
+    test("surfaces an unassigned sandbox tool to a user with agent:read", async ({
       makeAgent,
       makeMember,
       makeOrganization,
@@ -876,7 +876,7 @@ describe("search_tools", () => {
       }
     });
 
-    test("hides sandbox tools from a user without sandbox:execute", async ({
+    test("hides sandbox tools from a user without agent:read", async ({
       makeAgent,
       makeCustomRole,
       makeMember,

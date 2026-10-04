@@ -921,7 +921,7 @@ describe("run_tool", () => {
 
   // Sandbox built-ins (run_command/upload_file/download_file) are Archestra
   // built-ins but ride the same dynamic tool access relaxation as third-party
-  // tools, gated on sandbox:execute. Distinct from the third-party path above
+  // tools, gated on agent:read. Distinct from the third-party path above
   // because they route through executeArchestraTool, not the gateway.
   describe("sandbox built-ins (dynamic tool access)", () => {
     const originalSandboxEnabled = config.skillsSandbox.enabled;
@@ -1013,7 +1013,7 @@ describe("run_tool", () => {
       expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
     });
 
-    test("runs for a user who cannot modify the agent but has sandbox:execute", async ({
+    test("runs for a user who cannot modify the agent but has agent:read", async ({
       makeCustomRole,
       makeMember,
       makeUser,
@@ -1021,7 +1021,7 @@ describe("run_tool", () => {
       const organizationId = mockContext.organizationId as string;
       const user = await makeUser();
       const role = await makeCustomRole(organizationId, {
-        permission: { sandbox: ["execute"], agent: ["read"] },
+        permission: { agent: ["read"] },
       });
       await makeMember(user.id, organizationId, { role: role.role });
       const runSpy = stubRunCommand();
@@ -1056,16 +1056,16 @@ describe("run_tool", () => {
       expect(runSpy).not.toHaveBeenCalled();
     });
 
-    test("denies when the user lacks sandbox:execute (RBAC before the dynamic gate)", async ({
+    test("denies when the user lacks agent:read (RBAC before the dynamic gate)", async ({
       makeCustomRole,
       makeMember,
       makeUser,
     }) => {
       const organizationId = mockContext.organizationId as string;
       const user = await makeUser();
-      // catalog access + agent rights, but no sandbox:execute
+      // chat access, but no agent:read
       const role = await makeCustomRole(organizationId, {
-        permission: { agent: ["read", "update"] },
+        permission: { chat: ["read", "create"] },
       });
       await makeMember(user.id, organizationId, { role: role.role });
       const runSpy = stubRunCommand();
@@ -1077,7 +1077,7 @@ describe("run_tool", () => {
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain("sandbox:execute");
+      expect((result.content[0] as any).text).toContain("agent:read");
       expect(runSpy).not.toHaveBeenCalled();
     });
   });

@@ -50,7 +50,7 @@ export const TOOL_PERMISSIONS: Record<
     action: "read",
   },
   create_guardrails_repository: {
-    resource: "openappaSettings",
+    resource: "organizationSettings",
     action: "update",
   },
   list_runtime_credentials: { resource: "credential", action: "read" },
@@ -234,13 +234,13 @@ export const TOOL_PERMISSIONS: Record<
   update_plugin: { resource: "plugin", action: "update" },
   edit_plugin: { resource: "plugin", action: "update" },
   delete_plugin: { resource: "plugin", action: "delete" },
-  // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
-  // assignment. The implicit per-conversation sandbox is created lazily; the
-  // create step is not a tool. load_skill (skill:read) mounts a skill into
-  // the sandbox when the caller also has sandbox:execute.
-  run_command: { resource: "sandbox", action: "execute" },
-  download_file: { resource: "sandbox", action: "execute" },
-  upload_file: { resource: "sandbox", action: "execute" },
+  // Code execution sandbox — part of using an agent (`agent:read`) plus
+  // per-agent tool assignment. The implicit per-conversation sandbox is
+  // created lazily; the create step is not a tool. load_skill (skill:read)
+  // mounts a skill into the sandbox when the caller also has agent:read.
+  run_command: { resource: "agent", action: "read" },
+  download_file: { resource: "agent", action: "read" },
+  upload_file: { resource: "agent", action: "read" },
 
   // Runs are an Agent capability, including when an Agent opts into
   // Agent Runtime. Per-run ownership stays in the handlers.

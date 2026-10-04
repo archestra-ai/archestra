@@ -260,7 +260,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
 
   // EncryptedChat toggle: only on the new-chat composer (no conversation yet —

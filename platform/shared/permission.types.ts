@@ -28,20 +28,17 @@ export const resources = [
   "skill",
   "plugin",
   "app",
-  "sandbox",
   "mcpGateway",
   "mcpOauthClient",
   "llmProxy",
   "toolPolicy",
   "openappaPolicy",
-  "openappaSettings",
   "openappaDiagnostics",
   "log",
   "identityProvider",
   "mcpRegistry",
   "mcpServerInstallation",
   "knowledgeSource",
-  "knowledgeSettings",
   "environment",
   "credential",
   "chat",
@@ -55,11 +52,6 @@ export const resources = [
   "llmModel",
   "secret",
   "organizationSettings",
-  "llmSettings",
-  "mcpSettings",
-  "skillsSettings",
-  "agentSettings",
-  "agentTrigger",
   "scheduledTask",
   /**
    * Better-auth access control resource - needed for organization role management
@@ -88,7 +80,6 @@ export const resources = [
   "chatAgentPicker",
   "chatProviderSettings",
   "chatExpandToolCalls",
-  "siteNotification",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -96,14 +87,12 @@ export const resourceLabels: Record<Resource, string> = {
   skill: "Skills",
   plugin: "Plugins",
   app: "Apps",
-  sandbox: "Code Sandbox",
   mcpGateway: "MCP Gateways",
   mcpOauthClient: "MCP OAuth Clients",
   llmProxy: "LLM Proxy",
   toolPolicy: "Tools & Policies",
   log: "LLM & MCP Logs",
   openappaPolicy: "OpenAPPA Policy",
-  openappaSettings: "OpenAPPA Settings",
   openappaDiagnostics: "OpenAPPA Diagnostics",
   organization: "Organization",
   identityProvider: "Identity Providers",
@@ -112,7 +101,6 @@ export const resourceLabels: Record<Resource, string> = {
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
   knowledgeSource: "Knowledge Sources",
-  knowledgeSettings: "Knowledge Settings",
   environment: "Environments",
   credential: "Credentials",
   team: "Teams",
@@ -132,17 +120,11 @@ export const resourceLabels: Record<Resource, string> = {
   auditLog: "Audit Log",
   accessPolicies: "Access Policies",
   organizationSettings: "Organization Settings",
-  llmSettings: "LLM Settings",
-  mcpSettings: "MCP Settings",
-  skillsSettings: "Skills Settings",
-  agentSettings: "Agent Settings",
-  agentTrigger: "Agent Triggers",
   scheduledTask: "Scheduled Tasks",
   simpleView: "Simple View",
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
   chatExpandToolCalls: "Chat Expand Tool Calls",
-  siteNotification: "Site Notifications",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -150,36 +132,27 @@ export const resourceDescriptions: Record<Resource, string> = {
   skill: "Agent skills — reusable SKILL.md instruction plugins",
   plugin: "Opaque plugins that execute hooks on connected developer machines",
   app: "User-authored MCP Apps — interactive apps with their own data store and tools",
-  sandbox:
-    "Code execution sandboxes — run commands, upload/download files, run activated skills",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
   mcpOauthClient:
     "OAuth clients (service accounts) authorized to call MCP gateways",
   llmProxy: "The LLM Proxy endpoint with security policies and observability",
   toolPolicy: "Tools, tool invocation policies, and trusted data policies",
   openappaPolicy: "OpenAPPA policy, batteries, and coverage",
-  openappaSettings: "OpenAPPA enforcement settings and GitHub synchronization",
   openappaDiagnostics: "Agent yells and OpenAPPA consult logs",
   log: "LLM proxy and MCP tool-call logs, with separate own and organization-wide visibility",
   chat: "Chat conversations",
   project:
     "Projects — shared collections of chats, Agent Runtime runs, and files",
   file: "Files produced and used in chats and projects",
-  agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
   scheduledTask: "Scheduled agent tasks that run on a schedule",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
   llmOauthClient: "OAuth clients authorized to call the LLM Proxy",
   llmModel: "LLM model catalog entries and chat capabilities",
   llmLimit: "LLM usage limits",
-  llmSettings: "LLM settings",
-  agentSettings:
-    "Agent settings (default model, default agent, default tool guardrails, chat file uploads)",
   llmCost: "Organization-wide LLM usage and cost analytics",
   mcpRegistry:
     "MCP server registry management. Deployment settings are granted per entry, on the entry's Permissions tab.",
-  mcpSettings: "MCP settings (online catalog availability)",
-  skillsSettings: "Skills settings (online catalog availability)",
   mcpServerInstallation: "Installed MCP servers and their runtime",
   environment: "Deployment environments (namespace) for catalog items",
   credential:
@@ -196,11 +169,9 @@ export const resourceDescriptions: Record<Resource, string> = {
   accessPolicies:
     "View and edit organization-wide access policies for every resource type",
   organizationSettings:
-    "Organization settings (appearance, authentication, etc)",
+    "Organization-wide settings: appearance, authentication, agents and security, LLM, MCP, skills, knowledge, OpenAPPA enforcement, messaging channels, and site notifications",
   knowledgeSource:
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
-  knowledgeSettings:
-    "Knowledge settings (embedding and reranking models configuration)",
   simpleView: "Collapse the app sidebar by default",
   chatAgentPicker: "Controls visibility of the agent picker in chat",
   chatProviderSettings:
@@ -208,38 +179,26 @@ export const resourceDescriptions: Record<Resource, string> = {
   chatExpandToolCalls:
     "Controls ability to expand and view tool call details in chat",
   organization: "Organization (internal, used by authentication system)",
-  siteNotification: "Site-wide notification banners and announcements",
 };
 
 /**
  * Resources that are internal to better-auth and should not be shown
  * in user-facing documentation or the RBAC UI.
  */
-export const internalResources: Resource[] = ["organization"];
+export const internalResources: Resource[] = ["organization", "invitation"];
 
 /**
  * Groups resources by category for the RBAC UI (role builder and permissions card).
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: [
-    "agent",
-    "skill",
-    "plugin",
-    "skillsSettings",
-    "app",
-    "sandbox",
-    "agentTrigger",
-    "scheduledTask",
-    "agentSettings",
-  ],
+  Agents: ["agent", "skill", "plugin", "app", "scheduledTask"],
   MCP: [
     "mcpGateway",
     "mcpOauthClient",
     "toolPolicy",
     "mcpRegistry",
     "mcpServerInstallation",
-    "mcpSettings",
   ],
   LLM: [
     "llmProxy",
@@ -248,11 +207,10 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmOauthClient",
     "llmModel",
     "llmLimit",
-    "llmSettings",
     "llmCost",
   ],
-  OpenAPPA: ["openappaPolicy", "openappaSettings", "openappaDiagnostics"],
-  Knowledge: ["knowledgeSource", "knowledgeSettings"],
+  OpenAPPA: ["openappaPolicy", "openappaDiagnostics"],
+  Knowledge: ["knowledgeSource"],
   Logs: ["log", "auditLog"],
   Other: [
     "chat",
@@ -268,7 +226,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "member",
     "ac",
     "team",
-    "invitation",
     "identityProvider",
     "secret",
     "apiKey",
@@ -276,7 +233,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "credential",
     "environment",
     "organizationSettings",
-    "siteNotification",
   ],
 };
 

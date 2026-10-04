@@ -794,7 +794,7 @@ describe("external A2A agent routed pages", () => {
       (permissions) =>
         ({
           data:
-            !!permissions.agentSettings?.includes("update") ||
+            !!permissions.organizationSettings?.includes("update") ||
             !!permissions.team?.includes("read"),
           isPending: false,
         }) as ReturnType<typeof useHasPermissions>,

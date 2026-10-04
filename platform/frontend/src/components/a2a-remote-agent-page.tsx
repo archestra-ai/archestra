@@ -49,7 +49,7 @@ const LIST_HREF = "/agents";
 
 export function CreateA2aRemoteAgentPage() {
   const router = useRouter();
-  const permission = useHasPermissions({ agentSettings: ["update"] });
+  const permission = useHasPermissions({ organizationSettings: ["update"] });
   const createMutation = useCreateA2aRemoteAgent();
   const [formDirty, setFormDirty] = useState(false);
   const navigationGuard = usePageUnsavedChangesGuard(formDirty);
@@ -95,7 +95,7 @@ export function CreateA2aRemoteAgentPage() {
             <CardContent className="py-6">
               <PermissionRequirementHint
                 message="Connecting external A2A agents requires"
-                permissions={[{ resource: "agentSettings", action: "update" }]}
+                permissions={[{ resource: "organizationSettings", action: "update" }]}
               />
             </CardContent>
           </Card>
@@ -113,7 +113,7 @@ export function CreateA2aRemoteAgentPage() {
 export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
   const router = useRouter();
   const query = useA2aRemoteAgent(id);
-  const permission = useHasPermissions({ agentSettings: ["update"] });
+  const permission = useHasPermissions({ organizationSettings: ["update"] });
   const updateMutation = useUpdateA2aRemoteAgent(id);
   const deleteMutation = useDeleteA2aRemoteAgent();
   const [deleteOpen, setDeleteOpen] = useState(false);

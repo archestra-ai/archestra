@@ -200,12 +200,12 @@ describe("checkToolPermission", () => {
     expect((result?.content[0] as any).text).toContain("personal token");
   });
 
-  test("sandbox:execute gates the sandbox tools — admin allowed", async () => {
+  test("agent:read gates the sandbox tools — admin allowed", async () => {
     const result = await checkToolPermission(t("run_command"), adminContext);
     expect(result).toBeNull();
   });
 
-  test("sandbox:execute gates the sandbox tools — skill:read alone does not grant run_command", async ({
+  test("agent:read gates the sandbox tools — skill:read alone does not grant run_command", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -228,7 +228,7 @@ describe("checkToolPermission", () => {
 
     // skill:read allows load_skill...
     expect(await checkToolPermission(t("load_skill"), ctx)).toBeNull();
-    // ...but does NOT allow run_command (needs sandbox:execute)
+    // ...but does NOT allow run_command (needs agent:read)
     const denied = await checkToolPermission(t("run_command"), ctx);
     expect(denied).not.toBeNull();
     expect((denied?.content[0] as any).text).toContain(
@@ -236,7 +236,7 @@ describe("checkToolPermission", () => {
     );
   });
 
-  test("sandbox:execute allows the sandbox tools", async ({
+  test("agent:read allows the sandbox tools", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -246,7 +246,7 @@ describe("checkToolPermission", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
+      permission: { agent: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({ name: "Sandbox Agent" });
@@ -262,7 +262,7 @@ describe("checkToolPermission", () => {
     expect(await checkToolPermission(t("download_file"), ctx)).toBeNull();
   });
 
-  test("sandbox:execute alone does not grant the file-store tools", async ({
+  test("agent:read alone does not grant the file-store tools", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -272,7 +272,7 @@ describe("checkToolPermission", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
+      permission: { agent: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({ name: "Sandbox Agent" });

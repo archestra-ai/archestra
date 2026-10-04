@@ -41,7 +41,7 @@ beforeEach(() => {
     http.get(`${API_ORIGIN}/api/user/permissions`, () =>
       HttpResponse.json({
         agent: ["read", "update"],
-        agentTrigger: ["read", "create", "update"],
+        organizationSettings: ["read", "update"],
       }),
     ),
     http.get(`${API_ORIGIN}/api/config`, () =>

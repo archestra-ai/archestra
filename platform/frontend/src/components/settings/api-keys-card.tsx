@@ -290,6 +290,7 @@ function ApiKeysCardContent() {
           <BulkActionsScope>
             <CollectionFilters>
               <FilterBar
+                leading
                 onClearFilters={
                   search
                     ? () => updateQueryParams({ search: null, page: "1" })

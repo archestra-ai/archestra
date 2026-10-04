@@ -121,7 +121,7 @@ The personal platform token the gateway authenticates with
 (`Authorization: Bearer …`). It does **not** grant platform API access.
 
 - UI: **Account → MCP Gateway/A2A Gateway Token**
-  (`http://localhost:3000/account/auth`) → *Manage Token*.
+  (`http://localhost:3000/account`) → *Manage Token*.
 - API: `GET /api/user-tokens/me/value` returns the value for the current
   session; `POST /api/user-tokens/me/rotate` mints a fresh one.
 

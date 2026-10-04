@@ -10,7 +10,7 @@ lastUpdated: 2026-10-02
 
 Archestra supports TOTP-based two-factor authentication: members enroll by scanning a QR code with any authenticator app (1Password, Google Authenticator, Authy, …) and confirming a one-time code. Enrollment generates single-use backup codes for recovery, shown exactly once. Enrolled members are prompted for a code at every sign-in and may trust a device to skip the prompt on it.
 
-Members enroll from **Personal Settings → Auth** by turning on **Two-Factor Authentication**. Setup opens in a dialog. Confirm your password, scan the QR code, enter an authenticator code, and download your recovery codes. Password confirmation applies even if you just signed in. Enrollment and organization-wide enforcement are enterprise features.
+Members enroll from **Personal Settings** (click your name in the sidebar) by turning on **Two-factor** under **Sign-in & security**. Setup opens in a dialog. Confirm your password, scan the QR code, enter an authenticator code, and download your recovery codes. Password confirmation applies even if you just signed in. Enrollment and organization-wide enforcement are enterprise features.
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.
 

@@ -1,16 +1,24 @@
 "use client";
 
 import { archestraApiSdk } from "@archestra/shared";
-import { Key } from "lucide-react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import {
+  AccountRow,
+  AccountRowMuted,
+} from "@/app/account/_components/account-rows";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
-import { PlatformTokenCard } from "@/components/tokens/platform-token-card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useRotateUserToken, useUserToken } from "@/lib/user-token.query";
 
-export function PersonalTokenCard() {
+/**
+ * The personal token MCP and A2A clients use to call agents as you — the one
+ * the Connect page's setup snippets embed, and the one chat uses when it runs
+ * tools as you. It does not grant access to the platform API (that is API
+ * Keys), which the dialog says.
+ */
+export function GatewayTokenRow() {
   const { data: token, isLoading, error } = useUserToken();
   const rotateMutation = useRotateUserToken();
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
@@ -28,41 +36,42 @@ export function PersonalTokenCard() {
 
   return (
     <>
-      <PlatformTokenCard
-        title="MCP Gateway/A2A Gateway Token"
-        description={
-          <>
-            Your personal token for calling Agents through MCP Gateways and A2A
-            — used by the{" "}
-            <Link href="/connection" className="underline underline-offset-4">
-              Connect
-            </Link>{" "}
-            page setup snippets and by chat when it executes tools as you. It
-            does not grant access to the platform API.
-          </>
-        }
-        isLoading={isLoading}
-        error={error}
-        tokenExists={!!token}
-        emptyDescription="No personal token available. It will be automatically created."
+      <AccountRow
+        label="Gateway token"
         action={
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setTokenDialogOpen(true)}
-          >
-            <Key className="h-4 w-4" />
-            Manage Token
-          </Button>
+          token && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setTokenDialogOpen(true)}
+            >
+              Manage
+            </Button>
+          )
         }
-      />
+      >
+        {isLoading ? (
+          <Skeleton className="h-5 w-40" />
+        ) : error ? (
+          <span className="text-destructive">
+            Couldn't load your token. Try refreshing the page.
+          </span>
+        ) : token ? (
+          <span className="font-mono text-muted-foreground">
+            {token.tokenStart}…
+          </span>
+        ) : (
+          <AccountRowMuted>Created automatically on first use</AccountRowMuted>
+        )}
+      </AccountRow>
 
       {token && (
         <TokenManagerDialog
           token={token}
           open={tokenDialogOpen}
           onOpenChange={setTokenDialogOpen}
-          description="Your personal token for calling Agents you can access through MCP Gateways and A2A."
+          description="Your personal token for calling Agents you can access through MCP Gateways and A2A. It does not grant access to the platform API."
           fetchTokenValue={async () => {
             const response = await archestraApiSdk.getUserTokenValue();
             return (

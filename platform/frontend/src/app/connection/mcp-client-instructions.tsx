@@ -511,7 +511,7 @@ export function GenericAuthRow({
       <div className="text-xs text-muted-foreground">
         No tokens available — provision one from{" "}
         <Link
-          href="/account/auth?highlight=personal-token"
+          href="/account?highlight=personal-token"
           className="underline hover:text-foreground"
         >
           Personal Settings

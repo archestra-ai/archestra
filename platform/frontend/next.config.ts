@@ -82,18 +82,6 @@ const nextConfig: NextConfig = {
     // messaging-channels restructure, so existing bookmarks and links don't 404.
     // `:path*` matches the bare path and any sub-path.
     return [
-      // Auth combines the personal gateway token and two-factor settings.
-      // Next preserves query parameters, including the token dialog highlight.
-      {
-        source: "/account/gateway-token",
-        destination: "/account/auth",
-        permanent: true,
-      },
-      {
-        source: "/account/two-factor",
-        destination: "/account/auth",
-        permanent: true,
-      },
       // Keep registered GitHub App callbacks valid. Next preserves the OAuth query.
       {
         source: "/settings/credentials/github/callback",

@@ -129,12 +129,12 @@ export function InitialResourcePermissions({
       {(ownerName || grants.length > 0 || inherited.length > 0) && (
         <div className="divide-y border-t">
           {ownerName && (
-            <div className="flex items-center gap-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
               <UserRound
                 className="size-4 shrink-0 text-muted-foreground"
                 aria-hidden="true"
               />
-              <span className="min-w-0 flex-1 truncate">
+              <span className="min-w-40 flex-1 truncate">
                 {ownerName}
                 <span className="ml-2 text-xs text-muted-foreground">
                   Owner
@@ -152,10 +152,10 @@ export function InitialResourcePermissions({
           {grants.map((grant, index) => (
             <div
               key={`${grant.subject.type}:${grant.subject.id}`}
-              className="flex items-center gap-3 py-2"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
             >
               <SubjectIcon type={grant.subject.type} />
-              <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+              <div className="flex min-w-40 flex-1 flex-wrap items-baseline gap-x-2">
                 <span className="break-words text-sm font-medium">
                   {grant.name}
                 </span>
@@ -215,10 +215,10 @@ export function InitialResourcePermissions({
           {inherited.map((grant) => (
             <div
               key={`inherited:${grant.subject.type}:${grant.subject.id}`}
-              className="flex items-center gap-3 py-2 text-muted-foreground"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-muted-foreground"
             >
               <SubjectIcon type={grant.subject.type} />
-              <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+              <div className="flex min-w-40 flex-1 flex-wrap items-baseline gap-x-2">
                 <span className="break-words text-sm font-medium">
                   {grant.name}
                 </span>

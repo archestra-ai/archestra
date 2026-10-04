@@ -280,9 +280,13 @@ function AgentDetails({
     runtimeEnabled && kind === "agent" && agent.runtime != null;
   const runsQuery = useAgentRuns(agent.id, hasAgentRuntime);
   // A failed lookup keeps its recovery surface accessible; only a known
-  // empty result hides the tab.
+  // empty result hides the tab. While the list loads, a link that asked for
+  // runs keeps them, so the page does not flash another section first.
   const hasRuns =
-    hasAgentRuntime && ((runsQuery.data?.length ?? 0) > 0 || runsQuery.isError);
+    hasAgentRuntime &&
+    ((runsQuery.data?.length ?? 0) > 0 ||
+      runsQuery.isError ||
+      (runsQuery.isPending && searchParams.get("section") === "runs"));
 
   // The record's own sections, listed down the side of its page. The setup
   // wizard's steps supply the editable ones, in the order it walks them, with

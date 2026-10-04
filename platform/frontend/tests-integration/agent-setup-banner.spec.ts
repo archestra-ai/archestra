@@ -56,8 +56,9 @@ test("spaces the setup banner like the rest of the agent page, and lets a ready 
   await mockAgentPage({ mswControl, request });
   await page.goto(`/agents/${AGENT.id}?section=general`);
 
+  // A missing Claude account is the compact sign-in notice, not a checklist.
   await expect(
-    page.getByRole("alert").filter({ hasText: "Before this agent can run" }),
+    page.getByRole("alert").filter({ hasText: "Sign in to use this agent." }),
   ).toBeVisible();
   await connectClaudeAccount(page, mswControl);
 

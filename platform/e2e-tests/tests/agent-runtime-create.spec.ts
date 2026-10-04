@@ -111,18 +111,11 @@ test("creates Claude Code from the catalog and explains the account connection a
       claudeCode: { authentication: "subscription" },
       inferenceProtocol: "anthropic",
     });
-    await expect(page).toHaveURL(new RegExp(`/agents/${agentId}/created$`));
+    // Creating opens chat with the agent selected, which asks for the
+    // missing Claude account before the agent can run.
+    await expect(page).toHaveURL(new RegExp(`/chat\\?agentId=${agentId}$`));
     await expect(
-      page.getByRole("heading", { name: "Agent created", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: new RegExp(name) }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Before this agent can run", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Connect your Claude account", { exact: true }),
+      page.getByText("Sign in to use this agent.", { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Sign in", exact: true }),

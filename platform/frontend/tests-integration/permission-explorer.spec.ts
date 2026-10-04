@@ -160,8 +160,8 @@ test("read-only roles and personal access expose permissions and keyboard source
   await expect(dialog.getByRole("checkbox")).toHaveCount(0);
   await capture(page, "role-view-desktop");
 
-  await page.goto("/account/permissions");
-  const permission = page.getByRole("button", {
+  const personal = await openAccountPermissions(page);
+  const permission = personal.getByRole("button", {
     name: "Agents Read granted",
     exact: true,
   });
@@ -174,18 +174,20 @@ test("read-only roles and personal access expose permissions and keyboard source
   await expect(page.getByRole("tooltip")).toContainText(
     "Agent Editor · Team: Platform",
   );
-  await expect(page.getByPlaceholder("Find a resource or action…")).toHaveCount(
-    0,
-  );
-  await page.getByRole("button", { name: "Knowledge", exact: true }).click();
   await expect(
-    page.getByRole("button", {
+    personal.getByPlaceholder("Find a resource or action…"),
+  ).toHaveCount(0);
+  await personal
+    .getByRole("button", { name: "Knowledge", exact: true })
+    .click();
+  await expect(
+    personal.getByRole("button", {
       name: "Knowledge Sources Query granted",
       exact: true,
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Agents Read granted", exact: true }),
+    personal.getByRole("button", { name: "Agents Read granted", exact: true }),
   ).toHaveCount(0);
 });
 
@@ -231,21 +233,35 @@ for (const viewport of [
     await expectNoOverflow(view);
     await capture(page, `role-view-${viewport.width}`);
 
-    await page.goto("/account/permissions");
+    const personal = await openAccountPermissions(page);
     await expect(
-      page.getByPlaceholder("Find a resource or action…"),
+      personal.getByPlaceholder("Find a resource or action…"),
     ).toHaveCount(0);
-    const read = page.getByRole("button", {
+    await insideViewport(page, personal);
+    await expectNoOverflow(personal);
+    const read = personal.getByRole("button", {
       name: "Agents Read granted",
       exact: true,
     });
     await read.scrollIntoViewIfNeeded();
     await insideViewport(page, read);
     await expectNoOverflow(
-      page.getByRole("region", { name: "Agents resources" }),
+      personal.getByRole("region", { name: "Agents resources" }),
     );
     await capture(page, `account-permissions-${viewport.width}`);
   });
+}
+
+/** Personal permissions live behind View in the Account tab's Access section. */
+async function openAccountPermissions(page: Page) {
+  await page.goto("/account");
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Your permissions",
+    exact: true,
+  });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 async function insideViewport(page: Page, element: Locator) {

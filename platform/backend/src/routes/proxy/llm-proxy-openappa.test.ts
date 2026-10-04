@@ -6189,8 +6189,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           content: teammateMessage(
             "team-lead",
             JSON.stringify({
-            type: "plan_approval_request",
-            details: { reason: "private nested instructions" },
+              type: "plan_approval_request",
+              details: { reason: "private nested instructions" },
               request_id: "request-nested-1",
             }),
           ),

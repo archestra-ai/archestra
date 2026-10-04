@@ -48,7 +48,7 @@ const READY: Preflight = {
   incompatible: null,
 };
 
-test("spaces the setup banner like the rest of the agent page, and lets a ready agent dismiss it", async ({
+test("spaces the sign-in notice like the rest of the agent page, and clears it once the account is connected", async ({
   page,
   mswControl,
   request,
@@ -57,26 +57,23 @@ test("spaces the setup banner like the rest of the agent page, and lets a ready 
   await page.goto(`/agents/${AGENT.id}?section=general`);
 
   // A missing Claude account is the compact sign-in notice, not a checklist.
-  await expect(
-    page.getByRole("alert").filter({ hasText: "Sign in to use this agent." }),
-  ).toBeVisible();
-  await connectClaudeAccount(page, mswControl);
-
-  const banner = page.getByRole("alert").filter({ hasText: "Ready to run." });
+  const notice = page
+    .getByRole("alert")
+    .filter({ hasText: "Sign in to use this agent." });
   const form = page.locator("form").first();
-  await expect(banner).toBeVisible();
+  await expect(notice).toBeVisible();
   await expect(form.getByLabel(/^Name/)).toBeVisible();
 
   // Compare against a gap the form already keeps, not a number from the CSS.
   const standardGap = await verticalGap(
     form.getByLabel(/^Name/),
-    form.locator("label").filter({ hasText: /^Authentication$/ }),
+    form.locator("label").filter({ hasText: /^Description$/ }),
   );
   expect(standardGap).toBeGreaterThan(0);
-  expect(await verticalGap(banner, form)).toBeCloseTo(standardGap, 0);
+  expect(await verticalGap(notice, form)).toBeCloseTo(standardGap, 0);
 
-  await page.getByRole("button", { name: "Dismiss" }).click();
-  await expect(banner).toHaveCount(0);
+  await connectClaudeAccount(page, mswControl);
+  await expect(notice).toHaveCount(0);
 });
 
 async function mockAgentPage({
@@ -109,6 +106,11 @@ async function mockAgentPage({
     url: `/api/agents/${AGENT.id}/runtime/claude-code/models`,
     body: { models: [] },
   });
+  await mswControl.use({
+    method: "get",
+    url: `/api/agents/${AGENT.id}/runs`,
+    body: [],
+  });
   await setAccountState({
     mswControl,
     account: { state: "disconnected" },
@@ -137,22 +139,21 @@ async function setAccountState({
   });
 }
 
-/** Signing in from the banner's own action is how it reaches "Ready to run.". */
+/**
+ * Opens sign-in from the notice's own action. Once the account connects the
+ * agent is ready, so the notice — and the dialog it opened — go away.
+ */
 async function connectClaudeAccount(page: Page, mswControl: MswControl) {
   await page
     .getByRole("alert")
     .getByRole("button", { name: "Sign in" })
     .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
   await setAccountState({
     mswControl,
     account: { state: "connected" },
     preflight: READY,
   });
-  // The dialog polls while it is open, so let the banner settle before closing.
-  await expect(
-    page.getByRole("alert").filter({ hasText: "Ready to run." }),
-  ).toBeAttached();
-  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 

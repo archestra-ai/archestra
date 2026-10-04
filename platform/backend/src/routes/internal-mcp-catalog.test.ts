@@ -27,9 +27,15 @@ import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 describe("internal MCP catalog routes", () => {
   let app: FastifyInstance;
   let organizationId: string;
+  const kubernetesConfig = { ...config.orchestrator.kubernetes };
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
+    // These route tests run without a Kubernetes process. Startup adoption is
+    // covered by the runtime manager tests; a developer's local kubeconfig must
+    // not make policy alias renames depend on a live cluster.
+    config.orchestrator.kubernetes.kubeconfig = undefined;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
     vi.spyOn(betterAuth.api, "getSession").mockImplementation(
       async () => ({ user: { id: user.id } }) as never,
     );
@@ -72,6 +78,7 @@ describe("internal MCP catalog routes", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    Object.assign(config.orchestrator.kubernetes, kubernetesConfig);
     await app.close();
   });
 
@@ -172,7 +179,7 @@ describe("internal MCP catalog routes", () => {
         url: `/api/internal_mcp_catalog/${catalog.id}`,
         payload: { name: "Cloud staging" },
       });
-      expect(renamed.statusCode).toBe(200);
+      expect(renamed.statusCode, renamed.body).toBe(200);
 
       const latest = await guardrailsPolicyService.get(organizationId);
       const declarations = await import("@/openappa/declarations").then(
@@ -228,7 +235,7 @@ describe("internal MCP catalog routes", () => {
         url: `/api/internal_mcp_catalog/${catalog.id}`,
         payload: { name: "Cloud staging" },
       });
-      expect(renamed.statusCode).toBe(200);
+      expect(renamed.statusCode, renamed.body).toBe(200);
 
       const latest = await guardrailsPolicyService.get(organizationId);
       expect(latest.content).toContain('cloudflare = ["cloud_prod"]');

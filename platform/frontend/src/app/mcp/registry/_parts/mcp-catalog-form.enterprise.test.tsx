@@ -296,6 +296,7 @@ describe("McpCatalogForm enterprise gating", () => {
     await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
     expect(screen.getByText("Environment")).toBeInTheDocument();
     expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("button", { name: /^Environment/ }));
     expect(
       screen.getByText("Only the default environment is available."),
     ).toBeInTheDocument();
@@ -349,6 +350,9 @@ describe("McpCatalogForm enterprise gating", () => {
       />,
     );
 
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Image pull secrets/ }),
+    );
     const imagePullSecretSelect = container.querySelector(
       '[data-slot="popover-trigger"][role="combobox"]',
     );

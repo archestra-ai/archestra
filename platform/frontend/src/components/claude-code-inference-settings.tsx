@@ -87,6 +87,8 @@ export function ClaudeCodeInferenceSettings({
         <div className="pt-2">
           <ClaudeCodeAccount
             agentId={agentId}
+            variant="compact"
+            showDisconnectedNotice={false}
             model={model}
             onModelChange={onModelChange}
           />

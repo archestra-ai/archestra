@@ -3226,15 +3226,15 @@ export function AgentForm({
                     </IdentityFields>
                   )}
 
-                  {showsModelControl &&
-                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
-                    modelBlock}
-
                   {/* Description (hidden for built-in agents) */}
                   {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
                     <div className="space-y-2">
                       <Label htmlFor="agentDescription">Description</Label>
+                      <FieldDescription id="agent-description-hint">
+                        An internal description of what this agent does.
+                      </FieldDescription>
                       <Textarea
+                        aria-describedby="agent-description-hint"
                         id="agentDescription"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
@@ -3243,6 +3243,10 @@ export function AgentForm({
                       />
                     </div>
                   )}
+
+                  {showsModelControl &&
+                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
+                    modelBlock}
 
                   {/* Instructions: what the agent is told to do. Saved with the
                       rest of this panel, so one Save covers the whole tab. */}

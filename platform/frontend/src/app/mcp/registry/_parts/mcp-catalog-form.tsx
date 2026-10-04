@@ -29,6 +29,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { ConfigurationRow } from "@/components/configuration-row";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import {
   type EnterpriseManagedConfigInput,
@@ -62,7 +63,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SecretInput } from "@/components/ui/secret-input";
 import {
@@ -1020,27 +1020,25 @@ export function McpCatalogForm({
               {mode === "create" && (
                 <div className="space-y-2">
                   <Label id="server-type-label">Server Type</Label>
-                  <RadioGroup
-                    aria-labelledby="server-type-label"
+                  <Select
                     value={currentServerType}
                     onValueChange={(value) =>
                       form.setValue("serverType", value as "local" | "remote")
                     }
-                    className="flex flex-wrap gap-6"
                   >
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem id="server-type-remote" value="remote" />
-                      <Label htmlFor="server-type-remote">Remote</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        id="server-type-local"
-                        value="local"
-                        disabled={!isLocalMcpEnabled}
-                      />
-                      <Label htmlFor="server-type-local">Self-hosted</Label>
-                    </div>
-                  </RadioGroup>
+                    <SelectTrigger
+                      aria-labelledby="server-type-label"
+                      className="w-48"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="remote">Remote</SelectItem>
+                      <SelectItem value="local" disabled={!isLocalMcpEnabled}>
+                        Self-hosted
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                   <p className="text-sm text-muted-foreground">
                     {currentServerType === "remote"
                       ? "Connect to a server running externally."
@@ -1058,15 +1056,6 @@ export function McpCatalogForm({
             {currentServerType === "local" && <Separator />}
 
             <div className="space-y-4">
-              {currentServerType === "local" ? (
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-base">Deployment</h3>
-                  <p className="text-sm text-muted-foreground">
-                    How {appName} runs this server in Kubernetes.
-                  </p>
-                </div>
-              ) : null}
-
               {currentServerType === "remote" && (
                 <FormField
                   control={form.control}
@@ -1092,371 +1081,382 @@ export function McpCatalogForm({
               )}
 
               {currentServerType === "local" && (
-                <>
-                  <ContainerDeploymentFields
-                    ids={{
-                      image: "mcp-deployment-image",
-                      command: "mcp-deployment-command",
-                      arguments: "mcp-deployment-arguments",
-                    }}
-                    value={{
-                      image: form.watch("localConfig.dockerImage") ?? "",
-                      command: form.watch("localConfig.command") ?? "",
-                      arguments: form.watch("localConfig.arguments") ?? "",
-                    }}
-                    onChange={(next) => {
-                      const current = form.getValues("localConfig");
-                      if (next.image !== current?.dockerImage) {
-                        form.setValue("localConfig.dockerImage", next.image, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        });
-                      }
-                      if (next.command !== current?.command) {
-                        form.setValue("localConfig.command", next.command, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        });
-                      }
-                      if (next.arguments !== current?.arguments) {
-                        form.setValue("localConfig.arguments", next.arguments, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        });
-                      }
-                    }}
-                    image={{
-                      placeholder: mcpServerBaseImage,
-                      optional: true,
-                      labelAddon: <ReinstallHint show={isDockerImageDirty} />,
-                    }}
-                    command={{
-                      placeholder: "node",
-                      labelAddon: <ReinstallHint show={isCommandDirty} />,
-                      description: (
-                        <>
-                          The executable to run. Optional when a container image
-                          is set; its default <code>CMD</code> is used.
-                        </>
-                      ),
-                    }}
-                    arguments={{
-                      placeholder: "/path/to/server.js\n--verbose",
-                      labelAddon: <ReinstallHint show={isArgumentsDirty} />,
-                    }}
-                    errors={{
-                      image:
-                        form.formState.errors.localConfig?.dockerImage?.message,
-                      command:
-                        form.formState.errors.localConfig?.command?.message,
-                      arguments:
-                        form.formState.errors.localConfig?.arguments?.message,
-                    }}
-                    autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                  />
+                <Accordion type="multiple" className="rounded-lg border">
+                  <ConfigurationRow
+                    value="deployment"
+                    title="Deployment"
+                    summary={
+                      form.watch("localConfig.dockerImage") || "Default image"
+                    }
+                  >
+                    <ContainerDeploymentFields
+                      ids={{
+                        image: "mcp-deployment-image",
+                        command: "mcp-deployment-command",
+                        arguments: "mcp-deployment-arguments",
+                      }}
+                      value={{
+                        image: form.watch("localConfig.dockerImage") ?? "",
+                        command: form.watch("localConfig.command") ?? "",
+                        arguments: form.watch("localConfig.arguments") ?? "",
+                      }}
+                      onChange={(next) => {
+                        const current = form.getValues("localConfig");
+                        if (next.image !== current?.dockerImage) {
+                          form.setValue("localConfig.dockerImage", next.image, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                        }
+                        if (next.command !== current?.command) {
+                          form.setValue("localConfig.command", next.command, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                        }
+                        if (next.arguments !== current?.arguments) {
+                          form.setValue(
+                            "localConfig.arguments",
+                            next.arguments,
+                            {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            },
+                          );
+                        }
+                      }}
+                      image={{
+                        placeholder: mcpServerBaseImage,
+                        optional: true,
+                        labelAddon: <ReinstallHint show={isDockerImageDirty} />,
+                      }}
+                      command={{
+                        placeholder: "node",
+                        labelAddon: <ReinstallHint show={isCommandDirty} />,
+                        description: (
+                          <>
+                            The executable to run. Optional when a container
+                            image is set; its default <code>CMD</code> is used.
+                          </>
+                        ),
+                      }}
+                      arguments={{
+                        placeholder: "/path/to/server.js\n--verbose",
+                        labelAddon: <ReinstallHint show={isArgumentsDirty} />,
+                      }}
+                      errors={{
+                        image:
+                          form.formState.errors.localConfig?.dockerImage
+                            ?.message,
+                        command:
+                          form.formState.errors.localConfig?.command?.message,
+                        arguments:
+                          form.formState.errors.localConfig?.arguments?.message,
+                      }}
+                      autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                    />
+                  </ConfigurationRow>
+                  <ConfigurationRow
+                    value="transport"
+                    title="Transport"
+                    summary={
+                      currentTransportType === "stdio"
+                        ? "stdio"
+                        : "Streamable HTTP"
+                    }
+                  >
+                    <FormField
+                      control={form.control}
+                      name="localConfig.transportType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Transport Type
+                            <ReinstallHint show={isTransportTypeDirty} />
+                          </FormLabel>
+                          <FormControl>
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value || "streamable-http"}
+                            >
+                              <SelectTrigger className="w-56">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="streamable-http">
+                                  Streamable HTTP (default)
+                                </SelectItem>
+                                <SelectItem value="stdio">stdio</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={form.control}
-                    name="localConfig.transportType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Transport Type
-                          <ReinstallHint show={isTransportTypeDirty} />
-                        </FormLabel>
-                        <FormControl>
-                          <RadioGroup
-                            onValueChange={field.onChange}
-                            value={field.value || "streamable-http"}
-                            className="space-y-1"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="streamable-http"
-                                id="transport-http"
-                              />
-                              <FormLabel
-                                htmlFor="transport-http"
-                                className="font-normal cursor-pointer"
-                              >
-                                Streamable HTTP (default)
+                    {form.watch("localConfig.transportType") ===
+                      "streamable-http" && (
+                      <div className="grid gap-4 sm:grid-cols-2 rounded-lg border p-4">
+                        <FormField
+                          control={form.control}
+                          name="localConfig.httpPort"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                HTTP Port (optional)
+                                <ReinstallHint show={isHttpPortDirty} />
                               </FormLabel>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="stdio"
-                                id="transport-stdio"
-                              />
-                              <FormLabel
-                                htmlFor="transport-stdio"
-                                className="font-normal cursor-pointer"
-                              >
-                                stdio
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="8080"
+                                  className="font-mono"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="localConfig.httpPath"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                HTTP Path (optional)
+                                <ReinstallHint show={isHttpPathDirty} />
                               </FormLabel>
-                            </div>
-                          </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                              <FormControl>
+                                <Input
+                                  placeholder="/mcp"
+                                  className="font-mono"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                     )}
-                  />
+                  </ConfigurationRow>
+                  <ConfigurationRow
+                    value="environment-variables"
+                    title="Environment variables"
+                    summary={`${fields.length} variables, ${envFromFields.length} sources`}
+                  >
+                    <EnvironmentVariablesFormField
+                      fields={fields}
+                      append={append}
+                      remove={remove}
+                      fieldNamePrefix="localConfig.environment"
+                      form={form}
+                      validateValue={validateConfigValue}
+                      useExternalSecretsManager={showByosOption}
+                      secretKeysWithStoredValue={storedSecretKeys}
+                      disablePromptOnInstallation={isMultitenant}
+                      disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
+                      labelSuffix={<ReinstallHint show={isEnvDirty} />}
+                      envFrom={
+                        canUpdateAdvancedSettings
+                          ? {
+                              fields: envFromFields,
+                              append: appendEnvFrom,
+                              remove: removeEnvFrom,
+                              watch: form.watch,
+                              setValue: form.setValue,
+                              register: form.register,
+                              fieldNamePrefix: "localConfig.envFrom",
+                            }
+                          : undefined
+                      }
+                    />
+                  </ConfigurationRow>
+                  <ConfigurationRow
+                    value="image-pull-secrets"
+                    title="Image pull secrets"
+                    summary={`${imagePullSecretFields.length} configured`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-base">
+                          Image Pull Secrets
+                        </h3>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            appendImagePullSecret({
+                              source: "existing",
+                              name: "",
+                            })
+                          }
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add
+                        </Button>
+                      </div>
 
-                  {form.watch("localConfig.transportType") ===
-                    "streamable-http" && (
-                    <div className="grid gap-4 sm:grid-cols-2 rounded-lg border p-4">
-                      <FormField
-                        control={form.control}
-                        name="localConfig.httpPort"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              HTTP Port (optional)
-                              <ReinstallHint show={isHttpPortDirty} />
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                placeholder="8080"
-                                className="font-mono"
-                                {...field}
+                      {imagePullSecretFields.length === 0 ? (
+                        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                          No image pull secrets configured.
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Kubernetes secrets for pulling container images from
+                          private registries.{" "}
+                          <ExternalDocsLink
+                            href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+                            className="underline underline-offset-2 hover:text-primary/80"
+                            showIcon={false}
+                          >
+                            Learn more
+                          </ExternalDocsLink>
+                        </p>
+                      )}
+
+                      {imagePullSecretFields.map((field, index) => {
+                        const watchField = (key: string) =>
+                          form.watch(
+                            // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
+                            `localConfig.imagePullSecrets.${index}.${key}` as any,
+                          ) ?? "";
+                        const setField = (key: string, value: string) =>
+                          form.setValue(
+                            // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
+                            `localConfig.imagePullSecrets.${index}.${key}` as any,
+                            value,
+                          );
+                        const source = watchField("source");
+
+                        return (
+                          <div
+                            key={field.id}
+                            className="border rounded-lg p-3 space-y-3"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <Select
+                                value={source}
+                                onValueChange={(val) => {
+                                  if (val === "existing") {
+                                    updateImagePullSecret(index, {
+                                      source: "existing",
+                                      name: "",
+                                    });
+                                  } else {
+                                    updateImagePullSecret(index, {
+                                      source: "credentials",
+                                      server: "",
+                                      username: "",
+                                      email: "",
+                                    });
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="w-[200px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="existing">
+                                    Existing Secret
+                                  </SelectItem>
+                                  <SelectItem value="credentials">
+                                    Registry Credentials
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeImagePullSecret(index)}
+                                aria-label="Remove image pull secret"
+                              >
+                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                              </Button>
+                            </div>
+
+                            {source === "existing" ? (
+                              <SearchableSelect
+                                value={watchField("name")}
+                                onValueChange={(val) => setField("name", val)}
+                                items={imagePullSecretItems}
+                                placeholder="Select a secret..."
+                                searchPlaceholder="Search secrets..."
+                                allowCustom
+                                multiline
+                                className="w-full"
+                                contentClassName="w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))]"
+                                emptyMessage="No image pull secrets found."
                               />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="localConfig.httpPath"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              HTTP Path (optional)
-                              <ReinstallHint show={isHttpPathDirty} />
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="/mcp"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                            ) : (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Server</Label>
+                                  <Input
+                                    placeholder="e.g. quay.io"
+                                    aria-label="Server"
+                                    className="font-mono"
+                                    autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                                    value={watchField("server")}
+                                    onChange={(e) =>
+                                      setField("server", e.target.value)
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Username</Label>
+                                  <Input
+                                    placeholder="username"
+                                    aria-label="Username"
+                                    autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                                    value={watchField("username")}
+                                    onChange={(e) =>
+                                      setField("username", e.target.value)
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Password</Label>
+                                  <SecretInput
+                                    placeholder={
+                                      mode === "edit" && !watchField("password")
+                                        ? "Saved — leave blank to keep"
+                                        : "password"
+                                    }
+                                    value={watchField("password") ?? ""}
+                                    onChange={(e) =>
+                                      setField("password", e.target.value)
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">
+                                    Email (optional)
+                                  </Label>
+                                  <Input
+                                    placeholder="email@example.com"
+                                    aria-label="Email"
+                                    autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                                    value={watchField("email")}
+                                    onChange={(e) =>
+                                      setField("email", e.target.value)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
-                </>
+                  </ConfigurationRow>
+                </Accordion>
               )}
             </div>
-
-            {currentServerType === "local" && (
-              <div className="space-y-4">
-                <EnvironmentVariablesFormField
-                  fields={fields}
-                  append={append}
-                  remove={remove}
-                  fieldNamePrefix="localConfig.environment"
-                  form={form}
-                  validateValue={validateConfigValue}
-                  useExternalSecretsManager={showByosOption}
-                  secretKeysWithStoredValue={storedSecretKeys}
-                  disablePromptOnInstallation={isMultitenant}
-                  disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
-                  labelSuffix={<ReinstallHint show={isEnvDirty} />}
-                  envFrom={
-                    canUpdateAdvancedSettings
-                      ? {
-                          fields: envFromFields,
-                          append: appendEnvFrom,
-                          remove: removeEnvFrom,
-                          watch: form.watch,
-                          setValue: form.setValue,
-                          register: form.register,
-                          fieldNamePrefix: "localConfig.envFrom",
-                        }
-                      : undefined
-                  }
-                />
-              </div>
-            )}
-
-            {currentServerType === "local" && (
-              <div className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-base">
-                      Image Pull Secrets
-                    </h3>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        appendImagePullSecret({ source: "existing", name: "" })
-                      }
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add
-                    </Button>
-                  </div>
-
-                  {imagePullSecretFields.length === 0 ? (
-                    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                      No image pull secrets configured.
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Kubernetes secrets for pulling container images from
-                      private registries.{" "}
-                      <ExternalDocsLink
-                        href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
-                        className="underline underline-offset-2 hover:text-primary/80"
-                        showIcon={false}
-                      >
-                        Learn more
-                      </ExternalDocsLink>
-                    </p>
-                  )}
-
-                  {imagePullSecretFields.map((field, index) => {
-                    const watchField = (key: string) =>
-                      form.watch(
-                        // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
-                        `localConfig.imagePullSecrets.${index}.${key}` as any,
-                      ) ?? "";
-                    const setField = (key: string, value: string) =>
-                      form.setValue(
-                        // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
-                        `localConfig.imagePullSecrets.${index}.${key}` as any,
-                        value,
-                      );
-                    const source = watchField("source");
-
-                    return (
-                      <div
-                        key={field.id}
-                        className="border rounded-lg p-3 space-y-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <Select
-                            value={source}
-                            onValueChange={(val) => {
-                              if (val === "existing") {
-                                updateImagePullSecret(index, {
-                                  source: "existing",
-                                  name: "",
-                                });
-                              } else {
-                                updateImagePullSecret(index, {
-                                  source: "credentials",
-                                  server: "",
-                                  username: "",
-                                  email: "",
-                                });
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="w-[200px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="existing">
-                                Existing Secret
-                              </SelectItem>
-                              <SelectItem value="credentials">
-                                Registry Credentials
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeImagePullSecret(index)}
-                            aria-label="Remove image pull secret"
-                          >
-                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                          </Button>
-                        </div>
-
-                        {source === "existing" ? (
-                          <SearchableSelect
-                            value={watchField("name")}
-                            onValueChange={(val) => setField("name", val)}
-                            items={imagePullSecretItems}
-                            placeholder="Select a secret..."
-                            searchPlaceholder="Search secrets..."
-                            allowCustom
-                            multiline
-                            className="w-full"
-                            contentClassName="w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))]"
-                            emptyMessage="No image pull secrets found."
-                          />
-                        ) : (
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Server</Label>
-                              <Input
-                                placeholder="e.g. quay.io"
-                                aria-label="Server"
-                                className="font-mono"
-                                autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                                value={watchField("server")}
-                                onChange={(e) =>
-                                  setField("server", e.target.value)
-                                }
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Username</Label>
-                              <Input
-                                placeholder="username"
-                                aria-label="Username"
-                                autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                                value={watchField("username")}
-                                onChange={(e) =>
-                                  setField("username", e.target.value)
-                                }
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Password</Label>
-                              <SecretInput
-                                placeholder={
-                                  mode === "edit" && !watchField("password")
-                                    ? "Saved — leave blank to keep"
-                                    : "password"
-                                }
-                                value={watchField("password") ?? ""}
-                                onChange={(e) =>
-                                  setField("password", e.target.value)
-                                }
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">
-                                Email (optional)
-                              </Label>
-                              <Input
-                                placeholder="email@example.com"
-                                aria-label="Email"
-                                autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                                value={watchField("email")}
-                                onChange={(e) =>
-                                  setField("email", e.target.value)
-                                }
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {(currentServerType === "remote" ||
               (currentServerType === "local" && isMultitenant)) && (
@@ -2211,71 +2211,87 @@ export function McpCatalogForm({
             {(currentServerType === "remote" ||
               (currentServerType === "local" &&
                 currentTransportType === "streamable-http")) && (
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <h3 className="font-semibold text-base">
-                      Headers
-                      <ReinstallHint show={isHeadersDirty} />
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Sent on every request — for tenant IDs, regions, or other
-                      upstream metadata.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setHeaderDialog({ mode: "add" })}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Header
-                  </Button>
-                </div>
+              <Accordion type="multiple" className="rounded-lg border">
+                <ConfigurationRow
+                  value="headers"
+                  title="Headers"
+                  summary={`${additionalHeaderFields.length} configured`}
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <h3 className="font-semibold text-base">
+                          Headers
+                          <ReinstallHint show={isHeadersDirty} />
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Sent on every request — for tenant IDs, regions, or
+                          other upstream metadata.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setHeaderDialog({ mode: "add" })}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Header
+                      </Button>
+                    </div>
 
-                {additionalHeaderFields.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    No headers configured.
+                    {additionalHeaderFields.length === 0 ? (
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                        No headers configured.
+                      </div>
+                    ) : (
+                      // TODO(e2e): tests under platform/e2e-tests previously drove
+                      // the inline header inputs; after this refactor those
+                      // interactions live in HeaderDialog (click "Add Header" /
+                      // click a row first, then operate inside the modal).
+                      <HeadersReadOnlyTable
+                        form={form}
+                        fields={additionalHeaderFields}
+                        fieldNamePrefix="additionalHeaders"
+                        onEdit={(index) =>
+                          setHeaderDialog({ mode: "edit", index })
+                        }
+                        onDelete={(index) => removeAdditionalHeader(index)}
+                      />
+                    )}
+                    <HeaderDialog
+                      open={headerDialog !== null}
+                      mode={headerDialog?.mode === "edit" ? "edit" : "add"}
+                      initial={
+                        headerDialog?.mode === "edit"
+                          ? readHeaderRowAsDraft(form, headerDialog.index)
+                          : null
+                      }
+                      existingHeaderNames={readOtherHeaderNames(
+                        form,
+                        additionalHeaderFields.length,
+                        headerDialog?.mode === "edit"
+                          ? headerDialog.index
+                          : null,
+                      )}
+                      validateValue={validateConfigValue}
+                      onClose={() => setHeaderDialog(null)}
+                      onConfirm={(draft) => {
+                        if (headerDialog?.mode === "add") {
+                          appendAdditionalHeader(headerDraftToRow(draft));
+                        } else if (headerDialog?.mode === "edit") {
+                          applyHeaderDraftToRow(
+                            form,
+                            headerDialog.index,
+                            draft,
+                          );
+                        }
+                        setHeaderDialog(null);
+                      }}
+                    />
                   </div>
-                ) : (
-                  // TODO(e2e): tests under platform/e2e-tests previously drove
-                  // the inline header inputs; after this refactor those
-                  // interactions live in HeaderDialog (click "Add Header" /
-                  // click a row first, then operate inside the modal).
-                  <HeadersReadOnlyTable
-                    form={form}
-                    fields={additionalHeaderFields}
-                    fieldNamePrefix="additionalHeaders"
-                    onEdit={(index) => setHeaderDialog({ mode: "edit", index })}
-                    onDelete={(index) => removeAdditionalHeader(index)}
-                  />
-                )}
-                <HeaderDialog
-                  open={headerDialog !== null}
-                  mode={headerDialog?.mode === "edit" ? "edit" : "add"}
-                  initial={
-                    headerDialog?.mode === "edit"
-                      ? readHeaderRowAsDraft(form, headerDialog.index)
-                      : null
-                  }
-                  existingHeaderNames={readOtherHeaderNames(
-                    form,
-                    additionalHeaderFields.length,
-                    headerDialog?.mode === "edit" ? headerDialog.index : null,
-                  )}
-                  validateValue={validateConfigValue}
-                  onClose={() => setHeaderDialog(null)}
-                  onConfirm={(draft) => {
-                    if (headerDialog?.mode === "add") {
-                      appendAdditionalHeader(headerDraftToRow(draft));
-                    } else if (headerDialog?.mode === "edit") {
-                      applyHeaderDraftToRow(form, headerDialog.index, draft);
-                    }
-                    setHeaderDialog(null);
-                  }}
-                />
-              </div>
+                </ConfigurationRow>
+              </Accordion>
             )}
 
             <Accordion
@@ -2286,84 +2302,117 @@ export function McpCatalogForm({
             >
               <AccordionItem value="advanced">
                 <AccordionTrigger>Advanced</AccordionTrigger>
-                <AccordionContent className="space-y-6">
-                  {mode === "create" && (
-                    <FormField
-                      control={form.control}
-                      name="initialGrants"
-                      render={({ field }) => (
-                        <InitialResourcePermissions
-                          resource="mcpRegistry"
-                          grants={field.value ?? []}
-                          onChange={field.onChange}
-                        />
-                      )}
-                    />
-                  )}
-                  <FormField
-                    control={form.control}
-                    name="environmentId"
-                    render={({ field }) => (
-                      <EnvironmentSelector
-                        value={field.value ?? null}
-                        onChange={field.onChange}
-                        resource="mcpRegistry"
-                      />
-                    )}
-                  />
-                  {currentServerType === "local" && (
-                    <div className="space-y-2">
-                      <Label id="tenancy-label">Tenancy</Label>
-                      <RadioGroup
-                        aria-labelledby="tenancy-label"
-                        value={isMultitenant ? "multi" : "single"}
-                        onValueChange={(value) =>
-                          handleMultitenantChange(value === "multi")
-                        }
-                        disabled={isTenancyLocked}
-                        className="flex flex-wrap gap-6"
+                <AccordionContent>
+                  <Accordion type="multiple" className="rounded-lg border">
+                    {mode === "create" && (
+                      <ConfigurationRow
+                        value="permissions"
+                        title="Permissions"
+                        summary="Full access for you and organization admins"
                       >
-                        <div className="flex items-center gap-2">
-                          <RadioGroupItem id="tenancy-single" value="single" />
-                          <Label htmlFor="tenancy-single">Single-tenant</Label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <RadioGroupItem id="tenancy-multi" value="multi" />
-                          <Label htmlFor="tenancy-multi">Multi-tenant</Label>
-                        </div>
-                      </RadioGroup>
-                      <p className="text-sm text-muted-foreground">
-                        {isMultitenant
-                          ? "Shared deployment; the gateway adds caller identity."
-                          : "Dedicated deployment per installation."}
-                      </p>
-                      {isTenancyLocked && (
-                        <p className="text-sm text-muted-foreground">
-                          Tenancy cannot be changed after the server is created.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <div className={embedded ? "mb-4" : ""}>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-base">Labels</h3>
-                        {labels.length > 0 && (
-                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                            {labels.length}
-                          </span>
+                        <FormField
+                          control={form.control}
+                          name="initialGrants"
+                          render={({ field }) => (
+                            <InitialResourcePermissions
+                              resource="mcpRegistry"
+                              grants={field.value ?? []}
+                              onChange={field.onChange}
+                            />
+                          )}
+                        />
+                      </ConfigurationRow>
+                    )}
+                    <ConfigurationRow
+                      value="environment"
+                      title="Environment"
+                      summary={boundEnvironmentName}
+                    >
+                      <FormField
+                        control={form.control}
+                        name="environmentId"
+                        render={({ field }) => (
+                          <EnvironmentSelector
+                            value={field.value ?? null}
+                            onChange={field.onChange}
+                            resource="mcpRegistry"
+                          />
                         )}
-                      </div>
-                    </div>
-                    <div className="pt-4">
-                      <ProfileLabels
-                        ref={labelsRef}
-                        labels={labels}
-                        onLabelsChange={setLabels}
-                        showLabel={false}
                       />
-                    </div>
-                  </div>{" "}
+                    </ConfigurationRow>
+                    {currentServerType === "local" && (
+                      <ConfigurationRow
+                        value="tenancy"
+                        title="Tenancy"
+                        summary={
+                          isMultitenant ? "Multi-tenant" : "Single-tenant"
+                        }
+                      >
+                        <div className="space-y-2">
+                          <Label id="tenancy-label">Tenancy</Label>
+                          <Select
+                            value={isMultitenant ? "multi" : "single"}
+                            onValueChange={(value) =>
+                              handleMultitenantChange(value === "multi")
+                            }
+                            disabled={isTenancyLocked}
+                          >
+                            <SelectTrigger
+                              aria-labelledby="tenancy-label"
+                              className="w-48"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="single">
+                                Single-tenant
+                              </SelectItem>
+                              <SelectItem value="multi">
+                                Multi-tenant
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-sm text-muted-foreground">
+                            {isMultitenant
+                              ? "Shared deployment; the gateway adds caller identity."
+                              : "Dedicated deployment per installation."}
+                          </p>
+                          {isTenancyLocked && (
+                            <p className="text-sm text-muted-foreground">
+                              Tenancy cannot be changed after the server is
+                              created.
+                            </p>
+                          )}
+                        </div>
+                      </ConfigurationRow>
+                    )}
+                    <ConfigurationRow
+                      value="labels"
+                      title="Labels"
+                      summary={`${labels.length} configured`}
+                    >
+                      <div className={embedded ? "mb-4" : ""}>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-base">Labels</h3>
+                            {labels.length > 0 && (
+                              <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                                {labels.length}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="pt-4">
+                          <ProfileLabels
+                            ref={labelsRef}
+                            labels={labels}
+                            onLabelsChange={setLabels}
+                            showLabel={false}
+                          />
+                        </div>
+                      </div>
+                    </ConfigurationRow>
+                  </Accordion>
                 </AccordionContent>
               </AccordionItem>
             </Accordion>

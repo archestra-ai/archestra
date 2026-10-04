@@ -48,8 +48,9 @@ export function McpServerUsageTab({
           No agents or MCP gateways use this server yet
         </p>
         <p className="max-w-md text-sm text-muted-foreground">
-          Agents and MCP gateways reach a server by having its tools assigned.
-          They can also reach it in auto mode with access to all tools.
+          Agents and MCP gateways reach a server by having its tools assigned,
+          or through auto mode, which gives them every tool without assigning
+          each one.
         </p>
       </div>
     );

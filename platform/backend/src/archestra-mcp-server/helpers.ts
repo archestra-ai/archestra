@@ -75,6 +75,11 @@ type ArchestraToolDefinition<
 
 export type ArchestraRuntimeToolEntry = {
   schema: ZodType;
+  /**
+   * The schema tools/list advertises when it differs from `schema`. Validation
+   * errors describe this one, so they never show members only the proxy writes.
+   */
+  publicSchema?: ZodType | undefined;
   outputSchema?: ZodType | undefined;
   invoke: (params: {
     args: unknown;
@@ -343,6 +348,7 @@ export function defineArchestraTools<
     }
     toolEntries[fullName] = {
       schema: definition.schema,
+      publicSchema: definition.publicSchema,
       outputSchema: definition.outputSchema,
       invoke:
         (definition as Partial<ArchestraToolDefinition>).invoke ??

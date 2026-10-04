@@ -34,7 +34,11 @@ import {
 } from "./notice";
 import type { OfferJws } from "./offer-claims";
 import { appendSessionReceipt, stripSessionReceipts } from "./session-token";
-import { parseTrajectoryStamp, type TrajectoryStamp } from "./trajectory-stamp";
+import {
+  parseTrajectoryStamp,
+  restoreTrajectoryStampText,
+  type TrajectoryStamp,
+} from "./trajectory-stamp";
 
 export type AppaWireFamily =
   | "anthropic:messages"
@@ -67,6 +71,26 @@ export function appaWireFamily(
   return APPA_WIRE_FAMILY_BY_INTERACTION_TYPE[
     interactionType as SupportedProviderDiscriminator
   ];
+}
+
+/**
+ * A wire whose tool calls, call ids and text this proxy reads structurally:
+ * the three APPA families, and the shapes of the other chat wires it
+ * forwards. Notices restore on {@link AppaWireFamily} only.
+ */
+export type ProviderWire =
+  | AppaWireFamily
+  | "bedrock:converse"
+  | "gemini:generateContent";
+
+/** The wire an interaction type's request body is shaped as. */
+export function providerWire(
+  interactionType: string,
+): ProviderWire | undefined {
+  return (
+    appaWireFamily(interactionType) ??
+    OTHER_STAMP_WIRES[interactionType as SupportedProviderDiscriminator]
+  );
 }
 
 /**
@@ -188,7 +212,8 @@ export function stripProxyArguments(params: {
   /** Resolved, with the namespace the call names, to a tool the proxy stamps. */
   isStampedTool: (name: string, namespace?: string) => boolean;
   names: ReadonlySet<string>;
-}): void {
+}): number {
+  let stripped = 0;
   const calls = toolCallSites({
     family: params.family,
     body: params.body,
@@ -210,7 +235,9 @@ export function stripProxyArguments(params: {
       kind: "function",
       arguments: Object.fromEntries(kept),
     });
+    stripped++;
   }
+  return stripped;
 }
 
 /**
@@ -222,20 +249,139 @@ export function stripProxyArguments(params: {
 export function stripDeclaredParameters(params: {
   tool: unknown;
   names: ReadonlySet<string>;
-}): void {
+}): boolean {
   const schema = declaredInputSchema(params.tool);
   const properties = asRecord(schema?.properties);
-  if (!schema || !properties) return;
+  if (!schema || !properties) return false;
   const kept = Object.entries(properties).filter(
     ([name]) => !params.names.has(name),
   );
-  if (kept.length === Object.keys(properties).length) return;
+  if (kept.length === Object.keys(properties).length) return false;
   schema.properties = Object.fromEntries(kept);
   // Strict function schemas list every property as required.
   if (Array.isArray(schema.required))
     schema.required = schema.required.filter(
       (name) => typeof name !== "string" || !params.names.has(name),
     );
+  return true;
+}
+
+/** A tool call in provider-bound history, as {@link providerToolCalls} reads it. */
+export type ProviderToolCall = {
+  /** The call's id; Gemini and native Ollama may send a call without one. */
+  id?: string;
+  name: string;
+  /** The namespace the call names (Codex Responses). */
+  namespace?: string;
+  /** A custom call's input is free-form text the model wrote, never ours. */
+  kind: "function" | "custom";
+  /** The arguments as an object, when they are one or JSON text of one. */
+  readArguments: () => Record<string, unknown> | undefined;
+  /** Writes arguments back as the wire recorded them: text stays text, an object an object. */
+  writeArguments: (next: Record<string, unknown> | string) => void;
+};
+
+/**
+ * Every tool call in a request's history, on any wire this proxy forwards.
+ * Reads in place; nothing changes until a caller writes arguments back.
+ */
+export function providerToolCalls(params: {
+  wire: ProviderWire;
+  body: unknown;
+}): ProviderToolCall[] {
+  const calls: ProviderToolCall[] = [];
+  const add = (
+    holder: Record<string, unknown>,
+    key: string,
+    call: Pick<ProviderToolCall, "id" | "name" | "namespace" | "kind">,
+  ) => {
+    calls.push({
+      ...call,
+      readArguments: () => {
+        const recorded = holder[key];
+        return asRecord(
+          typeof recorded === "string" ? parseJson(recorded) : recorded,
+        );
+      },
+      writeArguments: (next) => {
+        const recorded = holder[key];
+        holder[key] =
+          typeof recorded === "string"
+            ? typeof next === "string"
+              ? next
+              : JSON.stringify(next)
+            : typeof next === "string"
+              ? (asRecord(parseJson(next)) ?? recorded)
+              : next;
+      },
+    });
+  };
+  const idOf = (value: unknown) =>
+    typeof value === "string" ? value : undefined;
+  if (params.wire === "anthropic:messages") {
+    for (const block of anthropicBlocks(params.body)) {
+      if (block.type !== "tool_use" || typeof block.name !== "string") continue;
+      add(block, "input", {
+        id: idOf(block.id),
+        name: block.name,
+        kind: "function",
+      });
+    }
+  } else if (params.wire === "openai:responses") {
+    for (const item of responsesItems(params.body)) {
+      if (item.type !== "function_call" && item.type !== "custom_tool_call")
+        continue;
+      if (typeof item.name !== "string") continue;
+      const namespace =
+        typeof item.namespace === "string" && item.namespace !== ""
+          ? item.namespace
+          : undefined;
+      add(item, item.type === "function_call" ? "arguments" : "input", {
+        id: idOf(item.call_id),
+        name: item.name,
+        ...(namespace ? { namespace } : {}),
+        kind: item.type === "function_call" ? "function" : "custom",
+      });
+    }
+  } else if (params.wire === "openai:chatCompletions") {
+    for (const message of chatMessages(params.body)) {
+      for (const entry of asArray(message.tool_calls) ?? []) {
+        const call = asRecord(entry);
+        const fn = asRecord(call?.function);
+        if (!call || !fn || typeof fn.name !== "string") continue;
+        add(fn, "arguments", {
+          id: idOf(call.id),
+          name: fn.name,
+          kind: "function",
+        });
+      }
+    }
+  } else if (params.wire === "bedrock:converse") {
+    for (const message of chatMessages(params.body)) {
+      for (const block of asArray(message.content) ?? []) {
+        const toolUse = asRecord(asRecord(block)?.toolUse);
+        if (!toolUse || typeof toolUse.name !== "string") continue;
+        add(toolUse, "input", {
+          id: idOf(toolUse.toolUseId),
+          name: toolUse.name,
+          kind: "function",
+        });
+      }
+    }
+  } else {
+    for (const content of asArray(asRecord(params.body)?.contents) ?? []) {
+      for (const part of asArray(asRecord(content)?.parts) ?? []) {
+        const functionCall = asRecord(asRecord(part)?.functionCall);
+        if (!functionCall || typeof functionCall.name !== "string") continue;
+        add(functionCall, "args", {
+          id: idOf(functionCall.id),
+          name: functionCall.name,
+          kind: "function",
+        });
+      }
+    }
+  }
+  return calls;
 }
 
 /**
@@ -251,48 +397,11 @@ export function restoreTrajectoryStamps(params: {
   body: unknown;
 }): TrajectoryStamp[] {
   const found: TrajectoryStamp[] = [];
-  const restore = (
-    record: Record<string, unknown> | undefined,
-    key: string,
-  ) => {
-    const value = record?.[key];
-    const stamp =
-      typeof value === "string" ? parseTrajectoryStamp(value) : undefined;
-    if (!record || !stamp) return;
-    record[key] = stamp.callId;
+  for (const site of callIdSites(params)) {
+    const stamp = parseTrajectoryStamp(site.get());
+    if (!stamp) continue;
+    site.set(stamp.callId);
     found.push(stamp);
-  };
-  const wire =
-    appaWireFamily(params.interactionType) ??
-    OTHER_STAMP_WIRES[params.interactionType as SupportedProviderDiscriminator];
-  if (wire === "anthropic:messages") {
-    for (const block of anthropicBlocks(params.body)) {
-      if (block.type === "tool_use") restore(block, "id");
-      else if (block.type === "tool_result") restore(block, "tool_use_id");
-    }
-  } else if (wire === "openai:responses") {
-    for (const item of responsesItems(params.body)) restore(item, "call_id");
-  } else if (wire === "openai:chatCompletions") {
-    for (const message of chatMessages(params.body)) {
-      restore(message, "tool_call_id");
-      for (const call of asArray(message.tool_calls) ?? []) {
-        restore(asRecord(call), "id");
-      }
-    }
-  } else if (wire === "bedrock:converse") {
-    for (const message of chatMessages(params.body)) {
-      for (const block of asArray(message.content) ?? []) {
-        restore(asRecord(asRecord(block)?.toolUse), "toolUseId");
-        restore(asRecord(asRecord(block)?.toolResult), "toolUseId");
-      }
-    }
-  } else if (wire === "gemini:generateContent") {
-    for (const content of asArray(asRecord(params.body)?.contents) ?? []) {
-      for (const part of asArray(asRecord(content)?.parts) ?? []) {
-        restore(asRecord(asRecord(part)?.functionCall), "id");
-        restore(asRecord(asRecord(part)?.functionResponse), "id");
-      }
-    }
   }
   return found;
 }
@@ -378,6 +487,35 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
     }
   }
   return receipts;
+}
+
+/**
+ * Puts the provider's call id back wherever a client copied a trajectory stamp
+ * into text it carries between turns: message text and tool-result text, never
+ * thinking, reasoning or tool arguments. Returns how many texts changed.
+ */
+export function restoreTrajectoryStampsInText(params: {
+  wire: ProviderWire;
+  body: unknown;
+}): number {
+  // Stamps are minted on the APPA families only (trajectoryStamper).
+  if (
+    params.wire === "bedrock:converse" ||
+    params.wire === "gemini:generateContent"
+  )
+    return 0;
+  let restored = 0;
+  for (const site of [
+    ...historyTextSites(params.wire, params.body),
+    ...toolResultTextSites(params.wire, params.body),
+  ]) {
+    const text = site.get();
+    const next = restoreTrajectoryStampText(text);
+    if (next === text) continue;
+    site.set(next);
+    restored++;
+  }
+  return restored;
 }
 
 /** Prepends one child-trajectory display and proof carrier. */
@@ -732,10 +870,7 @@ const APPA_WIRE_FAMILY_BY_INTERACTION_TYPE: Partial<
  * their own.
  */
 const OTHER_STAMP_WIRES: Partial<
-  Record<
-    SupportedProviderDiscriminator,
-    AppaWireFamily | "bedrock:converse" | "gemini:generateContent"
-  >
+  Record<SupportedProviderDiscriminator, ProviderWire>
 > = {
   "azure:responses": "openai:responses",
   "bedrock:converse": "bedrock:converse",
@@ -1270,6 +1405,60 @@ export function chatMessages(body: unknown): Record<string, unknown>[] {
   return messages;
 }
 
+type CallIdSite = { get: () => string; set: (id: string) => void };
+
+/**
+ * Where each chat wire carries a tool call's id, on the call and on its
+ * result: the three APPA families and the other wires a conversation can move
+ * to. String ids only, in history order.
+ */
+function callIdSites(params: {
+  interactionType: string;
+  body: unknown;
+}): CallIdSite[] {
+  const sites: CallIdSite[] = [];
+  const add = (record: Record<string, unknown> | undefined, key: string) => {
+    if (!record || typeof record[key] !== "string") return;
+    sites.push({
+      get: () => record[key] as string,
+      set: (id) => {
+        record[key] = id;
+      },
+    });
+  };
+  const wire = providerWire(params.interactionType);
+  if (wire === "anthropic:messages") {
+    for (const block of anthropicBlocks(params.body)) {
+      if (block.type === "tool_use") add(block, "id");
+      else if (block.type === "tool_result") add(block, "tool_use_id");
+    }
+  } else if (wire === "openai:responses") {
+    for (const item of responsesItems(params.body)) add(item, "call_id");
+  } else if (wire === "openai:chatCompletions") {
+    for (const message of chatMessages(params.body)) {
+      add(message, "tool_call_id");
+      for (const call of asArray(message.tool_calls) ?? []) {
+        add(asRecord(call), "id");
+      }
+    }
+  } else if (wire === "bedrock:converse") {
+    for (const message of chatMessages(params.body)) {
+      for (const block of asArray(message.content) ?? []) {
+        add(asRecord(asRecord(block)?.toolUse), "toolUseId");
+        add(asRecord(asRecord(block)?.toolResult), "toolUseId");
+      }
+    }
+  } else if (wire === "gemini:generateContent") {
+    for (const content of asArray(asRecord(params.body)?.contents) ?? []) {
+      for (const part of asArray(asRecord(content)?.parts) ?? []) {
+        add(asRecord(asRecord(part)?.functionCall), "id");
+        add(asRecord(asRecord(part)?.functionResponse), "id");
+      }
+    }
+  }
+  return sites;
+}
+
 type TextSite = {
   get: () => string;
   set: (text: string) => void;
@@ -1333,6 +1522,62 @@ function historyTextSites(family: AppaWireFamily, body: unknown): TextSite[] {
   for (const message of chatMessages(body)) {
     if (message.role !== "user" && message.role !== "assistant") continue;
     addContent(message);
+  }
+  return sites;
+}
+
+/**
+ * Tool-result text a client carries between turns: an Anthropic
+ * `tool_result`'s content, a Responses call output, a Chat Completions `tool`
+ * message. Text parts only.
+ */
+function toolResultTextSites(
+  family: AppaWireFamily,
+  body: unknown,
+): TextSite[] {
+  const sites: TextSite[] = [];
+  const add = (holder: Record<string, unknown>, key: string) => {
+    if (typeof holder[key] === "string") {
+      sites.push({
+        get: () => holder[key] as string,
+        set: (text) => {
+          holder[key] = text;
+        },
+      });
+      return;
+    }
+    for (const part of asArray(holder[key]) ?? []) {
+      const record = asRecord(part);
+      if (
+        !record ||
+        typeof record.text !== "string" ||
+        !HISTORY_TEXT_PART_TYPES.has(record.type as string)
+      )
+        continue;
+      sites.push({
+        get: () => record.text as string,
+        set: (text) => {
+          record.text = text;
+        },
+      });
+    }
+  };
+  if (family === "anthropic:messages") {
+    for (const block of anthropicBlocks(body)) {
+      if (block.type === "tool_result") add(block, "content");
+    }
+  } else if (family === "openai:responses") {
+    for (const item of responsesItems(body)) {
+      if (
+        item.type === "function_call_output" ||
+        item.type === "custom_tool_call_output"
+      )
+        add(item, "output");
+    }
+  } else {
+    for (const message of chatMessages(body)) {
+      if (message.role === "tool") add(message, "content");
+    }
   }
   return sites;
 }

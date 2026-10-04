@@ -197,6 +197,20 @@ describe("search_tools", () => {
       expect(names.some((name) => name.endsWith("execute_remedy_plan"))).toBe(
         true,
       );
+      // The rendered signatures show only what the model writes, never the
+      // members the proxy stamps or their JWS prose.
+      const remedyTools = (
+        result.structuredContent as SearchToolsStructuredContent
+      ).tools.filter((tool) => /remedy_plan/.test(tool.toolName));
+      const execute = remedyTools.find((tool) =>
+        tool.toolName.endsWith("execute_remedy_plan"),
+      );
+      expect(execute?.params).toContain("offer_id!:string");
+      for (const tool of remedyTools) {
+        expect(tool.params).not.toMatch(
+          /execution|protected|payload|signature|offers|JWS|RFC 7515/,
+        );
+      }
     } finally {
       config.openappa.enabled = previous;
     }

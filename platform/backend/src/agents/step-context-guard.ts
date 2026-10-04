@@ -16,7 +16,13 @@
  * newest message of each step that it does not trim, so later steps read the
  * earlier tool calls and results from the cache.
  */
-import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
+import {
+  CONTEXT_COMPACTION_AUTO_THRESHOLD,
+  PROXY_STAMPED_TOOL_ARGUMENTS,
+  TOOL_ASK_USER_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+} from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
@@ -249,7 +255,7 @@ function serializeForTranscript(messages: ModelMessage[]): string {
         case "tool-call":
           lines.push(
             `[assistant → tool ${part.toolName as string}]: ${truncate(
-              safeJson(part.input),
+              safeJson(modelWrittenInput(part.toolName as string, part.input)),
               TRANSCRIPT_TOOL_INPUT_MAX_CHARS,
             )}`,
           );
@@ -320,6 +326,30 @@ function charSize(messages: Array<ModelMessage | undefined>): number {
   );
 }
 
+/**
+ * A tool call's input without what only the OpenAPPA proxy writes: a notice's
+ * record and signed offers, a remedy call's receipt and JWS, ask_user's
+ * offers. The summary goes to a provider as plain text, where the proxy can no
+ * longer take them out. A tool matches by its short name under any label.
+ */
+function modelWrittenInput(toolName: string, input: unknown): unknown {
+  const hidden = PROXY_WRITTEN_MEMBERS.find(
+    ([shortName]) =>
+      toolName === shortName || toolName.endsWith(`__${shortName}`),
+  )?.[1];
+  if (
+    !hidden ||
+    typeof input !== "object" ||
+    input === null ||
+    Array.isArray(input)
+  ) {
+    return input;
+  }
+  return Object.fromEntries(
+    Object.entries(input).filter(([key]) => !hidden.includes(key)),
+  );
+}
+
 function truncate(text: string, maxChars: number): string {
   return text.length <= maxChars ? text : `${text.slice(0, maxChars)}…`;
 }
@@ -345,3 +375,17 @@ const RECENT_KEEP_RATIO = 0.3;
 // whole-transcript ceiling is the shared CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS).
 const TRANSCRIPT_TOOL_INPUT_MAX_CHARS = 2_000;
 const TRANSCRIPT_TOOL_RESULT_MAX_CHARS = 8_000;
+
+const PROXY_WRITTEN_MEMBERS: ReadonlyArray<
+  readonly [shortName: string, members: readonly string[]]
+> = [
+  [TOOL_GET_REMEDY_PLANS_SHORT_NAME, ["notice", "offers"]],
+  [
+    TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+    PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME],
+  ],
+  [
+    TOOL_ASK_USER_SHORT_NAME,
+    PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_ASK_USER_SHORT_NAME],
+  ],
+];

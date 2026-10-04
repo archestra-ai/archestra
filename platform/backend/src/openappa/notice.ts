@@ -53,19 +53,31 @@ export const RemedyExecutionSchema = z.object({
     .refine((value) => isRecord(parseJson(value)), "a JSON object"),
 });
 
+const NoticeArgumentsObject = z.object({
+  tool: z.string().min(1),
+  arguments: FunctionArguments,
+  ruling: z.string().min(1),
+  notice: NoticeMetadata.extend({ custom: z.literal(true).optional() }),
+  offers: z.array(OfferJwsSchema).optional(),
+});
+
+/**
+ * The notice arguments the gateway advertises. The proxy alone writes
+ * `offers` (signed routing claims), so the advertised schema leaves them out:
+ * a client that forwards the tool list to its model never shows it the
+ * signatures. Not strict, so a validating client still accepts a notice that
+ * carries them.
+ */
+export const NoticePublicArguments = NoticeArgumentsObject.omit({
+  offers: true,
+});
+
 /**
  * Schema for notice arguments. Standard function calls accept JSON objects;
  * custom tool calls accept an object with an input string.
  */
-export const NoticeArguments = z
-  .object({
-    tool: z.string().min(1),
-    arguments: FunctionArguments,
-    ruling: z.string().min(1),
-    notice: NoticeMetadata.extend({ custom: z.literal(true).optional() }),
-    offers: z.array(OfferJwsSchema).optional(),
-  })
-  .superRefine((value, context) => {
+export const NoticeArguments = NoticeArgumentsObject.superRefine(
+  (value, context) => {
     if (!value.notice.custom) return;
     const customArguments =
       typeof value.arguments === "string"
@@ -82,7 +94,8 @@ export const NoticeArguments = z
         message: "a custom call requires an input string",
       });
     }
-  });
+  },
+);
 
 type NoticeFunctionCall = {
   kind: "function";

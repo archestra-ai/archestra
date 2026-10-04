@@ -353,7 +353,7 @@ test("releases allowed call immediately, returns notice for denied call, and rel
     const allowedOutput = textOf(outputFor(toolOutputs, allowedCallId));
     expect(allowedOutput).not.toContain("[appa] Blocked");
     expect(allowedOutput).not.toContain("Tool output withheld");
-    expect(allowedOutput).not.toContain("The tool was not executed");
+    expect(allowedOutput).not.toContain("The tool did not run. If the ruling");
 
     const ruling = textOf(outputFor(toolOutputs, notice.toolCallId));
     const offerId = readOfferId(ruling);
@@ -363,7 +363,7 @@ test("releases allowed call immediately, returns notice for denied call, and rel
     const released = textOf(outputFor(toolOutputs, retry.toolCallId));
     expect(released).not.toContain("[appa] Blocked");
     expect(released).not.toContain("Tool output withheld");
-    expect(released).not.toContain("The tool was not executed");
+    expect(released).not.toContain("The tool did not run. If the ruling");
 
     expect(assistantText(events)).toContain(finalAnswer);
   } finally {
@@ -573,7 +573,7 @@ test("evaluates two denied calls independently, emits two notices, and releases 
       const released = textOf(outputFor(toolOutputs, retryId));
       expect(released).not.toContain("[appa] Blocked");
       expect(released).not.toContain("Tool output withheld");
-      expect(released).not.toContain("The tool was not executed");
+      expect(released).not.toContain("The tool did not run. If the ruling");
     }
 
     expect(assistantText(events)).toContain(finalAnswer);
@@ -744,7 +744,7 @@ test("prevents duplicate remedy execution and releases retried call only once", 
     const released = textOf(outputFor(toolOutputs, retry.toolCallId));
     expect(released).not.toContain("[appa] Blocked");
     expect(released).not.toContain("Tool output withheld");
-    expect(released).not.toContain("The tool was not executed");
+    expect(released).not.toContain("The tool did not run. If the ruling");
 
     expect(assistantText(events)).toContain(finalAnswer);
   } finally {

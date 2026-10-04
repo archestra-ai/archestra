@@ -82,6 +82,21 @@ describe("chat tool execution", () => {
     expect(properties).not.toHaveProperty("remedy_offers");
   });
 
+  test("a malformed ask_user call is shown the advertised arguments, not the proxy's", async () => {
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      { options: [{ label: "Approve" }] },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    const text = result.content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("\n");
+    expect(text).toContain('"remedy_offer_ids"');
+    expect(text).not.toContain('"remedy_offers"');
+  });
+
   const acceptingElicitation = {
     elicit: async () => ({
       status: "answered" as const,
@@ -356,7 +371,11 @@ describe("chat tool execution", () => {
     expect(text).toContain("The user picked: Accept for this session.");
     expect(text).toContain("Live remedy offers: offer-abc123");
     expect(text).toContain("archestra__execute_remedy_plan");
-    expect(text).toContain("Do not ask the user again");
+    // Credits the user's answer instead of hurrying past the user.
+    expect(text).toContain(
+      "The user already answered, so do not ask about the same plan again",
+    );
+    expect(text).not.toMatch(/continue now|immediately/i);
   });
 
   test("a staged HITL review replaces model-authored copy and records approval", async () => {

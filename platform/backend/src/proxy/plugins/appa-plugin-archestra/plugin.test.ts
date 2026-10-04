@@ -208,14 +208,19 @@ describe("asking through the client's own question tool", () => {
       expect(request.instructions).toBe("Base");
       const developerGuidance = JSON.stringify(request.input);
       expect(developerGuidance).toContain(
-        "Do not reply to the user and do not ask whether to continue",
+        "If the plan fits the user's request, continue the task",
       );
       expect(developerGuidance).toContain(
-        "Immediately call execute_remedy_plan",
+        "apply the plan with execute_remedy_plan",
       );
       expect(developerGuidance).toContain(
-        "When get_remedy_plans offers a remedy",
+        "can block a tool call and offer remedy plans in its ruling",
       );
+      // The guidance says who decides; it never tells the model to skip the
+      // user, which provider safety classifiers refuse.
+      expect(developerGuidance).not.toContain("Do not reply to the user");
+      expect(developerGuidance).not.toContain("do not ask the user");
+      expect(developerGuidance).not.toContain("Immediately");
       expect(request).toMatchObject({
         tool_choice: "required",
         parallel_tool_calls: false,
@@ -464,10 +469,12 @@ describe("asking through the client's own question tool", () => {
       await plugin.onBeforeModel({ ...context, request });
 
       expect(request.system).toContain(
-        "Immediately call the declared ask_user tool",
+        "Ask the user with the declared ask_user tool, one call for each offer ID below",
       );
       expect(request.system).toContain('Offer IDs: ["offer-hitl"]');
-      expect(request.system).toContain("do not ask for approval in plain text");
+      // The question goes through the question tool, never plain text.
+      expect(request.system).toContain("not in plain text");
+      expect(request.system).not.toContain("Immediately");
     } finally {
       processResults.mockRestore();
       await plugin.onCleanup(context);
@@ -555,6 +562,73 @@ describe("asking through the client's own question tool", () => {
       }
     } finally {
       cacheSet.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("refuses one native answer sent twice in a request", async () => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "opencode-duplicate-answer",
+      toolIdentity: identityStub({
+        canonicalize: (name) => name.replace(/^my_gateway_(?=archestra__)/, ""),
+      }),
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = {
+      tools: {
+        control: { name: "my_gateway_archestra__execute_remedy_plan" },
+        notice: { name: "my_gateway_archestra__get_remedy_plans" },
+        askUser: { name: "my_gateway_archestra__ask_user" },
+        platformToolNames: new Set(["my_gateway_archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      session: {},
+      customTools: new Set(),
+      declaredTools: [{ name: "question" }],
+    };
+    context.headers = { "x-opencode-session": "s" };
+    try {
+      await plugin.onSessionInit(context);
+      const prepared = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "call_dup",
+            name: "my_gateway_archestra__ask_user",
+            arguments: JSON.stringify({
+              question: "Continue?",
+              options: [{ label: "Yes" }, { label: "No" }],
+            }),
+          },
+        ],
+      });
+      if (prepared?.decision !== "allow")
+        throw new Error("expected native question");
+      // The client answers under the signed id the proxy issued for the call.
+      const answerId = prepared.toolCalls[0].wireId ?? "";
+      await expect(
+        plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: answerId,
+              name: "question",
+              content: 'approval="Yes"',
+              isError: false,
+            },
+            {
+              id: answerId,
+              name: "question",
+              content: 'approval="No"',
+              isError: false,
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({ statusCode: 400 });
+    } finally {
       await plugin.onCleanup(context);
     }
   });
@@ -784,10 +858,10 @@ describe("asking through the client's own question tool", () => {
         'approved OpenAPPA offer IDs ["offer-hitl"]',
       );
       expect(continuationRequest.system).toContain(
-        "next and only tool calls must be execute_remedy_plan",
+        "In your next response, call only execute_remedy_plan, once for each approved offer",
       );
       expect(continuationRequest.system).toContain(
-        "Do not call or retry the blocked tool in the same response",
+        "Retry the blocked call in a later response",
       );
       const resumed = await plugin.onPrepareToolCalls({
         ...context,
@@ -1044,7 +1118,7 @@ describe("asking through the client's own question tool", () => {
       });
       const continuation = JSON.stringify(continuationRequest);
       expect(continuation).not.toContain(
-        "The last execute_remedy_plan result requires human review",
+        "The policy needs the user's approval for the last execute_remedy_plan result",
       );
 
       if (ruling === "approve") {
@@ -2391,6 +2465,72 @@ describe("rendering runtime text for this client", () => {
           '[appa] Blocked: call github__list again after execute_remedy_plan(offer_id: "x")',
         listing: "[appa] the repository names github__list in its README",
       });
+    } finally {
+      processProxyResults.mockRestore();
+    }
+  });
+
+  test("lets only this request's own remedy call show a declined result", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "declined-control",
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        control: {
+          name: "archestra__execute_remedy_plan",
+          namespace: "mcp__gw",
+        },
+        notice: { name: "archestra__get_remedy_plans", namespace: "mcp__gw" },
+        askUser: undefined,
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+    };
+    const processProxyResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {},
+        contextIsTrusted: true,
+        dualLlmAnalyses: [],
+        unsafeContextBoundary: undefined,
+      } as never);
+    const declined = {
+      id: "declined",
+      name: "archestra__execute_remedy_plan",
+      namespace: "mcp__gw",
+      content: "The user rejected this tool call.",
+      isError: false,
+    };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [declined],
+      } as never);
+      const isControlResult =
+        processProxyResults.mock.calls[0]?.[0].isControlResult;
+
+      expect(isControlResult?.(declined)).toBe(true);
+      // The same name in another namespace is someone else's tool.
+      expect(isControlResult?.({ ...declined, namespace: "mcp__other" })).toBe(
+        false,
+      );
+      // The gateway's pending review is the HITL flow's to handle.
+      expect(
+        isControlResult?.({
+          ...declined,
+          content: JSON.stringify({
+            ok: false,
+            outcome: "review_required",
+            offer_id: "offer-1",
+          }),
+        }),
+      ).toBe(false);
     } finally {
       processProxyResults.mockRestore();
     }

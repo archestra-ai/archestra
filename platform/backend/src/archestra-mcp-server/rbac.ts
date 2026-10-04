@@ -544,6 +544,16 @@ export async function filterToolNamesByPermission(
   return allowed;
 }
 
+/**
+ * Whether a per-object grant can open this tool, independently of the role.
+ * @public — the coverage test uses it to prove every tool stays reachable.
+ */
+export function isToolGrantGated(shortName: ArchestraToolShortName): boolean {
+  return Boolean(
+    SCOPED_CATALOG_TOOLS[shortName] || SCOPED_RESOURCE_TOOLS[shortName],
+  );
+}
+
 // Only handlers that enforce the exact object action or filter their list in
 // SQL may bypass the organization-level permission gate through this map.
 const SCOPED_CATALOG_TOOLS: Partial<

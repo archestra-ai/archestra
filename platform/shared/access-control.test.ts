@@ -22,6 +22,24 @@ import { ADMIN_ROLE_NAME } from "./roles";
 import { RouteId } from "./routes";
 
 describe("access-control", () => {
+  test("every route and page gate names an action its resource has", () => {
+    // A gate on an action no role can hold locks everyone out, silently.
+    const unreachable: string[] = [];
+    for (const [gate, permissions] of [
+      ...Object.entries(requiredEndpointPermissionsMap),
+      ...Object.entries(requiredPagePermissionsMap),
+    ]) {
+      for (const [resource, actions] of Object.entries(permissions ?? {})) {
+        for (const action of actions ?? []) {
+          if (!allAvailableActions[resource as Resource]?.includes(action)) {
+            unreachable.push(`${gate}: ${resource}:${action}`);
+          }
+        }
+      }
+    }
+    expect(unreachable).toEqual([]);
+  });
+
   test("every resource:action combination has a permissionDescription", () => {
     const missing: string[] = [];
 

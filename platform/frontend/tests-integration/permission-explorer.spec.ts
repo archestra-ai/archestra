@@ -100,7 +100,7 @@ test("editing across categories saves the complete role", async ({
   ).toBeChecked();
   await capture(page, "role-edit-desktop");
 
-  await dialog.getByRole("button", { name: "Knowledge", exact: true }).click();
+  await dialog.getByRole("button", { name: "Other", exact: true }).click();
   await dialog
     .getByRole("checkbox", { name: "Knowledge Sources Read", exact: true })
     .check();
@@ -108,7 +108,7 @@ test("editing across categories saves the complete role", async ({
   await dialog
     .getByRole("checkbox", { name: "Agents Delete", exact: true })
     .uncheck();
-  await dialog.getByRole("button", { name: "Knowledge", exact: true }).click();
+  await dialog.getByRole("button", { name: "Other", exact: true }).click();
   await expect(
     dialog.getByRole("checkbox", {
       name: "Knowledge Sources Read",
@@ -177,9 +177,7 @@ test("read-only roles and personal access expose permissions and keyboard source
   await expect(
     personal.getByPlaceholder("Find a resource or action…"),
   ).toHaveCount(0);
-  await personal
-    .getByRole("button", { name: "Knowledge", exact: true })
-    .click();
+  await personal.getByRole("button", { name: "Other", exact: true }).click();
   await expect(
     personal.getByRole("button", {
       name: "Knowledge Sources Query granted",

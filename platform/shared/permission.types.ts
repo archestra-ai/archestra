@@ -193,9 +193,14 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmCost",
   ],
   OpenAPPA: ["openappaPolicy", "openappaDiagnostics"],
-  Knowledge: ["knowledgeSource"],
-  Logs: ["log", "auditLog"],
-  Other: ["chat", "project", "simpleView"],
+  Other: [
+    "chat",
+    "project",
+    "simpleView",
+    "knowledgeSource",
+    "log",
+    "auditLog",
+  ],
   Administration: [
     "accessPolicies",
     "member",

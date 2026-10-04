@@ -56,7 +56,7 @@ describe("RolePermissionBuilder", () => {
         userPermissions={{ knowledgeSource: ["read"] }}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Knowledge" }));
+    await user.click(screen.getByRole("button", { name: "Other" }));
     const checkbox = screen.getByRole("checkbox", {
       name: "Knowledge Sources Create",
     });
@@ -85,7 +85,7 @@ describe("RolePermissionBuilder", () => {
     );
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(screen.getByRole("checkbox", { name: "Agents Read" }));
-    await user.click(screen.getByRole("button", { name: "Knowledge" }));
+    await user.click(screen.getByRole("button", { name: "Other" }));
     expect(
       screen.getByRole("checkbox", { name: "Knowledge Sources Read" }),
     ).toBeChecked();

@@ -1204,9 +1204,9 @@ function AgentEmailSection({
 }) {
   if (!providerEnabled) {
     return (
-      <div className="rounded-md border border-dashed px-4 py-6">
+      <div className="flex flex-col items-center gap-1 rounded-md border border-dashed px-4 py-6 text-center">
         <p className="text-sm font-medium">Incoming email isn&apos;t set up</p>
-        <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+        <p className="max-w-prose text-xs text-muted-foreground">
           Set it up once for the organization and every agent gets its own
           address.
         </p>
@@ -1214,7 +1214,7 @@ function AgentEmailSection({
           type="button"
           variant="outline"
           size="sm"
-          className="mt-4"
+          className="mt-2"
           asChild
         >
           <Link href="/settings/messaging-channels/email">

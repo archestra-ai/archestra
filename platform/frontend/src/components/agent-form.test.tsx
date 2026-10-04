@@ -3013,13 +3013,15 @@ describe("AgentForm save payload and failure handling", () => {
         activeSection="configuration"
       />,
     );
-    expect(panelOf(screen.getByTestId("agent-runtime"))).toHaveClass("hidden");
+    // The runtime fields render their own sections, so the panel is the
+    // wrapper directly around them.
+    const runtimePanel = () =>
+      screen.getByTestId("agent-runtime").parentElement;
+    expect(runtimePanel()).toHaveClass("hidden");
     rerender(
       <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
     );
-    expect(panelOf(screen.getByTestId("agent-runtime"))).not.toHaveClass(
-      "hidden",
-    );
+    expect(runtimePanel()).not.toHaveClass("hidden");
   });
 
   it("opens the shared provider-key dialog from the agent picker", async () => {

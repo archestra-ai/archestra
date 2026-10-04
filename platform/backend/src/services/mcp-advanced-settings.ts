@@ -1,8 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import {
-  hasScopedPermission,
-  resourcePermissionPresets,
-} from "@archestra/shared";
+import { hasScopedPermission } from "@archestra/shared";
 import type { FastifyInstance } from "fastify";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { LocalConfig } from "@/types";
@@ -16,7 +13,7 @@ export async function assertCanManageMcpDeployment(params: {
   if (!(await canManageMcpDeployment(params)))
     throw new ApiError(
       403,
-      "Kubernetes deployment settings require Full access to this MCP registry entry.",
+      "Deployment settings require the configure-deployment-spec permission on this MCP registry entry.",
     );
 }
 
@@ -91,7 +88,11 @@ export function registerMcpDeploymentYamlResponseFilter(
   });
 }
 
-/** Kubernetes settings require the existing Full access preset on the catalog entry. */
+/**
+ * Deployment settings reach the cluster the server runs on, so they need their
+ * own `configure-deployment-spec` action on the entry (or on `*`). Full access
+ * does not imply it: a creator's automatic grant stops short of it.
+ */
 async function canManageMcpDeployment(params: {
   userId: string;
   organizationId: string;
@@ -104,9 +105,10 @@ async function canManageMcpDeployment(params: {
     scope: params.catalogId ?? "*",
   };
   const grants = await ResourcePermissions.resolve(context);
-  return resourcePermissionPresets.manage.actions.every((action) =>
-    hasScopedPermission({ grants, required: { ...context, action } }),
-  );
+  return hasScopedPermission({
+    grants,
+    required: { ...context, action: "configure-deployment-spec" },
+  });
 }
 
 function containsDeploymentYaml(value: unknown): boolean {

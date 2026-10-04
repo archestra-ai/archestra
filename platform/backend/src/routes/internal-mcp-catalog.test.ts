@@ -27,15 +27,9 @@ import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 describe("internal MCP catalog routes", () => {
   let app: FastifyInstance;
   let organizationId: string;
-  const kubernetesConfig = { ...config.orchestrator.kubernetes };
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
-    // These route tests run without a Kubernetes process. Startup adoption is
-    // covered by the runtime manager tests; a developer's local kubeconfig must
-    // not make policy alias renames depend on a live cluster.
-    config.orchestrator.kubernetes.kubeconfig = undefined;
-    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
     vi.spyOn(betterAuth.api, "getSession").mockImplementation(
       async () => ({ user: { id: user.id } }) as never,
     );
@@ -78,7 +72,6 @@ describe("internal MCP catalog routes", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    Object.assign(config.orchestrator.kubernetes, kubernetesConfig);
     await app.close();
   });
 
@@ -179,7 +172,7 @@ describe("internal MCP catalog routes", () => {
         url: `/api/internal_mcp_catalog/${catalog.id}`,
         payload: { name: "Cloud staging" },
       });
-      expect(renamed.statusCode, renamed.body).toBe(200);
+      expect(renamed.statusCode).toBe(200);
 
       const latest = await guardrailsPolicyService.get(organizationId);
       const declarations = await import("@/openappa/declarations").then(
@@ -235,7 +228,7 @@ describe("internal MCP catalog routes", () => {
         url: `/api/internal_mcp_catalog/${catalog.id}`,
         payload: { name: "Cloud staging" },
       });
-      expect(renamed.statusCode, renamed.body).toBe(200);
+      expect(renamed.statusCode).toBe(200);
 
       const latest = await guardrailsPolicyService.get(organizationId);
       expect(latest.content).toContain('cloudflare = ["cloud_prod"]');
@@ -368,57 +361,6 @@ describe("internal MCP catalog routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().clonedFrom).toBe(source.id);
-  });
-
-  test("POST /api/internal_mcp_catalog rejects a service account outside the MCP runtime allowlist", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/internal_mcp_catalog",
-      payload: {
-        name: "Disallowed Runtime Identity",
-        serverType: "local",
-        localConfig: {
-          command: "node",
-          arguments: ["server.js"],
-          serviceAccount: "platform-control-plane",
-        },
-      },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain(
-      "is not allowed for MCP server workloads",
-    );
-  });
-
-  test("PUT /api/internal_mcp_catalog preserves the existing service account when an override is rejected", async ({
-    makeInternalMcpCatalog,
-  }) => {
-    const catalog = await makeInternalMcpCatalog({
-      organizationId,
-      name: "Allowed Runtime Identity",
-      serverType: "local",
-      localConfig: {
-        command: "node",
-        arguments: ["server.js"],
-        serviceAccount: "default",
-      },
-    });
-
-    const response = await app.inject({
-      method: "PUT",
-      url: `/api/internal_mcp_catalog/${catalog.id}`,
-      payload: {
-        localConfig: {
-          ...catalog.localConfig,
-          serviceAccount: "platform-control-plane",
-        },
-      },
-    });
-
-    expect(response.statusCode).toBe(400);
-    const persisted = await InternalMcpCatalogModel.findById(catalog.id);
-    expect(persisted?.localConfig?.serviceAccount).toBe("default");
   });
 
   describe("network egress policy enforcement (remote servers)", () => {

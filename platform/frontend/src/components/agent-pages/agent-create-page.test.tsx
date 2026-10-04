@@ -21,6 +21,7 @@ vi.mock("@/lib/hooks/use-app-name");
 // props are what the page is expected to hand it, plus a way to fire
 // `onCreated` and report dirtiness.
 const formProps = vi.fn<(props: AgentFormProps) => void>();
+const formState = { hasRuntime: false };
 vi.mock("@/components/agent-form", () => ({
   AgentForm: (props: AgentFormProps) => {
     formProps(props);
@@ -42,6 +43,7 @@ vi.mock("@/components/agent-form", () => ({
           isDirty: false,
           canSubmit: true,
           readOnly: false,
+          hasRuntime: formState.hasRuntime,
         })}
       </div>
     );
@@ -364,6 +366,26 @@ describe("AgentCreatePage", () => {
     expect(formProps).toHaveBeenLastCalledWith(
       expect.objectContaining({ activeSection: "tools", submitEnabled: false }),
     );
+  });
+
+  it("names the create action after what opening the agent starts", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderAgentCreatePage();
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
+    expect(
+      screen.getByTestId(E2eTestId.AgentSetupSubmitButton),
+    ).toHaveTextContent("Create and chat");
+
+    formState.hasRuntime = true;
+    rerender(
+      <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
+    );
+    expect(
+      screen.getByTestId(E2eTestId.AgentSetupSubmitButton),
+    ).toHaveTextContent("Create and run");
+    formState.hasRuntime = false;
   });
 
   it("opens chat with the newly created agent selected", async () => {

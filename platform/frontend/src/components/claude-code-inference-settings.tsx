@@ -84,15 +84,13 @@ export function ClaudeCodeInferenceSettings({
               : "Uses the selected API connection for usage-based billing."}
       </p>
       {authentication === "subscription" ? (
-        <div className="pt-2">
-          <ClaudeCodeAccount
-            agentId={agentId}
-            variant="compact"
-            showDisconnectedNotice={false}
-            model={model}
-            onModelChange={onModelChange}
-          />
-        </div>
+        <ClaudeCodeAccount
+          agentId={agentId}
+          variant="compact"
+          showDisconnectedNotice={false}
+          model={model}
+          onModelChange={onModelChange}
+        />
       ) : (
         <div className="space-y-2 pt-2">
           <Label>Provider and model</Label>

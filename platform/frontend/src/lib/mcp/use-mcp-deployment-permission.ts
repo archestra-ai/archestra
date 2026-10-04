@@ -1,17 +1,16 @@
 "use client";
-import { resourcePermissionPresets } from "@archestra/shared";
 import { useScopedCapabilities } from "@/lib/auth/auth.query";
+
+/** Whether the caller may view and change this entry's deployment settings. */
 export function useMcpDeploymentPermission(catalogId?: string) {
   const query = useScopedCapabilities();
   return {
     ...query,
-    data: resourcePermissionPresets.manage.actions.every((action) =>
-      query.data?.some(
-        (grant) =>
-          grant.resource === "mcpRegistry" &&
-          grant.action === action &&
-          (grant.scope === "*" || grant.scope === (catalogId ?? "*")),
-      ),
+    data: !!query.data?.some(
+      (grant) =>
+        grant.resource === "mcpRegistry" &&
+        grant.action === "configure-deployment-spec" &&
+        (grant.scope === "*" || grant.scope === (catalogId ?? "*")),
     ),
   };
 }

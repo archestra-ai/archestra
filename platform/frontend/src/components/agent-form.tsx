@@ -919,6 +919,11 @@ export interface AgentFormFooterState {
    * shows nothing at all.
    */
   readOnly: boolean;
+  /**
+   * The agent runs in its own container: opening it in Chat starts a run
+   * rather than a foreground conversation.
+   */
+  hasRuntime: boolean;
 }
 
 /** Editable values a create flow may seed from a catalog template. */
@@ -2919,6 +2924,7 @@ export function AgentForm({
     isDirty,
     canSubmit,
     readOnly,
+    hasRuntime: runtime !== null,
   };
   // Keep the popover portaled: choosing a credential changes the model control
   // while Radix closes its focus scope, and reconciling both in the form tree
@@ -3865,16 +3871,12 @@ export function AgentForm({
             agentType === "agent" &&
             agentRuntimeEnabled &&
             !isBuiltIn && (
-              <SettingsSectionGroup
-                className={cn(!isActiveSection("runtime") && "hidden")}
-              >
-                <SettingsSection aria-label="Agent runtime">
-                  <AgentRuntimeFields
-                    value={runtime}
-                    onChange={setAgentRuntime}
-                  />
-                </SettingsSection>
-              </SettingsSectionGroup>
+              <div className={cn(!isActiveSection("runtime") && "hidden")}>
+                <AgentRuntimeFields
+                  value={runtime}
+                  onChange={setAgentRuntime}
+                />
+              </div>
             )}
 
           {/* The Advanced step: security, passthrough
@@ -3886,6 +3888,7 @@ export function AgentForm({
             >
               {!agent && agentType !== "llm_proxy" && (
                 <InitialResourcePermissions
+                  layout="settings"
                   resource={
                     agentType === "mcp_gateway" ? "mcpGateway" : "agent"
                   }

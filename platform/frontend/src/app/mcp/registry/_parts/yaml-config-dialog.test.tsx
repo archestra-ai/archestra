@@ -83,9 +83,14 @@ afterAll(() => {
 });
 beforeEach(() => {
   vi.mocked(useScopedCapabilities).mockReturnValue({
-    data: ["read", "use", "update", "delete", "manage-permissions"].map(
-      (action) => ({ resource: "mcpRegistry", scope: "*", action }),
-    ),
+    data: [
+      "read",
+      "use",
+      "update",
+      "delete",
+      "manage-permissions",
+      "configure-deployment-spec",
+    ].map((action) => ({ resource: "mcpRegistry", scope: "*", action })),
   } as ReturnType<typeof useScopedCapabilities>);
   saved.length = 0;
   resetCount = 0;

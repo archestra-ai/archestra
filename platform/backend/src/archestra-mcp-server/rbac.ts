@@ -355,7 +355,9 @@ export async function checkToolPermission(
   }
 
   const allowed =
-    perm.action === "manage-permissions" || perm.action === "use"
+    perm.action === "manage-permissions" ||
+    perm.action === "use" ||
+    perm.action === "configure-deployment-spec"
       ? false
       : await userHasPermission(
           context.userId,
@@ -484,7 +486,9 @@ export async function filterToolNamesByPermission(
       if (!permResults.has(key)) {
         permResults.set(
           key,
-          perm.action === "manage-permissions" || perm.action === "use"
+          perm.action === "manage-permissions" ||
+            perm.action === "use" ||
+            perm.action === "configure-deployment-spec"
             ? false
             : (permissions[roleActionResourceFor(perm.resource)]?.includes(
                 perm.action,

@@ -30,6 +30,10 @@ import {
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { ResourcePermissions } from "@/components/resource-permissions";
+import {
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -424,11 +428,6 @@ function CatalogItemDetails({
       href: tabHref("overview"),
       selected: effectiveTab === "overview",
     },
-    {
-      label: <TabLabel title="Usage" count={agentUsageCount} />,
-      href: tabHref("usage"),
-      selected: effectiveTab === "usage",
-    },
     ...(tabIds.includes("permissions")
       ? [
           {
@@ -438,11 +437,25 @@ function CatalogItemDetails({
           },
         ]
       : []),
-    ...diagnosticTabs.map((panel) => ({
-      label: panel.title,
-      href: tabHref(panel.id),
-      selected: effectiveTab === panel.id,
-    })),
+    ...diagnosticTabs
+      .filter((panel) => panel.id !== "yaml")
+      .map((panel) => ({
+        label: panel.title,
+        href: tabHref(panel.id),
+        selected: effectiveTab === panel.id,
+      })),
+    {
+      label: <TabLabel title="Usage" count={agentUsageCount} />,
+      href: tabHref("usage"),
+      selected: effectiveTab === "usage",
+    },
+    ...diagnosticTabs
+      .filter((panel) => panel.id === "yaml")
+      .map((panel) => ({
+        label: panel.title,
+        href: tabHref(panel.id),
+        selected: effectiveTab === panel.id,
+      })),
   ];
   const isLogsTab =
     effectiveTab === "logs" ||
@@ -589,6 +602,7 @@ function CatalogItemDetails({
       <div className="space-y-4">
         {effectiveTab === "permissions" && (
           <ResourcePermissions
+            layout="settings"
             resource="mcpRegistry"
             scope={item.id}
             onDirtyChange={setPermissionsDirty}
@@ -602,66 +616,68 @@ function CatalogItemDetails({
         )}
 
         {effectiveTab === "overview" && (
-          <div className="space-y-10">
-            {item.serverType !== "builtin" && (
-              <OverviewSummary
-                headingId="mcp-overview-heading"
-                facts={[
-                  {
-                    label: "Hosting",
-                    value:
-                      item.serverType === "local"
-                        ? "Managed deployment"
-                        : "External server",
-                  },
-                  {
-                    label: "Environment",
-                    value: environmentLabel ?? defaultEnvironment.name,
-                  },
-                  ...(item.providesUi
-                    ? [{ label: "Interactive tools", value: "Available" }]
-                    : []),
-                  ...(item.providesSkills
-                    ? [
-                        {
-                          label: "Skills",
-                          value: `${item.skillCount ?? 0} available`,
-                        },
-                      ]
-                    : []),
-                  ...overviewFacts,
-                ]}
-                configHref={
-                  canModify ? mcpServerActionHref(editAction) : undefined
-                }
-              />
-            )}
-
+          <div className="space-y-6">
             <CardIssues
               item={item}
               issues={itemIssues}
               servers={allServersForCatalog}
             />
 
-            {showConnectionsTab && (
-              <section
-                id={MCP_CONNECTIONS_SECTION_ID}
-                aria-labelledby="mcp-connections-heading"
-                className="scroll-mt-24 space-y-4"
-              >
-                <h2
-                  id="mcp-connections-heading"
-                  className="text-base font-semibold tracking-tight text-foreground"
-                  data-testid={E2eTestId.McpServerSettingsConnectionsNavButton}
+            <SettingsSectionGroup>
+              {item.serverType !== "builtin" && (
+                <OverviewSummary
+                  facts={[
+                    {
+                      label: "Hosting",
+                      value:
+                        item.serverType === "local"
+                          ? "Managed deployment"
+                          : "External server",
+                    },
+                    {
+                      label: "Environment",
+                      value: environmentLabel ?? defaultEnvironment.name,
+                    },
+                    ...(item.providesUi
+                      ? [{ label: "Interactive tools", value: "Available" }]
+                      : []),
+                    ...(item.providesSkills
+                      ? [
+                          {
+                            label: "Skills",
+                            value: `${item.skillCount ?? 0} available`,
+                          },
+                        ]
+                      : []),
+                    ...overviewFacts,
+                  ]}
+                />
+              )}
+
+              {showConnectionsTab && (
+                <SettingsSection
+                  id={MCP_CONNECTIONS_SECTION_ID}
+                  className="scroll-mt-24"
+                  title={
+                    <span
+                      data-testid={
+                        E2eTestId.McpServerSettingsConnectionsNavButton
+                      }
+                    >
+                      <TabLabel
+                        title={
+                          variant === "local" ? "Installations" : "Credentials"
+                        }
+                        count={connectionsCount}
+                      />
+                    </span>
+                  }
+                  description={
+                    variant === "local"
+                      ? "Running instances of this server, for one person or shared with a team."
+                      : "The credentials this server is used with."
+                  }
                 >
-                  <TabLabel
-                    title={
-                      variant === "local" ? "Installations" : "Credentials"
-                    }
-                    count={connectionsCount}
-                  />
-                </h2>
-                <div className="space-y-4 rounded-lg border bg-card p-4">
                   {reauthServer ? (
                     <InlineMcpReauthentication
                       item={item}
@@ -691,9 +707,9 @@ function CatalogItemDetails({
                       variant === "local" ? openPodLogs : undefined
                     }
                   />
-                </div>
-              </section>
-            )}
+                </SettingsSection>
+              )}
+            </SettingsSectionGroup>
           </div>
         )}
 

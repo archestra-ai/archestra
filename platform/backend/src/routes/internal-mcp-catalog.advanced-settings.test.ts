@@ -1,4 +1,8 @@
-import { RouteId, resourcePermissionPresets } from "@archestra/shared";
+import {
+  RouteId,
+  resourcePermissionPresets,
+  topResourcePermissionPreset,
+} from "@archestra/shared";
 import { type Mock, vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -29,9 +33,12 @@ spec:
 `;
 
 /**
- * Deployment YAML requires the existing scoped MCP Registry Full access preset.
+ * Deployment YAML requires `configure-deployment-spec` on the MCP registry
+ * entry (the "Full access + deployment" preset). Full access alone stops short.
  * Session identity is stubbed; middleware and database-backed policies are real.
  */
+const DEPLOY_ACTIONS = topResourcePermissionPreset("mcpRegistry").actions;
+
 describe("internal MCP catalog deployment YAML permission", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
@@ -108,7 +115,9 @@ describe("internal MCP catalog deployment YAML permission", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toContain("Full access");
+    expect(response.json().error.message).toContain(
+      "configure-deployment-spec",
+    );
     expect(
       await InternalMcpCatalogModel.findRootByNameInOrg({
         name: "Editor Custom Yaml",
@@ -156,41 +165,12 @@ describe("internal MCP catalog deployment YAML permission", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toContain("Full access");
+    expect(response.json().error.message).toContain(
+      "configure-deployment-spec",
+    );
     const persisted = await InternalMcpCatalogModel.findById(catalog.id);
     expect(persisted?.name).toBe("Stored Yaml");
     expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
-  });
-
-  test("a disallowed runtime service account cannot persist a catalog rename", async ({
-    makeInternalMcpCatalog,
-  }) => {
-    const catalog = await makeInternalMcpCatalog({
-      organizationId,
-      name: "Unchanged Runtime Identity",
-      serverType: "local",
-      localConfig: { command: "node", arguments: ["server.js"] },
-      authorId: admin.id,
-    });
-
-    const response = await app.inject({
-      method: "PUT",
-      url: `/api/internal_mcp_catalog/${catalog.id}`,
-      payload: {
-        name: "Rejected Runtime Rename",
-        localConfig: {
-          command: "node",
-          arguments: ["server.js"],
-          serviceAccount: "unapproved-runtime-identity",
-        },
-      },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("not allowed");
-    const persisted = await InternalMcpCatalogModel.findById(catalog.id);
-    expect(persisted?.name).toBe("Unchanged Runtime Identity");
-    expect(persisted?.localConfig?.serviceAccount).toBeUndefined();
   });
 
   test("an editor cannot clear stored YAML", async ({
@@ -212,7 +192,9 @@ describe("internal MCP catalog deployment YAML permission", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toContain("Full access");
+    expect(response.json().error.message).toContain(
+      "configure-deployment-spec",
+    );
     const persisted = await InternalMcpCatalogModel.findById(catalog.id);
     expect(persisted?.deploymentSpecYaml).toBeTruthy();
   });
@@ -362,6 +344,7 @@ describe("internal MCP catalog deployment YAML permission", () => {
     "read",
     "edit",
     "full",
+    "deploy",
     "wildcard",
   ] as const)("%s grants apply to exactly their YAML scope", async (level, {
     makeInternalMcpCatalog,
@@ -391,7 +374,9 @@ describe("internal MCP catalog deployment YAML permission", () => {
         ? resourcePermissionPresets.view.actions
         : level === "edit"
           ? resourcePermissionPresets.edit.actions
-          : resourcePermissionPresets.manage.actions;
+          : level === "full"
+            ? resourcePermissionPresets.manage.actions
+            : DEPLOY_ACTIONS;
     await ResourcePermissionPolicyModel.replace({
       ...context,
       revision: previous?.revision ?? 0,
@@ -403,7 +388,8 @@ describe("internal MCP catalog deployment YAML permission", () => {
       ],
     });
     currentUser = editor;
-    const allowed = level === "full" || level === "wildcard";
+    // Full access is not enough: deployment settings need their own action.
+    const allowed = level === "deploy" || level === "wildcard";
     for (const target of [catalog, other]) {
       const expected =
         allowed && (target.id === catalog.id || level === "wildcard");
@@ -489,7 +475,7 @@ describe("internal MCP catalog deployment YAML permission", () => {
       (await InternalMcpCatalogModel.findById(catalog.id))?.deploymentSpecYaml,
     ).toBe(role === "admin" ? `${DEPLOYMENT_YAML}\n` : DEPLOYMENT_YAML);
   });
-  test("custom role composition combines scoped actions into Full access", async ({
+  test("Full access composed across roles still needs the deployment action", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -528,14 +514,41 @@ describe("internal MCP catalog deployment YAML permission", () => {
       ],
     });
     currentUser = user;
-    const update = await app.inject({
+    const denied = await app.inject({
       method: "PUT",
       url: `/api/internal_mcp_catalog/${catalog.id}`,
       payload: { deploymentSpecYaml: DEPLOYMENT_YAML },
     });
-    expect(update.statusCode, update.body).toBe(200);
+    expect(denied.statusCode, denied.body).toBe(403);
+
+    const composed = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "mcpRegistry",
+      scope: catalog.id,
+    });
+    await ResourcePermissionPolicyModel.replace({
+      organizationId,
+      resource: "mcpRegistry",
+      scope: catalog.id,
+      revision: composed?.revision ?? 0,
+      grants: [
+        ...(composed?.grants ?? []).filter(
+          (grant) => grant.subject.id !== role.id,
+        ),
+        {
+          subject: { type: "role", id: role.id },
+          actions: [...DEPLOY_ACTIONS],
+        },
+      ],
+    });
+    const allowed = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: { deploymentSpecYaml: DEPLOYMENT_YAML },
+    });
+    expect(allowed.statusCode, allowed.body).toBe(200);
   });
-  test("a scoped service-account Full access grant does not reach another entry", async ({
+  test("a scoped service-account deployment grant does not reach another entry", async ({
     makeServiceAccount,
     makeInternalMcpCatalog,
   }) => {
@@ -577,7 +590,7 @@ describe("internal MCP catalog deployment YAML permission", () => {
         ...(previous?.grants ?? []),
         {
           subject: { type: "serviceAccount", id: account.id },
-          actions: [...resourcePermissionPresets.manage.actions],
+          actions: [...DEPLOY_ACTIONS],
         },
       ],
     });
@@ -620,7 +633,7 @@ describe("internal MCP catalog deployment YAML permission", () => {
         ...(previous?.grants ?? []),
         {
           subject: { type: "user", id: editor.id },
-          actions: [...resourcePermissionPresets.manage.actions],
+          actions: [...DEPLOY_ACTIONS],
         },
       ],
     });

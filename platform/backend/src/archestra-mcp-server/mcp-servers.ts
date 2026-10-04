@@ -24,7 +24,6 @@ import {
 } from "@/auth/mcp-catalog-permissions";
 import { userHasPermission } from "@/auth/utils";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import { assertMcpServiceAccountAllowed } from "@/k8s/mcp-server-runtime/runtime-policy";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -929,8 +928,6 @@ async function handleEditMcpConfig(
     }
 
     try {
-      if (args.serviceAccount !== undefined)
-        assertMcpServiceAccountAllowed(args.serviceAccount);
       await assertCanWriteMcpDeploymentYaml({
         userId: context.userId,
         organizationId,
@@ -1067,8 +1064,6 @@ async function handleCreateMcpServer(
     }
 
     try {
-      if (args.serviceAccount !== undefined)
-        assertMcpServiceAccountAllowed(args.serviceAccount);
       await assertCanWriteMcpDeploymentYaml({
         userId: context.userId,
         organizationId,

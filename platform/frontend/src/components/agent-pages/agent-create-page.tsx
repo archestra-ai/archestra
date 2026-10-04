@@ -245,7 +245,7 @@ export function AgentCreatePage({
             setIsDirty(false);
             setCreated(record);
           }}
-          footer={({ isSaving, canSubmit }) => (
+          footer={({ isSaving, canSubmit, hasRuntime }) => (
             <WizardFooter>
               <div>
                 {prevStep ? (
@@ -293,9 +293,11 @@ export function AgentCreatePage({
                     <span>
                       {isSaving
                         ? "Creating..."
-                        : canChat
-                          ? "Create and chat"
-                          : "Create Agent"}
+                        : !canChat
+                          ? "Create Agent"
+                          : hasRuntime
+                            ? "Create and run"
+                            : "Create and chat"}
                     </span>
                   </Button>
                 )}

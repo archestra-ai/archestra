@@ -291,7 +291,9 @@ describe("LlmProviderApiKeyForm", () => {
       screen.queryByRole("tab", { name: "Shared" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Permissions")).toBeInTheDocument();
-    expect(screen.getByText(/You’ll have full access/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add access" }),
+    ).toBeInTheDocument();
   });
 
   it("offers no sharing for a per-user credential", () => {

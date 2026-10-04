@@ -36,7 +36,6 @@ import {
   validateDeploymentYaml,
 } from "@/k8s/mcp-server-runtime/k8s-yaml-generator";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import { assertMcpServiceAccountAllowed } from "@/k8s/mcp-server-runtime/runtime-policy";
 import logger from "@/logging";
 import {
   AppModel,
@@ -463,10 +462,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "App catalog entities are managed via the Apps API.",
         );
-      }
-
-      if (restBody.serverType === "local") {
-        assertMcpServiceAccountAllowed(restBody.localConfig?.serviceAccount);
       }
       await assertCanWriteMcpDeploymentYaml({
         userId: request.user.id,
@@ -1038,10 +1033,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         current: originalCatalogItem.deploymentSpecYaml,
         currentLocalConfig: originalCatalogItem.localConfig,
       });
-
-      if (restBody.localConfig) {
-        assertMcpServiceAccountAllowed(restBody.localConfig.serviceAccount);
-      }
 
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
@@ -1920,7 +1911,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetDeploymentYamlPreview,
         description:
-          "Generate a deployment YAML template preview. Requires Full access to this MCP registry entry.",
+          "Generate a deployment YAML template preview. Requires configure-deployment-spec on this MCP registry entry.",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,
@@ -1996,7 +1987,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ValidateDeploymentYaml,
         description:
-          "Validate a deployment YAML template. Requires Full access to the supplied catalogId, or to all MCP registry entries when catalogId is omitted.",
+          "Validate a deployment YAML template. Requires configure-deployment-spec on the supplied catalogId, or on all MCP registry entries when catalogId is omitted.",
         tags: ["MCP Catalog"],
         body: z.object({
           catalogId: UuidIdSchema.optional(),
@@ -2023,7 +2014,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ResetDeploymentYaml,
         description:
-          "Reset the deployment YAML to default by clearing the custom YAML. Requires Full access to this MCP registry entry.",
+          "Reset the deployment YAML to default by clearing the custom YAML. Requires configure-deployment-spec on this MCP registry entry.",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,

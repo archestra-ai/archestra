@@ -3660,38 +3660,6 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
       "archestra-platform-mcp-k8s-operator",
     );
   });
-
-  test("rejects a service account outside the MCP runtime allowlist", () => {
-    const k8sDeployment = new K8sDeployment({
-      mcpServer: {
-        id: "rejected-service-account-server",
-        name: "Rejected Service Account",
-        catalogId: "rejected-service-account-catalog",
-      } as McpServer,
-      k8sApi: {} as k8s.CoreV1Api,
-      k8sAppsApi: {} as k8s.AppsV1Api,
-      k8sAttach: {} as k8s.Attach,
-      k8sLog: {} as k8s.Log,
-      k8sExec: {} as Exec,
-      namespace: "default",
-      catalogItem: null,
-    });
-
-    expect(() =>
-      k8sDeployment.generateDeploymentSpec(
-        "test-image:latest",
-        {
-          command: "node",
-          arguments: ["server.js"],
-          serviceAccount: "platform-control-plane",
-        },
-        false,
-        8080,
-      ),
-    ).toThrow(
-      'Kubernetes service account "platform-control-plane" is not allowed for MCP server workloads',
-    );
-  });
 });
 
 describe("K8sDeployment.deleteK8sSecret", () => {

@@ -133,7 +133,7 @@ Self-hosted registry entries define how the deployment should be built.
 - **Base image with command and args**: use Archestra's MCP server base image and specify the command to run.
 - **Custom image**: provide your own Docker image when the server is packaged as a container.
 - **Environment and secrets**: define install-time fields, static environment variables, and secret values needed by the server.
-- **Advanced YAML**: customize the Kubernetes deployment, including secrets, volumes, and resource limits. Viewing YAML and changing deployment settings require **Full access** to the registry entry. Grant access to one entry or all entries through [resource permissions](/docs/platform-access-control).
+- **Advanced YAML**: customize the Kubernetes deployment, including secrets, volumes, and resource limits. Viewing YAML and changing deployment settings require **Full access + deployment** on the registry entry. Admins hold it on every entry by default. Grant it for one entry or all entries through [resource permissions](/docs/platform-access-control).
 
 Registry entries define whether a server is remote or self-hosted before the orchestrator creates any Kubernetes resources. See [Private MCP Registry - Server Configuration](/docs/platform-private-registry#server-configuration) for those registry fields.
 

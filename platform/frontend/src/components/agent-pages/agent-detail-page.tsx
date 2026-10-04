@@ -64,6 +64,7 @@ import {
   useExportAgent,
   useProfile,
 } from "@/lib/agent.query";
+import { useAgentRuns } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
@@ -277,6 +278,11 @@ function AgentDetails({
   const showConnect = connectAction.visible;
   const hasAgentRuntime =
     runtimeEnabled && kind === "agent" && agent.runtime != null;
+  const runsQuery = useAgentRuns(agent.id, hasAgentRuntime);
+  // A failed lookup keeps its recovery surface accessible; only a known
+  // empty result hides the tab.
+  const hasRuns =
+    hasAgentRuntime && ((runsQuery.data?.length ?? 0) > 0 || runsQuery.isError);
 
   // The record's own sections, listed down the side of its page. The setup
   // wizard's steps supply the editable ones, in the order it walks them, with
@@ -315,9 +321,9 @@ function AgentDetails({
             ? (["advanced"] as const)
             : []),
         ]),
-    ...(showConnect && !connectFirst ? (["connect"] as const) : []),
-    ...(hasAgentRuntime ? (["runs"] as const) : []),
+    ...(hasRuns ? (["runs"] as const) : []),
     ...(!isBuiltIn ? (["permissions"] as const) : []),
+    ...(showConnect && !connectFirst ? (["connect"] as const) : []),
   ];
   const sectionParam = searchParams.get("section");
   const section = resolveAgentDetailSection(sections, sectionParam);
@@ -336,8 +342,18 @@ function AgentDetails({
   // does not keep asking for a section that is not on this page.
   useEffect(() => {
     if (!sectionParam || sectionParam === section) return;
+    if (sectionParam === "runs" && hasAgentRuntime && runsQuery.isPending)
+      return;
     router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
-  }, [sectionParam, section, kind, agent.id, router]);
+  }, [
+    sectionParam,
+    section,
+    kind,
+    agent.id,
+    router,
+    hasAgentRuntime,
+    runsQuery.isPending,
+  ]);
 
   // Unsaved edits guard every way off the current tab that is not a save:
   // another tab, the back link, the header's own links. The pending
@@ -621,6 +637,7 @@ function AgentDetails({
       <div className="min-w-0">
         {section === "permissions" ? (
           <ResourcePermissions
+            layout="settings"
             resource={
               agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent"
             }

@@ -3284,11 +3284,6 @@ const config = {
       environmentNamespaces: parseCommaSeparatedList(
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
       ),
-      allowedMcpServerServiceAccounts: parseCommaSeparatedList(
-        process.env
-          .ARCHESTRA_ORCHESTRATOR_MCP_SERVER_ALLOWED_SERVICE_ACCOUNTS ||
-          "default,archestra-platform-mcp-k8s-operator",
-      ),
     },
   },
   /**

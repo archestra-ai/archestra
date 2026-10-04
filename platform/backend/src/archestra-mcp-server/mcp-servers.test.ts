@@ -409,7 +409,9 @@ spec:
     );
 
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain("Full access");
+    expect(JSON.stringify(result.content)).toContain(
+      "configure-deployment-spec",
+    );
     const persisted = await InternalMcpCatalogModel.findById(catalog.id, {
       expandSecrets: false,
     });
@@ -441,7 +443,9 @@ spec:
     );
 
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain("Full access");
+    expect(JSON.stringify(result.content)).toContain(
+      "configure-deployment-spec",
+    );
     expect(
       await InternalMcpCatalogModel.findRootByNameInOrg({
         name: "Editor Yaml Server",
@@ -486,7 +490,9 @@ spec:
       context,
     );
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain("Full access");
+    expect(JSON.stringify(result.content)).toContain(
+      "configure-deployment-spec",
+    );
     expect(
       (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
         ?.envFrom ?? [],
@@ -499,35 +505,6 @@ spec:
     ).toBeFalsy();
   });
 
-  test("even an admin cannot persist a disallowed service account through a catalog tool", async ({
-    makeAgent,
-    makeMember,
-    makeOrganization,
-    makeUser,
-    makeInternalMcpCatalog,
-  }) => {
-    const { context, organizationId } = await makeContext("admin", {
-      makeAgent,
-      makeMember,
-      makeOrganization,
-      makeUser,
-    });
-    const catalog = await makeInternalMcpCatalog({
-      organizationId,
-      serverType: "local",
-    });
-    const result = await executeArchestraTool(
-      EDIT_TOOL,
-      { id: catalog.id, serviceAccount: "archestra-platform" },
-      context,
-    );
-    expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain("not allowed");
-    expect(
-      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
-        ?.serviceAccount,
-    ).toBeUndefined();
-  });
   test("an admin can set deployment YAML through edit_mcp_config", async ({
     makeAgent,
     makeInternalMcpCatalog,

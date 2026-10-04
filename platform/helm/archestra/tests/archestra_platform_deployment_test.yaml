@@ -1079,29 +1079,6 @@ tests:
             name: ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE
             value: "external-runtime-owner"
 
-  - it: should allow only the default and dedicated MCP service accounts
-    documentIndex: 1
-    release:
-      name: "my-release"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_ALLOWED_SERVICE_ACCOUNTS
-            value: "default,my-release-archestra-platform-mcp-k8s-operator"
-
-  - it: should honor an explicit MCP service account allowlist
-    documentIndex: 1
-    set:
-      archestra.env:
-        ARCHESTRA_ORCHESTRATOR_MCP_SERVER_ALLOWED_SERVICE_ACCOUNTS: "default,custom-runtime"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_ALLOWED_SERVICE_ACCOUNTS
-            value: "default,custom-runtime"
-
   # MCP image pre-pull tests
   - it: should configure pull secrets for a private pre-pull bootstrap image
     documentIndex: 1

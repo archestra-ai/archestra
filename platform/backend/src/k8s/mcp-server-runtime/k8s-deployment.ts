@@ -72,7 +72,6 @@ import {
   shouldUseGkeFqdnNetworkPolicy,
 } from "./network-policy";
 import { resolveRuntimeOwnerReferences } from "./runtime-owner";
-import { assertMcpServiceAccountAllowed } from "./runtime-policy";
 import type { K8sDeploymentStatusSummary } from "./schemas";
 
 const {
@@ -2145,8 +2144,6 @@ export default class K8sDeployment {
     tolerations?: k8s.V1Toleration[] | null,
     resolvedImagePullSecretNames?: Array<{ name: string }>,
   ): k8s.V1Deployment {
-    assertMcpServiceAccountAllowed(localConfig.serviceAccount);
-
     // Check if YAML override is provided
     if (this.catalogItem?.deploymentSpecYaml) {
       const yamlDeployment = this.generateDeploymentFromYaml(

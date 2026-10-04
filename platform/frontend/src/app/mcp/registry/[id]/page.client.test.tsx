@@ -198,9 +198,14 @@ function section(name: string) {
 describe("McpCatalogItemDetailPage overview", () => {
   beforeEach(() => {
     vi.mocked(useScopedCapabilities).mockReturnValue({
-      data: ["read", "use", "update", "delete", "manage-permissions"].map(
-        (action) => ({ resource: "mcpRegistry", scope: "*", action }),
-      ),
+      data: [
+        "read",
+        "use",
+        "update",
+        "delete",
+        "manage-permissions",
+        "configure-deployment-spec",
+      ].map((action) => ({ resource: "mcpRegistry", scope: "*", action })),
     } as ReturnType<typeof useScopedCapabilities>);
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
@@ -333,19 +338,14 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByText("Support")).toBeNull();
   });
 
-  it("keeps one Edit in the header, and points Overview at the same place", () => {
+  it("keeps the header's Edit as the only way into the configuration", () => {
     renderPage();
 
     expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
       "href",
       "/mcp/registry/cat-1/edit?step=configuration",
     );
-    expect(
-      section("Overview").getByRole("link", { name: /Configuration/ }),
-    ).toHaveAttribute("href", "/mcp/registry/cat-1/edit?step=configuration");
-    expect(
-      section("Overview").queryByRole("link", { name: /^Edit\b/ }),
-    ).toBeNull();
+    expect(section("Overview").queryByRole("link")).toBeNull();
   });
 
   it("allows template editing before installation without a competing configuration Edit action", () => {
@@ -363,16 +363,26 @@ describe("McpCatalogItemDetailPage overview", () => {
 
   it.each([
     "edit",
+    "full-access",
     "other-entry",
   ])("ignores a YAML deep link for %s access", (access) => {
     vi.mocked(useScopedCapabilities).mockReturnValue({
       data: (access === "edit"
         ? ["read", "use", "update"]
-        : ["read", "use", "update", "delete", "manage-permissions"]
+        : access === "full-access"
+          ? ["read", "use", "update", "delete", "manage-permissions"]
+          : [
+              "read",
+              "use",
+              "update",
+              "delete",
+              "manage-permissions",
+              "configure-deployment-spec",
+            ]
       ).map((action) => ({
         organizationId: "org",
         resource: "mcpRegistry",
-        scope: access === "edit" ? "cat-1" : "cat-other",
+        scope: access === "other-entry" ? "cat-other" : "cat-1",
         action,
       })),
     } as ReturnType<typeof useScopedCapabilities>);

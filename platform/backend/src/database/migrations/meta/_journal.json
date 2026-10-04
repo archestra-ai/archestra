@@ -3557,6 +3557,13 @@
       "when": 1791074452370,
       "tag": "0507_peer-message-inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 508,
+      "version": "7",
+      "when": 1791126427875,
+      "tag": "0508_mcp-registry-configure-deployment-spec",
+      "breakpoints": true
     }
   ]
 }

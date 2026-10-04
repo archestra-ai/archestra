@@ -187,8 +187,11 @@ describe("AgentRuntimePicker", () => {
       screen.getByRole("option", { name: "Anthropic Messages" }),
     );
     await user.click(screen.getByRole("button", { name: /^Run controls/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Resources and access/ }),
+    );
     expect(screen.getByLabelText("Privileged mode")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Metered LLM budget (USD)"), {
+    fireEvent.change(screen.getByLabelText("Metered LLM budget"), {
       target: { value: "25" },
     });
     expect(

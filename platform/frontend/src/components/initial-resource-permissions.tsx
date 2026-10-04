@@ -4,11 +4,16 @@
 import {
   type ResourcePermissionGrant,
   resourcePermissionPresets,
+  resourcePermissionPresetsFor,
   type ScopedResource,
 } from "@archestra/shared";
 import { Info, Plus, Trash2, UserRound } from "lucide-react";
 import { useState } from "react";
 import { AddResourceAccessDialog } from "@/components/add-resource-access-dialog";
+import {
+  PermissionsSettingsSection,
+  permissionsSettingsDescription,
+} from "@/components/permissions-settings-section";
 import {
   actionSummary,
   PermissionsPanel,
@@ -33,7 +38,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useResourcePermissions } from "@/lib/resource-permissions.query";
 
 export type InitialPermissionGrant = ResourcePermissionGrant & { name: string };
@@ -46,6 +54,8 @@ export function InitialResourcePermissions({
   grants,
   onChange,
   standalone,
+  layout = "default",
+  showHeader = true,
 }: {
   resource: ScopedResource;
   scope?: string;
@@ -54,6 +64,10 @@ export function InitialResourcePermissions({
   onChange: (grants: InitialPermissionGrant[]) => void;
   /** Set when the section is a tab pane of its own, not one field among many. */
   standalone?: boolean;
+  /** Match the title-left, controls-right layout of settings forms. */
+  layout?: "default" | "settings";
+  /** The enclosing configuration row already supplies its heading and helper. */
+  showHeader?: boolean;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [allPermissionsOpen, setAllPermissionsOpen] = useState(false);
@@ -75,29 +89,41 @@ export function InitialResourcePermissions({
   // Only offer the way in when the viewer could actually save there. The
   // organization-wide policy reports what this viewer may do with it.
   const canEditAll = !!canUpdateGlobal;
-  return (
-    <PermissionsPanel embedded standalone={standalone}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-sm font-medium">Permissions</h3>
-          <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            {!ownerName && !scope && <span>You’ll have full access. </span>}
-            <span>
-              Add others now or later. Organization permissions also apply.
-            </span>
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="size-4" />
-          <span>Add access</span>
-        </Button>
-      </div>
+  // The author gets Full access to what they create, so every preset up to it
+  // can be handed on. Anything above it (the MCP registry's deployment
+  // access) the author can only grant if they already hold it everywhere.
+  const presets = resourcePermissionPresetsFor(resource);
+  const { data: capabilities } = useScopedCapabilities();
+  const canGrantPreset = (actions: readonly string[]) =>
+    actions.every(
+      (action) =>
+        (
+          resourcePermissionPresets.manage.actions as readonly string[]
+        ).includes(action) ||
+        !!capabilities?.some(
+          (grant) =>
+            grant.resource === resource &&
+            grant.action === action &&
+            grant.scope === "*",
+        ),
+    );
+  const description = permissionsSettingsDescription(
+    scopedResourceNouns[resource],
+  );
+  const addAccessButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="shrink-0"
+      onClick={() => setAddOpen(true)}
+    >
+      <Plus className="size-4" />
+      <span>Add access</span>
+    </Button>
+  );
+  const accessRows = (
+    <>
       {/* A rule above the list only. The section that follows draws its own
           top rule, so closing this one too stacks two lines. */}
       {(ownerName || grants.length > 0 || inherited.length > 0) && (
@@ -117,7 +143,7 @@ export function InitialResourcePermissions({
               {/* Same width and padding as the editable rows' permission
                   select, plus the trash column's spacer, so every row in the
                   list shares one permission column. */}
-              <span className="w-36 shrink-0 px-3 text-sm text-muted-foreground">
+              <span className="w-48 shrink-0 px-3 text-sm text-muted-foreground">
                 Full access
               </span>
               <span className="size-8 shrink-0" />
@@ -128,19 +154,20 @@ export function InitialResourcePermissions({
               key={`${grant.subject.type}:${grant.subject.id}`}
               className="flex items-center gap-3 py-2"
             >
+              <SubjectIcon type={grant.subject.type} />
               <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-                <span className="break-words text-sm">{grant.name}</span>
+                <span className="break-words text-sm font-medium">
+                  {grant.name}
+                </span>
                 <span className="text-xs text-muted-foreground">
                   {subjectLabels[grant.subject.type]}
                 </span>
               </div>
               <Select
-                value={presetFor(grant.actions)}
+                value={presetFor(grant.actions, resource)}
                 onValueChange={(value) => {
-                  const preset =
-                    resourcePermissionPresets[
-                      value as keyof typeof resourcePermissionPresets
-                    ];
+                  const preset = presets[value];
+                  if (!preset) return;
                   onChange(
                     grants.map((entry, entryIndex) =>
                       entryIndex === index
@@ -152,19 +179,21 @@ export function InitialResourcePermissions({
               >
                 <SelectTrigger
                   size="sm"
-                  className="w-36 shrink-0 border-transparent bg-transparent shadow-none dark:bg-transparent"
+                  className="w-48 shrink-0 border-transparent bg-transparent shadow-none dark:bg-transparent"
                   aria-label={`Permission for ${grant.name}`}
                 >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(resourcePermissionPresets).map(
-                    ([key, preset]) => (
-                      <SelectItem key={key} value={key}>
-                        {preset.label}
-                      </SelectItem>
-                    ),
-                  )}
+                  {Object.entries(presets).map(([key, preset]) => (
+                    <SelectItem
+                      key={key}
+                      value={key}
+                      disabled={!canGrantPreset(preset.actions)}
+                    >
+                      {preset.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button
@@ -238,13 +267,48 @@ export function InitialResourcePermissions({
                   </PopoverContent>
                 </Popover>
               </div>
-              <span className="w-36 shrink-0 px-3 text-sm text-muted-foreground">
+              <span className="w-48 shrink-0 px-3 text-sm text-muted-foreground">
                 {actionSummary(grant.actions, resource)}
               </span>
               <span className="size-8 shrink-0" />
             </div>
           ))}
         </div>
+      )}
+    </>
+  );
+  return (
+    <>
+      {layout === "settings" ? (
+        <PermissionsSettingsSection
+          resourceName={scopedResourceNouns[resource]}
+          directCount={grants.length}
+          inheritedCount={inherited.length}
+          action={addAccessButton}
+        >
+          {accessRows}
+        </PermissionsSettingsSection>
+      ) : (
+        <PermissionsPanel embedded standalone={standalone}>
+          <div
+            className={
+              !showHeader
+                ? "flex justify-end"
+                : "flex items-start justify-between gap-3"
+            }
+          >
+            {showHeader && (
+              <div className="min-w-0">
+                <h3 className="text-sm font-medium">Permissions</h3>
+                <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+                  {description}
+                </p>
+              </div>
+            )}
+            {addAccessButton}
+          </div>
+          {accessRows}
+        </PermissionsPanel>
       )}
       {allPermissionsOpen && (
         <ResourcePermissionsDialog
@@ -259,17 +323,17 @@ export function InitialResourcePermissions({
         resource={resource}
         scope={scope}
         existingSubjects={grants.map((grant) => grant.subject)}
-        presets={Object.entries(resourcePermissionPresets).map(
-          ([value, preset]) => ({
-            value,
-            label: preset.label,
-            description: presetDescription(value, resource),
-            actions: [...preset.actions],
-            disabled: false,
-          }),
-        )}
-        onAdd={(added) => onChange([...grants, ...added])}
+        presets={Object.entries(presets).map(([value, preset]) => ({
+          value,
+          label: preset.label,
+          description: presetDescription(value, resource),
+          actions: [...preset.actions],
+          disabled: !canGrantPreset(preset.actions),
+        }))}
+        onAdd={(added) => {
+          onChange([...grants, ...added]);
+        }}
       />
-    </PermissionsPanel>
+    </>
   );
 }

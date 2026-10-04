@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   peerProofAuthorizes,
   signPeerProof,
+  stripPeerProofs,
   verifyPeerProof,
 } from "./peer-claims";
 
@@ -62,6 +63,43 @@ describe("peer proofs", () => {
     expect(
       verifyPeerProof({ ...signed, signature: remedyMac }, secret),
     ).toBeNull();
+  });
+
+  test("an empty secret does not sign or verify", () => {
+    expect(signPeerProof(claims, "")).toBeUndefined();
+    const signed = signPeerProof(claims, secret);
+    expect(verifyPeerProof(signed, "")).toBeNull();
+  });
+
+  test("proof removal walks a deep object and a cycle without keeping a proof", () => {
+    let deep: Record<string, unknown> = { peer_proof: "leaf" };
+    for (let i = 0; i < 20_000; i++) deep = { child: deep };
+    const reused = { peer_proof: "shared" };
+    const cycle: Record<string, unknown> = {
+      peer_proof: "root",
+      reused,
+      again: reused,
+    };
+    cycle.self = cycle;
+    const request = { deep, cycle };
+    stripPeerProofs(request);
+    let cursor: unknown = request.deep;
+    for (let i = 0; i < 20_000; i++) {
+      cursor = (cursor as { child: unknown }).child;
+    }
+    expect(cursor).toEqual({});
+    expect(cycle).not.toHaveProperty("peer_proof");
+    expect(reused).not.toHaveProperty("peer_proof");
+    expect(cycle.self).toBe(cycle);
+  });
+
+  test("invalid claims are not signed", () => {
+    expect(
+      signPeerProof({ ...claims, organization_id: "" }, secret),
+    ).toBeUndefined();
+    expect(
+      signPeerProof({ ...claims, v: 2 } as unknown as typeof claims, secret),
+    ).toBeUndefined();
   });
 
   test("an altered payload or the wrong secret does not verify", () => {

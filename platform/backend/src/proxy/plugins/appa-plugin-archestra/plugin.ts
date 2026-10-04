@@ -43,7 +43,11 @@ import {
   signOfferClaims,
   unsignedOfferClaims,
 } from "@/openappa/offer-claims";
-import { PEER_PROOF_ARGUMENT, signPeerProof } from "@/openappa/peer-claims";
+import {
+  PEER_PROOF_ARGUMENT,
+  signPeerProof,
+  stripPeerProofs,
+} from "@/openappa/peer-claims";
 import { underscoreLabeledPlatformToolName } from "@/openappa/request";
 import {
   type AppaChildReturnRecord,
@@ -848,7 +852,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     >();
     for (const [index, call] of relayCandidates.entries()) {
       const decision = relayEvaluations[index];
-      if (decision?.kind === "allow" || undeclaredRelayTool(decision)) {
+      if (decision?.kind === "allow") {
         admittedRelayIds.add(call.id);
       } else if (decision) withheldRelayDecisions.set(call.id, decision);
     }
@@ -2135,16 +2139,6 @@ async function resolveRelayTarget(params: {
   return childTarget(parent, sibling);
 }
 
-function undeclaredRelayTool(
-  decision: { kind: string; feedback?: string } | undefined,
-): boolean {
-  return (
-    decision?.kind === "deny" &&
-    typeof decision.feedback === "string" &&
-    decision.feedback.includes("is not declared in this policy")
-  );
-}
-
 function childTarget(
   parent: OpenAppaSession,
   child: { childNativeId: string; spawnCallId?: string; started: boolean },
@@ -2521,10 +2515,8 @@ function heldPeerNotice(
 const PROTOCOL_REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$/;
 
 function protocolRequestId(body: string): string | undefined {
-  const json = /^\s*(\{[\s\S]*?\})/.exec(body)?.[1];
-  if (!json) return undefined;
   try {
-    const parsed: unknown = JSON.parse(json);
+    const parsed: unknown = JSON.parse(body);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return undefined;
     }
@@ -2709,19 +2701,6 @@ function restoredPeerRead(params: {
 
 function isPeerReadResult(binding: AppaPluginBinding, name: string): boolean {
   return peerShortName(binding, name) === TOOL_READ_PEER_MESSAGE_SHORT_NAME;
-}
-
-function stripPeerProofs(request: unknown): void {
-  const walk = (value: unknown): void => {
-    if (Array.isArray(value)) {
-      for (const item of value) walk(item);
-      return;
-    }
-    if (!isRecord(value)) return;
-    if (PEER_PROOF_ARGUMENT in value) delete value[PEER_PROOF_ARGUMENT];
-    for (const nested of Object.values(value)) walk(nested);
-  };
-  walk(request);
 }
 
 function stringArgument(value: unknown): string | undefined {

@@ -5077,6 +5077,27 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events.filter((event) => event.event === "child_end")).toEqual([]);
     });
 
+    test("an undeclared send denial cannot authorize a peer release", async () => {
+      const { prompt } = await spawnTeammate();
+      runtime((event) =>
+        event.event === "tool_call" && event.tool === "SendMessage"
+          ? {
+              decision: "deny_call",
+              feedback: 'Tool "SendMessage" is not declared in this policy',
+              offers: [],
+            }
+          : undefined,
+      );
+      reply("SendMessage", { to: "team-lead", message: "A denied update" });
+      const response = await send(auditor, [
+        { role: "user", content: opening(prompt) },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).not.toContain("appapm1-");
+      expect(appaService.sendPeerMessage).not.toHaveBeenCalled();
+    });
+
     test("a teammate's protocol message is sent unchanged and does not end the sender", async () => {
       const { prompt } = await spawnTeammate();
       const message = {
@@ -6155,6 +6176,30 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(forwarded()).not.toContain("ab".repeat(32));
       expect(forwarded()).not.toContain(scoped(lead));
       expect(appaService.admitPeerMessage).not.toHaveBeenCalled();
+    });
+
+    test("a held structured message retains a safe request id after nested JSON", async () => {
+      const { prompt } = await spawnTeammate();
+      answerText();
+      const response = await send(auditor, [
+        { role: "user", content: opening(prompt) },
+        { role: "assistant", content: "Working" },
+        {
+          role: "user",
+          content: teammateMessage(
+            "team-lead",
+            JSON.stringify({
+            type: "plan_approval_request",
+            details: { reason: "private nested instructions" },
+              request_id: "request-nested-1",
+            }),
+          ),
+        },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(forwarded()).toContain("Protocol request id: request-nested-1");
+      expect(forwarded()).not.toContain("private nested instructions");
     });
 
     // The switch turns off and on again while the session runs. OpenAPPA

@@ -1392,37 +1392,36 @@ export async function sendPeerMessage(params: {
 }): Promise<
   { kind: "released"; messageId: string } | { kind: "denied"; feedback: string }
 > {
-  const parsed = z
-    .discriminatedUnion("kind", [
+  const parsed = await peerResponse(
+    params.session,
+    (module, policy) =>
+      module.sendPeerMessage(
+        JSON.stringify({
+          ...peerActor(params.session),
+          operation_id: params.operationId,
+          recipient_session_id: params.recipientSessionId,
+          ...(params.recipientParentId
+            ? { recipient_parent_id: params.recipientParentId }
+            : {}),
+          ...(params.recipientNativeId
+            ? { recipient_native_id: params.recipientNativeId }
+            : {}),
+          ...(params.recipientSpawnCallId
+            ? { recipient_spawn_call_id: params.recipientSpawnCallId }
+            : {}),
+          value: params.value,
+        }),
+        policy,
+      ),
+    z.discriminatedUnion("kind", [
       z
         .object({ kind: z.literal("released"), message_id: z.string().min(1) })
         .strict(),
       z
         .object({ kind: z.literal("denied"), feedback: z.string().min(1) })
         .strict(),
-    ])
-    .parse(
-      await peerJson(params.session, (module, policy) =>
-        module.sendPeerMessage(
-          JSON.stringify({
-            ...peerActor(params.session),
-            operation_id: params.operationId,
-            recipient_session_id: params.recipientSessionId,
-            ...(params.recipientParentId
-              ? { recipient_parent_id: params.recipientParentId }
-              : {}),
-            ...(params.recipientNativeId
-              ? { recipient_native_id: params.recipientNativeId }
-              : {}),
-            ...(params.recipientSpawnCallId
-              ? { recipient_spawn_call_id: params.recipientSpawnCallId }
-              : {}),
-            value: params.value,
-          }),
-          policy,
-        ),
-      ),
-    );
+    ]),
+  );
   return parsed.kind === "released"
     ? { kind: "released", messageId: parsed.message_id }
     : { kind: "denied", feedback: parsed.feedback };
@@ -1445,8 +1444,25 @@ export async function admitPeerMessage(params: {
   | { kind: "held"; notices: PeerNotice[] }
   | { kind: "unverified" }
 > {
-  const parsed = z
-    .discriminatedUnion("kind", [
+  const parsed = await peerResponse(
+    params.session,
+    (module, policy) =>
+      module.admitPeerMessage(
+        JSON.stringify({
+          ...peerActor(params.session),
+          ...(params.messageId ? { message_id: params.messageId } : {}),
+          ...(params.senderSessionId
+            ? { sender_session_id: params.senderSessionId }
+            : {}),
+          ...(params.value !== undefined ? { value: params.value } : {}),
+          ...(params.digest ? { digest: params.digest } : {}),
+          ...(params.structured !== undefined
+            ? { structured: params.structured }
+            : {}),
+        }),
+        policy,
+      ),
+    z.discriminatedUnion("kind", [
       z
         .object({
           kind: z.literal("admitted"),
@@ -1461,26 +1477,8 @@ export async function admitPeerMessage(params: {
         })
         .strict(),
       z.object({ kind: z.literal("unverified") }).strict(),
-    ])
-    .parse(
-      await peerJson(params.session, (module, policy) =>
-        module.admitPeerMessage(
-          JSON.stringify({
-            ...peerActor(params.session),
-            ...(params.messageId ? { message_id: params.messageId } : {}),
-            ...(params.senderSessionId
-              ? { sender_session_id: params.senderSessionId }
-              : {}),
-            ...(params.value !== undefined ? { value: params.value } : {}),
-            ...(params.digest ? { digest: params.digest } : {}),
-            ...(params.structured !== undefined
-              ? { structured: params.structured }
-              : {}),
-          }),
-          policy,
-        ),
-      ),
-    );
+    ]),
+  );
   if (parsed.kind === "admitted") {
     return {
       kind: "admitted",
@@ -1504,8 +1502,9 @@ export async function listPeerMessages(params: {
   session: OpenAppaSession;
   toolCallId?: string;
 }): Promise<PeerNotice[]> {
-  const parsed = z.object({ notices: z.array(PeerNoticeWireSchema) }).parse(
-    await peerJson(params.session, (module, policy) =>
+  const parsed = await peerResponse(
+    params.session,
+    (module, policy) =>
       module.listPeerMessages(
         JSON.stringify({
           ...peerActor(params.session),
@@ -1516,7 +1515,7 @@ export async function listPeerMessages(params: {
         }),
         policy,
       ),
-    ),
+    z.object({ notices: z.array(PeerNoticeWireSchema) }),
   );
   return parsed.notices.map(peerNotice);
 }
@@ -1714,6 +1713,21 @@ function peerActor(session: OpenAppaSession) {
     ...(session.caller_id ? { caller_id: session.caller_id } : {}),
     ...(session.parent_id ? { parent_id: session.parent_id } : {}),
   };
+}
+
+async function peerResponse<T>(
+  session: OpenAppaSession,
+  call: (
+    module: Awaited<ReturnType<typeof binding>>,
+    policy: DispatchPolicy,
+  ) => Promise<string>,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  try {
+    return schema.parse(await peerJson(session, call));
+  } catch (error) {
+    throw openappaFailure(error);
+  }
 }
 
 async function peerJson(

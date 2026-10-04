@@ -14,6 +14,7 @@ import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
 import {
+  admitPeerMessage,
   approveSpawnReturn,
   cancelCalls,
   endChild,
@@ -2910,5 +2911,122 @@ describe("remedy by offer", () => {
     expect(
       JSON.parse(native.listPeerMessages.mock.calls[0][0]).session_id,
     ).toBe("conversation");
+  });
+
+  test("a peer admission returns the runtime's admitted, held, or unverified result", async () => {
+    native.admitPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        kind: "admitted",
+        message_id: "msg-1",
+        value: "retained body",
+      }),
+    );
+    await expect(
+      admitPeerMessage({ session, messageId: "msg-1", value: "retained body" }),
+    ).resolves.toEqual({
+      kind: "admitted",
+      messageId: "msg-1",
+      value: "retained body",
+    });
+
+    native.admitPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        kind: "held",
+        notices: [
+          {
+            message_id: "msg-2",
+            sender_session_id: "conversation:lead",
+            recipient_session_id: "conversation",
+            digest: "cd".repeat(32),
+            expires_at: "2026-10-03T00:00:00Z",
+          },
+        ],
+      }),
+    );
+    await expect(
+      admitPeerMessage({ session, value: "held body" }),
+    ).resolves.toEqual({
+      kind: "held",
+      notices: [
+        {
+          messageId: "msg-2",
+          senderSessionId: "conversation:lead",
+          recipientSessionId: "conversation",
+          digest: "cd".repeat(32),
+          expiresAt: "2026-10-03T00:00:00Z",
+        },
+      ],
+    });
+
+    native.admitPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({ kind: "unverified" }),
+    );
+    await expect(admitPeerMessage({ session })).resolves.toEqual({
+      kind: "unverified",
+    });
+  });
+
+  test("a malformed peer response is an unavailable runtime, not a raw parse error", async () => {
+    const unavailable = {
+      statusCode: 503,
+      message: expect.stringContaining("OpenAPPA could not safely complete"),
+    };
+    native.sendPeerMessage.mockResolvedValueOnce("{not json");
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:bad",
+        recipientSessionId: "conversation:worker",
+        value: "hello",
+      }),
+    ).rejects.toMatchObject(unavailable);
+
+    native.admitPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({ kind: "admitted" }),
+    );
+    await expect(admitPeerMessage({ session })).rejects.toMatchObject(
+      unavailable,
+    );
+
+    native.listPeerMessages.mockResolvedValueOnce(
+      JSON.stringify({ notices: [{}] }),
+    );
+    await expect(listPeerMessages({ session })).rejects.toMatchObject(
+      unavailable,
+    );
+
+    native.readPeerMessage.mockResolvedValueOnce("not-json");
+    await expect(
+      readPeerMessage({
+        session,
+        toolCallId: "read-bad",
+        args: { message_id: "msg-1" },
+      }),
+    ).rejects.toMatchObject(unavailable);
+  });
+
+  test("a runtime refusal is not rewritten as an unavailable peer response", async () => {
+    native.sendPeerMessage.mockRejectedValueOnce(
+      new Error("no prepared fork to open this child"),
+    );
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:unforked",
+        recipientSessionId: "conversation:worker",
+        value: "hello",
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    native.sendPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({ kind: "denied", feedback: "the label narrows" }),
+    );
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:denied",
+        recipientSessionId: "conversation:worker",
+        value: "hello",
+      }),
+    ).resolves.toEqual({ kind: "denied", feedback: "the label narrows" });
   });
 });

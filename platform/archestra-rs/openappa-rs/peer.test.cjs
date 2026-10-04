@@ -8,6 +8,40 @@ const native = require('./index.cjs');
 
 const policyPath = `${__dirname}/test-policy.toml`;
 
+test('a peer caller id is bounded before a session is opened', async () => {
+  const policy = { content: 'enabled = false\n', credentials: {} };
+  await assert.rejects(
+    () =>
+      native.sendPeerMessage(
+        JSON.stringify({
+          organization_id: 'org',
+          session_id: 'session',
+          caller_id: 'c'.repeat(513),
+          operation_id: 'peer_send:bound',
+          recipient_session_id: 'other',
+          value: 'hi',
+        }),
+        policy,
+      ),
+    /invalid caller identity/,
+  );
+  await assert.rejects(
+    () =>
+      native.sendPeerMessage(
+        JSON.stringify({
+          organization_id: 'org',
+          session_id: 'session',
+          caller_id: 'user:ok\n',
+          operation_id: 'peer_send:control',
+          recipient_session_id: 'other',
+          value: 'hi',
+        }),
+        policy,
+      ),
+    /invalid caller identity/,
+  );
+});
+
 test('peer messages stay inside one family and do not invent a release', async (t) => {
   const ledgerUrl = new URL(databaseUrl);
   ledgerUrl.searchParams.set('application_name', `openappa-peer-${randomUUID()}`);
@@ -338,6 +372,59 @@ context_control = true
     outcome: 'success',
   });
   assert.equal(settled.decision, 'ack');
+
+  const oversized = await send(child, {
+    operation_id: 'peer_send:oversized',
+    recipient_session_id: parent.session_id,
+    value: 'x'.repeat(64 * 1024 + 1),
+  });
+  assert.equal(oversized.kind, 'denied');
+  assert.match(oversized.feedback, /64KiB/);
+  const self = await send(child, {
+    operation_id: 'peer_send:self',
+    recipient_session_id: child.session_id,
+    value: 'no',
+  });
+  assert.equal(self.kind, 'denied');
+  assert.match(self.feedback, /itself/);
+  await assert.rejects(
+    () => read(child, 'read-long-id', 'm'.repeat(129)),
+    /invalid peer message id/,
+  );
+  const logicalList = await native
+    .listPeerMessages(
+      JSON.stringify({
+        ...child,
+        tool_call_id: 'logical-list-1',
+        tool: 'acme__list_peer_messages',
+      }),
+      policy,
+    )
+    .then(JSON.parse);
+  assert.ok(logicalList.notices.some((notice) => notice.message_id === held.message_id));
+  const replayedList = await native
+    .listPeerMessages(
+      JSON.stringify({
+        ...child,
+        tool_call_id: 'logical-list-1',
+        tool: 'acme__list_peer_messages',
+      }),
+      policy,
+    )
+    .then(JSON.parse);
+  assert.deepEqual(replayedList.notices, logicalList.notices);
+  await assert.rejects(
+    () =>
+      native.listPeerMessages(
+        JSON.stringify({
+          ...child,
+          tool_call_id: 'logical-list-huge',
+          tool: 't'.repeat(513),
+        }),
+        policy,
+      ),
+    /invalid tool identity/,
+  );
 
   const rows = await client.query(
     "SELECT count(*) FROM openappa_operations WHERE organization_id = $1 AND input::text LIKE '%child_end%'",

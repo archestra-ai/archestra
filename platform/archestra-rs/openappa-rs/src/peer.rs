@@ -84,6 +84,10 @@ async fn execute(
         .await
         .map_err(error)?;
     let state = state.pinned(&deployment);
+    // acting_root's connection lease is sequential with the execution lease
+    // below, not nested. It must drop when acting_root returns, before
+    // RootLock and state.lease().await. Holding it across either await can
+    // exhaust the pool and deadlock the second lease.
     let root = acting_root(&state, &input).await?;
     let _root = super::RootLock::acquire(root.clone()).await;
     let leased = state.lease().await?;
@@ -283,7 +287,8 @@ async fn list(
     }
     let operation = format!("peer_list:{tool_call_id}");
     let key = peer_operation_key(input, operation);
-    let request = json!({ "event": "peer_list", "tool": input.tool });
+    let tool = bounded_tool(input.tool.as_deref())?;
+    let request = json!({ "event": "peer_list", "tool": tool });
     match state.store.claim_operation(OperationRequest {
         key: key.clone(),
         root: actor.root.clone(),
@@ -774,6 +779,7 @@ fn current_trajectory(actor: &Actor) -> &TrajectoryId {
 
 async fn acting_root(state: &State, input: &PeerInput) -> napi::Result<String> {
     let key = SessionKey::new(&input.organization_id, &input.session_id);
+    // Local lease only. Do not return it, and do not await again while it is held.
     let leased = state.lease().await?;
     let root = postgres_store(&leased.state.store)?
         .with_client(move |client| {
@@ -1050,10 +1056,23 @@ fn sessions_by_id(
 fn validate_actor(input: &PeerInput) -> napi::Result<()> {
     opaque_id(&input.organization_id, "organization", 512)?;
     opaque_id(&input.session_id, "session", 1024)?;
+    if let Some(caller) = input.caller_id.as_deref() {
+        opaque_id(caller, "caller", 512)?;
+    }
     if let Some(parent) = input.parent_id.as_deref() {
         opaque_id(parent, "parent", 1024)?;
     }
     Ok(())
+}
+
+/// The caller's public tool spelling, bounded before it is stored. The name is
+/// kept as sent so a whitelabel spelling still matches a later call.
+fn bounded_tool(raw: Option<&str>) -> napi::Result<Option<String>> {
+    let Some(tool) = blank_as_none(raw) else {
+        return Ok(None);
+    };
+    opaque_id(tool, "tool", 512)?;
+    Ok(Some(tool.to_owned()))
 }
 
 fn opaque_id(value: &str, name: &str, limit: usize) -> napi::Result<()> {
@@ -1212,7 +1231,7 @@ struct PeerInput {
 
 #[cfg(test)]
 mod tests {
-    use super::{AdmitCandidate, iso8601, pick_admit};
+    use super::{AdmitCandidate, PeerInput, bounded_tool, iso8601, pick_admit, validate_actor};
     use serde_json::json;
     use std::time::{Duration, UNIX_EPOCH};
 
@@ -1268,5 +1287,47 @@ mod tests {
                 digest: "aa",
             }
         );
+    }
+
+    fn actor(caller_id: Option<&str>) -> PeerInput {
+        PeerInput {
+            organization_id: "org".to_owned(),
+            caller_id: caller_id.map(str::to_owned),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            operation_id: None,
+            recipient_session_id: None,
+            recipient_parent_id: None,
+            recipient_native_id: None,
+            recipient_spawn_call_id: None,
+            value: None,
+            message_id: None,
+            sender_session_id: None,
+            digest: None,
+            structured: None,
+            tool_call_id: None,
+            tool: None,
+        }
+    }
+
+    #[test]
+    fn caller_id_uses_the_organization_identity_limit() {
+        assert!(validate_actor(&actor(None)).is_ok());
+        assert!(validate_actor(&actor(Some("user:alice"))).is_ok());
+        assert!(validate_actor(&actor(Some(&"c".repeat(512)))).is_ok());
+        assert!(validate_actor(&actor(Some(&"c".repeat(513)))).is_err());
+        assert!(validate_actor(&actor(Some("user:alice\n"))).is_err());
+        assert!(validate_actor(&actor(Some(""))).is_err());
+    }
+
+    #[test]
+    fn a_list_tool_keeps_its_public_name_inside_the_bound() {
+        assert_eq!(
+            bounded_tool(Some("acme__list_peer_messages")).unwrap(),
+            Some("acme__list_peer_messages".to_owned())
+        );
+        assert_eq!(bounded_tool(Some("")).unwrap(), None);
+        assert!(bounded_tool(Some(&"t".repeat(513))).is_err());
+        assert!(bounded_tool(Some("acme__list\n")).is_err());
     }
 }

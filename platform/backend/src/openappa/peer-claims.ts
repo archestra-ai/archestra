@@ -116,6 +116,20 @@ export function peerProofAuthorizes(params: {
   return params.proof.message_id === null;
 }
 
+/** Remove proxy-only proofs without recursing through untrusted request data. */
+export function stripPeerProofs(request: unknown): void {
+  const pending: unknown[] = [request];
+  const visited = new WeakSet<object>();
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (!value || typeof value !== "object" || visited.has(value)) continue;
+    visited.add(value);
+    const record = value as Record<string, unknown>;
+    delete record[PEER_PROOF_ARGUMENT];
+    for (const nested of Object.values(record)) pending.push(nested);
+  }
+}
+
 function signHs256(
   encodedHeader: string,
   payload: string,

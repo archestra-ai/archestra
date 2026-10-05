@@ -436,61 +436,60 @@ class LimitModel {
       "[LimitModel] Update token limit usage",
     );
     try {
-      // Find all token_cost limits for this entity that include this model
-      const limits = await db
-        .select({ id: schema.limitsTable.id })
-        .from(schema.limitsTable)
-        .where(
-          and(
-            eq(schema.limitsTable.entityType, entityType),
-            eq(schema.limitsTable.entityId, entityId),
-            eq(schema.limitsTable.limitType, "token_cost"),
-            or(
-              sql`${schema.limitsTable.model} ? ${model}`,
-              sql`${schema.limitsTable.model} IS NULL`,
-            ),
-          ),
-        );
-
-      if (limits.length === 0) {
-        logger.debug(
-          `[LimitModel] No limits found for ${entityType} ${entityId} with model ${model}`,
-        );
-        return;
-      }
-
-      // Update model usage for each limit
-      for (const limit of limits) {
-        await db
-          .insert(schema.limitModelUsageTable)
-          .values({
-            limitId: limit.id,
-            model,
-            currentUsageTokensIn: inputTokens,
-            currentUsageTokensOut: outputTokens,
-          })
-          .onConflictDoUpdate({
-            target: [
-              schema.limitModelUsageTable.limitId,
-              schema.limitModelUsageTable.model,
-            ],
-            set: {
-              currentUsageTokensIn: sql`${schema.limitModelUsageTable.currentUsageTokensIn} + ${inputTokens}`,
-              currentUsageTokensOut: sql`${schema.limitModelUsageTable.currentUsageTokensOut} + ${outputTokens}`,
-              updatedAt: new Date(),
-            },
-          });
-
-        logger.debug(
-          `[LimitModel] Updated model usage for limit ${limit.id}, model ${model}: +${inputTokens} in, +${outputTokens} out`,
-        );
-      }
+      await LimitModel.addTokenUsage({
+        entityRefs: sql`VALUES (${entityType}, ${entityId})`,
+        model,
+        inputTokens,
+        outputTokens,
+      });
     } catch (error) {
       logger.error(
         `Error updating ${entityType} token limit for ${entityId}, model ${model}: ${error}`,
       );
       // Don't throw - continue with other updates
     }
+  }
+
+  /**
+   * Add one interaction's tokens to every token_cost limit it reaches, in a
+   * single statement. Besides the agent and `entities`, the interaction reaches
+   * each of `teamIds` and one organization: a team's when the agent has teams,
+   * otherwise the agent's own.
+   */
+  static async recordInteractionTokenUsage(params: {
+    agentId: string;
+    teamIds: string[];
+    entities: Array<{ entityType: LimitEntityType; entityId: string }>;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+  }): Promise<void> {
+    const { agentId, teamIds, entities, ...usage } = params;
+    const team = schema.teamsTable;
+    const agent = schema.agentsTable;
+    const literalRefs = sql.join(
+      [
+        sql`(${"agent"}, ${agentId})`,
+        ...entities.map(
+          ({ entityType, entityId }) => sql`(${entityType}, ${entityId})`,
+        ),
+      ],
+      sql`, `,
+    );
+    const derivedRefs =
+      teamIds.length === 0
+        ? sql`SELECT ${"organization"}, ${agent.organizationId} FROM ${agent}
+            WHERE ${agent.id} = ${agentId} AND ${notDeleted(agent)}`
+        : sql`SELECT ${"team"}, ${team.id} FROM ${team}
+            WHERE ${inArray(team.id, teamIds)}
+            UNION ALL
+            (SELECT ${"organization"}, ${team.organizationId} FROM ${team}
+              WHERE ${inArray(team.id, teamIds)} LIMIT 1)`;
+
+    await LimitModel.addTokenUsage({
+      entityRefs: sql`VALUES ${literalRefs} UNION ALL ${derivedRefs}`,
+      ...usage,
+    });
   }
 
   static async cleanupLimitsIfNeeded(
@@ -844,6 +843,43 @@ class LimitModel {
         return Boolean(hit);
       }
     }
+  }
+
+  /**
+   * A limit reached through several entity refs accrues once per ref. Rows are
+   * written in limit id order so concurrent statements lock them in the same
+   * order.
+   */
+  private static async addTokenUsage(params: {
+    entityRefs: SQL;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+  }): Promise<void> {
+    const { entityRefs, model, inputTokens, outputTokens } = params;
+    const limits = schema.limitsTable;
+    const usage = schema.limitModelUsageTable;
+    await db.execute(sql`
+      WITH entity_refs (entity_type, entity_id) AS (${entityRefs}),
+      matched AS (
+        SELECT ${limits.id} AS limit_id, count(*)::integer AS refs
+        FROM ${limits}
+        JOIN entity_refs
+          ON ${limits.entityType} = entity_refs.entity_type
+          AND ${limits.entityId} = entity_refs.entity_id
+        WHERE ${limits.limitType} = ${"token_cost"}
+          AND (${limits.model} ? ${model} OR ${limits.model} IS NULL)
+        GROUP BY ${limits.id}
+      )
+      INSERT INTO ${usage} (limit_id, model, current_usage_tokens_in, current_usage_tokens_out)
+      SELECT limit_id, ${model}, refs * ${inputTokens}::integer, refs * ${outputTokens}::integer
+      FROM matched
+      ORDER BY limit_id
+      ON CONFLICT (limit_id, model) DO UPDATE SET
+        current_usage_tokens_in = ${usage}.current_usage_tokens_in + EXCLUDED.current_usage_tokens_in,
+        current_usage_tokens_out = ${usage}.current_usage_tokens_out + EXCLUDED.current_usage_tokens_out,
+        updated_at = ${sql.param(new Date(), usage.updatedAt)}
+    `);
   }
 }
 

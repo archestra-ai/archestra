@@ -61,6 +61,7 @@ class OpenAppaArchestraAnnotator {
       agentId: agent.id,
       modelName: selection.modelName,
       source: "guardrail:annotator",
+      internalCall: true,
       baseUrl: selection.baseUrl,
       chatApiKeyId: selection.chatApiKeyId,
     });

@@ -39,6 +39,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { takeInternalCall } from "@/clients/internal-call";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
@@ -661,6 +662,7 @@ export async function handleLLMProxy<
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
+  const internalCall = takeInternalCall(request.headers);
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
@@ -1820,13 +1822,10 @@ export async function handleLLMProxy<
           adapter.matches({ headers: headersForExtraction, requestBody: body }),
         );
       // The platform's own guardrail models bypass instead of being blocked.
-      const platformGuardrailCall =
-        platformLoopback &&
-        (source === "guardrail:annotator" || source === "guardrail:dual_llm");
       if (
         unsupportedClient &&
         unsupportedClientAction === "block" &&
-        !platformGuardrailCall
+        !(platformLoopback && internalCall)
       ) {
         throw new ApiError(
           400,

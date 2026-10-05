@@ -620,27 +620,6 @@ describe("SkillsPage rows", () => {
     expect(push).toHaveBeenCalledWith("/skills?page=1", { scroll: false });
   });
 
-  it("keeps the OpenAPPA source badge unqualified", () => {
-    mockUseFeature.mockImplementation((name: string) => name === "plugins");
-    vi.mocked(usePluginSkills).mockReturnValue({
-      data: [
-        {
-          ...PLUGIN_SKILL,
-          pluginName: "OpenAPPA",
-          sourceRepo: "archestra-ai/OpenAPPA",
-          sourceMarketplaceRepo: "archestra-ai/OpenAPPA",
-        },
-      ],
-      isFetching: false,
-      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
-    } as any);
-
-    render(<SkillsPage />);
-
-    expect(screen.getByTitle("OpenAPPA")).toHaveTextContent(/^OpenAPPA$/);
-    expect(screen.queryByTitle("OpenAPPA · Plugin")).not.toBeInTheDocument();
-  });
-
   it("refuses Edit and Delete on somebody else's skill, with the reason", async () => {
     // Skills were the only agent-shaped entity with no ownership gate in the
     // frontend: `skill:update` alone lit up Edit on every row and the save

@@ -37,7 +37,6 @@ describe("catch-all tool annotations", () => {
     expect(policy.content).toContain('name = "*"');
     expect(policy.content.match(/name = "archestra__[^"]*"/g)).toEqual([
       'name = "archestra__run_command"',
-      'name = "archestra__search_tools"',
       'name = "archestra__ask_user"',
     ]);
     expect(

@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
@@ -258,12 +257,8 @@ effects = []
 name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
 annotator = "archestra.run-command"
 
-# Tool discovery and questions carry no data: they keep an empty label
-# even if the catch-all below is made stricter.
-[[policy.tool]]
-name = "${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}"
-delta = {}
-
+# Questions carry no data: they keep an empty label even if the catch-all
+# below is made stricter. search_tools gets the same from the archestra battery.
 [[policy.tool]]
 name = "${archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)}"
 delta = {}

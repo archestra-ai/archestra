@@ -1,7 +1,6 @@
 import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { parse } from "smol-toml";
@@ -43,15 +42,12 @@ describe("initialPolicy", () => {
     expect(
       governing(archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)),
     ).toEqual(expect.objectContaining({ builtin: "archestra" }));
-    for (const shortName of [
-      TOOL_SEARCH_TOOLS_SHORT_NAME,
-      TOOL_ASK_USER_SHORT_NAME,
-    ] as const) {
-      expect(rule(archestraMcpBranding.getToolName(shortName))).toEqual({
-        name: archestraMcpBranding.getToolName(shortName),
-        delta: {},
-      });
-    }
+    expect(
+      rule(archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)),
+    ).toEqual({
+      name: archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME),
+      delta: {},
+    });
     expect(
       governing(archestraMcpBranding.getToolName(TOOL_TODO_WRITE_SHORT_NAME)),
     ).toEqual({ name: "noop" });

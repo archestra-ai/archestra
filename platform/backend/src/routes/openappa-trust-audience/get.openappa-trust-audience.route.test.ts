@@ -31,6 +31,9 @@ describe("GET /api/openappa/trust-audience", () => {
   };
   const audience = (body: { audiences: { name: string }[] }, name: string) =>
     body.audiences.find((level) => level.name === name);
+  const internalConsult = (body: {
+    audiences: { from?: { declaredBy: { lastConsult: unknown } }[] }[];
+  }) => body.audiences[1].from?.[0].declaredBy.lastConsult;
   // The view reads the text, whether or not the runtime composes it.
   const saveRoot = async (content: string) => {
     const latest = await guardrailsPolicyService.get(ctx.organizationId);
@@ -81,26 +84,15 @@ describe("GET /api/openappa/trust-audience", () => {
           selector: "members",
           entry: ARCHESTRA,
           line: await batteryLine(ARCHESTRA, '{ template = "members"'),
+          declaredBy: {
+            battery: "archestra",
+            runBy: "archestra",
+            lastConsult: null,
+          },
         },
       ],
     });
     expect(audience(body, "self")).toEqual({ name: "self", kind: "builtin" });
-    expect(body.sources).toEqual([
-      {
-        name: "archestra",
-        battery: "archestra",
-        entry: ARCHESTRA,
-        line: await batteryLine(ARCHESTRA, "[externals.audience.archestra]"),
-        runBy: "archestra",
-        templates: [
-          { template: "members", feeds: "internal" },
-          { template: "team/<team>", feeds: null },
-          { template: "user/<user>", feeds: null },
-        ],
-        usedBy: ["internal"],
-        lastConsult: null,
-      },
-    ]);
   });
 
   test("an audience rules name but nothing maps is unmapped", async () => {
@@ -138,7 +130,6 @@ delta = { trust = "untrusted", audience = ["public"] }
       name: "public",
       kind: "builtin",
     });
-    expect(body.sources).toEqual([]);
   });
 
   test("an audience read from two sources lists both, and a group follows the chain", async () => {
@@ -177,6 +168,7 @@ requires = { audience = { within = ["@eng"] } }
           selector: "org/acme/members",
           entry: GITHUB,
           line: await batteryLine(GITHUB, '{ template = "org/<org>/members"'),
+          declaredBy: { battery: "github", runBy: "helper", lastConsult: null },
         },
       ],
     });
@@ -194,21 +186,13 @@ requires = { audience = { within = ["@eng"] } }
             GITHUB,
             '{ template = "org/<org>/team/<team>"',
           ),
+          declaredBy: { battery: "github", runBy: "helper", lastConsult: null },
         },
       ],
     });
-    const github = body.sources.find(
-      (source: { name: string }) => source.name === "github",
-    );
-    expect(github).toMatchObject({
-      battery: "github",
-      entry: GITHUB,
-      runBy: "helper",
-      usedBy: ["internal", "@eng"],
-    });
   });
 
-  test("the latest consult of each source shows only with organization-wide consult access", async ({
+  test("the latest consult of a source shows only with organization-wide consult access", async ({
     makeUser,
     makeMember,
   }) => {
@@ -225,7 +209,7 @@ requires = { audience = { within = ["@eng"] } }
       createdAt: new Date("2026-01-02T00:00:00Z"),
     });
 
-    expect((await view()).sources[0].lastConsult).toEqual({
+    expect(internalConsult(await view())).toEqual({
       outcome: "timeout",
       at: "2026-01-02T00:00:00.000Z",
     });
@@ -235,7 +219,7 @@ requires = { audience = { within = ["@eng"] } }
     await makeMember(ctx.user.id, ctx.organizationId, {
       role: EDITOR_ROLE_NAME,
     });
-    expect((await view()).sources[0].lastConsult).toBeNull();
+    expect(internalConsult(await view())).toBeNull();
   });
 });
 

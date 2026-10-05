@@ -1,9 +1,9 @@
 import { userHasPermission } from "@/auth";
 import { OpenappaExternalConsultModel } from "@/models";
+import type { ExternalConsult } from "@/types/openappa-external-consults";
 import type {
   AudienceLevel,
   AudienceSelectorRef,
-  AudienceSource,
   TrustAudienceView,
 } from "@/types/openappa-trust-audience";
 import { archestraAudience } from "./archestra-audience";
@@ -19,8 +19,8 @@ import {
 
 /**
  * The trust levels and audiences the policy works with, read from the root
- * text and the batteries it includes: who belongs to each audience, which
- * rules name it, and the audience sources that answer it.
+ * text and the batteries it includes: who belongs to each audience, and the
+ * audience sources that answer it.
  */
 class OpenAppaTrustAudienceService {
   async view(params: {
@@ -57,6 +57,13 @@ class OpenAppaTrustAudienceService {
       ...batteries,
     ]);
     const mappings = audienceMappings(rootContent, policy);
+    const latest = canSeeAllConsults
+      ? await OpenappaExternalConsultModel.findLatestByExternalName({
+          organizationId: params.organizationId,
+          role: "audience_source",
+          externalNames: declared.map((source) => source.name),
+        })
+      : new Map<string, LatestConsult>();
 
     const audiences: AudienceLevel[] = [
       ...CHAIN_AUDIENCES,
@@ -69,7 +76,9 @@ class OpenAppaTrustAudienceService {
           kind: "mapped",
           mappingLine: mapping.line,
           within: mapping.within,
-          from: mapping.from.map((spelled) => selectorRef(spelled, declared)),
+          from: mapping.from.map((spelled) =>
+            selectorRef({ spelled, sources: declared, latest }),
+          ),
         };
       return {
         name,
@@ -77,35 +86,9 @@ class OpenAppaTrustAudienceService {
       };
     });
 
-    const latest = canSeeAllConsults
-      ? await OpenappaExternalConsultModel.findLatestByExternalName({
-          organizationId: params.organizationId,
-          role: "audience_source",
-          externalNames: declared.map((source) => source.name),
-        })
-      : new Map();
-    const sources: AudienceSource[] = declared.map(
-      ({ templateLines: _, ...source }) => {
-        const consult = latest.get(source.name);
-        return {
-          ...source,
-          usedBy: audiences.flatMap((level) =>
-            level.kind === "mapped" &&
-            level.from.some((ref) => ref.source === source.name)
-              ? [level.name]
-              : [],
-          ),
-          lastConsult: consult
-            ? { outcome: consult.outcome, at: consult.createdAt }
-            : null,
-        };
-      },
-    );
-
     return {
       trust: strings(policy?.trust_chain) ?? DEFAULT_TRUST_CHAIN,
       audiences,
-      sources,
     };
   }
 }
@@ -134,9 +117,16 @@ type IncludedBattery = PolicyFile & {
   name: string;
   packageHash: string | null;
 };
-type DeclaredSource = Omit<AudienceSource, "usedBy" | "lastConsult"> & {
+type DeclaredSource = {
+  name: string;
+  battery: string;
+  entry: string;
+  line: number | null;
+  runBy: "archestra" | "helper";
+  templates: string[];
   templateLines: Array<number | null>;
 };
+type LatestConsult = Pick<ExternalConsult, "outcome" | "createdAt">;
 type Mapping = { from: string[]; line: number | null; within: string | null };
 
 /** Every `[externals.audience.<name>]` the included batteries declare, in include order. */
@@ -152,15 +142,8 @@ function declaredSources(batteries: IncludedBattery[]): DeclaredSource[] {
           ? (asRecord(value)?.selectors as unknown[])
           : []
       ).flatMap((selector) => {
-        const spelled = asRecord(selector);
-        return typeof spelled?.template === "string"
-          ? [
-              {
-                template: spelled.template,
-                feeds: typeof spelled.feeds === "string" ? spelled.feeds : null,
-              },
-            ]
-          : [];
+        const template = asRecord(selector)?.template;
+        return typeof template === "string" ? [template] : [];
       });
       return {
         name,
@@ -175,7 +158,7 @@ function declaredSources(batteries: IncludedBattery[]): DeclaredSource[] {
           ? ("archestra" as const)
           : ("helper" as const),
         templates,
-        templateLines: templates.map(({ template }) =>
+        templateLines: templates.map((template) =>
           lineInTable({
             text: battery.text,
             table,
@@ -231,23 +214,35 @@ function audienceMappings(
 }
 
 /** `<source>:<selector>`, pointing at the template of the source that serves it. */
-function selectorRef(
-  spelled: string,
-  sources: DeclaredSource[],
-): AudienceSelectorRef {
-  const split = spelled.indexOf(":");
-  const source = split === -1 ? spelled : spelled.slice(0, split);
-  const selector = split === -1 ? "" : spelled.slice(split + 1);
-  const declared = sources.find((candidate) => candidate.name === source);
-  const index =
-    declared?.templates.findIndex(({ template }) =>
-      templateMatches(template, selector),
-    ) ?? -1;
+function selectorRef(params: {
+  spelled: string;
+  sources: DeclaredSource[];
+  latest: Map<string, LatestConsult>;
+}): AudienceSelectorRef {
+  const split = params.spelled.indexOf(":");
+  const source = split === -1 ? params.spelled : params.spelled.slice(0, split);
+  const selector = split === -1 ? "" : params.spelled.slice(split + 1);
+  const declared = params.sources.find(
+    (candidate) => candidate.name === source,
+  );
+  if (!declared)
+    return { source, selector, entry: null, line: null, declaredBy: null };
+  const index = declared.templates.findIndex((template) =>
+    templateMatches(template, selector),
+  );
+  const consult = params.latest.get(source);
   return {
     source,
     selector,
-    entry: declared?.entry ?? null,
-    line: declared?.templateLines[index] ?? declared?.line ?? null,
+    entry: declared.entry,
+    line: declared.templateLines[index] ?? declared.line,
+    declaredBy: {
+      battery: declared.battery,
+      runBy: declared.runBy,
+      lastConsult: consult
+        ? { outcome: consult.outcome, at: consult.createdAt }
+        : null,
+    },
   };
 }
 

@@ -336624,13 +336624,68 @@
                                     },
                                     "selector": {
                                       "type": "string"
+                                    },
+                                    "declaredBy": {
+                                      "nullable": true,
+                                      "type": "object",
+                                      "properties": {
+                                        "battery": {
+                                          "type": "string"
+                                        },
+                                        "runBy": {
+                                          "type": "string",
+                                          "enum": [
+                                            "archestra",
+                                            "helper"
+                                          ]
+                                        },
+                                        "lastConsult": {
+                                          "nullable": true,
+                                          "type": "object",
+                                          "properties": {
+                                            "outcome": {
+                                              "type": "string",
+                                              "enum": [
+                                                "answered",
+                                                "unregistered",
+                                                "unreachable",
+                                                "dismissed",
+                                                "non_success",
+                                                "timeout",
+                                                "transport",
+                                                "malformed",
+                                                "oversized",
+                                                "unsupported_version",
+                                                "module_error",
+                                                "module_panicked"
+                                              ]
+                                            },
+                                            "at": {
+                                              "type": "string",
+                                              "format": "date-time"
+                                            }
+                                          },
+                                          "required": [
+                                            "outcome",
+                                            "at"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "battery",
+                                        "runBy",
+                                        "lastConsult"
+                                      ],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": [
                                     "entry",
                                     "line",
                                     "source",
-                                    "selector"
+                                    "selector",
+                                    "declaredBy"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -336670,111 +336725,11 @@
                           }
                         ]
                       }
-                    },
-                    "sources": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string"
-                          },
-                          "battery": {
-                            "type": "string"
-                          },
-                          "entry": {
-                            "type": "string"
-                          },
-                          "line": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "runBy": {
-                            "type": "string",
-                            "enum": [
-                              "archestra",
-                              "helper"
-                            ]
-                          },
-                          "templates": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "template": {
-                                  "type": "string"
-                                },
-                                "feeds": {
-                                  "nullable": true,
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "template",
-                                "feeds"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "usedBy": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "lastConsult": {
-                            "nullable": true,
-                            "type": "object",
-                            "properties": {
-                              "outcome": {
-                                "type": "string",
-                                "enum": [
-                                  "answered",
-                                  "unregistered",
-                                  "unreachable",
-                                  "dismissed",
-                                  "non_success",
-                                  "timeout",
-                                  "transport",
-                                  "malformed",
-                                  "oversized",
-                                  "unsupported_version",
-                                  "module_error",
-                                  "module_panicked"
-                                ]
-                              },
-                              "at": {
-                                "type": "string",
-                                "format": "date-time"
-                              }
-                            },
-                            "required": [
-                              "outcome",
-                              "at"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "battery",
-                          "entry",
-                          "line",
-                          "runBy",
-                          "templates",
-                          "usedBy",
-                          "lastConsult"
-                        ],
-                        "additionalProperties": false
-                      }
                     }
                   },
                   "required": [
                     "trust",
-                    "audiences",
-                    "sources"
+                    "audiences"
                   ],
                   "additionalProperties": false
                 }

@@ -87334,27 +87334,19 @@ export type GetOpenappaTrustAudienceResponses = {
                 line: number | null;
                 source: string;
                 selector: string;
+                declaredBy: {
+                    battery: string;
+                    runBy: 'archestra' | 'helper';
+                    lastConsult: {
+                        outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+                        at: string;
+                    } | null;
+                } | null;
             }>;
             within: string | null;
         } | {
             name: string;
             kind: 'unmapped';
-        }>;
-        sources: Array<{
-            name: string;
-            battery: string;
-            entry: string;
-            line: number | null;
-            runBy: 'archestra' | 'helper';
-            templates: Array<{
-                template: string;
-                feeds: string | null;
-            }>;
-            usedBy: Array<string>;
-            lastConsult: {
-                outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
-                at: string;
-            } | null;
         }>;
     };
 };

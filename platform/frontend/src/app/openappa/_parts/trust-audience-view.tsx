@@ -1,16 +1,18 @@
 "use client";
 
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { OUTCOME_LABEL } from "@/app/consults/logs/_components/consult-outcome-badge";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -21,7 +23,6 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type AudienceLevel,
-  type AudienceSource,
   useTrustAudience,
 } from "@/lib/openappa-trust-audience.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -55,7 +56,7 @@ export function LevelChain({
   );
 }
 
-/** The Trust & audience tab: trust levels, audiences, and audience sources. */
+/** The Trust & audience tab: the trust chain, then one card per audience. */
 export function TrustAudienceView() {
   const view = useTrustAudience();
   const { data: canSeeConsults } = useHasPermissions({
@@ -72,13 +73,16 @@ export function TrustAudienceView() {
   if (!view.data)
     return (
       <div className="space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-20 w-full max-w-md" />
+        <div className="grid gap-4 md:grid-cols-3">
+          <Skeleton className="h-36" />
+          <Skeleton className="h-36" />
+          <Skeleton className="h-36" />
+        </div>
       </div>
     );
 
-  const { trust, audiences, sources } = view.data;
+  const { trust, audiences } = view.data;
   return (
     <div className="space-y-8">
       <Section
@@ -86,39 +90,26 @@ export function TrustAudienceView() {
         title="Trust"
         hint="How much the agent can believe what it has read."
       >
-        <LevelChain levels={trust.map((name) => ({ name }))} />
+        <Card className="w-fit py-4">
+          <CardContent className="px-4">
+            <LevelChain levels={trust.map((name) => ({ name }))} />
+          </CardContent>
+        </Card>
       </Section>
       <Section
         id="trust-audience-audience"
         title="Audience"
         hint="Who is allowed to see what the agent has read. Reading something private limits where the agent can send it."
       >
-        <div className="divide-y rounded-lg border">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {audiences.map((level) => (
-            <AudienceRow key={level.name} level={level} />
+            <AudienceCard
+              key={level.name}
+              level={level}
+              canSeeConsults={canSeeConsults === true}
+            />
           ))}
         </div>
-      </Section>
-      <Section
-        id="trust-audience-sources"
-        title="Audience sources"
-        hint="Where the people in each audience are looked up."
-      >
-        {sources.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No included battery declares an audience source.
-          </p>
-        ) : (
-          <div className="divide-y rounded-lg border">
-            {sources.map((source) => (
-              <SourceRow
-                key={`${source.entry}:${source.name}`}
-                source={source}
-                canSeeConsults={canSeeConsults === true}
-              />
-            ))}
-          </div>
-        )}
       </Section>
     </div>
   );
@@ -131,9 +122,7 @@ export function TrustAudienceView() {
 const WARNING_CLASSES =
   "border-amber-500/50 text-amber-800 dark:border-amber-500/40 dark:text-amber-300";
 
-const ROW = "grid items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm";
-const AUDIENCE_COLUMNS =
-  "grid-cols-[1rem_minmax(0,1fr)] sm:grid-cols-[1rem_8rem_minmax(0,1fr)]";
+type SelectorRef = Extract<AudienceLevel, { kind: "mapped" }>["from"][number];
 
 function Section({
   id,
@@ -159,149 +148,123 @@ function Section({
   );
 }
 
-function AudienceRow({ level }: { level: AudienceLevel }) {
-  const cells = (
-    <>
-      <span className="font-mono">{level.name}</span>
-      <span className="col-start-2 sm:col-start-auto">
-        <AudienceFrom level={level} />
-      </span>
-    </>
-  );
-  if (level.kind !== "mapped")
-    return (
-      <div className={cn(ROW, AUDIENCE_COLUMNS)}>
-        <span />
-        {cells}
-      </div>
-    );
+function AudienceCard({
+  level,
+  canSeeConsults,
+}: {
+  level: AudienceLevel;
+  canSeeConsults: boolean;
+}) {
   return (
-    <Collapsible>
-      <div className={cn(ROW, AUDIENCE_COLUMNS)}>
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Show where ${level.name} is mapped`}
-            className="group text-muted-foreground"
-          >
-            <ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none" />
-          </button>
-        </CollapsibleTrigger>
-        {cells}
-      </div>
-      <CollapsibleContent>
-        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 pb-3 pl-11 pr-4 text-sm">
-          <dt className="text-muted-foreground">Mapped</dt>
-          <dd>
-            <LineLink at={{ entry: null, line: level.mappingLine }} />
-          </dd>
-          {level.from.map((ref) => (
-            <Fragment key={`${ref.source}:${ref.selector}`}>
-              <dt className="text-muted-foreground">{ref.source}</dt>
-              <dd>
-                {ref.line === null ? (
-                  <span className="text-muted-foreground">
-                    No included battery declares this source
-                  </span>
-                ) : (
-                  <LineLink at={ref} />
+    <Card className="gap-3 py-4">
+      <CardHeader className="px-4">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="font-mono text-sm">{level.name}</CardTitle>
+          <KindBadge level={level} />
+        </div>
+        {level.kind === "mapped" && (
+          <CardDescription className="text-xs">
+            {level.within && <>Within {level.within} · </>}
+            Mapped at <LineLink at={{ entry: null, line: level.mappingLine }} />
+          </CardDescription>
+        )}
+      </CardHeader>
+      {level.kind === "unmapped" && (
+        <CardContent className="px-4 text-sm text-muted-foreground">
+          Rules use it, but <span className="font-mono">[policy.audience]</span>{" "}
+          does not map it.
+        </CardContent>
+      )}
+      {level.kind === "mapped" && (
+        <CardContent className="space-y-2 px-4 text-sm">
+          {level.from.length === 0 ? (
+            <span className="text-muted-foreground">No sources</span>
+          ) : (
+            level.from.map((ref, index) => (
+              <Fragment key={`${ref.source}:${ref.selector}`}>
+                {index > 0 && (
+                  <div className="text-xs text-muted-foreground">or</div>
                 )}
-              </dd>
-            </Fragment>
-          ))}
-        </dl>
-      </CollapsibleContent>
-    </Collapsible>
+                <SourceBlock refTo={ref} canSeeConsults={canSeeConsults} />
+              </Fragment>
+            ))
+          )}
+        </CardContent>
+      )}
+    </Card>
   );
 }
 
-function AudienceFrom({ level }: { level: AudienceLevel }) {
+function KindBadge({ level }: { level: AudienceLevel }) {
   switch (level.kind) {
     case "builtin":
-      return <span className="text-muted-foreground">built in</span>;
+      return <Badge variant="outline">Built in</Badge>;
+    case "mapped":
+      return null;
     case "unmapped":
       return (
-        <span className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-300">
-          <AlertTriangle className="size-3.5" aria-hidden="true" />
-          <span>not mapped</span>
-        </span>
-      );
-    case "mapped":
-      if (level.from.length === 0)
-        return <span className="text-muted-foreground">no sources</span>;
-      return (
-        <span>
-          {level.from.map((ref, index) => (
-            <Fragment key={`${ref.source}:${ref.selector}`}>
-              {index > 0 && <span className="text-muted-foreground"> or </span>}
-              <span className="font-mono">
-                {ref.source}:{ref.selector}
-              </span>
-            </Fragment>
-          ))}
-        </span>
+        <Badge variant="outline" className={cn("gap-1", WARNING_CLASSES)}>
+          <AlertTriangle className="size-3" aria-hidden="true" />
+          Not mapped
+        </Badge>
       );
   }
 }
 
-function SourceRow({
-  source,
+function SourceBlock({
+  refTo,
   canSeeConsults,
 }: {
-  source: AudienceSource;
+  refTo: SelectorRef;
   canSeeConsults: boolean;
 }) {
   const appName = useAppName();
+  const declared = refTo.declaredBy;
   return (
-    <div
-      className={cn(
-        ROW,
-        "grid-cols-[1rem_minmax(0,1fr)] sm:grid-cols-[1rem_8rem_minmax(0,1fr)_auto]",
-      )}
-    >
-      <span>
-        {canSeeConsults && <ConsultDot consult={source.lastConsult} />}
-      </span>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="w-fit font-mono">{source.name}</span>
-        </TooltipTrigger>
-        <TooltipContent>
-          {source.runBy === "archestra"
-            ? `${appName} answers this source`
-            : "The battery's helper answers this source"}
-        </TooltipContent>
-      </Tooltip>
-      <span className="col-start-2 flex flex-wrap gap-1 sm:col-start-auto">
-        {source.templates.map(({ template }) => (
-          <Badge
-            key={template}
-            variant="outline"
-            className="rounded-md font-mono font-normal"
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-2">
+        {declared && canSeeConsults && (
+          <ConsultDot consult={declared.lastConsult} />
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="w-fit break-all font-mono">
+              {refTo.source}:{refTo.selector}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {!declared
+              ? "No included battery declares this source"
+              : declared.runBy === "archestra"
+                ? `${appName} answers this source`
+                : `The ${declared.battery} battery's helper answers this source`}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      {declared ? (
+        <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+          <LineLink at={refTo} />
+          <Link
+            href={`/consults/logs?${new URLSearchParams({ externalName: refTo.source })}`}
+            className="underline-offset-4 hover:underline"
           >
-            {template}
-          </Badge>
-        ))}
-      </span>
-      <span className="col-start-2 flex flex-wrap items-center gap-x-4 gap-y-1 sm:col-start-auto sm:justify-end">
-        <span
-          className={cn(source.usedBy.length === 0 && "text-muted-foreground")}
-        >
-          {source.usedBy.length > 0 ? source.usedBy.join(", ") : "unused"}
-        </span>
-        <LineLink at={source} />
-        <Link
-          href={`/consults/logs?${new URLSearchParams({ externalName: source.name })}`}
-          className="underline-offset-4 hover:underline"
-        >
-          Logs
-        </Link>
-      </span>
+            Logs
+          </Link>
+        </div>
+      ) : (
+        <div className="text-xs text-muted-foreground">
+          No included battery declares this source
+        </div>
+      )}
     </div>
   );
 }
 
-function ConsultDot({ consult }: { consult: AudienceSource["lastConsult"] }) {
+function ConsultDot({
+  consult,
+}: {
+  consult: NonNullable<SelectorRef["declaredBy"]>["lastConsult"];
+}) {
   const label = consult
     ? `Last consult: ${OUTCOME_LABEL[consult.outcome]}, ${formatRelativeTimeFromNow(consult.at)}`
     : "Not consulted yet";

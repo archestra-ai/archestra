@@ -6,9 +6,8 @@ import { throwOnApiError } from "@/lib/utils/api";
 export type TrustAudienceView =
   archestraApiTypes.GetOpenappaTrustAudienceResponses["200"];
 export type AudienceLevel = TrustAudienceView["audiences"][number];
-export type AudienceSource = TrustAudienceView["sources"][number];
 
-/** The policy's trust levels, audiences, and the audience sources batteries declare. */
+/** The policy's trust levels and audiences, with the audience sources each one reads. */
 export function useTrustAudience() {
   return useQuery({
     queryKey: trustAudienceQueryKey,

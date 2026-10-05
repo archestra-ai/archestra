@@ -11,11 +11,23 @@ const PolicyLineRefSchema = z.object({
 
 /**
  * One `<source>:<selector>` an audience reads its members from, pointing at
- * the source's selector template that serves it.
+ * the source's selector template that serves it. `declaredBy` is null when no
+ * included battery declares the source.
  */
 export const AudienceSelectorRefSchema = PolicyLineRefSchema.extend({
   source: z.string(),
   selector: z.string(),
+  declaredBy: z
+    .object({
+      battery: z.string(),
+      /** Whether the platform answers it in process or the battery's helper runs. */
+      runBy: z.enum(["archestra", "helper"]),
+      /** The organization's latest consult of this source; null when none or not visible to the caller. */
+      lastConsult: z
+        .object({ outcome: ExternalConsultOutcomeSchema, at: z.date() })
+        .nullable(),
+    })
+    .nullable(),
 });
 export type AudienceSelectorRef = z.infer<typeof AudienceSelectorRefSchema>;
 
@@ -44,32 +56,10 @@ export const AudienceLevelSchema = z.discriminatedUnion("kind", [
 ]);
 export type AudienceLevel = z.infer<typeof AudienceLevelSchema>;
 
-/** One `[externals.audience.<name>]` an included battery declares. */
-export const AudienceSourceSchema = z.object({
-  name: z.string(),
-  battery: z.string(),
-  entry: z.string(),
-  /** The `[externals.audience.<name>]` header line in the battery file. */
-  line: z.number().int().nullable(),
-  /** Whether the platform answers it in process or the battery's helper runs. */
-  runBy: z.enum(["archestra", "helper"]),
-  templates: z.array(
-    z.object({ template: z.string(), feeds: z.string().nullable() }),
-  ),
-  /** The audiences whose mapping reads this source. */
-  usedBy: z.array(z.string()),
-  /** The organization's latest consult of this source; null when none or not visible to the caller. */
-  lastConsult: z
-    .object({ outcome: ExternalConsultOutcomeSchema, at: z.date() })
-    .nullable(),
-});
-export type AudienceSource = z.infer<typeof AudienceSourceSchema>;
-
 export const TrustAudienceViewSchema = z.object({
   /** Trust levels, least trusted first. */
   trust: z.array(z.string()),
   /** Widest audience first: `public`, `internal`, `self`, then groups. */
   audiences: z.array(AudienceLevelSchema),
-  sources: z.array(AudienceSourceSchema),
 });
 export type TrustAudienceView = z.infer<typeof TrustAudienceViewSchema>;

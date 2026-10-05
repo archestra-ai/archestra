@@ -146,6 +146,7 @@ requires = { trust = "trusted", audience = { contains = ["public"] } }
 
 The starter maps `internal = ["archestra:members"]` through the Archestra battery and sets `noop` as the fallback annotator. Changes apply to new conversations; running ones keep their policy. See the [policy reference](https://www.openappa.com/contracts) for every field.
 
+<a id="protection-limits"></a>
 <a id="client-connections"></a>
 <a id="client-support-matrix"></a>
 

@@ -717,7 +717,7 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `edit_mcp_config` | Edit an MCP server's technical configuration. | `update` on the MCP registry entry (granted per item) |
 | `create_mcp_server` | Create a new MCP server in the private registry. | `mcpRegistry:create` |
 | `deploy_mcp_server` | Deploy (install) an MCP server from the catalog. | `update` on the MCP registry entry (granted per item) |
-| `list_mcp_server_deployments` | List all deployed (installed) MCP server instances accessible to the current user. | `mcpRegistry:read` |
+| `list_mcp_server_deployments` | List deployed (installed) MCP server instances the current user can read. | `mcpRegistry:read` |
 | `get_mcp_server_logs` | Get recent container logs from a deployed local (K8s) MCP server. | `mcpRegistry:read` |
 | `reload_mcp_server_tools` | Re-discover a deployed MCP server's tools from the live server and refresh Archestra's tool catalog for it — picks up added, removed, and changed tools (names, descriptions, and input schemas) with... | `mcpServerInstallation:create` |
 

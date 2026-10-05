@@ -1,11 +1,11 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
-import { APICallError, generateObject, type JSONSchema7, jsonSchema } from "ai";
+import { APICallError } from "ai";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import OrganizationModel from "@/models/organization";
+import { generateTaggedText } from "@/utils/generate-tagged-text";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
-import { repairStructuredOutputText } from "@/utils/structured-output-repair";
 
 /** The prompt the runtime's `builtin = "archestra"` annotator renders. */
 type ArchestraAnnotationRequest = {
@@ -65,25 +65,19 @@ class OpenAppaArchestraAnnotator {
       chatApiKeyId: selection.chatApiKeyId,
     });
     try {
-      const result = await generateObject({
+      const text = await generateTaggedText({
         model,
-        schema: jsonSchema(request.schema as JSONSchema7),
-        system: request.system,
+        tag: "annotation",
+        system: `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
         prompt: request.input,
-        temperature: 0,
-        experimental_repairText: repairStructuredOutputText,
       });
-      const answer = result.object;
-      if (
-        typeof answer !== "object" ||
-        answer === null ||
-        Array.isArray(answer)
-      )
+      const answer = text === null ? null : parseObject(text);
+      if (answer === null)
         return {
           kind: "failed",
-          reason: "The model did not answer an object.",
+          reason: "The model did not answer a JSON object.",
         };
-      return { kind: "answered", answer: answer as Record<string, unknown> };
+      return { kind: "answered", answer };
     } catch (error) {
       const status = APICallError.isInstance(error)
         ? error.statusCode
@@ -105,3 +99,14 @@ class OpenAppaArchestraAnnotator {
 }
 
 export const openappaArchestraAnnotator = new OpenAppaArchestraAnnotator();
+
+function parseObject(text: string): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}

@@ -108,7 +108,10 @@ describe("archestra annotator", () => {
             choices: [
               {
                 index: 0,
-                message: { role: "assistant", content: '{"rank":"trusted"}' },
+                message: {
+                  role: "assistant",
+                  content: '<annotation>{"rank":"trusted"}</annotation>',
+                },
                 finish_reason: "stop",
               },
             ],
@@ -122,18 +125,18 @@ describe("archestra annotator", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ rank: "trusted" });
-    expect(sent).toMatchObject({
-      model: "gpt-4o-mini",
-      temperature: 0,
-      messages: [
-        { role: "system", content: request.system },
-        { role: "user", content: request.input },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: { schema: request.schema },
-      },
-    });
+    // Archestra's usual call: no sampling override and no provider-strict
+    // schema; the schema reaches the model as text.
+    expect(sent).toMatchObject({ model: "gpt-4o-mini" });
+    expect(sent).not.toHaveProperty("temperature");
+    expect(sent).not.toHaveProperty("response_format");
+    const [system, user] = sent?.messages as Array<{
+      role: string;
+      content: string;
+    }>;
+    expect(system.content).toContain(request.system);
+    expect(system.content).toContain(JSON.stringify(request.schema));
+    expect(user).toEqual({ role: "user", content: request.input });
     expect(source).toBe("guardrail:annotator");
   });
 

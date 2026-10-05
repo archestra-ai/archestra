@@ -192,6 +192,16 @@ const registry = defineArchestraTools([
           signal: context.abortSignal,
         });
         if (ruling !== "not-runtime") {
+          if (ruling === "no-reviewer") {
+            return errorResult(
+              "This runtime has no eligible human reviewer. Keep the call blocked; a native form or a plain-text answer cannot approve it.",
+            );
+          }
+          if (ruling === "review-unavailable") {
+            return errorResult(
+              "The staged runtime review expired or became unavailable, including after loss of shared cache state. Keep the call blocked. A fresh exact-offer review is required before proceeding; missing state is not approval.",
+            );
+          }
           if (ruling === "unavailable" || ruling === "none") {
             return errorResult(
               "The runtime review was not approved. Keep the call blocked. A timeout or disconnection is not approval.",

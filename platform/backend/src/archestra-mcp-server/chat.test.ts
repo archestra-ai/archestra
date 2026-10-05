@@ -443,6 +443,47 @@ describe("chat tool execution", () => {
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
   });
 
+  for (const [outcome, message] of [
+    ["no-reviewer", "no eligible human reviewer"],
+    ["review-unavailable", "fresh exact-offer review"],
+  ] as const) {
+    test(`runtime review ${outcome} is an error, not an approval or native form`, async () => {
+      const offerId = `runtime-${outcome}`;
+      const session = chatOpenAppaSession(
+        mockContext.organizationId as string,
+        mockContext.userId as string,
+        sessionId,
+      );
+      await stageHitlReview({
+        session,
+        review: { offerId, text: "Exact action", tool: "mcp/example/write" },
+      });
+      const nativeForm = vi.fn();
+      const wait = vi
+        .spyOn(runtimeReview, "awaitRuntimeHitlReview")
+        .mockResolvedValue(outcome);
+      try {
+        const result = await executeArchestraTool(
+          TOOL_ASK_USER_FULL_NAME,
+          {
+            question: "Approve?",
+            options: [{ label: "Approve" }, { label: "Deny" }],
+            remedy_offer_ids: [offerId],
+            remedy_offers: [sessionOffer(offerId)],
+          },
+          { ...mockContext, elicitation: { elicit: nativeForm } },
+        );
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(message);
+        expect(result.structuredContent).toBeUndefined();
+        expect(nativeForm).not.toHaveBeenCalled();
+        expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+      } finally {
+        wait.mockRestore();
+      }
+    });
+  }
+
   test("a runtime review waits on the platform instead of an auto-declining native form", async () => {
     const offerId = "runtime-review";
     const session = chatOpenAppaSession(

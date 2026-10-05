@@ -109,6 +109,53 @@ test("parallel reviews remain queued when the first offer is answered", async ({
   });
 });
 
+test("lost review state is distinguished from a missing reviewer and does not approve", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+}) => {
+  const fixture = await createRuntime({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    actorKind: "user",
+  });
+  await stageAndBind(fixture, "lost-review");
+  await clearHitlReview({ session: fixture.session, offerId: "lost-review" });
+  await expect(
+    awaitRuntimeHitlReview({
+      session: fixture.session,
+      offerId: "lost-review",
+      userId: fixture.actorUserId ?? undefined,
+    }),
+  ).resolves.toBe("review-unavailable");
+  expect(
+    await consumeHitlRuling({
+      session: fixture.session,
+      offerId: "lost-review",
+    }),
+  ).toBeUndefined();
+  const unattended = await createRuntime({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    actorKind: "team",
+  });
+  await stageAndBind(unattended, "no-reviewer");
+  await expect(
+    awaitRuntimeHitlReview({
+      session: unattended.session,
+      offerId: "no-reviewer",
+    }),
+  ).resolves.toBe("no-reviewer");
+  expect(
+    await consumeHitlRuling({
+      session: unattended.session,
+      offerId: "no-reviewer",
+    }),
+  ).toBeUndefined();
+});
+
 test("concurrent owner decisions spend one staged review only", async ({
   makeOrganization,
   makeUser,

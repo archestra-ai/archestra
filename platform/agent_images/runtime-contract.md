@@ -173,6 +173,8 @@ Claude Code, Codex, and OpenCode children retain separate trajectories when the 
 
 Human-review remedies use `ask_user` with the exact signed offer IDs. Runtime reviews appear on the run page. Only the run's user owner can approve or deny them. Native permission settings and plain-text answers do not approve an OpenAPPA offer. A run without an eligible human reviewer stays blocked.
 
+Pending reviews and rulings expire after ten minutes. They use the platform's shared PostgreSQL-backed cache, whose state can be lost on restart. Expiry or missing state never approves an action; the runtime must request a fresh review for a live exact offer before proceeding.
+
 Protected runtime tools accept only proxy-signed source proofs. Returned text is an admitted value for that run, not a raw transcript. Protected file downloads admit the pinned content before issuing a ticket. They refuse transformed content and files over 4 MiB. Direct owner downloads remain an authenticated human surface. A parent cannot publish another runtime's file through `post_run_file` without a supported external-egress crossing.
 
 Session and parent IDs must be 1 to 512 bytes with no control characters. The proxy rejects a malformed value with HTTP 400; the gateway answers with JSON-RPC error `-32600`.

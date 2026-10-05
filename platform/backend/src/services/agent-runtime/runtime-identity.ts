@@ -109,8 +109,8 @@ function runtimeCallerId(params: {
 /**
  * OpenAPPA session for a persisted workspace. Does not read a virtual key or
  * a client header. User sessions stay `user:<id>|<workloadName>`.
+ * @public — persisted session for crossing; does not read a virtual key
  */
-/** @public — persisted session for crossing; does not read a virtual key */
 export function runtimeOpenAppaSession(params: {
   organizationId: string;
   workspaceId: string;

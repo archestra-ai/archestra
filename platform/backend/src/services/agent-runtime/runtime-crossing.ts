@@ -14,7 +14,7 @@ import {
   runtimeOpenAppaSession,
 } from "./runtime-identity";
 
-/** Inlined governed output above this is withheld whole, never sliced. */
+/** JavaScript UTF-16 code units, not UTF-8 bytes; larger output is withheld whole. */
 const RUNTIME_OUTPUT_INLINE_LIMIT = 20_000;
 
 export const SPAWN_TARGET_MISMATCH =

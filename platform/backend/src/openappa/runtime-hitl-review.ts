@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import { TimeInMs } from "@archestra/shared";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import logger from "@/logging";
 import { resolveVerifiedRuntimeAssociation } from "@/services/agent-runtime/runtime-identity";
 import { getHitlReview, peekHitlRuling, recordHitlRuling } from "./hitl-review";
 import type { OpenAppaSession } from "./service";
@@ -74,7 +75,15 @@ export async function awaitRuntimeHitlReview(params: {
   offerId: string;
   userId?: string;
   signal?: AbortSignal;
-}): Promise<"approve" | "deny" | "none" | "unavailable" | "not-runtime"> {
+}): Promise<
+  | "approve"
+  | "deny"
+  | "none"
+  | "unavailable"
+  | "no-reviewer"
+  | "review-unavailable"
+  | "not-runtime"
+> {
   const association = await resolveVerifiedRuntimeAssociation({
     organizationId: params.session.organization_id,
     callerId: params.session.caller_id,
@@ -83,12 +92,21 @@ export async function awaitRuntimeHitlReview(params: {
   });
   if (!association) return "not-runtime";
   if (!association.actorUserId || association.actorUserId !== params.userId)
-    return "unavailable";
+    return "no-reviewer";
   const deadline = Date.now() + RUNTIME_HITL_TTL_MS;
   while (!params.signal?.aborted && Date.now() < deadline) {
     const ruling = await peekHitlRuling(params);
     if (ruling) return ruling;
-    if (!(await getHitlReview(params))) return "unavailable";
+    if (!(await getHitlReview(params))) {
+      // A reviewer can commit between the first peek and removal of the stage.
+      const committed = await peekHitlRuling(params);
+      if (committed) return committed;
+      logger.warn(
+        { taskId: association.taskId, workspaceId: association.workspaceId },
+        "Runtime review state expired or became unavailable",
+      );
+      return "review-unavailable";
+    }
     try {
       await setTimeout(2_000, undefined, { signal: params.signal });
     } catch {

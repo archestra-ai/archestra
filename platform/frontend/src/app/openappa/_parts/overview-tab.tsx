@@ -6,6 +6,7 @@ import {
   OverviewSetupCards,
   UnrecognizedClientsCard,
 } from "./overview-setup-cards";
+import { TrustAudienceCard } from "./trust-audience-card";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 /** The visible policy targets whose tool calls can enter the OpenAPPA path. */
@@ -17,6 +18,7 @@ export function OverviewTab() {
       <OverviewSetupCards />
       {isFresh === false && (
         <>
+          <TrustAudienceCard />
           <section
             aria-labelledby="overview-policy-coverage"
             className="space-y-3"

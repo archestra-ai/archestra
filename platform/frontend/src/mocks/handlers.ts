@@ -128,6 +128,15 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  ...getJson("/api/openappa/trust-audience", {
+    trust: ["suspicious", "trusted"],
+    audiences: [
+      { name: "public", kind: "builtin", ruleCount: 0, firstRule: null },
+      { name: "internal", kind: "builtin", ruleCount: 0, firstRule: null },
+      { name: "self", kind: "builtin", ruleCount: 0, firstRule: null },
+    ],
+    sources: [],
+  }),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
   ...getJson("/api/openappa/yells", {
     data: [],

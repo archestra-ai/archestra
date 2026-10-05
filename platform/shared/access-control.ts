@@ -2019,6 +2019,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/openappa": { openappaPolicy: ["read"] },
   "/openappa/policy": { openappaPolicy: ["read"] },
   "/openappa/batteries": { openappaPolicy: ["read"] },
+  "/openappa/trust-audience": { openappaPolicy: ["read"] },
   "/openappa/yells": { openappaDiagnostics: ["read"] },
 
   // Logs

@@ -104,6 +104,7 @@ import type {
   LlmProxyModelResponseContext,
   LlmProxyPlugin,
   LlmProxyRequestContext,
+  LlmProxyRuntimeToolProof,
   LlmProxyToolCallAnnotation,
   LlmProxyToolCallsContext,
   LlmProxyToolCallsOutcome,
@@ -982,6 +983,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const notice = binding.request.tools?.notice;
     const blocked: { id: string; name: string; reason: string }[] = [];
     const annotated: LlmProxyToolCallAnnotation[] = [];
+    const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
     const mint = this.delegationMinter(
       binding,
       { ...context, toolCalls: calls },
@@ -1053,6 +1055,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
               503,
               "OpenAPPA could not protect this runtime call",
             );
+          runtimeProofs.push({
+            id: call.id,
+            name: call.name,
+            action: runtime.action,
+            session,
+            spawn: runtime.spawn,
+            wrapped: runtime.wrapper !== undefined,
+          });
           const signed = {
             ...runtime.args,
             [RUNTIME_TOOL_PROOF_ARGUMENT]: proof,
@@ -1184,6 +1194,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       toolCalls: stamp ? released.map(stamp) : released,
       ...(blocked.length > 0 ? { blocked } : {}),
       ...(annotated.length > 0 ? { annotated } : {}),
+      ...(runtimeProofs.length > 0 ? { runtimeProofs } : {}),
     };
   }
 

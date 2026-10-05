@@ -1,286 +1,241 @@
-# Archestra × OpenAPPA
+# OpenAPPA Engineering Handoff
 
-OpenAPPA evaluates tool calls and tool results at the LLM proxy guardrails. The proxy detects session identity from client headers or an explicit `X-Appa-Session-ID`. External client sessions are scoped to the authenticated credential (`user:<id>`, `app:<id>`, or `virtual-key:<id>`). This prevents callers from accessing another user's session by guessing its ID. Two MCP tools manage remedies: `archestra__get_remedy_plans` and `archestra__execute_remedy_plan`.
+**Baseline:** Archestra commit [`3aa876d1c3bfc227035c740b420f964f731bb47e`](https://github.com/archestra-ai/archestra/tree/3aa876d1c3bfc227035c740b420f964f731bb47e), inspected on 2026-10-05. OpenAPPA is pinned to [`c7c1e1ef36aa07604b421c48be266d7397557656`](https://github.com/archestra-ai/OpenAPPA/tree/c7c1e1ef36aa07604b421c48be266d7397557656), with locked crate version `0.31.1`.
 
-Session state is keyed by session ID. Internal requests over loopback use shared session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback is the platform trust boundary. Requests without a session header share a fallback session per credential and agent.
+This document explains the OpenAPPA integration in Archestra for engineers who build, maintain, or debug it. APPA is shorthand for OpenAPPA. **Guardrails v2** is its product name. For operator setup, read the [user guide](pages/platform-ai-tool-guardrails.md). This document covers architecture, runtime code, persistence, and operations.
 
-## Startup configuration
+## Reading Guide
 
-OpenAPPA follows the `ARCHESTRA_BETA` master switch and has no flag of its
-own. `ARCHESTRA_BETA=true` enables APPA and the OpenAPPA editor and
-automatically registers the proxy plugin.
-The **Enable Guardrails v2** switch on `/openappa` controls APPA enforcement
-across every organization and agent in the deployment. It defaults to off and
-requires organization administration permission to change. Both the server flag
-and this shared switch must be on for APPA to enforce policies. Each request
-reads the shared setting, so replicas do not rely on a process-local switch.
-Policy editing and GitHub sync remain available while enforcement is off.
-The plugin list alone does not activate them.
-The OpenAPPA editor stores organization policy revisions in PostgreSQL. Restart
-the backend when changing the switch; saving a policy requires no restart.
+1. Read [System Overview](#system-overview), [Policy Model](#policy-model), and [Startup Configuration](#startup-configuration) for core concepts.
+2. Read [Tool Calls and Results](#tool-calls-and-results), [Remedies](#remedies), and [Identity and Clients](#identity-and-clients) for the request path.
+3. Read [Batteries](#batteries), [GitHub Policy Sync](#github-policy-sync), and [APIs and UI](#apis-and-ui) for policy control.
+4. Read [Persistence and Recovery](#persistence-and-recovery), [Diagnostics and Runbooks](#diagnostics-and-runbooks), and [Testing and Qualification](#testing-and-qualification) for operations.
+5. Read [Known Limits](#known-limits) before you roll out or change policies.
 
-Existing trusted-data and invocation guardrails always remain active. When APPA
-is enabled, existing result filters run first and APPA evaluates their filtered
-output. Rewritten tool calls pass existing invocation checks before APPA reserves
-them; either engine can block a call. Disabling APPA does not disable existing
-guardrails or delete policies. A request already inside APPA fails closed if the
-switch is turned off before its next native operation.
+## System Overview
 
-The HTTP API and agent read/validate/update tools share validation and revision
-checks. Edits compile without executing external services. The next dispatch
-loads the latest saved revision under the native runtime lock. New conversations
-use it; existing conversations retain their recorded policy.
+OpenAPPA is a Rust policy engine embedded in the Fastify backend via NAPI. It runs in-process, not as a standalone service. Archestra handles authenticated caller identity, tool normalization, policy composition, and wire protocols. The upstream Rust engine evaluates policies, encodes events, replays history, and checks log consistency.
 
-The editor accepts `[policy]` and URL/builtin bindings in `[externals]`. The
-only `include` entries admitted are battery declarations (see Batteries); any
-other include, local command, or runtime-owned setting is rejected with the line
-that carries it. Tokens are referenced through `token_env`; policy documents
-must not contain credentials.
-Existing file-based deployments must copy their policy into the editor. An
-unconfigured organization starts with only a catch-all annotator. It returns
-empty changes and requirements, leaving trust and audience unchanged. Explicit
-tool rules take precedence over the catch-all. The local backend serves this
-fixed answer without calling a model or accessing user data.
+The LLM proxy evaluates proposed tool calls before release, subject to adapter limits in [Streaming Boundary](#streaming-boundary). The client executes allowed calls through an executor, such as the MCP gateway. On the next model turn, the proxy admits or replaces the tool results. An allowed call does not mean the tool succeeded. The MCP gateway still enforces its own RBAC and invocation policies.
 
-Tool names match exactly, or as the `*` catch-all; partial globs do not exist,
-so a rule named `grain__*` matches nothing. Globs live in argument selectors
-(`shell(command:*publish*)`).
+```mermaid
+flowchart LR
+  Client[Chat or external client] <--> Proxy[LLM proxy and APPA plugin]
+  Proxy <--> Provider[Model provider]
+  Client <--> Gateway[MCP gateway and tool executors]
+  Proxy <--> Host[TypeScript OpenAPPA service]
+  Gateway --> Host
+  Host <--> Native[NAPI addon and pinned Rust runtime]
+  Native <--> Ledger[(PostgreSQL events and receipts)]
+  Admin[Policy tools and admin API] --> Composer[Policy and battery composition]
+  Composer <--> PolicyDB[(Policy revisions and effective policy)]
+  Host --> PolicyDB
+  Native --> Bridge[Authenticated loopback helper bridge]
+  Bridge --> Sandbox[Isolated helper sandbox]
+```
 
-| Boundary | APPA inactive | Flag and global switch on |
-| --- | --- | --- |
-| Incoming tool results | Existing result policies | APPA admission and saved output |
-| Outgoing calls | Existing invocation policies | Existing invocation policies, then APPA decision |
-| Denied call | Existing adapter refusal | Notice call carrying APPA's explanation and remedies |
-| Session header | No APPA wiring | Stable conversation identity |
-| Special MCP tools | Hidden and unavailable | Notice reading and embedded remedy execution |
-| Runtime | Not loaded or initialized | Lazy native initialization; errors fail closed |
+Control-plane data and runtime events both live in PostgreSQL. Archestra currently provisions one organization per deployment. The data model preserves organization scoping for future multi-tenant support. The enforcement switch is deployment-wide.
 
-Migrations remain additive and deployment-wide; runtime APPA records are accessed
-only when enabled.
+### Critical Invariants
 
-The server flag hands the trusted-data decision over rather than layering it.
-With the flag on, the pre-APPA trusted-data guardrail stands down: it marks no
-tool result untrusted, runs no dual-LLM sanitization, reports no
-sensitive-context boundary, and an agent's own "consider context untrusted"
-setting stops applying. Every proxied request then reads as trusted context, so an existing
-invocation policy that only restricts untrusted context no longer fires, while
-one that blocks or requires approval outright still does. Note that the flag
-alone enforces nothing on the APPA side: until the deployment switch is also
-on, a deployment with the flag set has neither guardrail judging its traffic.
+- The beta flag and the deployment switch are separate gates. The beta flag stands down legacy trusted-data checks even when APPA enforcement is off.
+- A root keeps the policy snapshot it opened with. Saving a new policy never rewrites an active session.
+- A signature verifies host integrity only. It does not prove an offer is live or that a tool executed.
+- Unreleased tool calls are withheld unless fork inheritance or a control rule admits them.
+- A pending receipt blocks normal dispatch across the family. The peer-read path is an exception to this rule.
+- Commits for receipts and event appends are separate transactions. They do not guarantee exactly-once external side effects.
+- A stored composition refusal does not stop traffic. Dispatch can still serve retained effective-policy bytes.
+- Unsupported clients bypass APPA by default. Provider-hosted tools execute before Archestra can inspect them.
+- A configured battery is not always active. Coverage, enforcement, composition, and credentials are distinct states.
 
-Their pages step aside with them: the legacy Guardrails page, the Security
-settings tab, and their navigation entries are hidden, and deep links redirect
-to OpenAPPA. Nothing stored changes, so clearing the flag restores both the
-pages and the evaluation exactly as they were, with every policy row intact.
+### Terms
 
-## GitHub policy sync
+| Term | Implementation Meaning |
+| --- | --- |
+| Session | Host conversation ID, scoped to an authenticated caller. |
+| Actor | Native identity derived from a session. A family holds a root and child actors. |
+| Trajectory / root | Event-sourced policy history. A family shares concurrency and failure fences. |
+| Label | Current trust and allowed-reader restrictions built from admitted values. |
+| Annotation | Call contract with label changes (`delta`), requirements, and effects. |
+| Effect | History marker for ordering rules. It is not the tool return value. |
+| Offer / remedy | Runtime-issued plan to resolve a blocked operation. |
+| Battery | Pre-packaged policy with optional helper scripts and credential mappings. |
+| Root policy | Organization-authored TOML, stored in database revisions or synced from GitHub. |
+| Effective policy | Composed TOML passed to the runtime. It differs from an active session snapshot. |
+| Receipt | Host processing record or signed client carrier. Neither is an arbitrary permission grant. |
 
-Open **OpenAPPA** (`/openappa`) and select **Connect GitHub** below the policy
-editor. `/guardrails-v2` redirects to this page. With APPA enabled, organization
-administrators can choose an `owner/repository`, branch or tag (blank uses the
-default branch), and a repository-relative TOML file. Public repositories need no
-credential; private repositories use an existing organization token or GitHub App
-credential, with credential-read permission required to select one.
+## Code Map
 
-Saving the source queues the first pull. Choose every 15 minutes, every hour, or
-once a day; **Sync now** requests an immediate pull. The panel shows the last
-check, accepted commit, and any error. The scheduler checks for due sources every
-minute and deduplicates queued/running pulls per organization.
+| Responsibility | Entry Points |
+| --- | --- |
+| Proxy pipeline | [`llm-proxy-handler.ts`](../platform/backend/src/routes/proxy/llm-proxy-handler.ts), [`registry.ts`](../platform/backend/src/proxy/plugins/registry.ts) |
+| APPA plugin and client adapters | [`appa-plugin-archestra/`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/), especially `plugin.ts` and `session-identity.ts` |
+| Native dispatch facade | [`openappa/service.ts`](../platform/backend/src/openappa/service.ts): `evaluateToolCalls`, `processProxyResults`, `executeRemedyByOffer`, child and peer operations |
+| Request restoration and wire protocols | [`request.ts`](../platform/backend/src/openappa/request.ts), [`wire.ts`](../platform/backend/src/openappa/wire.ts), [`notice.ts`](../platform/backend/src/openappa/notice.ts) |
+| Command policy normalization | [`command-normalization.ts`](../platform/backend/src/openappa/command-normalization.ts) and its real-native validation test |
+| Signed artifacts and lineage | [`offer-claims.ts`](../platform/backend/src/openappa/offer-claims.ts), [`session-token.ts`](../platform/backend/src/openappa/session-token.ts), [`trajectory-stamp.ts`](../platform/backend/src/openappa/trajectory-stamp.ts), [`lineage.ts`](../platform/backend/src/openappa/lineage.ts) |
+| Policy administration | [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts), [`guardrails-deployment.ts`](../platform/backend/src/services/guardrails-deployment.ts), [`openappa-policy-change.ts`](../platform/backend/src/services/openappa-policy-change.ts) |
+| Composition and helpers | [`batteries.ts`](../platform/backend/src/openappa/batteries.ts), [`declarations.ts`](../platform/backend/src/openappa/declarations.ts), [`helper-bridge.ts`](../platform/backend/src/openappa/helper-bridge.ts) |
+| MCP control tools | [`archestra-mcp-server/openappa.ts`](../platform/backend/src/archestra-mcp-server/openappa.ts), [`mcp-gateway/utils.ts`](../platform/backend/src/routes/mcp-gateway/utils.ts) |
+| Native host | [`openappa-rs/src/lib.rs`](../platform/archestra-rs/openappa-rs/src/lib.rs), [`index.d.ts`](../platform/archestra-rs/openappa-rs/index.d.ts), [`Cargo.toml`](../platform/archestra-rs/openappa-rs/Cargo.toml), [`Cargo.lock`](../platform/archestra-rs/Cargo.lock) |
+| Database declarations | [`schemas/openappa.ts`](../platform/backend/src/database/schemas/openappa.ts), [`schemas/openappa-batteries.ts`](../platform/backend/src/database/schemas/openappa-batteries.ts) |
+| UI and permissions | [`frontend/src/app/openappa/`](../platform/frontend/src/app/openappa/), [`shared/access-control.ts`](../platform/shared/access-control.ts) |
+| Qualification fixtures | [`native tests`](../platform/archestra-rs/openappa-rs/), [`OpenAPPA e2e tests`](../platform/e2e-tests/tests/openappa/), [`CLI qualification runbook`](../platform/e2e-tests/fixtures/appa-root-flow/README.md) |
 
-Each pull resolves a commit before downloading the file, limits the policy to
-1 MiB of UTF-8, and runs the native policy validator. Accepted changes atomically
-create an organization policy revision and record source metadata. Unchanged
-bytes create no additional revision. Failed pulls preserve the active policy;
-a source edit or disconnect prevents an in-flight stale pull from publishing.
+The live native path pins deployment policy via `PreparedDeployment` in [`deployments.rs`](../platform/archestra-rs/openappa-rs/src/deployments.rs). Do not describe policy saves as calls to `Runtime::reload` - that function is for tests only. This addon has no separate `openappa-core` crate. `lib.rs` hosts both runtime logic and NAPI exports.
 
-While connected, the policy editor and the Batteries panel are read only and
-manual API/agent updates are rejected. **Stop syncing** keeps the current policy
-and enables local editing. GitHub sync only pulls changes; it does not push
-editor changes to the repository. New conversations use the accepted revision;
-existing conversations retain theirs.
+## Policy Model
 
-A pull is *held* rather than published when the repository text would drop a
-battery this deployment declared (only while `declarations_pending_publish` is
-set, i.e. until the deployment's own declarations have been published once) or
-would add or rekey a `[credentials]` grant. The sync row stores the held content,
-its hash, the source commit and the reasons (`drops_batteries`,
-`changes_credentials`); the declarations endpoint reports them and the panel
-shows them. `POST /api/openappa/github-sync/accept-held` publishes the held text
-under the accepting user's permissions: `toolPolicy:update` and
-`organization:update`, plus `credential:update` when the reasons include
-`changes_credentials`. The audit record of the acceptance lists the dropped
-batteries and changed variables. While the repository owns the text, alias
-targets do not follow a catalog rename; the battery reads `server_missing` with
-the stale target until the repository text changes.
+These semantics come from the [pinned OpenAPPA engine](https://github.com/archestra-ai/OpenAPPA/tree/c7c1e1ef36aa07604b421c48be266d7397557656). Archestra does not re-implement the trust algebra in TypeScript.
 
-Migration `0477_appa_github_sync` adds source storage, task deduplication, and
-the deployment switch; `0485_fine_silver_surfer` adds the held-pull columns and
-`declarations_pending_publish`, and makes `repo`/`path` nullable so a sync row
-can carry the declaration flags alone.
+### Labels and Checks
+
+Admitted values restrict one concrete label. Trust folds with minimum rank (lower is less trusted). Audience folds with set intersection. Public audience is unrestricted. An empty audience means nobody. The built-in audience chain is `self` within `internal` within `public`. Audience specifies who can receive data - not network targets or RBAC roles.
+
+Tool requirements check the label at sinks. A private read can block a later public send. Trust and audience are independent: authenticated input can be untrusted, and tool access permissions do not authorize sending data everywhere.
+
+Directory checks can pass, fail, or need evidence. Missing evidence is not a denial. The runtime can query an audience source and re-evaluate with recorded facts. Dynamic annotations bind to call digests. Rewritten calls require new annotations. Replay uses saved facts rather than calling annotators again.
+
+### Effects and Outcomes
+
+| Primitive | Behavior |
+| --- | --- |
+| `delta` | Label change from an admitted value. Normal propagation restricts the trajectory. |
+| `requires` | Label, history, or attention constraints that the call must satisfy. |
+| `prior(k)` | Requires effect `k` to be committed. An open reservation does not satisfy it. |
+| `no_prior(k)` | Fails if effect `k` is committed or reserved. |
+| `emits` | Reserves an effect while a call runs. Commits it only on success. |
+| Success | Can commit effects even when no value is admitted. |
+| Failure / Indeterminate | Does not commit effects. Indeterminate means the host cannot confirm execution. |
+
+The host maps unknown tool outcomes to indeterminate and withholds the output. Policy denials, output replacements, and operational refusals are distinct outcomes. A helper timeout is an operational refusal, not a policy finding.
+
+### Matching and Authority
+
+Root rules run before battery rules. The first match wins. Names match exact strings or the wildcard `*`. There are no partial namespace globs. Argument selectors support patterns (`shell(command:*publish*)`). Unmatched tools are refused.
+
+The native adapter maps `<catalog>__<tool>` to `mcp/<catalog>/<tool>`. Other names map to `host/archestra/<name>`. Remedy calls map to `appa/execute_remedy_plan`. Use [`adapter.rs`](../platform/archestra-rs/openappa-rs/src/adapter.rs) when adding tools.
+
+Only the runtime's offered plan can relax a restriction. An agent explanation, a peer note, or an unsigned approval string is never authorization. Upstream supports file-based IFC, but Archestra does not install file logs or run a file workspace.
+
+## Startup Configuration
+
+`ARCHESTRA_BETA=true` turns on the feature and registers the proxy plugin. There is no separate `ARCHESTRA_OPENAPPA_ENABLED` flag. The deployment switch row in PostgreSQL sets `enabled` and `unsupported_client_action`. Changing the database row takes effect immediately. Changing the beta flag requires a backend restart.
+
+| Beta Flag | Deployment Switch | APPA Behavior | Legacy Proxy Guardrails |
+| --- | --- | --- | --- |
+| Off | Either | Feature unavailable, plugin not registered. | Trusted-data and invocation checks run normally. |
+| On | Off | Plugin observes traffic but does not gate calls. | Trusted-data checks stand down. Invocation checks still run. |
+| On | On | Eligible sessions use APPA. | Trusted-data checks stand down. Invocation checks run before APPA reserves calls. |
+
+**The middle row is a protection gap.** Beta-on disables legacy trusted-data labeling, dual-LLM sanitization, and sensitive boundaries. Context appears trusted, so invocation rules that only check untrusted context will not fire on the proxy. Unconditional block or approval rules still run. The MCP gateway independently uses `!agent.considerContextUntrusted` for its invocation checks.
+
+Each request captures its activation state. If enforcement turns off mid-request, that turn finishes under its policy. Later requests observe the switch and proceed unenforced. Sessions that start while enforcement is off stay bypassed while their observation record exists (30-day retention). Expired records allow new starts, but older unobserved results remain withheld. Always start a fresh conversation after enabling protection.
+
+The deployment switch defaults to off. `unsupported_client_action` defaults to `bypass`, with `block` available. The switch checks policy validity before enabling. An invalid policy returns 409.
+
+Revision `0` is an unsaved starter template. It includes the bundled Archestra battery, an Archestra alias, `internal = ["archestra:members"]`, `context_control = true`, and a local no-op wildcard annotator. The wildcard adds no restrictions to uncovered tools. The template source is `initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts).
+
+Saving revision `1` through MCP local publication can auto-enable enforcement if the user has `organization:update`. Direct HTTP PUT saves and GitHub imports do not auto-enable. The explicit deployment API checks `organizationSettings:update`. Later saves leave the switch unchanged.
+
+New roots adopt the latest effective policy. Active roots replay their recorded policy snapshot. A policy save does not replace existing root snapshots. Stored composition errors keep previous effective bytes, as described under Batteries. Rotating credentials can cause dispatches to fail if the runtime cannot resolve them. Disabling beta restores legacy UI and guardrails without deleting policy data.
+
+Sources: [`config.ts`](../platform/backend/src/config.ts), [`guardrails-deployment.ts`](../platform/backend/src/services/guardrails-deployment.ts), [`trusted-data.ts`](../platform/backend/src/guardrails/trusted-data.ts), [`tool-invocation.ts`](../platform/backend/src/guardrails/tool-invocation.ts), [`proxy integration tests`](../platform/backend/src/routes/proxy/llm-proxy-openappa.test.ts).
+
+## GitHub Policy Sync
+
+GitHub sync lets a Git repository own the root policy text. It works even while enforcement is off. Settings specify `owner/repository`, branch or tag, and a file path. Blank branches use the default branch. Public repositories need no credentials. Private repositories use a GitHub App or token with `credential:read`.
+
+The sync worker checks repositories on schedule (every 15m, 1h, or 1d) or when triggered with **Sync now**. It downloads files up to 1 MiB, validates the TOML, and saves revisions atomically. Unchanged files create no revision. Failed pulls preserve the active policy.
+
+When sync is active, the UI policy editor is read-only and direct HTTP PUT saves return 409. Calling `update_guardrails_policy` via MCP opens a pull request instead of saving directly. Opening a PR requires a GitHub App, `credential:read`, and a branch head matching the synced commit. Merged PRs take effect on the next sync pull.
+
+Pulls are *held* if incoming text drops declared batteries or adds/rekeys `[credentials]`. Held text is saved in the database with reasons (`drops_batteries`, `changes_credentials`). To apply it, call `POST /api/openappa/github-sync/accept-held`. This requires `openappaPolicy:update`, plus `credential:update` if credentials changed.
+
+An invalid download keeps the current revision. A failed composition on an accepted revision keeps serving the previous effective policy bytes.
+
+Sources: [`openappa-github-sync.ts`](../platform/backend/src/services/openappa-github-sync.ts), [`openappa-policy-change.ts`](../platform/backend/src/services/openappa-policy-change.ts), [`GitHub routes`](../platform/backend/src/routes/openappa-github-sync/openappa-github-sync.routes.ts), [`GitHub sync model`](../platform/backend/src/models/openappa-github-sync.ts).
 
 ## Batteries
 
-A battery is an OpenAPPA policy package for one provider: a policy file that
-names tools by their canonical namespace (`mcp/github/get_file_contents`), optional
-helper scripts the policy consults over the externals protocol, and the
-`APPA_PROVIDER_*` credential each helper reads. The addon exposes the batteries
-bundled with the pinned OpenAPPA commit that govern MCP tools, the only tools
-Archestra serves, and validates uploaded packages with the same marketplace
-checks (`openappa-rs/src/batteries.rs`): a `command` external is admitted and
-rewritten to the helper bridge below, a `url` external is refused. The Archestra
-adapter, which maps a spelled tool name onto its canonical identity and back,
-lives in the addon (`openappa-rs/src/adapter.rs`); OpenAPPA knows only that a
-host embeds it.
+A battery is a policy package for a tool provider. Catalog batteries define rules for tools like `mcp/github/get_file_contents`. Organization batteries define annotators. You must add tool rules to route calls to them.
+
+The addon provides bundled batteries and validates uploaded packages. It rewrites battery `command` externals to the sandbox helper bridge and rejects battery `url` externals. The Archestra adapter translates canonical tool names to platform names.
 
 ### Declarations
 
-The organization's policy text is the source of truth for batteries
-(`backend/src/openappa/declarations.ts`). A battery is included by an `include`
-entry, spelled `batteries/<name>/appa.toml` for a bundled battery or
-`batteries/<name>@sha256-<64 hex>/appa.toml` for an uploaded package; the
-`[server_aliases]` table maps each battery namespace to the catalogs' tool
-prefixes; one `[credentials]` table per organization maps `APPA_PROVIDER_*`
-variables to runtime credential keys. Resolution is exact: a bundled spelling
-always resolves to the bundled battery and an upload never shadows it. A name may
-be included once; a second include of the same name is refused with 409 at write
-time, and a stored duplicate resolves to nothing.
+The organization policy text owns battery declarations:
+- `include`: names bundled batteries (`batteries/<name>/appa.toml`) or uploaded packages (`batteries/<name>@sha256-<hash>/appa.toml`).
+- `[server_aliases]`: maps battery namespaces to catalog tool prefixes.
+- `[credentials]`: maps `APPA_PROVIDER_*` variables to runtime credential keys.
 
-Install rows (`openappa_battery_install`) are a read model derived from the
-text: every recompose plans the rows from the declarations and replaces them
-wholesale, preserving ids. `enabled` is `true` for every declared battery; a
-battery is off by being absent from the text. Unticking the wizard checkbox
-unbinds the alias but keeps the include, which then composes as the
-`server_missing` stub until the panel removes the battery
-(`DELETE /api/openappa/battery-includes/:name`, which drops the entry and every
-alias its namespaces bind) or the text is edited. An attach to a catalog with no
-synced tools is refused with 409, since the alias would have no target, and so
-is one to a catalog whose tool prefix holds `__`; `GET /api/openappa/battery-matches`
-answers `attach` (`ready | unsynced | conflicting`) beside the matches, and the
-wizard checkbox and the panel's attach form disable on it with the reason; the
-form lists only catalog entries with an install, since tools are discovered on
-install and an entry nobody installed has no prefix to alias. A
-detach or disable that would edit nothing (the row outlived the prefixes it was
-derived from, or the alias is another included battery's) is refused with 409
-pointing at the include removal rather than answering success over an unchanged
-text. Every write path edits the text
-through the addon's `editOpenappaPolicy` and saves a revision: the batteries
-routes (attach, detach, remove, rebind, upload), the wizard checkbox, the
-editor, the MCP guardrails tools, and GitHub sync. Attaching through the routes requires
-`toolPolicy:update` and `organization:update`; nothing attaches a battery on
-catalog install, and the bundled match list
-(`backend/src/openappa/battery-match.ts`) is advisory only, served by
-`GET /api/openappa/battery-matches` for the wizard checkbox. The policy-save
-grant gate (`backend/src/services/guardrails-policy.ts`) requires
-`credential:update` whenever the resulting text adds or rekeys a
-`[credentials]` grant, whatever the path. A variable may be read by several
-included batteries; each battery's declarations carry its `readers`, and a
-rebind that would unset a variable another included battery reads is skipped
-by the backend and refused by the panel.
+Resolution is exact: bundled names always resolve to bundled packages. Duplicate includes fail validation. Discovery can recommend newer uploads of the same name, but declared bundled includes stay bundled.
 
-An include entry that stopped resolving is a validation error only when it is
-new or changed against the previous revision; an unchanged one is a warning and
-composes as an empty stub, so a stale entry never takes the document down. A
-battery the host holds back (unresolved, missing a credential, without a
-server, in a naming conflict) composes as the same stub, so the runtime never
-consults a helper the host cannot serve.
+Install rows in `openappa_battery_installs` are a derived read model. Recomposition replaces rows while preserving IDs. Every declared battery is enabled. Removing its `include` line deletes the battery. Removing an alias keeps the include and leaves the battery in `server_missing`.
 
-`GET /api/openappa/policy-declarations` returns what the text declares, per
-entry: name, source, package hash, line, status, helpers, servers and credential
-rows with readers, plus unused aliases, the root revision, the composition error,
-whether GitHub owns the text, and the held pull. The panel and the editor's
-annotations read it; the MCP guardrails tools return the same composition view
-as `effective.batteries`.
+Mutating batteries through API routes rewrites policy text and increments the revision. Routes require `openappaPolicy:update`. Adding or rekeying credentials requires `credential:update`. Installing an MCP catalog does not activate its battery.
+
+Attaching to a catalog without synced tools, or one with an ambiguous `__` prefix, returns 409. Detaches that do not change declarations also return 409. `DELETE /api/openappa/battery-includes/:name` removes the include and its aliases. If several batteries read one credential, unbinding must not break the other readers.
+
+Unresolved includes produce errors if new, or warnings if unchanged. Catalog batteries with missing servers, credentials, or naming conflicts compose as empty stubs. Organization-wide annotator batteries compose even when `unrouted` or `missing_credentials`. Calls to a helper with missing credentials return no answer and fail closed.
+
+`GET /api/openappa/policy-declarations` returns declaration details, statuses, helpers, and held pulls for UI panels and MCP inspection tools.
 
 ### Statuses
 
-Each derived row carries one status, evaluated in this precedence
-(`backend/src/openappa/batteries.ts`, `batteryStatus`):
+Derived rows report one status by priority order:
+- `unavailable`: unresolved package or duplicate include.
+- `missing_credentials`: unbound variable, non-organization credential definition, or missing organization connection.
+- `naming_conflict`: catalog prefix contains `__`, or multiple catalogs share a prefix.
+- `server_missing`: namespace has no alias target, or target matches no catalog.
+- `unrouted`: organization battery has no rules routing to its annotators.
+- `active`: battery is ready and enforcing rules.
 
-- `unavailable`: the entry resolves to no battery, or the name is included twice;
-- `missing_credentials`: a declared variable has no key, or its key has no organization-level value;
-- `naming_conflict`: a catalog's tool prefix contains `__` (the adapter splits at the last `__`), or one alias target is carried by more than one catalog;
-- `server_missing`: the battery's namespace has no alias target, or the target names no catalog;
-- `active`: otherwise.
+A composition error marks rows as `refused`. Stored effective content becomes `accepted ?? previousContent ?? root.content`. `getEffectivePolicy` returns this row without throwing. The dispatch facade serves `.content` even when `lastError` is set. If the native runtime cannot open those bytes, dispatch fails at execution time. Unchanged errors are cached to avoid repeated work.
 
-A composition the runtime refuses overrides all of them: every row of the
-organization is marked `refused` with the error, and the stored document is the
-last composition that opened (`accepted ?? previousContent ?? root`), so a
-refused revision is not retried on every call and the last enforceable document
-remains visible as such. A battery may govern any number of catalogs; every row
-of one battery carries the same status. The helper owner is the earliest row
-(by `createdAt`, then id): its install id is the one the composed helper URLs
-point at.
+A battery can cover multiple catalogs. Each catalog row shares the battery status. The oldest install row owns the helper URL.
 
 ### Composition
 
-The runtime opens the composed *effective policy* rather than the root policy
-alone. The composer reads the latest root revision, its declarations, and the
-tool names synced for each aliased catalog; each battery namespace becomes a
-`server_aliases` entry whose targets are the catalog's tool prefixes, so a rule
-for `mcp/github/get_file_contents` judges the platform tool
-`github_prod__get_file_contents` and feedback to the model spells the platform
-name. The composed document is stored per organization with the root revision
-and a fingerprint of the compose inputs, including the `[credentials]` table.
+The runtime evaluates the composed *effective policy*, not the raw root text. The composer combines the root revision, declarations, and catalog tool names into alias mappings. Composed text is stored per organization with a fingerprint of its inputs.
 
-Composition runs after each root save, GitHub import or held-pull acceptance,
-battery route write, package upload, runtime credential change, catalog rename,
-delete or restore, and tool sync, and hourly for every organization as a
-backstop. Before each dispatch the runtime compares the stored root revision to
-the latest one and recomposes on a mismatch; a declarations read also recomposes
-when the fingerprint moved. Overlapping recomposes of one organization coalesce;
-contention beyond three jittered attempts answers 503 rather than failing the
-caller's write. A composition whose grants exceed the previous one's (after a
-bundled-battery pin bump, say, with no user write) logs
-`OpenAPPA composition grants credentials the previous composition did not`.
+Recomposition triggers on policy saves, GitHub imports, battery changes, package uploads, credential updates, catalog renames, tool syncs, and an hourly cron job. Before dispatch, the backend compares the stored root revision with the database and recomposes on mismatch. Concurrent runs coalesce. High contention returns 503 after three jittered retries.
+
+```mermaid
+flowchart TD
+  Root[Latest root revision] --> Plan[Resolve declarations and composition inputs]
+  Packages[Bundled or hashed uploaded packages] --> Plan
+  Catalog[Catalog tool prefixes and aliases] --> Plan
+  Credentials[Credential bindings and availability] --> Plan
+  Plan --> Native[Native hosted-policy composition and validation]
+  Native --> Effective[(Effective policy and fingerprint)]
+  Native --> Status[(Derived battery statuses)]
+  Effective --> Dispatch[Per-dispatch prepared deployment]
+  Dispatch --> NewRoot[New root records policy snapshot]
+  OldRoot[Existing root] --> Snapshot[(Previously recorded policy bytes)]
+```
+
+Dispatch freshness checks root revisions and the revision-0 starter hash. Declarations and coverage reads also check the fingerprint. A catalog match marked `available` is a recommendation, not an active install.
 
 ### Helpers
 
-Helper scripts never run on the API host. The composer rewrites every `command`
-binding into a URL binding on the loopback helper bridge,
-`POST /api/openappa/helpers/<install id>/<external name>`, authenticated by a
-per-process bearer the backend mints at boot and exports as
-`APPA_ARCHESTRA_BRIDGE_TOKEN`. Neither a root policy nor a battery may name an
-`APPA_ARCHESTRA_` variable in a `token_env` of its own (validation, upload and
-composition all refuse it), so no author can send the runtime, bearer in hand, to
-another install's helper or to an outside URL. The bridge refuses non-loopback
-sockets and any other bearer, resolves the install's credentials at organization
-scope, mounts the battery files into a fresh sandbox container under
-`/skills/<battery>`, passes the consult envelope on stdin and the credential as a
-sandbox secret, and returns the helper's stdout as the answer. The bridge needs
-the code execution sandbox (`ARCHESTRA_CODE_RUNTIME_ENABLED` with a Dagger runner
-or orchestrator kubeconfig; `daggerRuntimeEnabled` follows
-`skillsSandboxEnabled` in `backend/src/config.ts`). Its budget is 4.5 seconds
-including container start, and helpers may hold at most half the sandbox pool;
-a slow, failed, unavailable or over-cap helper answers 5xx, which the runtime
-treats as no answer, never as a denial. A dispatch holds its pooled PostgreSQL
-connection across its consults, so slow helpers keep those connections busy and
-dispatches waiting for one fail closed once the wait runs out; the addon's
-global state lock is not involved, as it covers initialization, policy reload
-and the start hook only.
+Helper scripts run inside an isolated sandbox container, never on the backend host. The composer rewrites `command` externals to loopback URLs: `POST /api/openappa/helpers/<installId>/<externalName>`. Calls require the secret bearer token `APPA_ARCHESTRA_BRIDGE_TOKEN`. Roots and batteries cannot use `APPA_ARCHESTRA_*` in `token_env`.
 
-### Packages and persistence
+The bridge rejects non-loopback calls and invalid tokens. It mounts battery files read-only under `/skills/<battery>`, sends the request on stdin, injects credentials as sandbox secrets, and reads JSON from stdout. Execution timeout is 4 seconds, and wall deadline is 4.5 seconds.
 
-Uploaded packages are content-addressed: `(organization, content_hash)` is
-unique and insert-only, several versions of a name may coexist, and an upload
-that repeats stored bytes returns the stored row. A package name matches
-`^[a-z0-9][a-z0-9-]*$`, carries at most 64 files, and its manifest name must
-equal the uploaded name. Uploading a package that declares credentials or
-externals requires `credential:update`. An upload rewrites an existing include of
-that name to the new hashed entry. Deleting a package is refused while the latest
-policy revision or a held pull spells its hash.
+Helper concurrency is capped at `max(1, floor(sandbox maxConcurrent / 2))`. Error codes: 404 for missing helpers, 502 for execution errors, 503 for capacity limits, 504 for timeouts. The runtime treats non-200 responses as no answer, not a policy denial. Because consults hold PostgreSQL connections, slow helpers can exhaust connection pools.
 
-Migration `0483_openappa_batteries` adds the package, install and effective
-policy tables; `0485_fine_silver_surfer` adds install `status`, `package_hash`
-and `last_error`, moves package uniqueness from name to content hash, and adds
-the GitHub-sync held-pull columns. `declareExistingInstalls()`
-(`backend/src/openappa/declare-installs.ts`) runs at startup, idempotently, and
-as `pnpm db:openappa-declare-installs`: it authors declarations for install rows
-that predate them, dropping (with a structured log) a disabled row, a row
-whose battery resolves to neither an upload nor the bundle, a non-owner row's
-bindings, and a variable two owners bind to different keys (left unbound, so
-those batteries read `missing_credentials` until an operator binds one key).
+The bundled Archestra audience battery runs in-process without sandbox overhead. Its `members`, `team/<team>`, and `user/<user>` selectors resolve directly against the database.
 
-## Tool calls and results
+### Packages and Persistence
+
+Uploaded packages are immutable and content-addressed by `(organization_id, content_hash)`. Packages support up to 64 files. Manifest names must match package names. Uploading packages with credentials or externals requires `credential:update`. Deleting packages in active use returns 409.
+
+Startup calls `declareExistingInstalls()` in [`declare-installs.ts`](../platform/backend/src/openappa/declare-installs.ts) to backfill declarations for legacy rows. Run it manually with `pnpm --dir backend db:openappa-declare-installs` if startup migration fails.
+
+Sources: [`batteries.ts`](../platform/backend/src/openappa/batteries.ts), [`declarations.ts`](../platform/backend/src/openappa/declarations.ts), [`native policy.rs`](../platform/archestra-rs/openappa-rs/src/policy.rs), [`helper-bridge.ts`](../platform/backend/src/openappa/helper-bridge.ts).
+
+## Tool Calls and Results
 
 ```mermaid
 sequenceDiagram
@@ -308,65 +263,414 @@ sequenceDiagram
   end
 ```
 
-The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice keeps the original call position and provider call ID. Notice arguments contain the blocked tool name, proposed arguments, and the policy ruling in plain text. The ruling is unencoded so client classifiers (such as Claude Code auto-mode) inspect plain text. The client executes the notice through its normal tool loop. The model reads the ruling and selects an offered remedy plan in the same turn.
+The proxy replaces denied calls with `archestra__get_remedy_plans`. The notice retains the original call index and provider ID. It passes the target tool name, arguments, and plain-text ruling. The client runs the notice tool, and the model reads offered remedy plans in the same turn.
 
-A `run_tool` dispatch is ruled on as the tool it targets. The runtime receives the target's name and its own `tool_args`, so named rules, annotator bindings, and the wildcard catch-all apply to the tool that executes, not the wrapper. A denial presents the same identity: the notice names the target and carries its arguments, and history restores the target call with the ruling. A released call stays the wrapper the client declared.
+### Pipeline Order
 
-On later requests, the proxy restores notice calls back to original tool calls and injects the ruling as their result. Restoration is a stateless pure function of the request body. It requires no database lookup, surviving restarts and replica changes. The runtime withholds results for call IDs it never released.
+1. Check activation, authenticate the caller, and resolve bypass routes (setup, unsupported clients, delegated tasks).
+2. Resolve session identity, check lineage, and confirm chat ownership.
+3. Collect signed offers, restore prior notices, and reject unsupported tool types.
+4. Submit previous tool results via `processProxyResults` and apply admitted outputs.
+5. Clean the provider-bound request payload. This cleanup runs even when APPA is bypassed.
+6. Trigger prompt hooks. `Prompt` fires for new user turns, not result continuations.
+7. Call the model provider and accumulate tool call chunks.
+8. Apply dispatch rewrites and run legacy invocation checks on the prepared batch.
+9. Run APPA's finalizer. It reserves allowed calls, replaces denied calls with notices, or refuses the batch.
+10. Send calls to the client for execution.
+11. Send `TurnEnd` for final parent answers. Active calls or remedies keep the turn open.
+
+`evaluateToolCalls` rejects duplicate IDs and invalid JSON. It logs operation IDs as `call:<id>`. If a call fails mid-batch, the host attempts to cancel admitted sibling calls.
+
+Calls targeting `run_tool` evaluate against the inner tool and arguments. The client sees the wrapper released, but policy checks inspect the real target. On subsequent requests, the proxy restores notice calls back to original tool calls and injects the ruling as their result. Restoration is a stateless function that needs no database lookup.
+
+### Streaming Boundary
+
+Tool calls are held until stream completion so the proxy can evaluate the full batch. Stream adapters hold calls by omitting `sseData`. Text streams immediately for parents. Child runs and client compaction buffer the entire response up to 10 MiB (413 on overflow).
+
+On unbuffered streams, adapters that emit chunks containing both text and tool calls (like Gemini, MiniMax, or OpenAI delta content) can release calls before policy validation runs. Responses terminal frames can do the same. Audit your stream adapter before relying on pre-execution guarantees. See [`llm-proxy-handler.ts` lines 2823-2837](../platform/backend/src/routes/proxy/llm-proxy-handler.ts#L2823-L2837).
+
+Provider-hosted tools (like server-side web search) run inside the model provider before Archestra sees them. The proxy can withhold or alter their output, but cannot prevent their execution.
 
 ### What Reaches the Provider
 
-The provider never receives what the proxy writes for the client and the gateway. On every forwarded request, with or without an OpenAPPA session (deployment switch off, a bypassed client, a delegated run), the proxy:
+The proxy cleans requests before sending them to providers:
+- Restores notice calls, control calls, and `ask_user` questions on supported wire families.
+- Strips proxy metadata: notice records, signed JWS offers, execution frames, and `ask_user` offers.
+- Removes proxy-only parameters from remedy tool schemas.
+- Restores trajectory stamps in text to real provider IDs.
 
-- restores notices, control calls, and ask_user calls on the three restoring families;
-- removes what restoration left on every wire: the notice record and signed offers, the execution frame and JWS members, and ask_user offers;
-- removes proxy-only parameters from the remedy and ask_user declarations of a client that still holds an old tool list (the notice keeps its record, which the gateway still advertises);
-- restores trajectory stamps that a client copied into message or tool-result text.
+Restoration ensures previous turns remain byte-stable for models that enforce strict cache keys. However, the plugin appends guidance to `system` between turns for active remedies or questions. This can invalidate prefix caches on providers that reject modified system prompts.
 
-A call is rewritten only when the request's gateway identity resolves it to a platform tool, or when it carries proof that only the proxy writes: a notice record that names its own call, or JWS signed with this deployment's key. A lookalike name alone is not enough. The catch-all routes (`/v1/messages/count_tokens` and similar) apply the same cleanup with proof-only matching. They also drop what the pipeline strips at entry: session receipts, child-trajectory receipts, delegation markers, child-return markers, and compaction carriers. A counted request thus matches the forwarded one.
+Native questions use signed `aq1` IDs (`<prefix>_aq1_<nonce>_<tag>`). These IDs are preserved in conversation history so earlier turns do not change bytes.
 
-Every rewrite gives an earlier turn the same bytes on every request. Claude Opus 5.5 and Fable 5.1 bind each thinking block to the bytes before it. On accounts that the API enforces, it refuses a request whose earlier turns changed. One exception remains: the plugin appends one-turn guidance to `system`, so `system` changes between requests. This guidance is the question and remedy continuations, and the HITL question and decision guidance.
-
-The A2A step-context guard summarizes older turns as plain text for a provider. It omits the members that only the proxy writes, because no sanitizer can remove them from that text.
-
-A native question call reaches the client under a signed `aq1` id (`<prefix>_aq1_<nonce>_<tag>`, an HMAC over the session, the tool, and the nonce) issued in place of the provider's id. The id is not restored: later history carries it to the provider unchanged, so the exchange keeps the same bytes on every turn. The plugin verifies the answer by that signed id and spends a one-shot claim that binds it to the staged review. Request entry also restores stamps that a client copied into text, so logging, policy evaluation, and the plugin read provider ids there too.
-
-Model-facing remedy text states who decides: the organization's policy, and the user when the policy requires approval. It does not tell the model to skip the user or to act immediately. Provider safety classifiers refused requests that carried such wording.
+Sources: [`registry.ts`](../platform/backend/src/proxy/plugins/registry.ts), [`plugin.ts`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/plugin.ts), [`service.ts`](../platform/backend/src/openappa/service.ts), [`request.ts`](../platform/backend/src/openappa/request.ts), [`wire.ts`](../platform/backend/src/openappa/wire.ts).
 
 ## Remedies
 
-Two MCP tools handle remedies:
-1. `archestra__get_remedy_plans`: Returns the ruling and remedy plans from the notice arguments. It executes no code and changes no state.
-2. `archestra__execute_remedy_plan`: Runs the remedy plan selected by the model through the embedded OpenAPPA runtime.
+Two MCP tools handle blocked calls:
+1. `archestra__get_remedy_plans`: returns the ruling and available plans from notice arguments. It runs no code.
+2. `archestra__execute_remedy_plan`: runs the selected remedy plan through the OpenAPPA runtime.
 
-The gateway advertises only the arguments the model writes: `get_remedy_plans` omits `offers`, and `execute_remedy_plan` omits `execution`, `protected`, `payload`, and `signature`. The advertised schemas stay open, so a client that validates tool input accepts the members the proxy stamps. The handlers validate the full schemas.
+Names use the default `archestra__` prefix, but can change with branding or client labels.
 
-The model selects each remedy. The proxy releases the model's `execute_remedy_plan` call to the client for execution.
+The gateway advertises only model-written arguments. It strips internal fields (`offers`, `execution`, `protected`, `payload`, `signature`) from the public tool schema. The proxy injects them during dispatch.
 
-The remedy can fail to run. The client can decline the call: the user rejects a permission prompt, or Claude Code's auto-mode classifier blocks it. The gateway can also refuse it before the remedy, for example when the offer is gone. Only a remedy that runs leaves a record, so the runtime has none to match the result against. For a result of the request's declared control tool, other than a pending review, the proxy shows the model what the client returned, after a line that says the plan is not applied. The model then reads, for example, the client's instruction to stop and let the user decide. Any other result without a record stays withheld.
+If a client rejects a remedy call (like a user rejecting a permission prompt), the proxy returns the error to the model with an explanation that the plan was not applied.
 
-Remedy routing is a flattened JWS (RFC 7515 §7.2.2, RFC 7797 unencoded payload) on the denial notice and `execute_remedy_plan` call: `protected`, `payload`, `signature`. That is integrity (JWS), not encryption (JWE). `protected.alg` selects the verify method; unknown algorithms fail closed. The event log is the authority for whether the offer still stands. A claim carries no expiry: it is a routing token, not an authorization, and the event log's operation idempotency gates the spend — replaying a claim from another conversation can only reach an offer the same session minted, and never twice.
+Remedy tokens use flattened JWS with HS256 and unencoded payloads (RFC 7515/7797). They provide integrity, not encryption. Tokens do not expire because the runtime ledger validates whether an offer is still spendable. Tokens cannot be reused across conversations.
 
-Session receipts belong to authorized users within an organization. A personal offer requires its original user. An offer id alone cannot be spent; the caller must present a valid signature for that offer. Spent, unknown, or unauthorized offers return terminal feedback without executing.
+### Review Lifecycle
 
-Interactive approval uses the client's native question tool or gateway `ask_user` elicitation. The ruling is recorded under the offer's signed session, including a child session when the gateway call has no session header. Approval in a parent session does not authorize a separate child offer.
+1. The model selects a remedy plan. The proxy attaches execution frames and signed claims.
+2. The gateway verifies claims and confirms arguments match the original blocked call.
+3. If the tool call would fail regardless of approval, the host returns a precheck refusal without spending the offer.
+4. If human review is required, the gateway stages review and returns `review_required`, or chat triggers elicitation.
+5. The user approves or denies the review. Execution consumes the answer and the runtime spends the offer.
+6. Denied, expired, or missing reviews leave the action blocked.
 
-## Persistence and current limits
+Review state lives in PostgreSQL Keyv cache with a 10-minute TTL. `consumeHitlRuling` uses `DELETE ... RETURNING` for atomic consumption. Denials take priority over approvals.
 
-The Rust binding stores event batches, policy snapshots, sessions, and receipts in PostgreSQL. Completed receipts commit with runtime events. Repeated results return their saved output. Interrupted work fails closed.
+The gateway correlates calls using `_meta["com.archestra/logicalToolCallId"]` or the frame's `call_id`, not the JSON-RPC ID. Reusing an ID with different arguments returns 400.
 
-The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Before releasing a remedy call, the proxy attaches a typed execution frame with the provider tool call ID and original arguments. Standard MCP clients return this frame unchanged. Before forwarding later history to providers, the proxy removes the frame and restores the original arguments.
+Sources: [`openappa.ts`](../platform/backend/src/archestra-mcp-server/openappa.ts), [`offer-claims.ts`](../platform/backend/src/openappa/offer-claims.ts), [`hitl-review.ts`](../platform/backend/src/openappa/hitl-review.ts), [`cache-manager.ts`](../platform/backend/src/cache-manager.ts).
 
-Submitting the same logical call ID and arguments returns the saved result without re-execution. Submitting changed arguments under that ID is refused. Spent offers return terminal feedback.
+## Identity and Clients
 
-Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, signed offers, and execution frames before forwarding. Azure Responses tool traffic is refused while OpenAPPA is enabled.
+Adapters match in strict order: Claude Code, Codex, OpenCode, then Chat. An explicit `X-Appa-Session-ID` overrides native extraction. `X-Appa-Parent-ID` overrides native parent claims.
 
-Start new conversations after enabling OpenAPPA. Tool results from before activation have no receipts and are refused.
+| Client | Match Rule | Session Source | Notes |
+| --- | --- | --- | --- |
+| Claude Code | User agent or session header | `x-claude-code-session-id`, else `metadata.user_id` | Uses native `AskUserQuestion`, spawn, and teammate paths. |
+| Codex | User agent or turn metadata | `thread_id` from metadata | Contradictory claims return 400. Code mode (`exec`) is refused. |
+| OpenCode | User agent or session header | `x-opencode-session` | Gateway tools use `<label>_<name>` without distinct delimiter. |
+| Archestra Chat | Internal loopback source | Conversation ID | Validates user ownership. Active encrypted chats return 409. |
+| Other | Explicit APPA headers or wire fallback | Header value or wire metadata | Unsupported clients trigger `unsupported_client_action` (default bypass). |
 
-## Build and deployment
+External sessions are scoped as `<caller-id>|<session-id>`. Caller IDs identify `user:`, `app:`, or `virtual-key:` credentials. Platform loopback requests can use unscoped sessions.
 
-The addon is compiled alongside Archestra's existing native addons and packaged
-inside the normal platform image. Cargo fetches OpenAPPA at the full commit
-pinned in `openappa-rs/Cargo.toml` and `archestra-rs/Cargo.lock`; neither a sibling
-checkout nor an extra Docker build context is required. Archestra's existing
-release workflow stays unchanged. There is no separate addon release.
+When callers provide no session ID, the fallback is `<caller-id>@<agent-id>`. This combines all conversations for that credential into one root trajectory. A turn end in one chat will expire unspent vouches across that shared root. Use explicit session IDs to avoid this.
+
+Native actors derive from session IDs. New top-level roots hash both organization ID and session ID. Existing sessions keep their saved root. Modifying a recorded parent or fork source returns an error.
+
+### Wire Support
+
+| Wire Family | Supported Features |
+| --- | --- |
+| Anthropic Messages, Bedrock InvokeModel | Full notice restoration, result admission, turn accounting, and cleanup. |
+| OpenAI Responses (supported providers) | Restoration, turn accounting, hosted tool gating, and compaction. |
+| OpenAI Chat Completions (compatible) | Common wire restoration and turn accounting. Streaming requires qualification. |
+| Gemini, Bedrock Converse, Cohere, native Ollama | Evaluates calls and results, but notices stay in history. No turn accounting. |
+| Azure Responses | Refused during request preparation if tools are declared. |
+
+Deferred tools (`tool_search`), `local_shell`, computer-use tools, and conflicting APPA declarations fail validation immediately.
+
+Connection-setup calls and delegated A2A runs bypass APPA. A2A tasks do not get checked child trajectories.
+
+Sources: [`session-identity.ts`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/session-identity.ts), [`adapters/`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/), [`request.ts`](../platform/backend/src/openappa/request.ts), [`unenforced.ts`](../platform/backend/src/openappa/unenforced.ts).
+
+## Child and Peer Flows
+
+### Child Versus Root Fork
+
+| Operation | Relationship | Return Boundary |
+| --- | --- | --- |
+| `parent_id` child | Same root family, checked spawn, shared history. Child starts with parent label. | Output crosses via `ChildEnd` and checked return contracts. |
+| `fork_of` root fork | New family with frozen copy of label, effects, reservations, and policy. | No return contract. History does not flow between roots. |
+| Child readdress/resume | Parent flows updated label into an existing child. | Unacknowledged staged returns are dropped. |
+
+Allowed spawns receive signed delegation markers binding caller, organization, and prompt. Missing markers cancel the batch with 400.
+
+Child model responses buffer completely before crossing. `endChild` can admit, block, or require a return echo. Parents verify returns against `loadChildReturns` records, not the marker string.
+
+Root forks inherit results only from before the fork timestamp. The engine walks at most 32 ancestor forks. Deeper chains inherit nothing. Pending receipts block dispatch across the family, except peer reads.
+
+### Peer Messages
+
+Sending and reading peer messages are separate operations. Sending saves a message. It does not grant read rights. Reading evaluates stored trust and audience rules before delivering content. Client-supplied read outputs are rejected without a native receipt.
+
+The embedded sender must target actors in the same family. Empty bodies and bodies over 64 KiB are rejected. Peer reads skip the pending-receipt fence in [`peer.rs`](../platform/archestra-rs/openappa-rs/src/peer.rs#L95-L115). Unenforced teammates cannot read governed messages.
+
+Sources: [`delegation.ts`](../platform/backend/src/openappa/delegation.ts), [`child-return.ts`](../platform/backend/src/openappa/child-return.ts), [`peer-claims.ts`](../platform/backend/src/openappa/peer-claims.ts), [`plugin.ts`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/plugin.ts), [`peer.rs`](../platform/archestra-rs/openappa-rs/src/peer.rs).
+
+## Persistence and Recovery
+
+### Ownership and Tables
+
+Drizzle manages schemas and migrations. The native store encodes events and manages operation receipts. TypeScript reads projections through models. It never alters raw event payloads.
+
+| Table | Purpose |
+| --- | --- |
+| `openappa_events` | Native event log, keyed by `(root, seq)` with binary payloads. |
+| `openappa_policy_files` | Content-addressed policy snapshots for trajectory replay. |
+| `openappa_host_keys` | Runtime key-to-root index (not a secret store). |
+| `openappa_sessions` | Actor, root, caller, session, parent, fork metadata, and start decision. |
+| `openappa_operations` | Host operation receipts (`pending` or `complete`) and decisions. |
+| `openappa_processed_results` | Processed tool results and decisions by session and tool call ID. |
+| `openappa_held_peer_messages` | Native held peer messages. |
+| `openappa_embedded_peer_messages` | Native actor-scoped peer delivery states. |
+| `guardrails_policy_revisions` | Root policy revisions per organization. |
+| `guardrails_deployment` | Deployment switch and unsupported-client configuration. |
+| `openappa_battery_packages` | Content-addressed uploaded package files. |
+| `openappa_battery_installs` | Derived battery install rows. |
+| `openappa_effective_policies` | Composed policy text and input fingerprints per organization. |
+| `openappa_github_sync` | GitHub sync settings, commits, and held pull data. |
+| `openappa_unenforced_sessions`, `calls` | Observations of calls run while enforcement was disabled. |
+| `openappa_external_consults` | Diagnostic records of external helper queries. |
+| `openappa_yells` | Stored diagnostic yell reports and archive metadata. |
+| `keyv_cache` | Shared review cache for human approval decisions (TTL 10m). |
+
+### Commit and Replay
+
+Execution follows three steps under a family advisory lock: insert pending receipt, run native hook and append events, and mark receipt complete. A crash after event commit leaves a pending receipt, which fails future operations closed.
+
+Completed receipts return saved decisions without re-evaluating the engine. Changed arguments on reused IDs are refused. The event log enforces sequence ordering using advisory locks. Snapshots insert with content hashes.
+
+There is no automated cleanup API for pending receipts. Do not delete pending rows or truncate tables. Investigate the cause and check external effects first.
+
+### Locks and Connections
+
+The host acquires an in-process root lock before leasing a database connection. A PostgreSQL advisory lock (`pg_advisory_lock`) serializes the family across instances. Roots can run concurrently. Siblings in a root run sequentially.
+
+The connection pool defaults to 4 connections (max 64). Calls wait up to 30s for a connection. Connections use 30s lock timeouts and 60s statement timeouts. Pool exhaustion usually comes from slow external consults. Dead connections are replaced automatically. Changing pool size requires a backend restart.
+
+### Native Contract
+
+`dispatchHook` processes events: `session_start`, `tool_call`, `tool_result`, `cancel_call`, `remedy`, `prompt`, `turn_end`, `child_end`, `child_address`, and `yell`.
+
+| Native Decision | Host Action |
+| --- | --- |
+| `allow_call` / `pass_control` | Release the call to the client or control handler. |
+| `deny_call` / `block` | Replace call with a notice or withhold output. |
+| `replace_output` | Deliver replacement text chosen by policy. |
+| `ack` (known outcome) | Return tool output. Unknown outcome is withheld. |
+| `deliver_value` / `child_return` | Deliver admitted child value. |
+| `context` | Provide return contract at lifecycle step. |
+| `refuse` | Operational error surfaced as an API exception. |
+
+Native panics fail closed. A panic after a pending receipt commits leaves the family locked.
+
+Sources: [`lib.rs`](../platform/archestra-rs/openappa-rs/src/lib.rs), [`index.d.ts`](../platform/archestra-rs/openappa-rs/index.d.ts), [`deployments.rs`](../platform/archestra-rs/openappa-rs/src/deployments.rs), [`consults.rs`](../platform/archestra-rs/openappa-rs/src/consults.rs).
+
+## APIs and UI
+
+Permissions use `openappaPolicy`, `openappaDiagnostics`, and `organizationSettings`. Older `toolPolicy` permissions are deprecated.
+
+| Endpoint | Role | Permission |
+| --- | --- | --- |
+| `GET /api/guardrails-policy` | Read current policy revision and content. | `openappaPolicy:read` |
+| `PUT /api/guardrails-policy` | Save full policy text with expected revision. | `openappaPolicy:update` (+ `credential:update` if grants change) |
+| `POST /api/guardrails-policy/validate` | Validate policy text without saving. | `openappaPolicy:update` |
+| `GET /api/guardrails-deployment` | Read deployment enforcement status. | `organizationSettings:read` |
+| `PUT /api/guardrails-deployment` | Toggle enforcement or set unsupported client action. | `organizationSettings:update` |
+| `/api/openappa/batteries/*` | Inspect and manage batteries, packages, and aliases. | `openappaPolicy:read` / `update` |
+| `/api/openappa/github-sync/*` | Configure sync, inspect commits, accept held pulls. | `organizationSettings:read` / `update` (accept: `policy:update`) |
+| `GET /api/openappa/coverage/*` | View static tool coverage summary. | `openappaPolicy:read` |
+| `GET /api/openappa/external-consults` | View helper consult logs. | `openappaDiagnostics:read` (`admin` views all users) |
+| `/api/openappa/yells/*` | View diagnostic reports and download archives. | `openappaDiagnostics:read` / `update` |
+| `GET /api/chat/conversations/:id/openappa-status` | Read chat conversation governance status. | `chat:read` |
+| `POST /api/openappa/helpers/:installId/:name` | Loopback helper bridge transport. | Loopback socket + bearer token |
+
+### Policy Publication
+
+1. Read root text, revision, effective composition, and delivery mode.
+2. Preview proposed TOML using `preview_guardrails_policy_change`.
+3. Review diffs, warnings, and credential grants.
+4. Publish with `expectedRevision`. Reconcile on conflict (409).
+5. For local saves, check effective status and enforcement. For GitHub PRs, wait for merge and sync.
+6. Test changes in a new session. Existing sessions retain their original policy.
+
+MCP tools expose policy operations: `get_guardrails_policy`, `validate_guardrails_policy`, `preview_guardrails_policy_change`, `update_guardrails_policy`, `get_guardrails_policy_change_status`, `create_guardrails_repository`, `inspect_guardrails_server`, and `list_guardrails_battery_fits`. Preview needs `openappaPolicy:read`, and validation needs `update`.
+
+### Frontend Map
+
+| Page | Content |
+| --- | --- |
+| `/openappa` | Overview cards, deployment switch, coverage table. |
+| `/openappa/policy` | Read-only policy viewer (Monaco), warnings, effective view. |
+| `/openappa/batteries` | Installed batteries, attach/detach controls, uploads. |
+| `/settings/openappa` | GitHub repository sync configuration panel. |
+| `/openappa/yells` | Diagnostic yell list and archive downloads. |
+| `/consults/logs` | External helper consult log viewer. |
+| Chat UI | OpenAPPA status badge and human-review dialogs. |
+
+The backend `/api/config` endpoint exposes `openappaEnabled` via `useFeature`. When beta is off, OpenAPPA routes return 404.
+
+Coverage tables show static rule matching, not live runtime evaluations. Root rules take precedence over battery rules. No-op catch-all rules are marked as uncovered.
+
+Sources: [`guardrails routes`](../platform/backend/src/routes/guardrails-policy/), [`battery routes`](../platform/backend/src/routes/openappa-batteries/openappa-batteries.routes.ts), [`coverage routes`](../platform/backend/src/routes/openappa-coverage/openappa-coverage.routes.ts), [`MCP RBAC`](../platform/backend/src/archestra-mcp-server/rbac.ts).
+
+## Build and Deployment
+
+The addon is built with the platform image using Cargo dependencies pinned in `openappa-rs/Cargo.toml`. There is no separate release workflow.
+
+### Configuration Reference
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `ARCHESTRA_BETA` | `false` | Enables OpenAPPA when set to `"true"`. Requires restart. |
+| `ARCHESTRA_LLM_PROXY_PLUGINS` | Empty | Automatically appends `appa` when beta is enabled. |
+| `guardrails_deployment.enabled` | `false` | Database row switch. Effective immediately without restart. |
+| `guardrails_deployment.unsupported_client_action` | `bypass` | Action for unknown clients (`bypass` or `block`). |
+| `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` | Auto-derived | Secret for signing offers and tokens. Min 32 chars if explicit. |
+| `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS` | `4` | Max native pool connections (cap 64). Requires restart. |
+| `ARCHESTRA_OPENAPPA_YELL_ENABLED` | `true` | Enables yell diagnostic reporting when beta is on. |
+| `ARCHESTRA_ANALYTICS` | `enabled` | Controls forwarding of yell archives to cloud receiver. |
+| `ARCHESTRA_DATABASE_URL` | None | Database connection string. Strips `schema` parameter on init. |
+| `ARCHESTRA_CODE_RUNTIME_ENABLED` | `false` | Required for sandbox helper script execution. |
+
+Helm manages `offer-signing-secret` inside the auth Secret. Never delete the auth Secret to rotate tokens. Rotate secrets intentionally across all pods, then restart them. Existing signed tokens will invalidate.
+
+Native PostgreSQL TLS uses system certificates and URL parameters. The addon does not support custom CA flags.
+
+Sources: [`config.ts`](../platform/backend/src/config.ts), [`.env.example`](../platform/.env.example), [`Dockerfile`](../platform/Dockerfile), [`Helm templates`](../platform/helm/archestra/templates/).
+
+## Diagnostics and Runbooks
+
+### Evidence Sources
+
+Correlate policy revisions, session IDs, operation IDs, provider call IDs, and trace IDs when investigating issues. Coverage entries do not prove tool execution, and client UI receipts do not prove ledger commit.
+
+External consults record authority, sanitizer, annotator, and audience queries (up to 256 per call). Recording is best effort. Missing logs do not prove an external call did not occur. Audience details require `member:read`. Ordinary users see only their own consults. The `openappaDiagnostics:admin` permission grants an organization-wide view.
+
+Yell reports store diagnostic archives. When analytics is on, the receiver forwards archives upstream. Do not put personal or secret data in yell messages. Resolving a yell is a manual operator action.
+
+There are no dedicated OpenAPPA Prometheus metrics. The generic `llm_blocked_tools_total` counter does not distinguish APPA decisions from legacy invocation policies. Use database receipts and traces instead.
+
+### Failure Handling
+
+| Symptom | Root Cause | Safe Action |
+| --- | --- | --- |
+| `/openappa` returns 404 | Beta flag is off. | Verify `ARCHESTRA_BETA=true` in environment. |
+| Policy saved but calls unblocked | Switch is off, or session started unenforced. | Check deployment switch, and test in a new session. |
+| 409 revision conflict | Another user or sync saved a revision. | Reload latest revision and re-apply changes. |
+| Effective policy `refused` | Composed TOML rejected by engine. | Fix the invalid policy. Notice: old policy may still serve. |
+| 500 error from proxy | Configuration or native compilation error. | Check trace ID and fix policy syntax. Do not retry blindly. |
+| 503 with `Retry-After: 5` | Connection pool exhausted or runtime saturated. | Inspect helper latency, and raise connection pool if needed. |
+| Interrupted processing error | Crash occurred while receipt was pending. | Check external tool effects, and preserve database records. |
+| Unknown or spent offer | Offer was already used, expired, or invalid. | Treat as terminal denial. Do not reuse IDs. |
+| Child return 409 | Returned value changed or child ran unenforced. | Rewind conversation or start a new session. |
+| Signing verification failure | Inconsistent signing keys across backend replicas. | Synchronize `offer-signing-secret` across instances. |
+| Helper error (502/503/504) | Helper script failed, timed out, or hit capacity. | Check container logs, credential bindings, and limits. |
+| Held GitHub pull | Sync text changes credentials or drops batteries. | Review diff and accept via `POST .../accept-held`. |
+
+### Recovery Boundaries
+
+Event logs, policy snapshots, session lineage, and operation receipts must stay consistent. Restoring only policy revisions does not restore session history.
+
+1. Back up database rows for the affected root family before modifying data.
+2. Check pending receipts to verify if external tools actually executed.
+3. Treat the entire family as affected, including parent and children. Never delete individual pending rows.
+4. If a session is broken, start a fresh conversation.
+5. Do not use `pnpm --dir backend db:reset-openappa` to fix stuck sessions. It wipes organization policy and configuration data.
+
+Sources: [`failure.ts`](../platform/backend/src/openappa/failure.ts), [`consult routes`](../platform/backend/src/routes/openappa-external-consults/openappa-external-consults.routes.ts), [`yell routes`](../platform/backend/src/routes/openappa-yells/openappa-yells.routes.ts).
+
+## Testing and Qualification
+
+Mocked Vitest tests verify proxy plumbing and route validation, but do not test the native engine or PostgreSQL ledger.
+
+| Layer | What It Tests | Limitations |
+| --- | --- | --- |
+| Backend Vitest (PGlite) | Proxy routing, rewrites, models, and HTTP routes. | Uses mocked native addon, not real Rust engine. |
+| Native module load test | Compiles NAPI bindings and tests uninitialized state. | Does not connect to a database. |
+| Native `.cjs` test suite | Real hooks, policy rules, concurrency, and persistence. | Requires real PostgreSQL database with pgvector. |
+| Cargo workspace tests | Engine unit tests and connection permit logic. | Runs Rust unit tests only, with no TypeScript integration. |
+| Playwright `openappa` | End-to-end proxy flow, remedies, and gateway execution. | Uses WireMock fixtures for provider calls. |
+| Manual CLI validation | Live interactive sessions with Claude Code, Codex, etc. | Must be re-tested across external CLI versions. |
+
+### Local Commands
+
+Run commands from `platform/`:
+
+```bash
+pnpm --filter @archestra/openappa-rs build:dev
+pnpm --filter @archestra/openappa-rs smoke:load
+
+pnpm --dir backend exec vitest run src/openappa/command-normalization.unit.test.ts
+pnpm --dir backend exec vitest run src/openappa src/proxy/plugins/appa-plugin-archestra src/routes/proxy/llm-proxy-openappa.test.ts
+
+cargo fmt --manifest-path archestra-rs/Cargo.toml --all --check
+cargo check --manifest-path archestra-rs/Cargo.toml --workspace --locked
+cargo test --manifest-path archestra-rs/Cargo.toml --workspace --locked
+```
+
+To run the real native database suite, provide an isolated PostgreSQL test database with pgvector:
+
+```bash
+test -n "${ARCHESTRA_OPENAPPA_TEST_DATABASE_URL:-}" && \
+  ARCHESTRA_DATABASE_URL="$ARCHESTRA_OPENAPPA_TEST_DATABASE_URL" pnpm --dir backend db:migrate
+
+test -n "${ARCHESTRA_OPENAPPA_TEST_DATABASE_URL:-}" && \
+  pnpm --filter @archestra/openappa-rs test
+```
+
+To run the Playwright suite on a local test container:
+
+```bash
+ARCHESTRA_BETA=true pnpm test:e2e:lite:up
+pnpm test:e2e:lite -- --project=openappa
+pnpm test:e2e:lite:down
+```
+
+### CI and Evidence
+
+Backend unit tests and Rust checks run on merge groups. The real native database suite (`openappa-native-tests`) runs on merge groups and updater-bot branches (`chore/openappa-v*`).
+
+The Playwright `openappa` project runs on a dedicated single-worker lite stack with beta enabled.
+
+Sources: [`on-pull-requests.yml`](../.github/workflows/on-pull-requests.yml), [`platform-e2e-tests.yml`](../.github/workflows/platform-e2e-tests.yml), [`playwright.config.ts`](../platform/e2e-tests/playwright.config.ts).
+
+## Change Guide
+
+| Change Type | Code Touched | Verification |
+| --- | --- | --- |
+| Update OpenAPPA pin | Cargo dependencies, `Cargo.lock`, NAPI bindings. | Run native database suite, test snapshot replay. |
+| Add client or wire family | Client adapter, wire parser, notice restoration. | Verify argument streaming, terminal frames, compaction. |
+| Add tool contract | Root rules, battery files, annotators. | Verify allowed/denied behavior, missing credentials. |
+| Change policy publishing | Policy service, conflict checks, GitHub sync. | Test concurrent saves, held pulls, first-save auto-enable. |
+| Add or change helper | Helper bridge, sandbox runner, timeouts. | Verify loopback checks, timeouts, container limits. |
+| Modify persistence | Drizzle schemas and native event store. | Test snapshot replay, advisory locks, fork inheritance. |
+| Change remedies or HITL | Signed claims, gateway tools, review cache. | Test claim validation, expired reviews, concurrent approval. |
+| Change child/peer transport | Delegation markers, return verification, peer messages. | Test unrecorded returns, peer read exceptions. |
+
+### Upgrade Checklist
+
+1. Record current Archestra and OpenAPPA git commit hashes.
+2. Review upstream schema, event, and policy changes.
+3. Build the NAPI addon and run load tests in target containers.
+4. Run the native database test suite (`pnpm --filter @archestra/openappa-rs test`).
+5. Verify replay of historical sessions under existing policy snapshots.
+6. Verify multi-process concurrency against a shared database.
+7. Test target client versions (Claude Code, Codex, OpenCode).
+8. Inspect battery statuses and credential grants after upgrading.
+9. Have a rollback plan. Toggling the database switch off does not re-enable legacy trusted-data checks while beta is on.
+
+## Known Limits
+
+| Area | Known Behavior | Impact |
+| --- | --- | --- |
+| Activation | Beta flag disables legacy trusted-data checks immediately. | Rollouts must coordinate beta flags and DB switch. |
+| Unsupported clients | Default action is bypass. Unenforced sessions stay bypassed (30d retention). | Configure `unsupported_client_action = block` if required. |
+| Composition refusal | `lastError` does not block dispatch. Old effective policy serves. | Alert on composition errors, and do not assume calls are blocked. |
+| Streaming | Unbuffered streams can emit mixed text/tool frames before evaluation. | Audit model stream adapter frames before rollout. |
+| Hosted tools | Provider tools run on the model server before proxy inspection. | Proxy can withhold outputs but cannot prevent execution. |
+| Protocol parity | Notice restoration works on mapped wire families only. | Unsupported wires evaluate calls but leave notices in history. |
+| Fallback identity | Unidentified sessions share a single root per credential and agent. | Use explicit session IDs to isolate conversation state. |
+| Delegation | Native checked spawns and A2A platform runs use different mechanisms. | Do not assume A2A runs share child trajectory guarantees. |
+| Crash recovery | Pending receipts lock normal dispatch. Peer reads skip the lock. | Never delete pending receipt rows manually. |
+| External side effects | Receipts and events do not commit in one transaction with external tools. | Exactly-once tool execution is not guaranteed. |
+| File IFC | Upstream file logs are not installed in Archestra. | Filesystem information flow is not tracked. |
+| Permissions | First-save auto-enable checks `organization:update`. Deployment API checks `organizationSettings:update`. | Test custom roles on policy publication. |
+| Capacity | Helper calls hold pooled database connections. | Connection pool size must account for slow helpers. |
+| Diagnostics | Consult logs are recorded best-effort. No APPA Prometheus series exist. | Use database consults and traces, not blocked-tool metrics. |
+| Provider history | Guidance injected into `system` prompts alters conversation bytes. | Verify provider support for modified system prompts. |
+
+### Documentation Drift
+
+At the baseline commit, these repository documents contained outdated statements:
+- [`openappa-rs/README.md`](../platform/archestra-rs/openappa-rs/README.md): outdated git pin, incorrect flag names, and obsolete single-connection claims.
+- [`platform-deployment.md`](pages/platform-deployment.md): says beta does not enable OpenAPPA, contradicting actual configuration code.
+- Phase 1 plans and backlogs: historical documents with outdated line numbers and design targets.
+- Declare-installs comments: describes Helm chaining that is not present in migration manifests.
+
+Trust the code and executable test suites over older documentation.

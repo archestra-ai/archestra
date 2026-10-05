@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import logger from "@/logging";
 import type { OpenAppaSession } from "./service";
 
 type HitlRuling = "approve" | "deny" | "none";
@@ -104,6 +105,14 @@ export async function recordHitlRuling(params: {
   if (params.ruling !== "approve") {
     await cacheManager.delete(reviewKey(params.session, params.offerId));
   }
+  logger.info(
+    {
+      sessionId: params.session.session_id,
+      callerId: params.session.caller_id,
+      ruling: params.ruling,
+    },
+    "OpenAPPA human-review ruling recorded",
+  );
   return true;
 }
 

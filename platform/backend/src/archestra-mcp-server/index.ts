@@ -420,6 +420,11 @@ export async function executeArchestraTool(
     if ("error" in parsedArgs) {
       return parsedArgs.error;
     }
+    if (runtimeProof !== undefined && !(await claimRuntimeDispatch(context))) {
+      return errorResult(
+        "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
+      );
+    }
     return handleDelegation(toolName, parsedArgs.value, context);
   }
 
@@ -441,6 +446,11 @@ export async function executeArchestraTool(
   const admitted = await admitArchestraToolCall({ toolName, args, context });
   if ("error" in admitted) return admitted.error;
   const { toolEntry, resolvedToolName } = admitted;
+  if (runtimeProof !== undefined && !(await claimRuntimeDispatch(context))) {
+    return errorResult(
+      "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
+    );
+  }
 
   // Mutating built-ins get an org-audit row, same event vocabulary as their
   // /api/* twins (the MCP surface bypasses the HTTP audit hook entirely).
@@ -805,6 +815,20 @@ function reparseStringifiedObjectArgs(
     }
   }
   return repaired;
+}
+
+async function claimRuntimeDispatch(
+  context: ArchestraContext,
+): Promise<boolean> {
+  const call = context.openappaRuntimeCall;
+  if (!call) return false;
+  return OpenAppaSpawnCorrelationModel.claimRuntimeDispatch({
+    organizationId: call.session.organization_id,
+    callerId: call.session.caller_id,
+    sessionId: call.session.session_id,
+    toolCallId: call.toolCallId,
+    spawn: call.spawn,
+  });
 }
 
 /**

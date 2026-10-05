@@ -23,6 +23,7 @@ import {
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { openappaActor } from "@/openappa/actor";
+import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import * as workspaceFiles from "@/services/agent-runtime/workspace-files";
@@ -748,6 +749,93 @@ test("an oversized protected export reads no bytes and issues no ticket", async 
   expect(backend.runWorkspaceTransferCommand).toHaveBeenLastCalledWith(
     expect.objectContaining({ args: ["discard", "oversized"] }),
   );
+});
+
+test("a signed released get_run proof executes once and replay cannot read the runtime again", async ({
+  makeAgent,
+  makeMember,
+  makeOrganization,
+  makeUser,
+  seedAndAssignArchestraTools,
+}) => {
+  await GuardrailsDeploymentModel.setEnabled(true);
+  config.openappa.enabled = true;
+  config.agentRuntime.enabled = true;
+  const seeded = await seededRun({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  });
+  const session = {
+    organization_id: seeded.organizationId,
+    caller_id: `user:${seeded.context.userId}`,
+    session_id: PARENT,
+  };
+  await db.insert(schema.openappaSessionsTable).values({
+    organizationId: seeded.organizationId,
+    callerId: session.caller_id,
+    sessionId: PARENT,
+    actor: openappaActor(PARENT),
+    root: openappaActor(PARENT),
+    parentId: null,
+    startDecision: { decision: "ack" },
+  });
+  await db.insert(schema.openappaOperationsTable).values({
+    organizationId: seeded.organizationId,
+    callerId: session.caller_id,
+    sessionId: PARENT,
+    operationId: "call:signed-get-run",
+    root: openappaActor(PARENT),
+    status: "complete",
+    input: {
+      semantic: {
+        event: "tool_call",
+        tool: "archestra__get_run",
+        spawn: false,
+      },
+    },
+    decision: { decision: "allow_call" },
+  });
+  const prior = config.openappa.offerSigningSecret;
+  config.openappa.offerSigningSecret = "synthetic-runtime-dispatch-test-secret";
+  try {
+    const args = { task_id: seeded.task.id };
+    const proof = signRuntimeToolProof({
+      session,
+      toolCallId: "signed-get-run",
+      action: "get_run",
+      arguments: args,
+      spawn: false,
+      secret: config.openappa.offerSigningSecret,
+    });
+    if (!proof) throw new Error("The fixture has no source proof");
+    const read = vi.spyOn(openappa, "loadChildReturns").mockResolvedValue([
+      {
+        childSessionId: seeded.child.session_id,
+        operationId: `runtime-return:${seeded.task.id}:checked`,
+        value: "checked answer",
+      },
+    ]);
+    const context = { ...seeded.context, openappaRuntimeCall: undefined };
+    const first = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { ...args, runtime_proof: proof },
+      context,
+    );
+    expect(JSON.stringify(first.content)).toContain("checked answer");
+    const replay = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { ...args, runtime_proof: proof },
+      context,
+    );
+    expect(replay.isError).toBe(true);
+    expect(JSON.stringify(replay.content)).toContain("already claimed");
+    expect(read).toHaveBeenCalledOnce();
+  } finally {
+    config.openappa.offerSigningSecret = prior;
+  }
 });
 
 async function runnable(params: {

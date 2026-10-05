@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import config from "@/config";
+import logger from "@/logging";
 import {
   AgentRunModel,
   AgentWorkspaceModel,
@@ -165,7 +166,10 @@ export function workloadSpenderMayUseOffer(params: {
   );
 }
 
-/** @public — launcher mints this; the gateway only verifies it */
+/**
+ * Optional while unenforced; the enforcing launcher rejects missing signer/output.
+ * @public — launcher mints this; the gateway only verifies it
+ */
 export function issueRuntimeBinding(params: {
   secret: string;
   organizationId: string;
@@ -200,23 +204,25 @@ function readRuntimeBinding(params: {
   secret: string;
   now?: number;
 }): RuntimeBindingClaims | null {
-  if (params.secret.length === 0) return null;
+  if (params.secret.length === 0) return rejectRuntimeBinding("missing_signer");
   const parts = params.token.split(".");
-  if (parts.length !== 3 || parts[0] !== "rt1") return null;
+  if (parts.length !== 3 || parts[0] !== "rt1")
+    return rejectRuntimeBinding("malformed");
   const expected = signBinding(parts[1], params.secret);
   const actual = Buffer.from(parts[2]);
   const wanted = Buffer.from(expected);
   if (actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) {
-    return null;
+    return rejectRuntimeBinding("signature_mismatch");
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
   } catch {
-    return null;
+    return rejectRuntimeBinding("invalid_json");
   }
-  if (!isBindingClaims(parsed)) return null;
-  if ((params.now ?? Date.now()) >= parsed.expiresAt) return null;
+  if (!isBindingClaims(parsed)) return rejectRuntimeBinding("invalid_claims");
+  if ((params.now ?? Date.now()) >= parsed.expiresAt)
+    return rejectRuntimeBinding("expired");
   return parsed;
 }
 
@@ -552,6 +558,7 @@ async function associationForCurrentTurn(
   workspace: AgentWorkspace,
 ): Promise<VerifiedRuntimeAssociation | null> {
   const taskId = workspace.activeTaskId ?? workspace.lastTaskId;
+  if (!taskId) return null;
   const run = await AgentRunModel.findByTaskId(taskId);
   if (!run) return null;
   return associationFrom(workspace, run);
@@ -644,11 +651,22 @@ function isBindingClaims(value: unknown): value is RuntimeBindingClaims {
   const claims = value as RuntimeBindingClaims;
   return (
     claims.v === BINDING_VERSION &&
-    bindingClaimsComplete(claims) &&
     typeof claims.organizationId === "string" &&
     typeof claims.workloadName === "string" &&
-    typeof claims.actorId === "string"
+    typeof claims.actorId === "string" &&
+    typeof claims.workspaceId === "string" &&
+    typeof claims.taskId === "string" &&
+    typeof claims.agentId === "string" &&
+    typeof claims.actorKind === "string" &&
+    typeof claims.expiresAt === "number" &&
+    bindingClaimsComplete(claims)
   );
+}
+
+function rejectRuntimeBinding(reason: string): null {
+  // Internal diagnostics distinguish causes; never log credentials or disclose an oracle.
+  logger.debug({ reason }, "Runtime binding validation rejected");
+  return null;
 }
 
 function signBinding(payload: string, secret: string): string {

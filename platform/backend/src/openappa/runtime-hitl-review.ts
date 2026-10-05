@@ -148,6 +148,7 @@ export async function decideRuntimeHitlReview(params: {
     offerKey(current),
     { throwOnError: true },
   );
+  // Authorize the atomically claimed value again, not the earlier UI peek.
   if (
     !taken ||
     taken.offerId !== params.offerId ||

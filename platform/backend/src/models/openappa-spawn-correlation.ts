@@ -12,6 +12,34 @@ export type AllowedSpawnAlias = {
 };
 
 class OpenAppaSpawnCorrelationModel {
+  /** Durable single execution claim; the native released-call row is immutable. */
+  static async claimRuntimeDispatch(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    sessionId: string;
+    toolCallId: string;
+    spawn: boolean;
+  }): Promise<boolean> {
+    const result = await db.execute<{ operation_id: string }>(sql`
+      INSERT INTO ${operations} (organization_id, session_id, caller_id, root, operation_id, status, input, decision)
+      SELECT released.organization_id, released.session_id, released.caller_id, released.root,
+        ${`runtime-dispatch:${params.toolCallId}`}, 'complete',
+        ${JSON.stringify({ event: "runtime_dispatch", tool_call_id: params.toolCallId })}::jsonb,
+        '{"decision":"ack"}'::jsonb
+      FROM ${operations} AS released
+      WHERE released.organization_id = ${params.organizationId}
+        AND released.session_id = ${params.sessionId}
+        AND released.caller_id IS NOT DISTINCT FROM ${params.callerId ?? null}
+        AND released.operation_id = ${`call:${params.toolCallId}`}
+        AND released.status = 'complete'
+        AND released.decision->>'decision' = 'allow_call'
+        AND COALESCE(released.input->'semantic'->>'spawn', released.input->>'spawn', 'false') = ${String(params.spawn)}
+      ON CONFLICT DO NOTHING
+      RETURNING operation_id
+    `);
+    return result.rows.length === 1;
+  }
+
   static async releasedCalls(params: {
     organizationId: string;
     callerId: string | undefined;

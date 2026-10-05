@@ -534,11 +534,50 @@ export function createOpenAiCodexFetch(params: {
           credential,
         });
       }
-      return retried;
+      return normalizeCodexErrorResponse(retried);
     }
 
-    return response;
+    return normalizeCodexErrorResponse(response);
   };
+}
+
+/**
+ * The Codex backend reports some errors FastAPI-style as a top-level
+ * `{"detail": "..."}` (e.g. a model the ChatGPT plan does not support). The
+ * OpenAI SDK only reads `error.message`, so it would surface such a response as
+ * "400 status code (no body)". Rewrites that shape into `{"error": {"message"}}`
+ * so the upstream explanation survives; other responses pass through untouched.
+ */
+export async function normalizeCodexErrorResponse(
+  response: Response,
+): Promise<Response> {
+  if (response.ok) return response;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await response.clone().text());
+  } catch {
+    return response;
+  }
+  if (!parsed || typeof parsed !== "object" || "error" in parsed) {
+    return response;
+  }
+  const detail = (parsed as { detail?: unknown }).detail;
+  if (detail === undefined || detail === null || detail === "") {
+    return response;
+  }
+  await response.body?.cancel();
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  headers.set("content-type", "application/json");
+  return new Response(
+    JSON.stringify({
+      error: {
+        message: typeof detail === "string" ? detail : JSON.stringify(detail),
+      },
+    }),
+    { status: response.status, statusText: response.statusText, headers },
+  );
 }
 
 /**

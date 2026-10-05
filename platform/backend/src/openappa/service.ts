@@ -1339,13 +1339,29 @@ export type AppaChildReturnRecord = {
 export async function loadChildReturns(params: {
   organizationId: string;
   parentSessionId: string;
+  childSessionId?: string;
+  operationPrefix?: string;
 }): Promise<AppaChildReturnRecord[]> {
   try {
     const module = await binding();
-    const records = await module.loadChildReturns(
-      params.organizationId,
-      params.parentSessionId,
-    );
+    const lookup =
+      params.childSessionId !== undefined ||
+      params.operationPrefix !== undefined
+        ? {
+            childSessionId: params.childSessionId,
+            operationPrefix: params.operationPrefix,
+          }
+        : undefined;
+    const records = lookup
+      ? await module.loadChildReturns(
+          params.organizationId,
+          params.parentSessionId,
+          lookup,
+        )
+      : await module.loadChildReturns(
+          params.organizationId,
+          params.parentSessionId,
+        );
     return records.map((record) => ({
       childSessionId: record.childSessionId,
       ...(record.operationId ? { operationId: record.operationId } : {}),

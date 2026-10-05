@@ -704,6 +704,8 @@ Gateway -> Parent: get_run returns the recorded admitted ChildReturn
 
 Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_run` returns only the exact admitted value for that task; unrelated sessions and oversized values are withheld. File reads cross the same boundary. Downloads check the pinned content, size, and checksum before issuing a ticket, and require admission without transformation. Protected exports are limited to 4 MiB. HTTP ranges serve the admitted host-side copy from a byte-bounded 64 MiB cache, not the runtime's mutable file. Owner HTTP views remain separate human surfaces; cross-runtime external publishing is refused without an egress crossing.
 
+Receipt readers stream PostgreSQL rows and refuse histories exceeding 10,000 records or 8 MiB; they do not return partial authority. Runtime output lookups filter by child and task and request only the latest admitted operation.
+
 Runtime human reviews use the run page rather than native forms that may auto-decline. Shared-cache entries retain separate offers for ten minutes. Only the run's user owner can record a ruling for its exact signed session and offer. `ask_user` waits without consuming approval; the remedy retry spends it. Denial, timeout, disconnection, or the absence of an eligible reviewer leaves the call blocked. Existing non-runtime elicitation is unchanged.
 
 ## Persistence and current limits

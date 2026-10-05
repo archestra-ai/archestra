@@ -766,7 +766,16 @@ builtin = "hitl"
     const held = await hook(child, { event: 'child_return', operation_id: 'runtime-return:task:pending', output: 'must not settle read-next' });
     assert.equal(held.decision, 'block', JSON.stringify(held));
     await result(child, 'read-next', 'private report');
-    await cross('second', 'runtime result two');
+    const admittedSecond = await cross('second', 'runtime result two');
+    const latest = await native.loadChildReturns(organization_id, parent.session_id, {
+      childSessionId: child.session_id, operationPrefix: 'runtime-return:task:',
+    });
+    assert.equal(latest.length, 1);
+    assert.equal(latest[0].value, admittedSecond);
+    assert.ok(latest[0].operationId.includes(':second'));
+    assert.deepEqual(await native.loadChildReturns(organization_id, parent.session_id, {
+      childSessionId: child.session_id, operationPrefix: 'runtime-return:another-task:',
+    }), []);
     assert.equal((await call(child, 'read-third', 'read_plain')).decision, 'allow_call', 'returning did not end the workspace');
     await result(child, 'read-third', 'next report');
   });

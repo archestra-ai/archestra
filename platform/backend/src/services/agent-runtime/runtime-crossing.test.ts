@@ -360,8 +360,8 @@ describe("model-facing runtime tools", () => {
     vi.spyOn(openappa, "loadChildReturns").mockResolvedValue([
       {
         childSessionId: seeded.child.session_id,
-        operationId: `runtime-return:${seeded.task.id}:old`,
-        value: "STALE",
+        operationId: `runtime-return:${seeded.task.id}:new`,
+        value: "ADMITTED",
       },
       {
         childSessionId: seeded.child.session_id,
@@ -370,8 +370,8 @@ describe("model-facing runtime tools", () => {
       },
       {
         childSessionId: seeded.child.session_id,
-        operationId: `runtime-return:${seeded.task.id}:new`,
-        value: "ADMITTED",
+        operationId: `runtime-return:${seeded.task.id}:old`,
+        value: "STALE",
       },
     ]);
 
@@ -509,6 +509,54 @@ describe("model-facing runtime tools", () => {
 });
 
 describe("crossRuntimeOutput", () => {
+  test("returns the latest admitted value and narrows the native lookup to this child and task", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const lookup = vi.spyOn(openappa, "loadChildReturns").mockResolvedValue([
+      {
+        childSessionId: seeded.child.session_id,
+        operationId: `runtime-return:${seeded.task.id}:new`,
+        value: "newest admitted answer",
+      },
+      {
+        childSessionId: seeded.child.session_id,
+        operationId: `runtime-return:${seeded.task.id}:old`,
+        value: "older answer",
+      },
+    ]);
+    const call = seeded.context.openappaRuntimeCall;
+    if (!call) throw new Error("The fixture has no authenticated source");
+    await expect(
+      crossRuntimeOutput({
+        organizationId: seeded.organizationId,
+        workspaceId: seeded.task.id,
+        taskId: seeded.task.id,
+        crossing: {
+          source: call.session,
+          callId: call.toolCallId,
+          spawn: false,
+        },
+      }),
+    ).resolves.toEqual({ kind: "admitted", value: "newest admitted answer" });
+    expect(lookup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        childSessionId: seeded.child.session_id,
+        operationPrefix: `runtime-return:${seeded.task.id}:`,
+      }),
+    );
+  });
+
   test("ignores a return that is not this turn", async ({
     makeAgent,
     makeAdmin,

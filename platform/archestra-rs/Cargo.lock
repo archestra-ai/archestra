@@ -2145,6 +2145,7 @@ dependencies = [
  "napi-build",
  "napi-derive",
  "openssl",
+ "postgres",
  "proptest",
  "serde",
  "serde_json",

@@ -215,17 +215,19 @@ export async function crossRuntimeOutput(params: {
   const relation = await classifyRuntimeCaller(params);
   if (relation.kind === "refused") return relation;
   if (relation.kind === "producer") return { kind: "producer" };
+  const prefix = `runtime-return:${params.taskId}:`;
   const records = await loadChildReturns({
     organizationId: params.organizationId,
     parentSessionId: params.crossing.source.session_id,
+    childSessionId: relation.child.session_id,
+    operationPrefix: prefix,
   });
-  const prefix = `runtime-return:${params.taskId}:`;
   const matches = records.filter(
     (record) =>
       record.childSessionId === relation.child.session_id &&
       record.operationId?.startsWith(prefix),
   );
-  const last = matches.at(-1);
+  const last = matches[0];
   if (!last) {
     return {
       kind: "withheld",

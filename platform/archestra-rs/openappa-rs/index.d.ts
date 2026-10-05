@@ -37,6 +37,13 @@ export interface ChildAddressRecord {
   value: string
 }
 
+export interface ChildReturnLookup {
+  /** Narrow the authority lookup to one registered child when known. */
+  childSessionId?: string
+  /** Load only the latest admitted operation with this task prefix. */
+  operationPrefix?: string
+}
+
 export interface ChildReturnRecord {
   /** Fully scoped session id of the child whose return crossed. */
   childSessionId: string
@@ -169,7 +176,7 @@ export declare function loadChildAddresses(organizationId: string, childSessionI
  * is the authority the parent side verifies an arriving completion against;
  * nothing the client carries proves a return.
  */
-export declare function loadChildReturns(organizationId: string, parentSessionId: string): Promise<Array<ChildReturnRecord>>
+export declare function loadChildReturns(organizationId: string, parentSessionId: string, lookup?: ChildReturnLookup | undefined | null): Promise<Array<ChildReturnRecord>>
 
 /**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.

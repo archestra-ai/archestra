@@ -1213,6 +1213,15 @@ pub async fn load_offer_review(
 }
 
 #[napi(object)]
+#[derive(Default)]
+pub struct ChildReturnLookup {
+    /// Narrow the authority lookup to one registered child when known.
+    pub child_session_id: Option<String>,
+    /// Load only the latest admitted operation with this task prefix.
+    pub operation_prefix: Option<String>,
+}
+
+#[napi(object)]
 #[derive(Serialize)]
 pub struct ChildReturnRecord {
     /// Fully scoped session id of the child whose return crossed.
@@ -1236,6 +1245,7 @@ pub struct ChildReturnRecord {
 pub async fn load_child_returns(
     organization_id: String,
     parent_session_id: String,
+    lookup: Option<ChildReturnLookup>,
 ) -> napi::Result<Vec<ChildReturnRecord>> {
     // Mirror load_offer_review: clone state, drop the mutex, then lease a
     // connection before host SQL so lookups never contend with dispatches.
@@ -1257,7 +1267,15 @@ pub async fn load_child_returns(
         // host has not echoed — and the ack's output is the exact bytes that
         // crossed. The echo ack is that crossing, so its operation id is kept,
         // suffix included. A row this filter drops must not fail the lookup.
-        let rows = client.query(
+        use postgres::{fallible_iterator::FallibleIterator, types::ToSql};
+        let lookup = lookup.unwrap_or_default();
+        let limit: i64 = if lookup.operation_prefix.is_some() { 1 } else { 10_001 };
+        // PostgreSQL's heterogeneous bind-parameter API, not domain type erasure.
+        let params: &[&(dyn ToSql + Sync)] = &[
+            &organization_id, &parent_session_id, &lookup.child_session_id,
+            &lookup.operation_prefix, &limit,
+        ];
+        let mut rows = client.query_raw(
             "SELECT o.session_id AS child_session_id, \
               o.operation_id, \
               COALESCE(o.input->'semantic'->>'event', o.input->>'event') AS event, \
@@ -1271,17 +1289,24 @@ pub async fn load_child_returns(
               AND EXISTS (SELECT 1 FROM openappa_sessions s \
                 WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
               AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') IN ('child_end', 'child_return') \
-              AND o.decision->>'decision' IN ('ack', 'child_return') \
-              ORDER BY o.session_id, o.created_at DESC",
-            &[&organization_id, &parent_session_id],
+              AND (o.decision->>'decision' = 'ack' OR \
+                (COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_end' \
+                 AND o.decision->>'decision' = 'child_return')) \
+              AND ($3::text IS NULL OR o.session_id=$3) \
+              AND ($4::text IS NULL OR left(o.operation_id,length($4))=$4) \
+              ORDER BY o.created_at DESC, o.session_id, o.operation_id DESC LIMIT $5",
+            params.iter().copied(),
         )?;
-        let mut records = Vec::with_capacity(rows.len());
-        for row in &rows {
+        let mut records = Vec::new();
+        let mut budget = ReceiptLookupBudget::default();
+        while let Some(row) = rows.next()? {
             let event: Option<String> = row.get("event");
             let operation_id: String = row.get("operation_id");
             let decision: Option<String> = row.get("decision");
             let decision_value: Option<String> = row.get("decision_value");
             let output: Option<String> = row.get("output");
+            budget.take(decision_value.as_deref().unwrap_or("").len()
+                .saturating_add(output.as_deref().unwrap_or("").len()))?;
             let Some(crossed) = crossed_return(ReturnReceipt {
                 event: event.as_deref().unwrap_or(""),
                 operation_id: &operation_id,
@@ -1334,7 +1359,9 @@ pub async fn load_child_addresses(
     pg.with_client(move |client| {
         // Only the child's own parent addresses it, and only an address the
         // runtime acknowledged carried the parent's label into the child.
-        let rows = client.query(
+        use postgres::{fallible_iterator::FallibleIterator, types::ToSql};
+        let params: &[&(dyn ToSql + Sync)] = &[&organization_id, &child_session_id];
+        let mut rows = client.query_raw(
             "SELECT o.session_id AS parent_session_id, \
               COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS value \
               FROM openappa_operations o \
@@ -1345,12 +1372,14 @@ pub async fn load_child_addresses(
               AND COALESCE(o.input->'semantic'->>'spawned_id', o.input->>'spawned_id') = $2 \
               AND o.decision->>'decision' = 'ack' \
               AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL \
-              ORDER BY o.created_at",
-            &[&organization_id, &child_session_id],
+              ORDER BY o.created_at LIMIT 10001",
+            params.iter().copied(),
         )?;
-        let mut records = Vec::with_capacity(rows.len());
-        for row in &rows {
+        let mut records = Vec::new();
+        let mut budget = ReceiptLookupBudget::default();
+        while let Some(row) = rows.next()? {
             let value: Option<String> = row.get("value");
+            budget.take(value.as_deref().unwrap_or("").len())?;
             records.push(ChildAddressRecord {
                 parent_session_id: row.get("parent_session_id"),
                 value: value.ok_or_else(|| {
@@ -1388,6 +1417,28 @@ fn addressed_before_start(pg: &LeasedPostgres, input: &Input) -> napi::Result<bo
 /// [`SpawnRef`].
 fn spawn_operation_id(spawn_call_id: &str) -> String {
     format!("call:{spawn_call_id}")
+}
+
+/// Refuse the whole authority lookup on overflow: partial history cannot prove
+/// that an omitted child never crossed, including enforcement-off recovery.
+#[derive(Default)]
+struct ReceiptLookupBudget {
+    records: usize,
+    bytes: usize,
+}
+
+impl ReceiptLookupBudget {
+    fn take(&mut self, bytes: usize) -> Result<(), PostgresError> {
+        self.records = self.records.saturating_add(1);
+        self.bytes = self.bytes.saturating_add(bytes);
+        if self.records > 10_000 || self.bytes > 8 * 1024 * 1024 {
+            return Err(PostgresError(
+                "OpenAPPA receipt history exceeds its bounded lookup; narrow the child/task lookup"
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 struct ReturnReceipt<'a> {
@@ -3363,6 +3414,23 @@ mod typed_tests {
                 assert_eq!(super::validate(&input).unwrap_err().reason, reason);
             }
         }
+    }
+
+    #[test]
+    fn receipt_lookup_refuses_record_or_byte_overflow_instead_of_partial_authority() {
+        let mut by_records = super::ReceiptLookupBudget::default();
+        for _ in 0..10_000 {
+            by_records.take(0).unwrap();
+        }
+        assert!(by_records.take(0).is_err());
+        let mut by_bytes = super::ReceiptLookupBudget::default();
+        by_bytes.take(8 * 1024 * 1024).unwrap();
+        assert!(by_bytes.take(1).is_err());
+        assert!(
+            super::ReceiptLookupBudget::default()
+                .take(usize::MAX)
+                .is_err()
+        );
     }
 
     #[test]

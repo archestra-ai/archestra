@@ -15,7 +15,12 @@ import { generateObject, generateText, streamText } from "ai";
 import { vi } from "vitest";
 import { z } from "zod";
 import config from "@/config";
-import { ConversationModel, LlmProviderApiKeyModel } from "@/models";
+import {
+  ConversationModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+} from "@/models";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, it, test } from "@/test";
 
@@ -1445,6 +1450,72 @@ describe("createLLMModel", () => {
       name: "LlmProviderAuthRequiredError",
       provider: "openai",
       providerLabel: CHATGPT_SUBSCRIPTION_LABEL,
+    });
+  });
+
+  test("rejects a model the user's ChatGPT subscription does not offer, and allows one it does", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ name: "Codex Agent" });
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeOpenAiCodexCredential({
+          refreshToken: "refresh-token",
+          accountId: "account-id",
+        }),
+      },
+    });
+    const subscriptionKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: secret.id,
+      name: CHATGPT_SUBSCRIPTION_LABEL,
+      provider: "openai",
+      scope: "personal",
+      userId: user.id,
+    });
+    const makeOpenAiModel = (modelId: string) =>
+      ModelModel.create({
+        externalId: `openai/${modelId}`,
+        provider: "openai",
+        modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+    // gpt-5.4 is catalogued (e.g. through a metered org key) but the plan's
+    // sync never linked it to the subscription key.
+    await makeOpenAiModel("gpt-5.4");
+    const planModel = await makeOpenAiModel("gpt-5.6-sol");
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+      subscriptionKey.id,
+      [planModel.id],
+    );
+
+    const createFor = (model: string) =>
+      createLLMModelForAgent({
+        organizationId: org.id,
+        userId: user.id,
+        agentId: agent.id,
+        model,
+        provider: "openai",
+        agentLlmApiKeyId: subscriptionKey.id,
+        source: "chat",
+      });
+
+    await expect(createFor("gpt-5.4")).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining(
+        `gpt-5.4 is not available with your ${CHATGPT_SUBSCRIPTION_LABEL}`,
+      ),
+    });
+    await expect(createFor("gpt-5.6-sol")).resolves.toMatchObject({
+      chatApiKeyId: subscriptionKey.id,
     });
   });
 

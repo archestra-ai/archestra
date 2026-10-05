@@ -72,6 +72,7 @@ import { createResponseHealingFetch } from "@/clients/openrouter-response-healin
 import config from "@/config";
 import { ENCRYPTED_CHAT_KEY_HEADER } from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import {
   APPA_PARENT_HEADER,
@@ -453,6 +454,15 @@ export async function createLLMModelForAgent(params: {
     );
   }
 
+  if (apiKey && chatApiKeyId) {
+    await assertSubscriptionKeyServesModel({
+      apiKey,
+      chatApiKeyId,
+      provider,
+      modelName,
+    });
+  }
+
   // Providers that serve one catalog over two wire formats need the surface
   // this model was catalogued on; it lives on the model row because the id
   // does not carry it. Only looked up for such providers — every other one
@@ -498,6 +508,46 @@ export async function createLLMModelForAgent(params: {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/**
+ * A subscription key reaches only the models its owner's plan includes, and
+ * resolution can land on one that never offered the requested model: the
+ * ownership ranking picks the key independently of the model, and a shared
+ * agent's subscription is swapped for the viewer's own, whose plan may differ.
+ * Fail before the upstream call with an actionable message instead of the
+ * provider's 400.
+ *
+ * Only a synced key with a known model is judged: a model never seen, or a
+ * key with no synced models, says nothing about what the plan includes.
+ */
+async function assertSubscriptionKeyServesModel(params: {
+  apiKey: string;
+  chatApiKeyId: string;
+  provider: SupportedProvider;
+  modelName: string;
+}): Promise<void> {
+  const kind = subscriptionKindFromCredential(params.apiKey);
+  if (!kind) return;
+
+  const servingKeyIds =
+    await LlmProviderApiKeyModelLinkModel.findApiKeyIdsServingModelId({
+      provider: params.provider,
+      modelId: params.modelName,
+    });
+  if (servingKeyIds === null || servingKeyIds.includes(params.chatApiKeyId)) {
+    return;
+  }
+  const syncedModelCount =
+    await LlmProviderApiKeyModelLinkModel.getModelCountForApiKey(
+      params.chatApiKeyId,
+    );
+  if (syncedModelCount === 0) return;
+
+  throw new ApiError(
+    400,
+    `${params.modelName} is not available with your ${SUBSCRIPTION_CREDENTIALS[kind].label}. Pick another model, or refresh models if your plan changed.`,
+  );
+}
 
 /**
  * Unified model creation config for each provider.

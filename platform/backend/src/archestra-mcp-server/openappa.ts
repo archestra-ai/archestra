@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
 import {
-  BUILT_IN_AGENT_IDS,
   isBuiltInCatalogId,
   MCP_HUMAN_RULING_META_KEY,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -13,7 +12,6 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import AgentModel from "@/models/agent";
 import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
@@ -86,6 +84,7 @@ import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
+import { resolveCallerScope } from "./caller-scope";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getUnassignedDiscoverableTools } from "./dynamic-tools";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
@@ -343,17 +342,13 @@ const registry = defineArchestraTools([
       const { organizationId, userId } = context;
       if (!organizationId || !userId)
         throw new ApiError(401, "Organization and user context are required");
-      const agent = await AgentModel.findById(context.agent.id);
-      if (
-        !agent ||
-        agent.organizationId !== organizationId ||
-        (context.agentId !== undefined && context.agentId !== agent.id)
-      ) {
+      const caller = await resolveCallerScope(context);
+      if (!caller)
         throw new ApiError(
           403,
           "Valid agent context for this organization is required",
         );
-      }
+      const { agent, scope } = caller;
       if (
         !(await userHasPermission(
           userId,
@@ -399,9 +394,7 @@ const registry = defineArchestraTools([
         });
         // SPDX-SnippetEnd
       }
-      const organizationScope =
-        agent.agentType === "agent" &&
-        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
+      const organizationScope = scope === "organization";
       const allowedIds = organizationScope
         ? null
         : await inspectableToolIds({ ...context, agentId: agent.id });
@@ -422,7 +415,7 @@ const registry = defineArchestraTools([
         catalogId: catalog.id,
       });
       return result({
-        scope: organizationScope ? "organization" : "agent",
+        scope,
         mcpServer: {
           id: catalog.id,
           name: catalog.name,

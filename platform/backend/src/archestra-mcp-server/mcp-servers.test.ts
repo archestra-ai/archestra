@@ -9,6 +9,7 @@ import {
   TOOL_CREATE_MCP_SERVER_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
+  TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_SEARCH_PRIVATE_MCP_REGISTRY_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -1351,6 +1352,63 @@ describe("mcp server tools respect the agent's environment", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not found");
+  });
+
+  test("list_mcp_server_deployments: only the config agent lists readable deployments across environments", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, orgId, { role: "member" });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, orgId, { role: "member" });
+    const prodCatalog = await makeInternalMcpCatalog({
+      name: "Production Server",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+    const readable = await makeMcpServer({
+      catalogId: prodCatalog.id,
+      scope: "org",
+    });
+    const unreadable = await makeMcpServer({
+      catalogId: prodCatalog.id,
+      scope: "personal",
+      ownerId: otherUser.id,
+    });
+    const configAgent = await makeAgent({
+      agentType: "agent",
+      organizationId: orgId,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    const list = async (agent: { id: string; name: string }) => {
+      const result = await executeArchestraTool(
+        tool(TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME),
+        {},
+        { agent, userId: member.id, organizationId: orgId },
+      );
+      expect(result.isError).toBe(false);
+      const content = result.structuredContent as {
+        scope: string;
+        deployments: { id: string }[];
+      };
+      return {
+        scope: content.scope,
+        ids: content.deployments.map((deployment) => deployment.id),
+      };
+    };
+
+    const fromConfigAgent = await list(configAgent);
+    expect(fromConfigAgent.scope).toBe("organization");
+    expect(fromConfigAgent.ids).toContain(readable.id);
+    expect(fromConfigAgent.ids).not.toContain(unreadable.id);
+
+    const fromStagingAgent = await list(stagingContext.agent);
+    expect(fromStagingAgent.scope).toBe("agent");
+    expect(fromStagingAgent.ids).not.toContain(readable.id);
   });
 
   test("create_mcp_server defaults to the calling agent's environment", async () => {

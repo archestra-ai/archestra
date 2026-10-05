@@ -613,6 +613,14 @@ class LimitModel {
     }
 
     await withDbTransaction(async (tx) => {
+      // Lock in the accumulator's order (limit id, then model) so a reset and
+      // a concurrent usage write cannot deadlock.
+      await tx
+        .select({ id: schema.limitsTable.id })
+        .from(schema.limitsTable)
+        .where(inArray(schema.limitsTable.id, limitIds))
+        .orderBy(schema.limitsTable.id)
+        .for("no key update");
       const limits = await tx
         .update(schema.limitsTable)
         .set({ lastCleanup: now, updatedAt: now })
@@ -630,6 +638,15 @@ class LimitModel {
         return;
       }
 
+      await tx
+        .select({ id: schema.limitModelUsageTable.id })
+        .from(schema.limitModelUsageTable)
+        .where(inArray(schema.limitModelUsageTable.limitId, tokenCostLimitIds))
+        .orderBy(
+          schema.limitModelUsageTable.limitId,
+          schema.limitModelUsageTable.model,
+        )
+        .for("update");
       // Reset model usage records for token_cost limits
       await tx
         .update(schema.limitModelUsageTable)
@@ -848,7 +865,8 @@ class LimitModel {
   /**
    * A limit reached through several entity refs accrues once per ref. Rows are
    * written in limit id order so concurrent statements lock them in the same
-   * order.
+   * order as {@link resetLimitsUsage}. A deadlock aborts the statement before
+   * any row is written, so it is retried once.
    */
   private static async addTokenUsage(params: {
     entityRefs: SQL;
@@ -859,7 +877,7 @@ class LimitModel {
     const { entityRefs, model, inputTokens, outputTokens } = params;
     const limits = schema.limitsTable;
     const usage = schema.limitModelUsageTable;
-    await db.execute(sql`
+    const statement = sql`
       WITH entity_refs (entity_type, entity_id) AS (${entityRefs}),
       matched AS (
         SELECT ${limits.id} AS limit_id, count(*)::integer AS refs
@@ -879,9 +897,24 @@ class LimitModel {
         current_usage_tokens_in = ${usage}.current_usage_tokens_in + EXCLUDED.current_usage_tokens_in,
         current_usage_tokens_out = ${usage}.current_usage_tokens_out + EXCLUDED.current_usage_tokens_out,
         updated_at = ${sql.param(new Date(), usage.updatedAt)}
-    `);
+    `;
+    try {
+      await db.execute(statement);
+    } catch (error) {
+      if (!isDeadlock(error)) throw error;
+      await db.execute(statement);
+    }
   }
 }
+
+function isDeadlock(error: unknown): boolean {
+  for (let current = error; current instanceof Error; current = current.cause) {
+    if ((current as { code?: unknown }).code === DEADLOCK_DETECTED) return true;
+  }
+  return false;
+}
+
+const DEADLOCK_DETECTED = "40P01";
 
 /**
  * Service for validating if current usage has exceeded limits

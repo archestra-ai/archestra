@@ -1698,6 +1698,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
+  // Loopback-only `builtin = "archestra"` annotator; authenticated by the same
+  // per-process bridge bearer inside the route.
+  [RouteId.AnnotateOpenappaToolWithArchestra]: {},
   // Diagnostics readers see all yells and their own consults; admin widens consult visibility.
   [RouteId.GetOpenAppaYells]: { openappaDiagnostics: ["read"] },
   [RouteId.GetOpenAppaYellsSummary]: { openappaDiagnostics: ["read"] },

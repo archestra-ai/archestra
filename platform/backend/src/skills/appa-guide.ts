@@ -48,7 +48,7 @@ If you run from a connected client where tool names lack the \`archestra__\` pre
 When the user asks to set up a starting policy, first read the policy. If its revision is 0 and delivery is local, follow this section instead of the full initial tool sync below. The approval, preservation, and truthful reporting rules still apply. Existing policies and GitHub-managed policies keep the full adjust workflow.
 
 1. Briefly inspect deployed server metadata and battery fits. Do not enumerate every tool or ask the user to classify every server just to activate a starter. Never execute business tools or read private content for this inspection.
-2. Use the returned starter text, preserving its built-in protections, context control, and catch-all. Defer additional batteries, credential bindings, GitHub sync, CI, and detailed tuning until after the first policy is saved. Never invent a credential key. If the user explicitly requests more protection, inspect the relevant tools and ask at most one necessary plain-language question instead of guessing.
+2. Use the returned starter text, preserving its built-in protections, the \`run_command\` annotator rule, context control, and catch-all. Defer additional batteries, credential bindings, GitHub sync, CI, and detailed tuning until after the first policy is saved. Never invent a credential key. If the user explicitly requests more protection, inspect the relevant tools and ask at most one necessary plain-language question instead of guessing.
 3. State coverage limits; do not ask a provider-hosted-tools question. The starter adds no restrictions to other tools, and cannot check provider-hosted execution before it runs. Unknown or unreachable tools remain outside the tailored coverage; do not claim they are safe. Mention an unavailable server briefly if discovered.
 4. Preview the complete starter text with the revision you read. A revision-0 starter is NOT saved or enabled merely because its composition is healthy. Even if the diff is empty, it still needs approval and publication. Do not manufacture an edit or say no update is needed.
 5. Explain the proposal as a person helping someone decide, in two or three short paragraphs (roughly 120–180 words, excluding requested TOML). Start with what you recommend: the built-in Archestra rules already available here, saved as this deployment's policy. Nothing needs installing or connecting. Explain that a policy is the set of rules checked when an agent uses a tool.
@@ -243,7 +243,8 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 ## Boundaries
 
 - Reading and previewing require \`toolPolicy:read\`. Publishing requires \`toolPolicy:update\`. GitHub PR publishing and status checks also require \`credential:read\`. Adding a battery that binds runtime credentials requires \`credential:update\`. On a permission error, explain what is missing. If GitHub sync lacks a ready App credential or has changed upstream, do not claim a policy update. Fix or sync the source before retrying.
-- The default catch-all annotator returns empty delta and requirements, so unlisted tools have no extra APPA restrictions.
+- The default catch-all annotator returns empty delta and requirements, so unlisted tools have no extra APPA restrictions. The default policy also routes \`run_command\` to the \`archestra.run-command\` annotator, which labels each sandbox command with the organization's default model.
+- Keep the \`run_command\` annotator rule as it is in every policy you write or edit. Change or remove it only when the user specifically asks.
 - Explicit rules apply. Keep the catch-all unless the user wants unknown tools blocked. Do not quietly weaken a rule to let a blocked call succeed.
 - The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
 - Keep secrets out of policy text. A remote binding's \`token_env\` reads the organization runtime credential bound to it in \`[credentials]\`, never a backend environment variable. Never put raw credentials in policy text.
@@ -308,7 +309,7 @@ annotator = "noop"
 
 Keep the existing [externals.annotators.noop] URL. The handler returns an empty delta, empty requirements, and no effects. A named tool rule takes precedence over the catch-all. Match rules in order. Put narrow rules before broad rules.
 
-An annotator can classify each call dynamically. It requires a policy declaration and an implementation. The default noop adds no restrictions.
+An annotator can classify each call dynamically. It requires a policy declaration and an implementation. The default noop adds no restrictions. The default policy also declares \`archestra.run-command\` with \`builtin = "archestra"\` and routes \`run_command\` to it before the catch-all, so the organization's default model ranks each sandbox command \`suspicious\` or \`trusted\`.
 
 For a remote annotator:
 

@@ -170931,6 +170931,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -171563,6 +171564,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -172798,6 +172800,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -173550,6 +173553,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -174302,6 +174306,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -175054,6 +175059,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -175806,6 +175812,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -176438,6 +176445,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -177070,6 +177078,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -179756,6 +179765,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -183184,6 +183194,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -183816,6 +183827,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -184448,6 +184460,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -185080,6 +185093,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -185712,6 +185726,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -186344,6 +186359,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -186976,6 +186992,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -187608,6 +187625,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -188240,6 +188258,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -188872,6 +188891,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -189504,6 +189524,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -190136,6 +190157,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -190768,6 +190790,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -193802,6 +193825,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -196831,6 +196855,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -199865,6 +199890,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -200497,6 +200523,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -201365,6 +201392,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -202418,6 +202446,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -203471,6 +203500,7 @@
                                   "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "guardrail:dual_llm",
+                                  "guardrail:annotator",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "chatops:telegram",
@@ -204986,6 +205016,7 @@
                               "a2a:tool_call_repair",
                               "skill:description_generation",
                               "guardrail:dual_llm",
+                              "guardrail:annotator",
                               "chatops:slack",
                               "chatops:ms-teams",
                               "chatops:telegram",
@@ -205357,6 +205388,7 @@
                 "a2a:tool_call_repair",
                 "skill:description_generation",
                 "guardrail:dual_llm",
+                "guardrail:annotator",
                 "chatops:slack",
                 "chatops:ms-teams",
                 "chatops:telegram",
@@ -205484,6 +205516,7 @@
                               "a2a:tool_call_repair",
                               "skill:description_generation",
                               "guardrail:dual_llm",
+                              "guardrail:annotator",
                               "chatops:slack",
                               "chatops:ms-teams",
                               "chatops:telegram",
@@ -205517,6 +205550,7 @@
                                 "a2a:tool_call_repair",
                                 "skill:description_generation",
                                 "guardrail:dual_llm",
+                                "guardrail:annotator",
                                 "chatops:slack",
                                 "chatops:ms-teams",
                                 "chatops:telegram",
@@ -206942,6 +206976,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -207574,6 +207609,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -208809,6 +208845,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -209561,6 +209598,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -210313,6 +210351,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -211065,6 +211104,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -211817,6 +211857,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -212449,6 +212490,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -213081,6 +213123,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -215767,6 +215810,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -219195,6 +219239,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -219827,6 +219872,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -220459,6 +220505,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -221091,6 +221138,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -221723,6 +221771,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -222355,6 +222404,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -222987,6 +223037,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -223619,6 +223670,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -224251,6 +224303,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -224883,6 +224936,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -225515,6 +225569,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -226147,6 +226202,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -226779,6 +226835,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -229813,6 +229870,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -232842,6 +232900,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -235876,6 +235935,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -236508,6 +236568,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -237376,6 +237437,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -238429,6 +238491,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -239482,6 +239545,7 @@
                             "a2a:tool_call_repair",
                             "skill:description_generation",
                             "guardrail:dual_llm",
+                            "guardrail:annotator",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "chatops:telegram",
@@ -327911,6 +327975,288 @@
         }
       }
     },
+    "/api/openappa/annotators/archestra": {
+      "post": {
+        "operationId": "annotateOpenappaToolWithArchestra",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "system": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "type": "string"
+                  },
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "system",
+                  "input",
+                  "schema"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
+      }
+    },
     "/api/openappa/batteries": {
       "get": {
         "operationId": "getOpenappaBatteries",
@@ -333452,7 +333798,8 @@
                               "llm",
                               "jev",
                               "claude_code",
-                              "hitl"
+                              "hitl",
+                              "archestra"
                             ]
                           },
                           "request": {},

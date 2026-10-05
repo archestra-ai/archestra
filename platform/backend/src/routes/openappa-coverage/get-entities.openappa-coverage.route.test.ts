@@ -331,6 +331,50 @@ describe("GET /api/openappa/coverage/entities", () => {
     ]);
   });
 
+  test("the default policy covers the built-in run_command and leaves other built-in tools to the fallback", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "mcp_gateway",
+      name: "Gateway",
+    });
+    const builtInCatalog = await makeInternalMcpCatalog({
+      id: ARCHESTRA_MCP_CATALOG_ID,
+      organizationId: null,
+      name: "Archestra",
+    });
+    for (const rawName of ["run_command", "search_tools"]) {
+      const tool = await makeTool({
+        catalogId: builtInCatalog.id,
+        name: `archestra__${rawName}`,
+        rawName,
+      });
+      await makeAgentTool(gateway.id, tool.id);
+    }
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/openappa/coverage/tools?entityId=${gateway.id}&limit=10`,
+    });
+    expect(response.statusCode).toBe(200);
+    const sources = Object.fromEntries(
+      (
+        response.json().data as Array<{
+          fullName: string;
+          policySource: string;
+        }>
+      ).map((row) => [row.fullName, row.policySource]),
+    );
+    expect(sources).toEqual({
+      archestra__run_command: "root",
+      archestra__search_tools: "not_covered",
+    });
+  });
+
   test("reports gateways and registry servers by policy coverage while omitting apps", async ({
     makeInternalMcpCatalog,
     makeTool,

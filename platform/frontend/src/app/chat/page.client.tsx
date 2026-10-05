@@ -1860,8 +1860,12 @@ export function ChatPageContent({
     [setMessages],
   );
 
+  // Sync once the turn has settled — including a failed one. regenerate (and
+  // the error card's "Try again") resolves the live message to its saved id
+  // through this stamp; skipping it after an error left the just-sent message
+  // unresolvable, so regenerating it silently did nothing.
   useEffect(() => {
-    if (status !== "ready") {
+    if (status === "submitted" || status === "streaming") {
       return;
     }
 

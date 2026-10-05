@@ -193,6 +193,7 @@ export function TeamsList() {
     setActionButton(
       <PermissionButton
         permissions={{ team: ["create"] }}
+        size="sm"
         onClick={() => setCreateDialogOpen(true)}
       >
         <Plus className="h-4 w-4" />

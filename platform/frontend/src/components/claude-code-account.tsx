@@ -111,8 +111,8 @@ export function ClaudeCodeAccount({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="ml-auto h-6 shrink-0 gap-1.5 bg-background px-2 text-xs"
+            size="xs"
+            className="ml-auto shrink-0 bg-background"
             onClick={() => setOpen(true)}
             disabled={account.isPending}
           >
@@ -143,8 +143,8 @@ export function ClaudeCodeAccount({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="h-7 shrink-0 gap-1.5 px-2.5 text-xs"
+            size="xs"
+            className="shrink-0"
             onClick={() => setOpen(true)}
             disabled={account.isPending}
           >

@@ -8,9 +8,11 @@ import {
   KbDocumentModel,
   KbExternalUserGroupModel,
   KnowledgeBaseConnectorModel,
-  TeamModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "@/models/resource-permission-subject";
 import * as metrics from "@/observability/metrics";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -48,6 +50,8 @@ interface KnowledgeSourceAccessControlContext {
   organizationId?: string;
   grants?: ScopedPermission[];
   userId?: string;
+  /** The caller's grant subjects, resolved once for the request's queries. */
+  principal?: GrantPrincipal;
   canReadAll: boolean;
   teamIds: string[];
 }
@@ -208,7 +212,7 @@ class KnowledgeSourceAccessControlService {
     userId: string;
     organizationId: string;
   }): Promise<KnowledgeSourceAccessControlContext> {
-    const [canReadAll, teamIds, grants] = await Promise.all([
+    const [canReadAll, principal, grants] = await Promise.all([
       ResourcePermissions.allows({
         userId: params.userId,
         organizationId: params.organizationId,
@@ -216,16 +220,19 @@ class KnowledgeSourceAccessControlService {
         scope: "*",
         action: "update",
       }),
-      TeamModel.getUserTeamIds(params.userId),
+      ResourcePermissionSubjectModel.resolvePrincipal(params),
       ResourcePermissions.resolveAll(params),
     ]);
 
     return {
       userId: params.userId,
       organizationId: params.organizationId,
+      principal,
       grants,
       canReadAll,
-      teamIds,
+      teamIds: principal.subjects.flatMap((subject) =>
+        subject.type === "team" ? [subject.id] : [],
+      ),
     };
   }
 

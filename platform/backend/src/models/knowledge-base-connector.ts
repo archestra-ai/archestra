@@ -27,7 +27,9 @@ import type {
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "./resource-permission-subject";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -37,6 +39,7 @@ class KnowledgeBaseConnectorModel {
     canReadAll?: boolean;
     viewerTeamIds?: string[];
     viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
     visibilityScope?: ConnectorVisibilityScope;
     /**
      * When provided (including explicit `null` = Default), restrict to connectors
@@ -59,6 +62,7 @@ class KnowledgeBaseConnectorModel {
             organizationId: params.organizationId,
             canReadAll: params.canReadAll,
             userId: params.viewerUserId,
+            principal: params.viewerPrincipal,
             teamIds: params.viewerTeamIds,
             scope: params.visibilityScope,
           }),
@@ -114,6 +118,7 @@ class KnowledgeBaseConnectorModel {
     canReadAll?: boolean;
     viewerTeamIds?: string[];
     viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
     visibilityScope?: ConnectorVisibilityScope;
     status?: "active" | "deleted";
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
@@ -144,6 +149,7 @@ class KnowledgeBaseConnectorModel {
         organizationId,
         canReadAll,
         userId: params.viewerUserId,
+        principal: params.viewerPrincipal,
         teamIds: viewerTeamIds,
         scope: visibilityScope,
       }),
@@ -214,6 +220,7 @@ class KnowledgeBaseConnectorModel {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
       viewerUserId?: string;
+      viewerPrincipal?: GrantPrincipal;
       visibilityScope?: ConnectorVisibilityScope;
       /** When provided (incl. `null` = Default), restrict to this environment. */
       environmentId?: string | null;
@@ -274,6 +281,7 @@ class KnowledgeBaseConnectorModel {
           await buildVisibilityFilter({
             canReadAll: params?.canReadAll,
             userId: params?.viewerUserId,
+            principal: params?.viewerPrincipal,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -291,6 +299,7 @@ class KnowledgeBaseConnectorModel {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
       viewerUserId?: string;
+      viewerPrincipal?: GrantPrincipal;
       visibilityScope?: ConnectorVisibilityScope;
     },
   ): Promise<(KnowledgeBaseConnector & { knowledgeBaseId: string })[]> {
@@ -352,6 +361,7 @@ class KnowledgeBaseConnectorModel {
           await buildVisibilityFilter({
             canReadAll: params?.canReadAll,
             userId: params?.viewerUserId,
+            principal: params?.viewerPrincipal,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -1095,6 +1105,8 @@ async function buildVisibilityFilter(params: {
   organizationId?: string;
   canReadAll?: boolean;
   userId?: string;
+  /** The caller's already-resolved subjects, when the request has them. */
+  principal?: GrantPrincipal;
   teamIds?: string[];
   scope?: ConnectorVisibilityScope;
 }) {
@@ -1112,10 +1124,12 @@ async function buildVisibilityFilter(params: {
       ? ResourcePermissionPolicyModel.grantConditionForAny({
           ...context,
           organizationColumn: table.organizationId,
-          principals: await ResourcePermissionSubjectModel.resolvePrincipals({
-            userId: params.userId,
-            organizationId: params.organizationId,
-          }),
+          principals: params.principal
+            ? [params.principal]
+            : await ResourcePermissionSubjectModel.resolvePrincipals({
+                userId: params.userId,
+                organizationId: params.organizationId,
+              }),
         })
       : // A caller with no user of its own reaches what is published to the
         // organization at large, plus what its teams were granted.

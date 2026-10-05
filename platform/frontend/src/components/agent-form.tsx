@@ -1058,7 +1058,7 @@ export function AgentForm({
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   });
   const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: supportsSubagents && !!canReadAgents,
@@ -1182,7 +1182,7 @@ export function AgentForm({
     knowledgeSource: ["read"],
   });
   const { data: canAccessKnowledgeSettings } = useHasPermissions({
-    knowledgeSettings: ["read"],
+    organizationSettings: ["read"],
   });
   const isKnowledgeConfigured = useIsKnowledgeBaseConfigured();
   const { data: canReadLlmProviderApiKeys } = useHasPermissions({

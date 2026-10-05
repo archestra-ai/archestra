@@ -9,7 +9,7 @@ import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
  */
 export function useOpenAppaSetupState() {
   const { data: canReadSettings } = useHasPermissions({
-    openappaSettings: ["read"],
+    organizationSettings: ["read"],
   });
   const deployment = useGuardrailsDeployment();
   const policy = useGuardrailsPolicy();

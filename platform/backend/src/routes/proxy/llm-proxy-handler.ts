@@ -1,4 +1,3 @@
-import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 /**
  * Generic LLM Proxy Handler
  *
@@ -18,8 +17,10 @@ import {
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
+  isAgentTool,
   isCodexOriginator,
   isProviderApiKeyOptional,
+  OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   OPENCODE_AGENT_HEADER,
   OPENCODE_CLIENT_ID,
   PROVIDER_BASE_URL_HEADER,
@@ -27,6 +28,7 @@ import {
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
   stripClaudeContextVariantSuffix,
+  TOOL_RUN_TOOL_SHORT_NAME,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
 import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
@@ -36,10 +38,13 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { resolveRunToolDispatch } from "@/archestra-mcp-server/run-tool-target";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { takeInternalCall } from "@/clients/internal-call";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
@@ -116,6 +121,10 @@ import {
 } from "@/openappa/rewrite-replay";
 import { RewriteStreamCapture } from "@/openappa/rewrite-stream";
 import {
+  isIssuedRuntimeToolProof,
+  RUNTIME_TOOL_PROOF_ARGUMENT,
+} from "@/openappa/runtime-tool-claims";
+import {
   APPA_PARENT_HEADER,
   isAppaChatSource,
   isAppaDelegatedRun,
@@ -171,6 +180,13 @@ import {
   type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
 import {
+  RUNTIME_BINDING_HEADER,
+  resolveRuntimeIdentityByVirtualKeys,
+  resolveRuntimeSessionForWorkspace,
+  runtimeBindingAuthorizes,
+  runtimeSessionConflicts,
+} from "@/services/agent-runtime/runtime-identity";
+import {
   connectionProxySetupContext,
   verifyConnectionProxySetupContext,
 } from "@/services/connection-proxy-setup-context";
@@ -179,6 +195,7 @@ import {
   resolveConnectionSetupScope,
 } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
+import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -668,6 +685,7 @@ export async function handleLLMProxy<
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
+  const internalCall = takeInternalCall(request.headers);
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
@@ -1699,13 +1717,107 @@ export async function handleLLMProxy<
       const delegatedRun =
         isInternalRequest &&
         isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
+      const runtimeLookup =
+        (appaActive || appaObserving) &&
+        (virtualKeyId || passthroughVirtualKeyId)
+          ? await resolveRuntimeIdentityByVirtualKeys({
+              virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
+              organizationId: resolvedAgent.organizationId,
+            })
+          : { status: "unbound" as const };
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        runtimeLookup.status === "conflict"
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA runtime credentials do not name one workspace",
+        );
+      }
+      const runtimeIdentity =
+        runtimeLookup.status === "bound" ? runtimeLookup.identity : null;
+      if (
+        runtimeIdentity?.actorKind === "user" &&
+        appaUserId &&
+        appaUserId !== runtimeIdentity.actorId
+      ) {
+        throw new ApiError(
+          401,
+          "OpenAPPA runtime credential does not match the authenticated user",
+        );
+      }
+      const presentedRuntimeSession = appaClaims.sessionId;
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        runtimeIdentity &&
+        runtimeSessionConflicts({
+          workloadName: runtimeIdentity.workloadName,
+          presentedSession: presentedRuntimeSession,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA session does not match the authenticated runtime workspace",
+        );
+      }
+      const runtimeBindingMatches =
+        runtimeIdentity !== null &&
+        runtimeBindingAuthorizes({
+          token: firstHeaderValue(
+            headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
+          ),
+          secret: config.openappa.offerSigningSecret,
+          identity: runtimeIdentity,
+        });
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        runtimeIdentity &&
+        !runtimeBindingMatches
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA runtime binding does not match this run",
+        );
+      }
+      const runtimeSession =
+        runtimeIdentity && runtimeBindingMatches
+          ? (
+              await resolveRuntimeSessionForWorkspace({
+                organizationId: runtimeIdentity.organizationId,
+                workspaceId: runtimeIdentity.workspaceId,
+              })
+            )?.session
+          : undefined;
+      const runtimeSessionId = runtimeSession?.session_id;
+      const boundRuntimeIdentity =
+        runtimeIdentity &&
+        runtimeBindingMatches &&
+        !runtimeSessionConflicts({
+          workloadName: runtimeIdentity.workloadName,
+          presentedSession: presentedRuntimeSession,
+        })
+          ? runtimeIdentity
+          : null;
+      if (
+        (appaActive || appaObserving) &&
+        boundRuntimeIdentity &&
+        presentedRuntimeSession === undefined
+      ) {
+        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
+          boundRuntimeIdentity.workloadName;
+      }
       const callerId = appaUserId
         ? `user:${appaUserId}`
-        : authenticatedApp
-          ? `app:${authenticatedApp.id}`
-          : virtualKeyId
-            ? `virtual-key:${virtualKeyId}`
-            : undefined;
+        : boundRuntimeIdentity
+          ? boundRuntimeIdentity.principal
+          : authenticatedApp
+            ? `app:${authenticatedApp.id}`
+            : virtualKeyId
+              ? `virtual-key:${virtualKeyId}`
+              : undefined;
       // A platform request over loopback that brings no credential of its own.
       // Only such a request may name an unscoped session in the header.
       const platformLoopback =
@@ -1723,10 +1835,15 @@ export async function handleLLMProxy<
         !APPA_CLIENT_ADAPTERS.some((adapter) =>
           adapter.matches({ headers: headersForExtraction, requestBody: body }),
         );
-      if (unsupportedClient && unsupportedClientAction === "block") {
+      // The platform's own guardrail models bypass instead of being blocked.
+      if (
+        unsupportedClient &&
+        unsupportedClientAction === "block" &&
+        !(platformLoopback && internalCall)
+      ) {
         throw new ApiError(
           400,
-          "This client cannot use Guardrails. Send X-Appa-Session-ID to use guardrails, or ask an administrator to choose Bypass on the Guardrails Overview tab.",
+          "Guardrails do not recognize this client, so the proxy blocked the request. Add an X-Appa-Session-ID header to each request, or ask an administrator to allow unrecognized clients.",
         );
       }
       if (
@@ -1856,6 +1973,16 @@ export async function handleLLMProxy<
                         : callerId,
                   }),
             });
+        if (runtimeSession) {
+          if (openappaSession?.session_id !== runtimeSession.session_id) {
+            throw new ApiError(
+              400,
+              "The runtime request does not match its bound workspace",
+            );
+          }
+          // The launcher stored the authenticated parent before giving the pod data.
+          openappaSession = runtimeSession;
+        }
         if (!openappaSession && !connectionSetupBypass)
           throw new ApiError(
             400,
@@ -1927,6 +2054,9 @@ export async function handleLLMProxy<
               toolIdentity,
               request: lineageRequest(),
               claims: appaClaims,
+              ...(runtimeSessionId
+                ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
+                : {}),
               ...(isInternalChat ? { chatSource: source } : {}),
             },
           }).session,
@@ -1992,6 +2122,9 @@ export async function handleLLMProxy<
           toolIdentity,
           request: appaRequest,
           claims: appaClaims,
+          ...(runtimeSessionId
+            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
+            : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "active",
           ...(isInternalChat ? { chatSource: source } : {}),
@@ -2003,6 +2136,9 @@ export async function handleLLMProxy<
           toolIdentity,
           request: lineageRequest(),
           claims: appaClaims,
+          ...(runtimeSessionId
+            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
+            : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "inactive",
           ...(isInternalChat ? { chatSource: source } : {}),
@@ -2136,12 +2272,16 @@ export async function handleLLMProxy<
           "OpenAPPA replay session binding is unavailable",
         );
       }
+      const replayContext = pluginContext.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext | undefined;
       const needsReplay =
         !auxiliaryAnalysis &&
         (requestAdapter.getTools().length > 0 ||
           declaredToolEntries(body).length > 0 ||
           replayCapture?.hasDeclarations === true ||
           replaySession.parent_id !== undefined ||
+          replayContext?.runtimeSessionId !== undefined ||
           sessionReceipt !== undefined ||
           childTrajectoryReceipt !== undefined ||
           replayCapture?.echo.hasCalls === true ||
@@ -2892,6 +3032,11 @@ async function handleStreaming<
         if (ctx.rewriteReplay) {
           request = await ctx.rewriteReplay.prepareRequest(request);
         }
+        refuseIssuedRuntimeProofs({
+          request,
+          family: appaWireFamily(provider.interactionType),
+          identity: toolIdentity,
+        });
         const stream = await provider.executeStream(client, request);
         billingMode = getBillingMode();
 
@@ -3656,6 +3801,11 @@ async function handleNonStreaming<
         if (ctx.rewriteReplay) {
           request = await ctx.rewriteReplay.prepareRequest(request);
         }
+        refuseIssuedRuntimeProofs({
+          request,
+          family: appaWireFamily(provider.interactionType),
+          identity: toolIdentity,
+        });
         result = await provider.execute(client, request);
         if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
@@ -4861,6 +5011,125 @@ function inactiveProviderBoundRewriteWouldChange(params: {
     );
   } catch {
     return true;
+  }
+}
+
+/** Never forward an issued credential, even when no replay journal was opened. */
+function refuseIssuedRuntimeProofs(params: {
+  request: unknown;
+  family: ReturnType<typeof appaWireFamily>;
+  identity: utils.gatewayToolNames.ToolNameResolution;
+}): void {
+  const secret = config.openappa.offerSigningSecret;
+  if (!secret || !params.family) return;
+  const body = asRecord(params.request);
+  if (!body) return;
+  const calls: Record<string, unknown>[] = [];
+  if (params.family === "openai:responses") {
+    for (const value of Array.isArray(body.input) ? body.input : []) {
+      const item = asRecord(value);
+      if (!item) continue;
+      if (item.role !== undefined && item.role !== "assistant") continue;
+      if (item.type === "function_call" || item.type === "custom_tool_call")
+        calls.push(item);
+    }
+  } else {
+    for (const value of Array.isArray(body.messages) ? body.messages : []) {
+      const message = asRecord(value);
+      if (message?.role !== "assistant") continue;
+      if (params.family === "anthropic:messages") {
+        for (const block of Array.isArray(message.content)
+          ? message.content
+          : []) {
+          const item = asRecord(block);
+          if (item?.type === "tool_use") calls.push(item);
+        }
+      } else {
+        for (const call of Array.isArray(message.tool_calls)
+          ? message.tool_calls
+          : []) {
+          const item = asRecord(call);
+          const fn = asRecord(item?.function);
+          if (fn)
+            calls.push({ ...fn, namespace: item?.namespace ?? fn.namespace });
+        }
+        const legacy = asRecord(message.function_call);
+        if (legacy) calls.push(legacy);
+      }
+    }
+  }
+  const isRuntimeTarget = (name: string) =>
+    isAgentTool(name) ||
+    (OPENAPPA_RUNTIME_TOOL_SHORT_NAMES as readonly string[]).includes(
+      archestraMcpBranding.getToolShortName(name) ?? "",
+    );
+  const readArguments = (
+    value: unknown,
+  ): Record<string, unknown> | undefined => {
+    if (typeof value === "string") {
+      if (value.length > 8 * 1024 * 1024) {
+        const error = new ApiError(
+          409,
+          "Runtime proof inspection exceeds its supported argument size",
+        );
+        error.shouldRetry = false;
+        throw error;
+      }
+      try {
+        value = JSON.parse(value);
+      } catch {
+        return undefined;
+      }
+    }
+    return value !== null && typeof value === "object" && !Array.isArray(value)
+      ? asRecord(value)
+      : undefined;
+  };
+  for (const call of calls) {
+    if (typeof call.name !== "string") continue;
+    const name = params.identity.canonicalize(
+      call.name,
+      typeof call.namespace === "string" ? call.namespace : undefined,
+    );
+    if (
+      !isRuntimeTarget(name) &&
+      archestraMcpBranding.getToolShortName(name) !== TOOL_RUN_TOOL_SHORT_NAME
+    )
+      continue;
+    const wireArguments =
+      params.family === "anthropic:messages" ||
+      (params.family === "openai:responses" && call.type === "custom_tool_call")
+        ? call.input
+        : call.arguments;
+    let args = readArguments(wireArguments);
+    if (!args) continue;
+    const dispatch = resolveRunToolDispatch({
+      toolName: name,
+      args,
+      loose: params.identity.looseRunToolDispatch,
+    });
+    if (dispatch.kind === "target") {
+      if (!isRuntimeTarget(dispatch.toolName)) continue;
+      // Only one actual dispatch layer; nested data and schemas are opaque.
+      args = readArguments(args.tool_args);
+    } else if (!isRuntimeTarget(name)) {
+      continue;
+    }
+    if (
+      args &&
+      Object.hasOwn(args, RUNTIME_TOOL_PROOF_ARGUMENT) &&
+      isIssuedRuntimeToolProof({
+        proof: args[RUNTIME_TOOL_PROOF_ARGUMENT],
+        secret,
+      })
+    ) {
+      const error = new ApiError(
+        409,
+        "OpenAPPA cannot forward an issued runtime credential without its exact retained original",
+      );
+      error.shouldRetry = false;
+      throw error;
+    }
   }
 }
 

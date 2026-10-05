@@ -27,7 +27,9 @@ import {
 } from "@/openappa/offer-claims";
 import { signPeerProof } from "@/openappa/peer-claims";
 import { AppaRewriteReplay } from "@/openappa/rewrite-replay";
+import * as runtimeReview from "@/openappa/runtime-hitl-review";
 import * as openappaService from "@/openappa/service";
+import { workloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -77,9 +79,6 @@ test("remedy tools open human review without asking for prior consent", () => {
     tool.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
   );
 
-  expect(getPlans?.description).toContain(
-    "apply that plan with execute_remedy_plan",
-  );
   expect(getPlans?.description).toContain(
     "execute_remedy_plan asks the user for approval when the policy requires it",
   );
@@ -361,6 +360,47 @@ describe("OpenAPPA tool execution", () => {
     ]);
   });
 
+  test("a workload principal can read its own peer proof and not a user's", async () => {
+    const workspaceId = "11111111-1111-4111-8111-111111111111";
+    const principal = workloadPrincipal(workspaceId);
+    const read = vi
+      .spyOn(openappaService, "readPeerMessage")
+      .mockResolvedValue({
+        content: [{ type: "text", text: "held" }],
+      });
+    const context = {
+      agent: mockContext.agent,
+      organizationId: orgId,
+      openappaSession: {
+        organization_id: orgId,
+        caller_id: principal,
+        session_id: `${principal}|workspace-a`,
+      },
+    };
+
+    await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+      {
+        message_id: "message-1",
+        peer_proof: peerProof({ caller_id: principal }),
+      },
+      context,
+    );
+    expect(read).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ caller_id: principal }),
+      }),
+    );
+
+    await expect(
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+        { message_id: "message-1", peer_proof: peerProof() },
+        context,
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
   test("a peer read cannot supply its own recipient or source label", async () => {
     const read = vi.spyOn(openappaService, "readPeerMessage");
     const response = await executeArchestraTool(
@@ -586,6 +626,251 @@ describe("OpenAPPA tool execution", () => {
     }
   });
 
+  test("a workload spender executes only its own remedy offer", async () => {
+    const workspaceId = "22222222-2222-4222-8222-222222222222";
+    const principal = workloadPrincipal(workspaceId);
+    const other = workloadPrincipal("33333333-3333-4333-8333-333333333333");
+    const load = vi
+      .spyOn(openappaService, "loadOfferReview")
+      .mockResolvedValue(null);
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockResolvedValue({
+        result: { content: [{ type: "text", text: "Authorized" }] },
+        known: true,
+      });
+    const context = {
+      agent: mockContext.agent,
+      organizationId: orgId,
+      currentToolCallId: "workload-owned-call",
+      openappaSession: {
+        organization_id: orgId,
+        caller_id: principal,
+        session_id: `${principal}|workspace-a`,
+      },
+    };
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor(context.openappaSession.session_id),
+      root: `root-${workspaceId}`,
+      organizationId: orgId,
+      callerId: principal,
+      sessionId: context.openappaSession.session_id,
+      startDecision: { decision: "ack" },
+    });
+    const owned = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: orgId,
+        sessionId: `${principal}|workspace-a`,
+        callerId: principal,
+        offerId: "offer-owned",
+      }),
+      TEST_SIGNING_SECRET,
+    );
+
+    const accepted = await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-owned", plan: "keep", ...owned },
+      context,
+    );
+    expect(accepted.isError).toBeFalsy();
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callerId: principal,
+        ownerCallerId: principal,
+      }),
+    );
+
+    executeSpy.mockClear();
+    load.mockClear();
+    const reserve = vi.spyOn(AppaRewriteReplay, "reserveControlOutcome");
+    const foreignSession = {
+      organization_id: orgId,
+      caller_id: other,
+      session_id: `${other}|workspace-b`,
+    };
+    await stageHitlReview({
+      session: foreignSession,
+      review: {
+        offerId: "offer-foreign",
+        text: "Another workspace's exact review.",
+      },
+    });
+    await recordHitlRuling({
+      session: foreignSession,
+      offerId: "offer-foreign",
+      ruling: "approve",
+    });
+    const pairsBefore = await db
+      .select()
+      .from(schema.openappaRewritePairsTable);
+    const groupsBefore = await db
+      .select()
+      .from(schema.openappaRewriteGroupsTable);
+    const foreign = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: orgId,
+        sessionId: `${other}|workspace-b`,
+        callerId: other,
+        offerId: "offer-foreign",
+      }),
+      TEST_SIGNING_SECRET,
+    );
+    const rejected = await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-foreign", plan: "keep", ...foreign },
+      context,
+    );
+    expect(rejected.isError).toBe(true);
+    expect(executeSpy).not.toHaveBeenCalled();
+
+    const stolen = await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-owned", plan: "keep", ...owned },
+      mockContext,
+    );
+    expect(stolen.isError).toBe(true);
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+    expect(await db.select().from(schema.openappaRewritePairsTable)).toEqual(
+      pairsBefore,
+    );
+    expect(await db.select().from(schema.openappaRewriteGroupsTable)).toEqual(
+      groupsBefore,
+    );
+    expect(
+      await hitlReview.peekHitlRuling({
+        session: foreignSession,
+        offerId: "offer-foreign",
+      }),
+    ).toBe("approve");
+  });
+
+  test.each([
+    "user:another-user",
+    "app:credential",
+    "virtual-key:credential",
+    "service:credential",
+    "agent-workspace:invalid",
+  ])("a workload spender cannot read or reserve a foreign %s offer", async (owner) => {
+    const principal = workloadPrincipal("66666666-6666-4666-8666-666666666666");
+    const load = vi.spyOn(openappaService, "loadOfferReview");
+    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const reserve = vi.spyOn(AppaRewriteReplay, "reserveControlOutcome");
+    const response = await executeArchestraTool(
+      toolFullName,
+      signedRemedyArgs(orgId, "foreign-owner", { callerId: owner }),
+      {
+        agent: mockContext.agent,
+        organizationId: orgId,
+        currentToolCallId: "workload-foreign-call",
+        openappaSession: {
+          organization_id: orgId,
+          caller_id: principal,
+          session_id: `${principal}|workspace`,
+        },
+      },
+    );
+    expect(response.isError).toBe(true);
+    expect(load).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+  });
+
+  test("a workload review uses the runtime route instead of an inline approval without a reviewer", async () => {
+    const bind = vi.spyOn(runtimeReview, "bindRuntimeHitlReview");
+    const principal = workloadPrincipal("88888888-8888-4888-8888-888888888888");
+    const session = {
+      organization_id: orgId,
+      caller_id: principal,
+      session_id: `${principal}|no-reviewer-workspace`,
+    };
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor(session.session_id),
+      root: `root-${principal}`,
+      organizationId: orgId,
+      callerId: principal,
+      sessionId: session.session_id,
+      startDecision: { decision: "ack" },
+    });
+    const offerId = "offer-no-reviewer";
+    const signed = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: orgId,
+        callerId: principal,
+        sessionId: session.session_id,
+        offerId,
+      }),
+      TEST_SIGNING_SECRET,
+    );
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: offerId,
+      session_id: session.session_id,
+      text: "Approve this exact runtime call?",
+      restrictions: [
+        { dimension: "trust", before: "trusted", after: "suspicious" },
+      ],
+    });
+    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const form = vi.fn(async () => ({
+      status: "answered" as const,
+      result: { action: "accept" as const, content: { action: "approve" } },
+    }));
+    const response = await executeArchestraTool(
+      toolFullName,
+      { offer_id: offerId, plan: "Review", ...signed },
+      {
+        agent: mockContext.agent,
+        organizationId: orgId,
+        currentToolCallId: "no-reviewer-control",
+        openappaSession: session,
+        elicitation: { elicit: form },
+      },
+    );
+    expect(response.structuredContent).toMatchObject({
+      outcome: "review_required",
+    });
+    expect(form).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(bind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        review: expect.objectContaining({
+          text: expect.stringContaining("trust: trusted -> suspicious"),
+        }),
+      }),
+    );
+    expect((await getHitlReview({ session, offerId }))?.text).toBe(
+      "Approve this exact runtime call?",
+    );
+    expect(
+      await hitlReview.peekHitlRuling({ session, offerId }),
+    ).toBeUndefined();
+  });
+
+  test("a malformed workspace identity is not an authenticated opaque spender", async () => {
+    const reserve = vi.spyOn(AppaRewriteReplay, "reserveControlOutcome");
+    const load = vi.spyOn(openappaService, "loadOfferReview");
+    const response = await executeArchestraTool(
+      toolFullName,
+      signedRemedyArgs(orgId, "malformed-workspace", {
+        callerId: "agent-workspace:invalid",
+      }),
+      {
+        agent: mockContext.agent,
+        organizationId: orgId,
+        currentToolCallId: "malformed-workload-call",
+        openappaSession: {
+          organization_id: orgId,
+          caller_id: "agent-workspace:invalid",
+          session_id: "workspace",
+        },
+      },
+    );
+    expect(response.isError).toBe(true);
+    expect(load).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+  });
+
   test("executes unreviewed remedy offer immediately without prompting", async () => {
     vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(null);
     const executeSpy = vi
@@ -729,6 +1014,7 @@ describe("OpenAPPA tool execution", () => {
     "virtual-key:credential",
     "service:credential",
   ])("preserves native organization-scoped authorization for an owned %s offer", async (ownerCallerId) => {
+    const reserve = vi.spyOn(AppaRewriteReplay, "reserveControlOutcome");
     await db
       .update(schema.openappaSessionsTable)
       .set({ callerId: ownerCallerId })
@@ -753,6 +1039,12 @@ describe("OpenAPPA tool execution", () => {
         sessionId: "session-1",
       }),
     );
+    expect(reserve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ caller_id: ownerCallerId }),
+        spenderId: `user:${mockContext.userId}`,
+      }),
+    );
   });
 
   test.each([
@@ -760,6 +1052,7 @@ describe("OpenAPPA tool execution", () => {
     "user:",
     "app:",
     "virtual-key:",
+    "agent-workspace:invalid",
   ])("refuses an ownerless or malformed typed offer before review lookup (owner=%s)", async (callerId) => {
     const load = vi
       .spyOn(openappaService, "loadOfferReview")

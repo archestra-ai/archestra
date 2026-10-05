@@ -37,6 +37,7 @@ export const AuditEventNameSchema = z.enum([
   "agentRun.canceled",
   "agentRun.updated",
   "agentRun.deleted",
+  "agentRun.reviewDecided",
   // No route emits these any more; kept so earlier records still parse.
   "agentRun.shared",
   "agentRun.unshared",

@@ -343,7 +343,7 @@ async function canManageRemoteAgents(params: {
   return userHasPermission(
     params.userId,
     params.organizationId,
-    "agentSettings",
+    "organizationSettings",
     "update",
   );
 }

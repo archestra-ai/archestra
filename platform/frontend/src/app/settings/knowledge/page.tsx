@@ -1187,7 +1187,7 @@ function KnowledgeSettingsContent() {
           }
         >
           <WithPermissions
-            permissions={{ knowledgeSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -1302,7 +1302,7 @@ function KnowledgeSettingsContent() {
                 </p>
               )}
               <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
+                permissions={{ organizationSettings: ["update"] }}
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
@@ -1365,7 +1365,7 @@ function KnowledgeSettingsContent() {
                 </p>
               </div>
               <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
+                permissions={{ organizationSettings: ["update"] }}
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
@@ -1408,7 +1408,7 @@ function KnowledgeSettingsContent() {
               {(rerankerChatApiKeyId || rerankerModel) && (
                 <div className="flex justify-end">
                   <WithPermissions
-                    permissions={{ knowledgeSettings: ["update"] }}
+                    permissions={{ organizationSettings: ["update"] }}
                     noPermissionHandle="tooltip"
                   >
                     {({ hasPermission }) => (
@@ -1488,7 +1488,7 @@ function KnowledgeSettingsContent() {
                         </p>
                       </div>
                       <WithPermissions
-                        permissions={{ knowledgeSettings: ["update"] }}
+                        permissions={{ organizationSettings: ["update"] }}
                         noPermissionHandle="tooltip"
                       >
                         {({ hasPermission }) => (
@@ -1602,7 +1602,7 @@ function KnowledgeSettingsContent() {
                         </p>
                       </div>
                       <WithPermissions
-                        permissions={{ knowledgeSettings: ["update"] }}
+                        permissions={{ organizationSettings: ["update"] }}
                         noPermissionHandle="tooltip"
                       >
                         {({ hasPermission }) => (
@@ -1669,7 +1669,7 @@ function KnowledgeSettingsContent() {
           }
         >
           <WithPermissions
-            permissions={{ knowledgeSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -1724,7 +1724,7 @@ function KnowledgeSettingsContent() {
             <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
               <span />
               <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
+                permissions={{ organizationSettings: ["update"] }}
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
@@ -1767,7 +1767,7 @@ function KnowledgeSettingsContent() {
           hasChanges={hasChanges}
           isSaving={updateKnowledgeSettings.isPending}
           disabledSave={bm25K1Invalid || bm25BInvalid}
-          permissions={{ knowledgeSettings: ["update"] }}
+          permissions={{ organizationSettings: ["update"] }}
           onSave={handleSave}
           onCancel={handleCancel}
         />

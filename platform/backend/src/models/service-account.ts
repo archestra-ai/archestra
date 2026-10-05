@@ -32,6 +32,7 @@ import CreatedByModel, { lookupCreator } from "./created-by";
 import { ServiceAccountLabelModel } from "./entity-labels";
 import OrganizationRoleModel from "./organization-role";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 class ServiceAccountModel {
   static readonly MAX_TOKENS_PER_SERVICE_ACCOUNT = 50;
@@ -55,6 +56,12 @@ class ServiceAccountModel {
       return [];
     }
 
+    const viewerPrincipal = viewer
+      ? await ResourcePermissionSubjectModel.resolvePrincipal({
+          organizationId,
+          userId: viewer.userId,
+        })
+      : null;
     const now = new Date();
     const tokens = schema.serviceAccountTokensTable;
     const rows = await db
@@ -93,13 +100,12 @@ class ServiceAccountModel {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          ...(viewer
+          ...(viewerPrincipal
             ? [
                 ResourcePermissionPolicyModel.grantCondition({
-                  organizationId,
+                  ...viewerPrincipal,
                   resource: "serviceAccount",
                   scopeColumn: schema.serviceAccountsTable.id,
-                  userId: viewer.userId,
                   action: "read",
                 }),
               ]

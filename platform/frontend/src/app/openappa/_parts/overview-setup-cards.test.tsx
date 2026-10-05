@@ -19,12 +19,15 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { OverviewSetupCards } from "./overview-setup-cards";
+import appConfig from "@/lib/config/config";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  OverviewSetupCards,
+  UnrecognizedClientsCard,
+} from "./overview-setup-cards";
 
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
 const api = "http://localhost:9000/api";
 const server = setupServer(
@@ -43,6 +46,8 @@ const server = setupServer(
   ),
 );
 let enabled: boolean;
+let featureEnabled: boolean;
+let clientAction: "bypass" | "block";
 let revision: number;
 let sync: archestraApiTypes.GetAppaGithubSyncResponses["200"];
 const source = {
@@ -72,16 +77,19 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);
+  vi.mocked(useAppName).mockReturnValue("Archestra");
   enabled = false;
+  featureEnabled = true;
+  clientAction = "bypass";
   revision = 0;
   sync = { enabled: true, hasPolicy: false, source: null };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
       HttpResponse.json({
         enabled,
-        featureEnabled: true,
+        featureEnabled,
         active: enabled,
-        unsupportedClientAction: "bypass",
+        unsupportedClientAction: clientAction,
       }),
     ),
     http.get(`${api}/guardrails-policy`, () =>
@@ -101,18 +109,21 @@ beforeEach(() => {
     ),
   );
 });
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  vi.restoreAllMocks();
+});
 afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
-function show() {
+function show(card: "setup" | "unrecognized" = "setup") {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <OverviewSetupCards />
+      {card === "setup" ? <OverviewSetupCards /> : <UnrecognizedClientsCard />}
     </QueryClientProvider>,
   );
 }
@@ -308,8 +319,13 @@ test("once sync is connected the cards stay as status with no next step", async 
   expect(screen.queryByText("Step 2 of 2")).not.toBeInTheDocument();
 });
 
-test("the enforcement card lets administrators configure unsupported client behavior", async () => {
-  revision = 3;
+test("an administrator blocks requests from unrecognized clients", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: Boolean(permissions.organizationSettings),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   const updates: unknown[] = [];
   server.use(
     http.put(`${api}/guardrails-deployment`, async ({ request }) => {
@@ -317,22 +333,101 @@ test("the enforcement card lets administrators configure unsupported client beha
         unsupportedClientAction: "bypass" | "block";
       };
       updates.push(body);
+      clientAction = body.unsupportedClientAction;
       return HttpResponse.json({
         enabled,
-        featureEnabled: true,
+        featureEnabled,
         active: enabled,
-        unsupportedClientAction: body.unsupportedClientAction,
+        unsupportedClientAction: clientAction,
       });
     }),
   );
-  show();
+  show("unrecognized");
   const selector = await screen.findByRole("combobox", {
-    name: "Unsupported clients",
+    name: /should be:/,
   });
-  expect(selector).toHaveTextContent("Bypass");
+  expect(selector).toHaveTextContent("Allowed");
   fireEvent.click(selector);
-  fireEvent.click(screen.getByRole("option", { name: "Block" }));
+  fireEvent.click(screen.getByRole("option", { name: /Blocked/ }));
   await waitFor(() =>
     expect(updates).toEqual([{ unsupportedClientAction: "block" }]),
+  );
+  await waitFor(() => expect(selector).toHaveTextContent("Blocked"));
+});
+
+test("a rejected change keeps unrecognized clients allowed", async () => {
+  const rejected = vi.fn(() => new HttpResponse(null, { status: 403 }));
+  server.use(http.put(`${api}/guardrails-deployment`, rejected));
+  show("unrecognized");
+  const selector = await screen.findByRole("combobox", {
+    name: /should be:/,
+  });
+  fireEvent.click(selector);
+  fireEvent.click(screen.getByRole("option", { name: /Blocked/ }));
+  await waitFor(() => expect(rejected).toHaveBeenCalledOnce());
+  await waitFor(() => expect(selector).toBeEnabled());
+  expect(selector).toHaveTextContent("Allowed");
+});
+
+test("members who cannot manage the setting see it disabled", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data:
+          permissions.organizationSettings?.every(
+            (action) => action === "read",
+          ) ?? false,
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  show("unrecognized");
+  expect(
+    await screen.findByRole("combobox", {
+      name: /should be:/,
+    }),
+  ).toBeDisabled();
+  expect(
+    screen.getByText(/Only administrators can change this setting/),
+  ).toBeInTheDocument();
+});
+
+test("the unrecognized-client setting is disabled without the feature flag", async () => {
+  featureEnabled = false;
+  show("unrecognized");
+  expect(
+    await screen.findByRole("combobox", {
+      name: /should be:/,
+    }),
+  ).toBeDisabled();
+});
+
+test("hidden docs links keep the branded client coverage explanation", async () => {
+  vi.spyOn(
+    appConfig.enterpriseFeatures,
+    "fullWhiteLabeling",
+    "get",
+  ).mockReturnValue(true);
+  vi.mocked(useAppName).mockReturnValue("Workspace");
+  const { container } = show("unrecognized");
+  await screen.findByRole("combobox", { name: /should be:/ });
+
+  expect(container).toHaveTextContent(
+    "Guardrails work with natively supported clients like Workspace chat, Claude Code, Codex, and more, and with any client that correctly sends OpenAPPA session headers.",
+  );
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
+});
+
+test("links 'more' to clients and 'OpenAPPA session headers' to session-headers", async () => {
+  show("unrecognized");
+  const moreLink = await screen.findByRole("link", { name: /^more/ });
+  expect(moreLink).toHaveAttribute(
+    "href",
+    expect.stringContaining("platform-ai-tool-guardrails#clients"),
+  );
+  const headersLink = screen.getByRole("link", {
+    name: /^OpenAPPA session headers/,
+  });
+  expect(headersLink).toHaveAttribute(
+    "href",
+    expect.stringContaining("platform-ai-tool-guardrails#session-headers"),
   );
 });

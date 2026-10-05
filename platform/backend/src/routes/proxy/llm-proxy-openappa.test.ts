@@ -11,11 +11,20 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { type MockInstance, vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
-import { InteractionModel, ModelModel, VirtualApiKeyModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
+  InteractionModel,
+  ModelModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
@@ -39,6 +48,7 @@ import {
 } from "@/openappa/trajectory-stamp";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
+import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { beginConnectionPromptSession } from "@/services/connection-prompt-session";
 import {
@@ -1236,11 +1246,89 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "Send X-Appa-Session-ID to use guardrails",
+      "Add an X-Appa-Session-ID header to each request",
     );
     expect(response.json().error.message).toContain(
-      "choose Bypass on the Guardrails Overview tab",
+      "ask an administrator to allow unrecognized clients",
     );
+    expect(providerRequests).toHaveLength(0);
+    expect(events).toHaveLength(0);
+  });
+
+  const guardrailCall = (
+    source: string,
+    proof: Record<string, string> = internalCallHeader(),
+  ) =>
+    app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "x-archestra-source": source,
+        ...proof,
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+
+  test("block mode lets the platform's own guardrail models through ungoverned", async () => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    for (const source of ["guardrail:annotator", "guardrail:dual_llm"]) {
+      const response = await guardrailCall(source);
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    expect(providerRequests).toHaveLength(2);
+    expect(events).toHaveLength(0);
+    const [proofHeader] = Object.keys(internalCallHeader());
+    for (const [, options] of vi.mocked(anthropicAdapterFactory.createClient)
+      .mock.calls) {
+      expect(options.defaultHeaders ?? {}).not.toHaveProperty(proofHeader);
+    }
+  });
+
+  test("block mode blocks a loopback guardrail source without the platform's proof", async () => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    const [proofHeader] = Object.keys(internalCallHeader());
+    for (const proof of [{}, { [proofHeader]: "forged" }]) {
+      const response = await guardrailCall("guardrail:annotator", proof);
+      expect(response.statusCode, response.body).toBe(400);
+    }
+    expect(providerRequests).toHaveLength(0);
+  });
+
+  test("block mode still blocks a credentialed client naming a guardrail source", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      name: "guardrail-source-spoof",
+      providerApiKeys: [
+        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+      ],
+    });
+    for (const remoteAddress of ["127.0.0.1", "203.0.113.20"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress,
+        headers: {
+          authorization: `Bearer ${virtualKey}`,
+          "anthropic-version": "2023-06-01",
+          "x-archestra-source": "guardrail:annotator",
+          ...internalCallHeader(),
+        },
+        payload: payload(false) as Record<string, unknown>,
+      });
+      expect(response.statusCode, response.body).toBe(400);
+    }
     expect(providerRequests).toHaveLength(0);
     expect(events).toHaveLength(0);
   });
@@ -1274,7 +1362,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "This client cannot use Guardrails",
+      "Guardrails do not recognize this client",
     );
     expect(providerRequests).toHaveLength(0);
     expect(events).toHaveLength(0);
@@ -3847,6 +3935,107 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect.objectContaining({ session_id: sessionId }),
     );
   });
+
+  for (const mode of ["missing", "invalid", "valid"] as const) {
+    test(`observing runtime identity requires a verified binding (${mode})`, async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      await GuardrailsDeploymentModel.setEnabled(false);
+      config.openappa.offerSigningSecret =
+        "runtime-observing-binding-test-secret";
+      const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+      const providerKey = await makeLlmProviderApiKey(
+        agent.organizationId,
+        secret.id,
+        { provider: "anthropic" },
+      );
+      const { value: key, virtualKey } = await VirtualApiKeyModel.create({
+        organizationId: agent.organizationId,
+        name: "runtime-observing",
+        scope: "org",
+        authorId: null,
+        providerApiKeys: [
+          { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+        ],
+      });
+      const context = await A2AContextModel.create({
+        actorKind: "organization",
+        actorId: agent.organizationId,
+      });
+      const task = await A2ATaskModel.create({
+        contextId: context.id,
+        agentId: agent.id,
+        state: "TASK_STATE_WORKING",
+      });
+      const workloadName = `runtime-observing-${task.id.slice(0, 8)}`;
+      const workspace = await AgentWorkspaceModel.create({
+        organizationId: agent.organizationId,
+        agentId: agent.id,
+        actorKind: "organization",
+        actorId: agent.organizationId,
+        backend: "kubernetes",
+        runtimeScope: "test",
+        workloadName,
+        state: "active",
+        activeTaskId: task.id,
+        lastTaskId: task.id,
+        expiresAt: new Date(Date.now() + 3600_000),
+      });
+      await AgentRunModel.create({
+        organizationId: agent.organizationId,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind: "organization",
+        actorId: agent.organizationId,
+        actorUserId: null,
+        workloadName,
+        backend: "kubernetes",
+        runtimeScope: "test",
+        virtualApiKeyId: virtualKey.id,
+      });
+      const binding = issueRuntimeBinding({
+        secret: config.openappa.offerSigningSecret,
+        organizationId: agent.organizationId,
+        workspaceId: workspace.id,
+        workloadName,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind: "organization",
+        actorId: agent.organizationId,
+        expiresAt: Date.now() + 600_000,
+      });
+      if (!binding) throw new Error("The fixture has no signed binding");
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "203.0.113.20",
+        headers: {
+          authorization: `Bearer ${key}`,
+          "anthropic-version": "2023-06-01",
+          "x-appa-session-id": workloadName,
+          ...(mode === "missing"
+            ? {}
+            : {
+                "x-archestra-runtime-binding":
+                  mode === "valid" ? binding : "invalid-binding",
+              }),
+        },
+        payload: payload(false) as Record<string, unknown>,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(events).toHaveLength(0);
+      const workload = `agent-workspace:${workspace.id}|${workloadName}`;
+      const credential = `virtual-key:${virtualKey.id}|${workloadName}`;
+      const rows = await OpenAppaUnenforcedModel.findSessions({
+        organizationId: agent.organizationId,
+        sessionIds: [workload, credential],
+      });
+      expect(rows).toEqual([
+        { sessionId: mode === "valid" ? workload : credential, parentId: null },
+      ]);
+    });
+  }
 
   test("refuses a Chat request that names no user, instead of binding it unchecked", async () => {
     const { "x-archestra-user-id": _user, ...noUser } = headers();
@@ -10449,7 +10638,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.body).not.toContain("archestra__get_remedy_plans");
       expect(response.body).not.toContain("NATIVE REFUSAL");
       expect(response.body).not.toContain("defers its tools");
-      expect(response.body).not.toContain("cannot use Guardrails");
+      expect(response.body).not.toContain(
+        "Guardrails do not recognize this client",
+      );
       expect(response.body).not.toContain("cps1_");
       expect(response.body).not.toContain(token);
       expect(events).toEqual([]);
@@ -10473,7 +10664,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       body: string;
     }) => {
       expect(response.statusCode, response.body).toBe(400);
-      expect(response.body).toContain("This client cannot use Guardrails");
+      expect(response.body).toContain(
+        "Guardrails do not recognize this client",
+      );
       expect(providerRequests).toHaveLength(0);
       expect(events).toEqual([]);
       expect(evaluatePolicies).not.toHaveBeenCalled();
@@ -10659,7 +10852,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           400,
         );
         expect(response.body, item.label).toContain(
-          "This client cannot use Guardrails",
+          "Guardrails do not recognize this client",
         );
         expect(providerRequests, item.label).toHaveLength(0);
         expect(events, item.label).toEqual([]);

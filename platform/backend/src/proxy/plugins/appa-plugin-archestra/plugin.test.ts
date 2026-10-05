@@ -15,6 +15,11 @@ import {
 import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { prepareAppaRequest } from "@/openappa/request";
+import {
+  AppaRewriteReplay,
+  captureAppaReplayRequest,
+} from "@/openappa/rewrite-replay";
+import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as appaService from "@/openappa/service";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import {
@@ -32,8 +37,12 @@ import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 import {
+  APPA_AUXILIARY_ANALYSIS,
   APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_REPLAY_APPROVED_TEXT,
+  APPA_REPLAY_ENVELOPE,
+  APPA_REPLAY_SESSION,
   type AppaChildTrajectoryReceiptOutput,
   type AppaTrustedContext,
 } from "./types";
@@ -208,10 +217,10 @@ describe("asking through the client's own question tool", () => {
       expect(request.input).toEqual([]);
       expect(request.instructions).toContain("Base");
       expect(request.instructions).toContain(
-        "If the plan fits the user's request, continue the task",
+        "A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next.",
       );
       expect(request.instructions).toContain(
-        "apply the plan with execute_remedy_plan",
+        "Apply a fitting plan with execute_remedy_plan.",
       );
       expect(request.instructions).toContain(
         "can block a tool call and offer remedy plans in its ruling",
@@ -1620,6 +1629,380 @@ describe("asking through the client's own question tool", () => {
 });
 
 describe("AppaPluginArchestra", () => {
+  for (const family of [
+    "anthropic:messages",
+    "openai:chatCompletions",
+    "openai:responses",
+  ] as const) {
+    test(`records the runtime return contract before inference and pins it on replay (${family})`, async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const parentId = "user:user|parent";
+      const sessionId = "user:user|runtime";
+      await db.insert(schema.openappaSessionsTable).values(
+        [parentId, sessionId].map((id) => ({
+          actor: openappaActor(id),
+          root: openappaActor(parentId),
+          organizationId: organization.id,
+          callerId: "user:user",
+          sessionId: id,
+          ...(id === sessionId ? { parentId } : {}),
+          startDecision: { decision: "ack" },
+        })),
+      );
+      config.secretsManager = {
+        ...config.secretsManager,
+        encryptionSecret: "plugin-replay-contract-test-secret",
+      };
+      const plugin = new AppaPluginArchestra([]);
+      let insideEnvelope = false;
+      const started = vi
+        .spyOn(appaService, "startRuntimeChild")
+        .mockImplementation(async () => {
+          expect(insideEnvelope).toBe(true);
+          return { contract: "Return only the admitted summary V1." };
+        });
+      const processed = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockImplementation(async (params) => {
+          params.deliverReturnContract?.(
+            "Return only the admitted summary V1.",
+          );
+          return {
+            toolResultUpdates: {},
+            contextIsTrusted: true,
+            dualLlmAnalyses: [],
+            unsafeContextBoundary: undefined,
+          };
+        });
+      try {
+        let pinned: unknown;
+        for (const appended of [false, true]) {
+          const context = requestContext({
+            organizationId: organization.id,
+            sessionId,
+            parentId,
+          });
+          context.interactionType = family;
+          const trusted = trustedOf(context);
+          trusted.runtimeSessionId = sessionId;
+          trusted.runtimeTaskId = "task-one";
+          const body: Record<string, unknown> =
+            family === "openai:responses"
+              ? {
+                  instructions: "Base",
+                  input: [{ role: "user", content: "Work" }],
+                }
+              : family === "openai:chatCompletions"
+                ? {
+                    messages: [
+                      { role: "system", content: "Base" },
+                      { role: "user", content: "Work" },
+                    ],
+                  }
+                : {
+                    system: "Base",
+                    messages: [{ role: "user", content: "Work" }],
+                  };
+          if (appended) {
+            const history = (body.input ?? body.messages) as unknown[];
+            history.push({ role: "user", content: "Continue" });
+            started.mockImplementation(async () => {
+              expect(insideEnvelope).toBe(true);
+              return { contract: "Return only the admitted summary V2." };
+            });
+          }
+          context.requestBody = body;
+          const replay = await AppaRewriteReplay.open({
+            session: trusted.session,
+            capture: captureAppaReplayRequest({ family, body }),
+            encryptedChat: { kind: "none" },
+          });
+          const rewrite = replay.rewriteEnvelope.bind(replay);
+          vi.spyOn(replay, "rewriteEnvelope").mockImplementation(
+            async (params) => {
+              expect(JSON.stringify(params.request)).not.toContain(
+                "admitted summary",
+              );
+              insideEnvelope = true;
+              try {
+                await rewrite(params);
+              } finally {
+                insideEnvelope = false;
+              }
+            },
+          );
+          await plugin.onSessionInit(context);
+          context.resources.set(APPA_REPLAY_ENVELOPE, replay);
+          if (!appended) {
+            await plugin.onToolResults({
+              ...context,
+              toolResults: [
+                {
+                  id: "read-one",
+                  name: "archestra__get_run",
+                  content: "Read",
+                  isError: false,
+                },
+              ],
+            });
+            expect(processed).toHaveBeenCalledWith(
+              expect.objectContaining({ replay }),
+            );
+            expect(JSON.stringify(body)).not.toContain("admitted summary");
+          }
+          await plugin.onBeforeModel({ ...context, request: body });
+          const prepared = await replay.prepareRequest(body);
+          expect(JSON.stringify(prepared)).toContain("admitted summary V1");
+          expect(JSON.stringify(prepared)).not.toContain("admitted summary V2");
+          if (appended) {
+            const guidance = (request: unknown) => {
+              const value = request as Record<string, unknown>;
+              return family === "openai:chatCompletions"
+                ? (value.messages as unknown[])[0]
+                : value[
+                    family === "openai:responses" ? "instructions" : "system"
+                  ];
+            };
+            expect(guidance(prepared)).toEqual(guidance(pinned));
+          } else {
+            pinned = prepared;
+          }
+          await plugin.onCleanup(context);
+        }
+        expect(started).toHaveBeenCalledTimes(1);
+      } finally {
+        started.mockRestore();
+        processed.mockRestore();
+      }
+    });
+  }
+
+  for (const streaming of [false, true]) {
+    for (const result of [
+      { kind: "admitted", value: "Original report" },
+      { kind: "admitted", value: "Approved summary" },
+      { kind: "held", reason: "The report stays withheld." },
+    ] as const) {
+      test(`records the exact runtime text disposition (${result.kind}, streaming=${streaming}, text=${"value" in result ? result.value : result.reason})`, async () => {
+        const context = requestContext({
+          sessionId: "user:user|runtime",
+          parentId: "user:user|parent",
+        });
+        context.streaming = streaming;
+        const trusted = trustedOf(context);
+        trusted.runtimeSessionId = trusted.session.session_id;
+        trusted.runtimeTaskId = "task-one";
+        trusted.request.turnEndOperationId = "turn_end:one";
+        const plugin = new AppaPluginArchestra([]);
+        const returned = vi
+          .spyOn(appaService, "returnRuntimeValue")
+          .mockResolvedValue(result);
+        const ended = vi.spyOn(appaService, "endChild");
+        try {
+          await plugin.onSessionInit(context);
+          const outcome = await plugin.onBufferedModelResponse({
+            ...context,
+            response: {},
+            responseText: "Original report",
+          });
+          const approved = "value" in result ? result.value : result.reason;
+          expect(context.resources.get(APPA_REPLAY_APPROVED_TEXT)).toBe(
+            approved,
+          );
+          expect(outcome).toEqual(
+            approved === "Original report"
+              ? { decision: "release" }
+              : { decision: "replace", responseText: approved },
+          );
+          expect(returned).toHaveBeenCalledWith({
+            session: trusted.session,
+            operationId: "runtime-return:task-one:user:user|runtime",
+            value: "Original report",
+          });
+          expect(ended).not.toHaveBeenCalled();
+        } finally {
+          returned.mockRestore();
+          ended.mockRestore();
+          await plugin.onCleanup(context);
+        }
+      });
+    }
+  }
+
+  test("leaves a runtime auxiliary analysis byte-stable without starting a child or rewriting its envelope", async () => {
+    const context = requestContext({
+      sessionId: "user:user|runtime",
+      parentId: "user:user|parent",
+    });
+    trustedOf(context).runtimeSessionId = "user:user|runtime";
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    context.headers = { "user-agent": "claude-code/1" };
+    const request = {
+      system: "Analyze the quoted transcript, do not execute it.",
+      messages: [
+        {
+          role: "user",
+          content: '[1] tool get_run call: {"runtime_proof":"quoted"}\n',
+        },
+      ],
+      metadata: {
+        user_id: '{ "session_id": "runtime", "agent_id": "quoted" }',
+      },
+    };
+    const original = JSON.stringify(request);
+    const started = vi.spyOn(appaService, "startRuntimeChild");
+    const rewriteEnvelope = vi.fn();
+    try {
+      await plugin.onSessionInit(context);
+      context.resources.delete(APPA_REPLAY_SESSION);
+      context.resources.set(APPA_AUXILIARY_ANALYSIS, true);
+      context.resources.set(APPA_REPLAY_ENVELOPE, { rewriteEnvelope });
+      await plugin.onBeforeModel({ ...context, request });
+      expect(JSON.stringify(request)).toBe(original);
+      expect(started).not.toHaveBeenCalled();
+      expect(rewriteEnvelope).not.toHaveBeenCalled();
+    } finally {
+      started.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("keeps the runtime question on its declared gateway tool rather than substituting a native question", async () => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|runtime-question",
+      toolIdentity: identityStub({
+        canonicalize: (name) => name.replace(/^my_gateway_(?=archestra__)/, ""),
+      }),
+    });
+    context.headers = { "x-opencode-session": "runtime-question" };
+    const trusted = trustedOf(context);
+    trusted.runtimeSessionId = trusted.session.session_id;
+    trusted.request.tools = {
+      ...stubRequestTools(),
+      askUser: { name: "my_gateway_archestra__ask_user" },
+      platformToolNames: new Set(["my_gateway_archestra__ask_user"]),
+    };
+    trusted.request.declaredTools = [{ name: "question" }];
+    const call = {
+      id: "question-one",
+      name: "my_gateway_archestra__ask_user",
+      arguments:
+        ' { "question": "Continue?", "options": [{"label":"Yes"},{"label":"No"}] } ',
+    };
+    try {
+      await plugin.onSessionInit(context);
+      expect(
+        await plugin.onPrepareToolCalls({ ...context, toolCalls: [call] }),
+      ).toBeUndefined();
+      expect(call.arguments).toBe(
+        ' { "question": "Continue?", "options": [{"label":"Yes"},{"label":"No"}] } ',
+      );
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("never strips or reserializes unrecorded runtime_proof fields in calls, schemas, quoted objects, or nested data", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({ sessionId: "proof-history" });
+    const quoted = {
+      runtime_proof: "quoted",
+      arguments: '{"runtime_proof":"quoted-args"}',
+    };
+    const args = { run_id: "run", runtime_proof: "transport", data: quoted };
+    const request = {
+      tools: [{ name: "get_run", input_schema: { properties: quoted } }],
+      messages: [
+        { role: "user", content: [quoted] },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              name: "archestra__get_run",
+              input: { ...args },
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              function: {
+                name: "archestra__get_run",
+                arguments: JSON.stringify(args),
+              },
+            },
+          ],
+        },
+      ],
+      input: [
+        {
+          type: "function_call",
+          name: "archestra__run_tool",
+          arguments: JSON.stringify({
+            tool_name: "archestra__get_run",
+            tool_args: JSON.stringify(args),
+            control: " unchanged ",
+          }),
+        },
+      ],
+    };
+    const before = JSON.stringify(request);
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      expect(JSON.stringify(request)).toBe(before);
+      expect(request.tools[0].input_schema.properties).toBe(quoted);
+      const wrapped = JSON.parse(request.input[0].arguments);
+      expect(wrapped.control).toBe(" unchanged ");
+      expect(typeof wrapped.tool_args).toBe("string");
+      expect(JSON.parse(wrapped.tool_args)).toEqual({
+        run_id: "run",
+        runtime_proof: "transport",
+        data: quoted,
+      });
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  for (const hasSession of [false, true]) {
+    test(`refuses an unrecorded runtime return contract without mutating provider bytes (session=${hasSession})`, async () => {
+      const context = requestContext({
+        sessionId: "user:user|runtime",
+        parentId: "user:user|parent",
+      });
+      trustedOf(context).runtimeSessionId = "user:user|runtime";
+      const request = {
+        system: "Base",
+        messages: [{ role: "user", content: "Work" }],
+      };
+      const before = JSON.stringify(request);
+      const plugin = new AppaPluginArchestra([]);
+      const started = vi
+        .spyOn(appaService, "startRuntimeChild")
+        .mockResolvedValue({
+          contract: "Return only the approved summary.",
+        });
+      try {
+        await plugin.onSessionInit(context);
+        if (!hasSession) context.resources.delete(APPA_REPLAY_SESSION);
+        await expect(
+          plugin.onBeforeModel({ ...context, request }),
+        ).rejects.toMatchObject({ statusCode: 409 });
+        expect(JSON.stringify(request)).toBe(before);
+        expect(started).toHaveBeenCalledTimes(hasSession ? 1 : 0);
+      } finally {
+        started.mockRestore();
+        await plugin.onCleanup(context);
+      }
+    });
+  }
+
   test("keeps bindings private to each request and deletes them at cleanup", async () => {
     const canonicalizedNames: string[] = [];
     const evaluateToolCalls = vi
@@ -2059,6 +2442,7 @@ describe("rendering runtime text for this client", () => {
     ) as AppaTrustedContext;
     trusted.request.tools = stubRequestTools();
     trusted.request.turnEndOperationId = "turn_end:native-text-stop";
+    const startRuntimeChild = vi.spyOn(appaService, "startRuntimeChild");
     const marker = mintDelegationMarker({
       organizationId: organization.id,
       callerId: "user:user",
@@ -2148,6 +2532,7 @@ describe("rendering runtime text for this client", () => {
       expect(continued.tool_choice).toEqual({ type: "auto" });
       expect(continued.tools).toEqual(beforeTools);
       expect(continued.system).toBe(enforce.system);
+      expect(startRuntimeChild).not.toHaveBeenCalled();
 
       const outcome = await plugin.onToolCalls({
         ...context,
@@ -2178,6 +2563,7 @@ describe("rendering runtime text for this client", () => {
     } finally {
       endTurn.mockRestore();
       endChild.mockRestore();
+      startRuntimeChild.mockRestore();
       config.openappa.offerSigningSecret = priorSecret;
     }
   });
@@ -3528,6 +3914,288 @@ describe("AppaPluginArchestra", () => {
       await plugin.onCleanup(context);
     }
   });
+  for (const toolArgs of ["not JSON", "[]", '"{}"']) {
+    test(`rejects invalid runtime string dispatch arguments before native approval: ${toolArgs}`, async () => {
+      const context = requestContext({ sessionId: "runtime-invalid-args" });
+      trustedOf(context).request.tools = stubRequestTools();
+      const plugin = new AppaPluginArchestra([]);
+      const evaluated = vi.spyOn(appaService, "evaluateToolCalls");
+      const call = {
+        id: "runtime-call",
+        name: "archestra__run_tool",
+        arguments: ` ${JSON.stringify({
+          tool_name: "archestra__get_run",
+          tool_args: toolArgs,
+        })} `,
+      };
+      const original = call.arguments;
+      try {
+        await plugin.onSessionInit(context);
+        await expect(
+          plugin.onToolCalls({ ...context, toolCalls: [call] }),
+        ).rejects.toMatchObject({ statusCode: 409 });
+        expect(evaluated).not.toHaveBeenCalled();
+        expect(call.arguments).toBe(original);
+      } finally {
+        evaluated.mockRestore();
+        await plugin.onCleanup(context);
+      }
+    });
+  }
+
+  for (const wrapping of ["direct", "object", "string"] as const) {
+    test(`restores the exact provider call from the durably recorded runtime proof inverse (${wrapping})`, async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const context = requestContext({
+        sessionId: "proof-inverse",
+        organizationId: organization.id,
+      });
+      context.interactionType = "openai:responses";
+      const trusted = trustedOf(context);
+      trusted.request.tools = stubRequestTools();
+      await db.insert(schema.openappaSessionsTable).values({
+        actor: openappaActor(trusted.session.session_id),
+        root: openappaActor(trusted.session.session_id),
+        organizationId: organization.id,
+        callerId: "user:user",
+        sessionId: trusted.session.session_id,
+        startDecision: { decision: "ack" },
+      });
+      config.secretsManager = {
+        ...config.secretsManager,
+        encryptionSecret: "plugin-proof-inverse-test-secret",
+      };
+      config.openappa.offerSigningSecret = "plugin-runtime-proof-test-key";
+      const name =
+        wrapping === "direct" ? "archestra__get_run" : "archestra__run_tool";
+      const args = { run_id: "run", note: "line\n\u0000caf\u00e9" };
+      const rawArgs =
+        wrapping === "direct"
+          ? ' { "run_id" : "run", "note" : "line\\n\\u0000caf\\u00e9" } '
+          : ` ${JSON.stringify({
+              tool_name: "archestra__get_run",
+              tool_args: wrapping === "string" ? JSON.stringify(args) : args,
+              control: " unchanged ",
+            })} `;
+      const body = { input: [{ role: "user", content: "Read the run" }] };
+      const replay = await AppaRewriteReplay.open({
+        session: trusted.session,
+        capture: captureAppaReplayRequest({ family: "openai:responses", body }),
+        encryptedChat: { kind: "none" },
+      });
+      const provider = {
+        output: [
+          {
+            type: "function_call",
+            id: "fc-one",
+            call_id: "runtime-call",
+            name,
+            arguments: rawArgs,
+          },
+        ],
+      };
+      const registry = new LlmProxyPluginRegistry();
+      const plugin = new AppaPluginArchestra([]);
+      registry.register(plugin);
+      const finalized = vi.spyOn(plugin, "onToolCalls");
+      const evaluated = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockResolvedValue([{ kind: "allow" }]);
+      try {
+        await registry.onSessionInit(context);
+        context.resources.set(APPA_REPLAY_ENVELOPE, replay);
+        await registry.onBeforeModel({ ...context, request: body });
+        const firstRequest = await replay.prepareRequest(body);
+        const pinnedInstructions = (firstRequest as Record<string, unknown>)
+          .instructions;
+        const source = replay.captureResponse(provider);
+        const calls = [{ id: "runtime-call", name, arguments: rawArgs }];
+        const validated = vi.fn(async () => null);
+        const outcome = await registry.onToolCalls(
+          { ...context, toolCalls: calls },
+          validated,
+        );
+        expect(validated).toHaveBeenCalledWith(calls);
+        expect(calls[0].arguments).toBe(rawArgs);
+        if (wrapping === "string") {
+          expect(evaluated.mock.calls[0][1][0].arguments).toEqual({
+            ...JSON.parse(rawArgs),
+            tool_args: args,
+          });
+        }
+        if (outcome.decision !== "allow")
+          throw new Error("Expected runtime approval");
+        const finalization = await finalized.mock.results[0].value;
+        if (finalization?.decision !== "allow")
+          throw new Error("Expected runtime finalization");
+        expect(finalization.runtimeProofs).toEqual([
+          {
+            id: "runtime-call",
+            name,
+            action: "get_run",
+            session: trusted.session,
+            spawn: false,
+            wrapped: wrapping !== "direct",
+          },
+        ]);
+        expect(finalization.annotated).toBeUndefined();
+        expect(provider.output[0].arguments).toBe(rawArgs);
+        expect(source.calls.get("runtime-call")).toEqual(
+          Buffer.from(JSON.stringify(provider.output[0])),
+        );
+        const call = outcome.toolCalls[0];
+        const client = {
+          output: [
+            {
+              ...provider.output[0],
+              call_id: call.wireId ?? call.id,
+              arguments: JSON.stringify(call.arguments),
+            },
+          ],
+        };
+        await replay.recordResponse({
+          source,
+          response: client,
+          emitted: outcome.toolCalls,
+        });
+        const history = {
+          input: [
+            ...body.input,
+            ...client.output,
+            {
+              type: "function_call_output",
+              call_id: call.wireId ?? call.id,
+              output: "Read",
+            },
+          ],
+        };
+        const next = await AppaRewriteReplay.open({
+          session: trusted.session,
+          capture: captureAppaReplayRequest({
+            family: "openai:responses",
+            body: history,
+          }),
+          encryptedChat: { kind: "none" },
+        });
+        context.resources.set(APPA_REPLAY_ENVELOPE, next);
+        const signedCall = JSON.stringify(history.input[1]);
+        await registry.onBeforeModel({
+          ...context,
+          requestBody: history,
+          request: history,
+        });
+        expect(JSON.stringify(history.input[1])).toBe(signedCall);
+        expect(provider.output[0].arguments).toBe(rawArgs);
+        const restored = await next.prepareRequest(history);
+        expect((restored as Record<string, unknown>).instructions).toEqual(
+          pinnedInstructions,
+        );
+        expect(restored.input[1]).toEqual(provider.output[0]);
+        expect((restored.input[1] as { arguments: string }).arguments).toBe(
+          rawArgs,
+        );
+        expect(JSON.stringify(restored)).not.toContain("runtime_proof");
+      } finally {
+        evaluated.mockRestore();
+        finalized.mockRestore();
+        await registry.complete(context);
+      }
+    });
+  }
+
+  for (const { name, wrapped } of [
+    { name: "archestra__get_run", wrapped: false },
+    { name: "archestra__get_run", wrapped: true },
+    { name: "agent__worker", wrapped: false },
+    { name: "agent__worker", wrapped: true },
+  ]) {
+    test(`releases approved ${name} calls through the registry, wrapped=${wrapped}`, async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      config.openappa.offerSigningSecret = "plugin-runtime-proof-test-key";
+      const organization = await makeOrganization();
+      if (name === "agent__worker") {
+        await makeAgent({
+          organizationId: organization.id,
+          name: "Worker",
+          runtime: {
+            image: "test:local",
+            command: null,
+            inferenceProtocol: "openai_responses",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: 24,
+            idleTimeoutMinutes: 5,
+          },
+        });
+      }
+      const context = requestContext({
+        sessionId: "runtime-source",
+        organizationId: organization.id,
+      });
+      trustedOf(context).request.tools = stubRequestTools();
+      const evaluate = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockResolvedValue([{ kind: "allow" }]);
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(new AppaPluginArchestra([new AppaChatAdapter()]));
+      const args =
+        name === "agent__worker"
+          ? { prompt: "Prepare a report" }
+          : { run_id: "example-run" };
+      const calls = [
+        {
+          id: "runtime-call",
+          name: wrapped ? "archestra__run_tool" : name,
+          arguments: wrapped ? { tool_name: name, tool_args: args } : args,
+        },
+      ];
+      try {
+        await registry.onSessionInit(context);
+        const validate = vi.fn(async () => null);
+        const outcome = await registry.onToolCalls(
+          { ...context, toolCalls: calls },
+          validate,
+        );
+        expect(validate).toHaveBeenCalledWith(calls);
+        expect(outcome.decision).toBe("allow");
+        if (outcome.decision !== "allow") throw new Error("Expected approval");
+        const released = outcome.toolCalls[0].arguments as Record<
+          string,
+          unknown
+        >;
+        const signed = wrapped
+          ? (released.tool_args as Record<string, unknown>)
+          : released;
+        const { runtime_proof: proof, ...original } = signed;
+        expect(original).toEqual(args);
+        expect(
+          verifyRuntimeToolProof({
+            proof,
+            organizationId: organization.id,
+            callerId: "user:user",
+            action: name === "archestra__get_run" ? "get_run" : name,
+            arguments: original,
+            secret: config.openappa.offerSigningSecret,
+          }),
+        ).toMatchObject({
+          toolCallId: "runtime-call",
+          spawn: name === "agent__worker",
+          session: { session_id: "runtime-source" },
+        });
+      } finally {
+        evaluate.mockRestore();
+        await registry.complete(context);
+      }
+    });
+  }
 
   test("evaluates a child request under its minted id as a parent branch", async ({
     makeOrganization,
@@ -3570,6 +4238,7 @@ describe("AppaPluginArchestra", () => {
       crossed: true,
     });
     const endTurn = vi.spyOn(appaService, "endTurn").mockResolvedValue();
+    const runtimeReturn = vi.spyOn(appaService, "returnRuntimeValue");
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
     const organization = await makeOrganization();
     const context = requestContext({
@@ -3586,6 +4255,8 @@ describe("AppaPluginArchestra", () => {
     ) as AppaTrustedContext;
     trusted.request.tools = stubRequestTools();
     trusted.request.turnEndOperationId = "turn_end:request-digest";
+    trusted.runtimeSessionId = trusted.session.session_id;
+    trusted.runtimeTaskId = "workspace-task";
     const marker = mintDelegationMarker({
       organizationId: organization.id,
       callerId: "user:user",
@@ -3607,6 +4278,9 @@ describe("AppaPluginArchestra", () => {
     try {
       await plugin.onSessionInit(context);
       expect(plugin.buffersModelResponse(context)).toBe(true);
+      expect(context.resources.get(APPA_REPLAY_SESSION)).toMatchObject({
+        session_id: "user:user|s1:a1",
+      });
       const outcome = await plugin.onBufferedModelResponse({
         ...context,
         response: {},
@@ -3628,9 +4302,14 @@ describe("AppaPluginArchestra", () => {
       } else {
         throw new Error("expected outcome to replace responseText");
       }
+      expect(context.resources.get(APPA_REPLAY_APPROVED_TEXT)).toBe(
+        "SUMMARY(24 characters): safe",
+      );
+      expect(runtimeReturn).not.toHaveBeenCalled();
     } finally {
       endChild.mockRestore();
       endTurn.mockRestore();
+      runtimeReturn.mockRestore();
     }
   });
 
@@ -4616,14 +5295,14 @@ describe("delegation markers", () => {
                     content: [
                       {
                         type: "text",
-                        text: `[appa] Authorized. Tell the user in your reply which plan was accepted. Call the spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
+                        text: `[appa] Authorized. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
                       },
                     ],
                   })
                 : [
                     {
                       type: "input_text",
-                      text: `[appa] Authorized. Tell the user in your reply which plan was accepted. Call the spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
+                      text: `[appa] Authorized. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
                     },
                   ],
             },

@@ -8,7 +8,7 @@ use appa_eventlog::LogStore;
 use appa_package::PackageName;
 use appa_runtime::{
     api::Runtime,
-    config::{Config, HostDefaults, HostedBattery, IncludeResolution},
+    config::{ArchestraEndpoint, Config, HostDefaults, HostedBattery, IncludeResolution},
 };
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -18,10 +18,23 @@ pub(crate) const CONSULT_TIMEOUT: Duration = Duration::from_millis(5000);
 
 fn defaults() -> HostDefaults {
     HostDefaults {
-        consult_timeout: CONSULT_TIMEOUT,
-        max_body_bytes: 65536,
+        archestra: archestra_endpoint(),
+        ..HostDefaults::new(CONSULT_TIMEOUT, 65536)
     }
 }
+
+/// Where a `builtin = "archestra"` annotator posts its rendered prompt: the backend's own
+/// route, behind the same per-process bearer the helper bridge checks. The host publishes
+/// both before it crosses into the addon; a process that has not leaves the builtin
+/// unconfigured, and a policy naming it fails to open.
+fn archestra_endpoint() -> Option<ArchestraEndpoint> {
+    let url = std::env::var(ARCHESTRA_ANNOTATOR_URL_ENV).ok()?;
+    let token = std::env::var(BRIDGE_TOKEN_ENV).ok()?;
+    Some(ArchestraEndpoint::new(url, token))
+}
+
+const ARCHESTRA_ANNOTATOR_URL_ENV: &str = "APPA_ARCHESTRA_ANNOTATOR_URL";
+const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 
 /// Compile a hosted document, resolving every `token_env` it names through `lookup`.
 pub(crate) fn compile(

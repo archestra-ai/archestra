@@ -7,10 +7,17 @@ import {
 } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
-import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
+import {
+  consumeHitlRuling,
+  peekHitlRuling,
+  recordHitlRuling,
+  stageHitlReview,
+} from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
+import * as runtimeReview from "@/openappa/runtime-hitl-review";
 import * as openappaService from "@/openappa/service";
 import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
+import { workloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import type { Agent } from "@/types";
@@ -604,6 +611,102 @@ describe("chat tool execution", () => {
     }
   });
 
+  for (const [outcome, message] of [
+    ["no-reviewer", "no eligible human reviewer"],
+    ["review-unavailable", "fresh exact-offer review"],
+  ] as const) {
+    test(`runtime review ${outcome} is an error, not an approval or native form`, async () => {
+      const offerId = `runtime-${outcome}`;
+      const session = chatOpenAppaSession(
+        mockContext.organizationId as string,
+        mockContext.userId as string,
+        sessionId,
+      );
+      if (outcome !== "review-unavailable") {
+        await stageHitlReview({
+          session,
+          review: { offerId, text: "Exact action", tool: "mcp/example/write" },
+        });
+      }
+      const nativeForm = vi.fn();
+      const wait = vi
+        .spyOn(runtimeReview, "awaitRuntimeHitlReview")
+        .mockResolvedValue(outcome);
+      const load = vi.spyOn(openappaService, "loadOfferReview");
+      try {
+        const result = await executeArchestraTool(
+          TOOL_ASK_USER_FULL_NAME,
+          {
+            question: "Approve?",
+            options: [{ label: "Approve" }, { label: "Deny" }],
+            remedy_offer_ids: [offerId],
+            remedy_offers: [sessionOffer(offerId)],
+          },
+          { ...mockContext, elicitation: { elicit: nativeForm } },
+        );
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(message);
+        expect(result.structuredContent).toBeUndefined();
+        expect(nativeForm).not.toHaveBeenCalled();
+        expect(load).not.toHaveBeenCalled();
+        expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+      } finally {
+        wait.mockRestore();
+        load.mockRestore();
+      }
+    });
+  }
+
+  test("a runtime review waits on the platform instead of an auto-declining native form", async () => {
+    const offerId = "runtime-review";
+    const session = chatOpenAppaSession(
+      mockContext.organizationId as string,
+      mockContext.userId as string,
+      sessionId,
+    );
+    await stageHitlReview({
+      session,
+      review: {
+        offerId,
+        text: "Exact runtime action",
+        tool: "mcp/example/write",
+        arguments: '{"value":1}',
+      },
+    });
+    const nativeForm = vi.fn(async () => ({
+      status: "answered" as const,
+      result: { action: "decline" as const },
+    }));
+    const wait = vi
+      .spyOn(runtimeReview, "awaitRuntimeHitlReview")
+      .mockResolvedValue("approve");
+    await recordHitlRuling({ session, offerId, ruling: "approve" });
+    try {
+      const answer = await executeArchestraTool(
+        TOOL_ASK_USER_FULL_NAME,
+        {
+          question: "Approve?",
+          options: [{ label: "Approve" }, { label: "Deny" }],
+          remedy_offer_ids: [offerId],
+          remedy_offers: [sessionOffer(offerId)],
+        },
+        { ...mockContext, elicitation: { elicit: nativeForm } },
+      );
+      expect(answer.structuredContent).toEqual({
+        action: "accept",
+        selected: ["Approve"],
+      });
+      expect(nativeForm).not.toHaveBeenCalled();
+      expect(wait).toHaveBeenCalledWith(
+        expect.objectContaining({ offerId, userId: mockContext.userId }),
+      );
+      expect(await peekHitlRuling({ session, offerId })).toBe("approve");
+      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    } finally {
+      wait.mockRestore();
+    }
+  });
+
   test.each([
     "missing",
     "parent",
@@ -795,7 +898,7 @@ describe("chat tool execution", () => {
   test("a headerless gateway does not accept an unrelated other owner's child offer", async () => {
     const offerId = "offer-unrelated";
     const parentId = `user:${mockContext.userId}|parent-session`;
-    const callerId = "service:other-owner";
+    const callerId = "user:other-owner";
     const session: OpenAppaSession = {
       organization_id: mockContext.organizationId as string,
       caller_id: callerId,
@@ -1034,12 +1137,8 @@ describe("chat tool execution", () => {
       overrides: { callerId: "user:someone-else" },
     },
     {
-      case: "minted for an app caller",
-      overrides: { callerId: "app:someone-else" },
-    },
-    {
-      case: "minted for a virtual-key caller",
-      overrides: { callerId: "virtual-key:someone-else" },
+      case: "minted for a malformed workspace",
+      overrides: { callerId: "agent-workspace:invalid" },
     },
     {
       case: "minted with no owner",
@@ -1065,6 +1164,178 @@ describe("chat tool execution", () => {
     const text = (result.content[0] as any).text as string;
     expect(text).toContain("The user picked: Accept for this session.");
     expect(text).not.toContain("Live remedy offers");
+  });
+
+  test.each([
+    "app:credential",
+    "virtual-key:credential",
+    "service:credential",
+  ])("an eligible user keeps a signed organization-scoped %s offer", async (callerId) => {
+    const load = vi
+      .spyOn(openappaService, "loadOfferReview")
+      .mockResolvedValue(null);
+    try {
+      const response = await executeArchestraTool(
+        TOOL_ASK_USER_FULL_NAME,
+        {
+          question: "Accept this change for the rest of this session?",
+          options: [
+            { label: "Accept for this session" },
+            { label: "Do not accept" },
+          ],
+          remedy_offers: [sessionOffer("offer-organization", { callerId })],
+        },
+        { ...mockContext, elicitation: acceptingElicitation },
+      );
+      expect(response.isError).toBe(false);
+      expect(JSON.stringify(response.content)).toContain("offer-organization");
+    } finally {
+      load.mockRestore();
+    }
+  });
+
+  test("an owned root review recovers without a parent or session header", async () => {
+    const offerId = "owned-root-review";
+    const rootId = "owned-root";
+    const session: OpenAppaSession = {
+      organization_id: mockContext.organizationId as string,
+      caller_id: `user:${mockContext.userId}`,
+      session_id: rootId,
+    };
+    const load = vi
+      .spyOn(openappaService, "loadOfferReview")
+      .mockResolvedValue({
+        offer_id: offerId,
+        session_id: rootId,
+        text: "Approve this exact root call?",
+        tool: "mcp/example/write",
+        arguments: '{"value":1}',
+      });
+    const form = vi.fn(async () => ({
+      status: "answered" as const,
+      result: { action: "accept" as const, content: { choice: "Approve" } },
+    }));
+    try {
+      const response = await executeArchestraTool(
+        TOOL_ASK_USER_FULL_NAME,
+        {
+          question: "Approve everything?",
+          options: [{ label: "Yes" }, { label: "No" }],
+          remedy_offer_ids: [offerId],
+          remedy_offers: [sessionOffer(offerId, { sessionId: rootId })],
+        },
+        { ...mockContext, sessionId: undefined, elicitation: { elicit: form } },
+      );
+      expect(response.isError).not.toBe(true);
+      expect(form).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "Approve this exact root call?",
+        }),
+      );
+      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    } finally {
+      load.mockRestore();
+    }
+  });
+
+  test("an unassociated workload review cannot use a native form as its reviewer", async () => {
+    const principal = workloadPrincipal("77777777-7777-4777-8777-777777777777");
+    const rootId = `${principal}|unassociated-workspace`;
+    const offerId = "workload-no-reviewer";
+    const session: OpenAppaSession = {
+      organization_id: mockContext.organizationId as string,
+      caller_id: principal,
+      session_id: rootId,
+    };
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Exact runtime call." },
+    });
+    const wait = vi
+      .spyOn(runtimeReview, "awaitRuntimeHitlReview")
+      .mockResolvedValue("not-runtime");
+    const form = vi.fn();
+    try {
+      const response = await executeArchestraTool(
+        TOOL_ASK_USER_FULL_NAME,
+        {
+          question: "Approve?",
+          options: [{ label: "Approve" }, { label: "Deny" }],
+          remedy_offer_ids: [offerId],
+          remedy_offers: [
+            sessionOffer(offerId, { callerId: principal, sessionId: rootId }),
+          ],
+        },
+        {
+          agent: mockContext.agent,
+          organizationId: mockContext.organizationId,
+          openappaSession: session,
+          elicitation: { elicit: form },
+        },
+      );
+      expect(response.isError).toBe(true);
+      expect(JSON.stringify(response.content)).toContain(
+        "no eligible human reviewer",
+      );
+      expect(form).not.toHaveBeenCalled();
+      expect(await peekHitlRuling({ session, offerId })).toBeUndefined();
+    } finally {
+      wait.mockRestore();
+    }
+  });
+
+  test("ask_user keeps a workload offer only for that workspace principal", async () => {
+    const workspaceId = "44444444-4444-4444-8444-444444444444";
+    const principal = workloadPrincipal(workspaceId);
+    const session = `${principal}|workspace-a`;
+    mockContext = {
+      agent: mockContext.agent,
+      organizationId: mockContext.organizationId,
+      openappaSession: {
+        organization_id: mockContext.organizationId as string,
+        caller_id: principal,
+        session_id: session,
+      },
+      elicitation: acceptingElicitation,
+    };
+
+    const accepted = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offers: [
+          sessionOffer("offer-owned", {
+            callerId: principal,
+            sessionId: session,
+          }),
+        ],
+      },
+      mockContext,
+    );
+    expect((accepted.content[0] as any).text).toContain("offer-owned");
+
+    const dropped = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offers: [
+          sessionOffer("offer-sibling", {
+            callerId: workloadPrincipal("55555555-5555-4555-8555-555555555555"),
+            sessionId: session,
+          }),
+        ],
+      },
+      mockContext,
+    );
+    expect((dropped.content[0] as any).text).not.toContain("offer-sibling");
   });
 
   test("ask_user keeps only this session's offers when replayed ones ride along", async () => {

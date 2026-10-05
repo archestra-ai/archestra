@@ -195,7 +195,7 @@ describe("McpServerUsageTab", () => {
     );
 
     expect(
-      screen.getByText("No agents use this server yet"),
+      screen.getByText("No agents or MCP gateways use this server yet"),
     ).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });

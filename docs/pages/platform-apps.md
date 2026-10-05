@@ -133,7 +133,7 @@ The app tools form an autonomous build→render→fix loop, so an agent rarely n
 
 ## App Data Store
 
-Each app has its own key-to-document store, exposed to the app's HTML as `archestra.storage`. The store is **partitioned**: `storage.user` addresses a partition private to the viewing user (the user is taken from the authenticated session, never from the app), and `storage.shared` addresses one app-wide partition all users share. No app id is ever passed: the app's MCP endpoint is route-bound, so an app can only ever read and write its own store. Access is gated by the viewing user's RBAC — reads need `app:read`, writes need `app:update`.
+Each app has its own key-to-document store, exposed to the app's HTML as `archestra.storage`. The store is **partitioned**: `storage.user` addresses a partition private to the viewing user (the user is taken from the authenticated session, never from the app), and `storage.shared` addresses one app-wide partition all users share. No app id is ever passed: the app's MCP endpoint is route-bound, so an app can only ever read and write its own store. Access is gated by the viewing user's access to the app: reads need `app:read` or the `use` grant on the app, and writes need the `use` grant.
 
 ## App Files
 
@@ -153,7 +153,7 @@ The agent knows the open app's files too. Each turn lists them in its context, a
 
 An app's files are all an agent can see of it. It lists them to find what the app has produced, and it cannot observe what the app is showing you or doing. Name the file you want, and it copies that one.
 
-Reads need `file:manage`, and the transfer tools need `sandbox:execute`. The file tools require the sandbox runtime; deployments that run without it have no file store.
+Reads and the transfer tools need `agent:read`. The file tools require the sandbox runtime; deployments that run without it have no file store.
 
 ## Tools and auto-auth
 

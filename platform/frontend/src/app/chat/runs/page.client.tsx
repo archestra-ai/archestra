@@ -46,6 +46,7 @@ import { useRuntimeClock } from "@/lib/agent-runtime-time";
 import { useScopedCapabilities } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
+import { AgentRunOpenappaReview } from "./openappa-review-card";
 
 export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [resumedRun, setResumedRun] = useState<{
@@ -320,6 +321,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
       </header>
 
       <section className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-6">
+        {run ? <AgentRunOpenappaReview taskId={activeTaskId} /> : null}
         {run && live && <AgentRunLiveness run={run} />}
         {isOwner && !live && run?.workspace && (
           <output className="flex shrink-0 flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">

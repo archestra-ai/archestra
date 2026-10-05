@@ -575,6 +575,7 @@ async function handleQueryKnowledgeSources(params: {
           canReadAll: access.canReadAll,
           viewerTeamIds: access.teamIds,
           viewerUserId: access.userId,
+          viewerPrincipal: access.principal,
           // Query scope: auto-sync-permissions connectors stay searchable for
           // everyone — their per-chunk ACLs (userAcl below) do the enforcement.
           visibilityScope: "query",
@@ -652,6 +653,7 @@ async function handleQueryKnowledgeSources(params: {
                   canReadAll: access?.canReadAll,
                   viewerTeamIds: access?.teamIds,
                   viewerUserId: access?.userId,
+                  viewerPrincipal: access?.principal,
                   visibilityScope: "query",
                   environmentId: agentEnvironmentId,
                 }),

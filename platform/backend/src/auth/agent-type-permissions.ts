@@ -7,7 +7,10 @@ import {
   ResourcePermissionActionSchema,
   ScopedResourceSchema,
 } from "@archestra/shared";
-import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
+import {
+  allAvailableActions,
+  buildForbiddenErrorMessage,
+} from "@archestra/shared/access-control";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type AgentScope, type AgentType, ApiError } from "@/types";
 import { getPermissionsForUserContext, userHasPermission } from "./utils";
@@ -134,11 +137,15 @@ export async function getAgentTypePermissionChecker(params: {
           allowsScoped({ agentType, agentId: requested.scope, action })
         )
       ) {
+        // An action no role can hold is only ever granted per agent, so
+        // naming it as a missing role permission would point nowhere.
         throw new ApiError(
           403,
-          buildForbiddenErrorMessage({
-            missingPermissions: { [resource]: [action] },
-          }),
+          allAvailableActions[resource].includes(action as never)
+            ? buildForbiddenErrorMessage({
+                missingPermissions: { [resource]: [action] },
+              })
+            : "You do not have permission to modify this resource",
         );
       }
     },

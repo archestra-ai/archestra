@@ -80,7 +80,10 @@ export function AppToolsEditor({
   const { data: app } = useApp(environmentId === undefined ? appId : null);
   const { data: assigned, isPending } = useAppTools(appId);
   const { data: catalogs = [] } = useInternalMcpCatalog();
-  const { data: hasUpdatePermission } = useHasPermissions({ app: ["update"] });
+  const { data: hasUpdatePermission } = useHasPermissions(
+    { app: ["update"] },
+    appId,
+  );
   const canEdit = hasUpdatePermission === true && !readOnly;
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();

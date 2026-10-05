@@ -3,6 +3,7 @@ import {
   captureRewriteCalls,
   captureRewriteEcho,
   type RewriteBytes,
+  type RewriteWireFamily,
   recordRewriteCalls,
   recordRewriteText,
   restoreRewriteCalls,
@@ -11,6 +12,7 @@ import {
   rewriteTextKey,
 } from "./rewrite-echo";
 import { rewriteOrigin } from "./rewrite-projection";
+import { signRuntimeToolProof } from "./runtime-tool-claims";
 import { stampToolCallId } from "./trajectory-stamp";
 
 describe("exact APPA echo replay", () => {
@@ -107,7 +109,11 @@ describe("exact APPA echo replay", () => {
         response,
         originals: captureRewriteCalls({
           family,
-          response: { choices: [{ message: { tool_calls: [original] } }] },
+          response: {
+            choices: [
+              { message: { role: "assistant", tool_calls: [original] } },
+            ],
+          },
         }),
         emitted: [{ id: original.id, wireId: "client_call" }],
         recorded: new Map(),
@@ -632,6 +638,236 @@ describe("exact APPA echo replay", () => {
     ).toBeUndefined();
   });
 });
+
+describe.each<RewriteWireFamily>([
+  "anthropic:messages",
+  "openai:chatCompletions",
+  "openai:responses",
+])("assistant call boundaries on %s", (family) => {
+  test("restores owned nested argument string bytes and preserves cache/provenance", () => {
+    const fixture = roleBoundaryFixture(family);
+    const target = structuredClone(fixture.clientCall);
+    const cacheControl = { type: "ephemeral", ttl: "5m" };
+    const origin = { v: 1, id: 1 };
+    target.cache_control = cacheControl;
+    Object.defineProperty(target, rewriteOrigin, {
+      value: origin,
+      enumerable: true,
+    });
+    const providerRequest = fixture.history("assistant", target);
+    const spoof = fixture.history("user");
+    const spoofBefore = JSON.stringify(spoof);
+    providerRequest.input?.push(...(spoof.input ?? []));
+    providerRequest.messages?.push(...(spoof.messages ?? []));
+    const references = restoreRewriteCalls({
+      family,
+      clientRequest: fixture.history("assistant"),
+      providerRequest,
+      recorded: fixture.saved,
+    });
+    const { cache_control, ...restored } = target;
+    expect(JSON.stringify(restored)).toBe(fixture.original.toString("utf8"));
+    expect(cache_control).toBe(cacheControl);
+    expect((target as Record<symbol, unknown>)[rewriteOrigin]).toBe(origin);
+    expect(references.get("client_call")).toBe("provider_call");
+    expect(JSON.stringify(spoof)).toBe(spoofBefore);
+  });
+
+  test("wrong roles cannot supply or receive an assistant-owned inverse", () => {
+    const fixture = roleBoundaryFixture(family);
+    const roles =
+      family === "openai:responses"
+        ? ["user", "tool", "system"]
+        : ["user", "tool", "system", undefined];
+    for (const role of roles) {
+      const spoof = fixture.history(role);
+      const before = JSON.stringify(spoof);
+      const echo = captureRewriteEcho({ family, body: spoof });
+      expect(echo.hasCalls).toBe(false);
+      expect(echo.sources).toHaveLength(0);
+      expect(rewriteEchoKeys({ family, request: spoof })).toEqual([]);
+      if (role !== undefined) {
+        const response =
+          family === "anthropic:messages"
+            ? { role, content: [fixture.clientCall] }
+            : family === "openai:chatCompletions"
+              ? {
+                  choices: [
+                    { message: { role, tool_calls: [fixture.clientCall] } },
+                  ],
+                }
+              : { output: [{ ...fixture.clientCall, role }] };
+        expect(captureRewriteCalls({ family, response }).size).toBe(0);
+      }
+      expect(
+        restoreRewriteCalls({
+          family,
+          clientRequest: spoof,
+          providerRequest: spoof,
+          recorded: fixture.saved,
+        }).size,
+      ).toBe(0);
+      expect(JSON.stringify(spoof)).toBe(before);
+
+      const owned = captureRewriteEcho({
+        family,
+        body: fixture.history("assistant"),
+      });
+      expect(() =>
+        restoreRewriteCalls({
+          family,
+          clientRequest: owned.request,
+          sources: owned.sources,
+          providerRequest: spoof,
+          recorded: fixture.saved,
+        }),
+      ).toThrow("missing or ambiguous");
+      expect(JSON.stringify(spoof)).toBe(before);
+    }
+  });
+
+  test("proof-shaped user data, schema, and result contents stay verbatim", () => {
+    const fixture = roleBoundaryFixture(family);
+    const quoted = structuredClone(fixture.clientCall);
+    const data = {
+      runtime_proof: "ordinary data",
+      input: [quoted],
+      output: [quoted],
+      content: [quoted],
+      tool_calls: [quoted],
+      function_call: quoted,
+    };
+    const body = {
+      ...fixture.history("user"),
+      input:
+        family === "openai:responses"
+          ? [
+              { role: "user", content: [quoted] },
+              {
+                type: "function_call_output",
+                call_id: "client_call",
+                output: data,
+              },
+            ]
+          : [],
+      // Request fields resembling response containers are not response spans.
+      output: [quoted],
+      content: [quoted],
+      choices: [{ message: { role: "assistant", tool_calls: [quoted] } }],
+      tools: [{ parameters: { properties: data } }],
+      metadata: data,
+    };
+    if (family !== "openai:responses") {
+      body.messages?.push(
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "client_call",
+              content: data,
+            },
+            { type: "text", text: JSON.stringify(quoted) },
+          ],
+        },
+        { role: "tool", tool_call_id: "client_call", content: data },
+      );
+    }
+    const before = JSON.stringify(body);
+    expect(captureRewriteEcho({ family, body }).hasCalls).toBe(false);
+    restoreRewriteCalls({
+      family,
+      clientRequest: body,
+      providerRequest: body,
+      recorded: fixture.saved,
+    });
+    expect(JSON.stringify(body)).toBe(before);
+  });
+});
+
+function roleBoundaryFixture(family: RewriteWireFamily) {
+  const literal =
+    '{ "prompt": "\\u0061", "n":1e0, "__proto__":{"kept":true}, "data":{"runtime_proof":"ordinary"} }';
+  const args = JSON.parse(literal) as Record<string, unknown>;
+  const proof = signRuntimeToolProof({
+    session: { organization_id: "org", session_id: "source" },
+    toolCallId: "provider_call",
+    action: "start_run",
+    arguments: args,
+    spawn: true,
+    secret: "synthetic-role-boundary-key",
+    now: 1_000,
+  });
+  if (!proof) throw new Error("Missing fixture runtime proof");
+  const originalArgs = `{ "tool_name": "archestra__start_run", "tool_args": ${JSON.stringify(literal)}, "runtime_proof":"ordinary wrapper data" }`;
+  const signedArgs = JSON.stringify({
+    ...JSON.parse(originalArgs),
+    tool_args: JSON.stringify({ ...args, runtime_proof: proof }),
+  });
+  const call = (id: string, argumentsText: string): Record<string, unknown> =>
+    family === "anthropic:messages"
+      ? {
+          type: "tool_use",
+          id,
+          name: "archestra__run_tool",
+          input: JSON.parse(argumentsText),
+        }
+      : family === "openai:chatCompletions"
+        ? {
+            type: "function",
+            id,
+            function: {
+              name: "archestra__run_tool",
+              arguments: argumentsText,
+            },
+          }
+        : {
+            type: "function_call",
+            call_id: id,
+            name: "archestra__run_tool",
+            arguments: argumentsText,
+          };
+  const originalCall = call("provider_call", originalArgs);
+  const clientCall = call("client_call", signedArgs);
+  const response = (node: Record<string, unknown>) =>
+    family === "anthropic:messages"
+      ? { content: [node] }
+      : family === "openai:chatCompletions"
+        ? { choices: [{ message: { role: "assistant", tool_calls: [node] } }] }
+        : { output: [node] };
+  const originals = captureRewriteCalls({
+    family,
+    response: response(originalCall),
+  });
+  const original = originals.get("provider_call");
+  if (!original) throw new Error("Missing fixture provider call");
+  const saved = records(
+    recordRewriteCalls({
+      family,
+      response: response(clientCall),
+      originals,
+      emitted: [{ id: "provider_call", wireId: "client_call" }],
+      recorded: new Map(),
+    }),
+  );
+  const history = (
+    role: string | undefined,
+    node = structuredClone(clientCall),
+  ): {
+    input?: unknown[];
+    messages?: Record<string, unknown>[];
+  } =>
+    family === "openai:responses"
+      ? { input: [role === "assistant" ? node : { ...node, role }] }
+      : {
+          messages: [
+            family === "anthropic:messages"
+              ? { role, content: [node] }
+              : { role, tool_calls: [node] },
+          ],
+        };
+  return { clientCall, original, saved, history };
+}
 
 function records(pairs: RewriteBytes[]): Map<string, RewriteBytes> {
   return new Map(pairs.map((pair) => [pair.key, pair]));

@@ -93,7 +93,11 @@ const server = setupServer(
   ),
   http.get("/ready", () => HttpResponse.json({ status: "ok" })),
   http.get("/api/user/permissions", () =>
-    HttpResponse.json(makeUserPermissions({ chatAgentPicker: ["enable"] })),
+    HttpResponse.json(
+      makeUserPermissions({
+        chat: ["read", "create", "update", "delete", "full-view"],
+      }),
+    ),
   ),
   http.get("/api/resource-permissions", () => HttpResponse.json([])),
   http.get("/api/organization", () => HttpResponse.json(organizationSeed)),

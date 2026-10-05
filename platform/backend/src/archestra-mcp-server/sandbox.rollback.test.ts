@@ -135,7 +135,7 @@ describe("sandbox tools (runtime enabled)", () => {
       const user = await makeUser();
       await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
       userId = user.id;
-      // Sandbox tools are gated by per-agent assignment (plus sandbox:execute),
+      // Sandbox tools are gated by per-agent assignment (plus agent:read),
       // so assign the full Archestra set (seeded with the runtime enabled).
       await seedAndAssignArchestraTools(agent.id);
       context = {

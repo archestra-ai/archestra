@@ -55,6 +55,15 @@ const llmProviderApiKeyModelsTable = pgTable(
      * can be COALESCEd away instead of silently un-flagging a 4B model.
      */
     recommendedForAgents: boolean("recommended_for_agents"),
+    /**
+     * When this key's own sync last confirmed the link; drives the key's lazy
+     * re-sync. `models.last_synced_at` cannot: it is shared by every key that
+     * serves the model, so any key's sync makes it look fresh. A ChatGPT
+     * subscription key whose models a metered key also serves would then never
+     * re-sync, and a model dropped from the plan would stay selectable.
+     * Null on links that predate this column, which counts as stale.
+     */
+    syncedAt: timestamp("synced_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

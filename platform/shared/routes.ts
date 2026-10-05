@@ -532,6 +532,8 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
+  GetAgentRunOpenappaReview: "getAgentRunOpenappaReview",
+  DecideAgentRunOpenappaReview: "decideAgentRunOpenappaReview",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
@@ -847,6 +849,8 @@ export const RouteId = {
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
+  // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
+  AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",
   GetOpenAppaYells: "getOpenAppaYells",
   GetOpenAppaYellsSummary: "getOpenAppaYellsSummary",
   DownloadOpenAppaYell: "downloadOpenAppaYell",

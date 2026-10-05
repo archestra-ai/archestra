@@ -39,7 +39,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
   useApplyChatOpsBindingPlan,
@@ -136,9 +136,6 @@ export function AgentChatAppsEditor({
     (params?: { agentId: string }) => Promise<boolean>
   >(() => Promise.resolve(true));
   const { data: session } = useSession();
-  const { data: canCreateDm = false } = useHasPermissions({
-    agentTrigger: ["create"],
-  });
   const {
     data,
     isPending,
@@ -274,7 +271,6 @@ export function AgentChatAppsEditor({
     bindings,
     configuredDmProviders,
     currentUserId: session?.user?.id,
-    canCreateDm,
   });
   // "new" while the record has no id, so the wizard's own selection still has
   // a stable key to be compared against.
@@ -701,7 +697,7 @@ export function AgentChatAppsEditor({
                   )}
                   <PermissionButton
                     type="button"
-                    permissions={{ agentTrigger: ["update"] }}
+                    permissions={{ organizationSettings: ["update"] }}
                     onClick={() => void requestSave()}
                     disabled={
                       readOnly || !isDirty || isSaving || !agentNamesReady
@@ -1373,7 +1369,6 @@ function buildAssignmentOptions({
   bindings,
   configuredDmProviders,
   currentUserId,
-  canCreateDm,
   visibilityLocation,
 }: {
   subject: ChannelSubject;
@@ -1381,7 +1376,6 @@ function buildAssignmentOptions({
   bindings: Binding[];
   configuredDmProviders: ChatProvider[];
   currentUserId: string | undefined;
-  canCreateDm: boolean;
   /** Where this agent's permissions are edited, named as its host names it. */
   visibilityLocation: string;
 }): AssignmentOption[] {
@@ -1393,9 +1387,8 @@ function buildAssignmentOptions({
     workspaceName: null,
     assignedAgentId: null,
     assignedAgentName: null,
-    disabledReason: !canCreateDm
-      ? "You do not have permission to create a direct message assignment."
-      : subject.scope === "personal" && subject.authorId !== currentUserId
+    disabledReason:
+      subject.scope === "personal" && subject.authorId !== currentUserId
         ? "Only this personal agent's owner can assign a direct message."
         : null,
     virtualDm: true,

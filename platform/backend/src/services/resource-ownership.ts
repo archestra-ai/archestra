@@ -177,7 +177,7 @@ const LEGACY_RESOURCE_FOR_KIND: Record<
   catalog: "mcpRegistry",
   plugin: "plugin",
   project: "project",
-  remoteAgent: "agentSettings",
+  remoteAgent: "organizationSettings",
 };
 
 /**

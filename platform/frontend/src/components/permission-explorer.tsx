@@ -5,13 +5,18 @@ import {
   type Action,
   type archestraApiTypes,
   isPermissionActionGranted,
+  ManagedResourceSchema,
   type Permissions,
   type Resource,
   resourceCategories,
   resourceDescriptions,
   resourceLabels,
 } from "@archestra/shared";
-import { allAvailableActions } from "@archestra/shared/access-control";
+import {
+  allAvailableActions,
+  permissionDescriptions,
+  roleActionResourceFor,
+} from "@archestra/shared/access-control";
 import { Check, Info } from "lucide-react";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -187,7 +192,9 @@ export function PermissionExplorer({
                               }
                             />
                           )}
-                          <span className="min-w-0 text-[13px] font-medium">
+                          {/* The label takes the slack so every row's info
+                              icon lands in the same column. */}
+                          <span className="min-w-0 flex-1 text-[13px] font-medium">
                             {label}
                           </span>
                           <Tooltip>
@@ -274,6 +281,15 @@ export function PermissionExplorer({
                     );
                   })}
                 </div>
+                {group.resources.some((resource) =>
+                  PER_ITEM_RESOURCES.has(resource),
+                ) && (
+                  <p className="pt-3 text-xs text-muted-foreground">
+                    Who can see, edit, delete or share these items isn't set
+                    here. Use Permissions on a single item, or Permissions in a
+                    list page's ⋯ menu for all of them.
+                  </p>
+                )}
               </section>
             ))}
           </div>
@@ -364,7 +380,10 @@ function PermissionAction({
         )}
       </TooltipTrigger>
       <TooltipContent className="max-w-xs space-y-1">
-        <p className="font-mono text-[11px]">
+        {permissionDescriptions[`${resource}:${action}`] && (
+          <p>{permissionDescriptions[`${resource}:${action}`]}</p>
+        )}
+        <p className="font-mono text-[11px] opacity-70">
           {resource}:{action}
         </p>
         {editable && disabled ? <p>{UNGRANTABLE_PERMISSION_TOOLTIP}</p> : null}
@@ -387,6 +406,15 @@ function PermissionAction({
 }
 
 const standardActions: Action[] = ["read", "create", "update", "delete"];
+// Role resources whose individual items carry their own grants. Environments
+// and scheduled tasks are governed organization-wide instead.
+const PER_ITEM_RESOURCES = new Set<Resource>(
+  ManagedResourceSchema.options
+    .filter(
+      (resource) => resource !== "environment" && resource !== "scheduledTask",
+    )
+    .map(roleActionResourceFor),
+);
 const UNGRANTABLE_PERMISSION_TOOLTIP =
   "You can only grant permissions that you currently have yourself.";
 const actionLabels: Record<Action, string> = {
@@ -395,10 +423,8 @@ const actionLabels: Record<Action, string> = {
   update: "Update",
   delete: "Delete",
   cancel: "Cancel",
-  enable: "Enable",
   query: "Query",
-  execute: "Execute",
-  manage: "Manage",
   impersonate: "Impersonate",
+  "full-view": "Full view",
   admin: "Admin",
 };

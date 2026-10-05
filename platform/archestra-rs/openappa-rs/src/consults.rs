@@ -195,6 +195,7 @@ fn backend_name(backend: ConsultBackend) -> &'static str {
         ConsultBackend::Jev => "jev",
         ConsultBackend::ClaudeCode => "claude_code",
         ConsultBackend::Hitl => "hitl",
+        ConsultBackend::Archestra => "archestra",
     }
 }
 
@@ -288,6 +289,7 @@ mod tests {
             ConsultBackend::Llm,
             ConsultBackend::ClaudeCode,
             ConsultBackend::Hitl,
+            ConsultBackend::Archestra,
         ] {
             assert_eq!(
                 serde_json::to_value(backend).unwrap(),

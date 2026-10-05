@@ -25,6 +25,7 @@ export const APPA_AUXILIARY_ANALYSIS: unique symbol = Symbol(
   "archestra.appa.auxiliary-analysis",
 );
 
+/** Exact admitted text, including a runtime-return replacement or refusal. */
 export const APPA_REPLAY_APPROVED_TEXT: unique symbol = Symbol(
   "archestra.appa.replay-approved-text",
 );
@@ -61,6 +62,14 @@ export type AppaTrustedContext = {
    * Child lineage checks compare against these claims.
    */
   claims?: { sessionId?: string; parentId?: string };
+  /**
+   * Persisted workspace session (`caller|workload`), including its stored
+   * parent. Not a client header or the derived native-child replay owner.
+   * Only the workspace's own turn may cross through runtime ChildReturn.
+   */
+  runtimeSessionId?: string;
+  /** Current task from the authenticated runtime credential, not a request header. */
+  runtimeTaskId?: string;
   /** Present only for the proxy's loopback Chat call path. */
   chatSource?: AppaChatSource;
   /**

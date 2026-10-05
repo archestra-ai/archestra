@@ -282,6 +282,9 @@ printf '%s\\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
           ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: "agent-run-codex-first",
           ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
           ARCHESTRA_AGENT_RUNTIME_OPENAPPA: openappa ? "1" : "",
+          ARCHESTRA_AGENT_RUNTIME_BINDING: openappa
+            ? "synthetic-codex-binding"
+            : "",
           ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
           ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
           OPENAI_API_KEY: "test-key",
@@ -307,6 +310,9 @@ printf '%s\\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
           "X-Archestra-Run-Id": "follow-up-task",
           "X-Archestra-Session-Id": "agent-run-codex-first",
           "X-Appa-Session-ID": "agent-run-codex-first",
+          ...(openappa
+            ? { "X-Archestra-Runtime-Binding": "synthetic-codex-binding" }
+            : {}),
         });
 
       if (!openappa) {

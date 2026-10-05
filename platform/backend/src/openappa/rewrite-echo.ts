@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { rewriteOrigin } from "./rewrite-projection";
+import { assertRuntimeToolProofReplay } from "./runtime-tool-claims";
 import { parseTrajectoryStamp } from "./trajectory-stamp";
 
 export type RewriteWireFamily =
@@ -236,7 +237,11 @@ export function captureRewriteCalls(params: {
   response: unknown;
 }): ReadonlyMap<string, Buffer> {
   const calls = new Map<string, Buffer>();
-  for (const site of callSites({ ...params, body: params.response })) {
+  for (const site of callSites({
+    ...params,
+    body: params.response,
+    fromResponse: true,
+  })) {
     if (calls.has(site.id))
       fail("duplicate-identity", "Duplicate replay call identity");
     calls.set(site.id, encode(site.value));
@@ -266,7 +271,11 @@ export function recordRewriteCalls(params: {
     params.emitted.map((call) => [call.wireId ?? call.id, call.id]),
   );
   const pending: RewriteBytes[] = [];
-  for (const site of callSites({ ...params, body: params.response })) {
+  for (const site of callSites({
+    ...params,
+    body: params.response,
+    fromResponse: true,
+  })) {
     const originalId = sources.get(site.id) ?? site.id;
     const original = params.originals.get(originalId);
     if (!original)
@@ -383,6 +392,11 @@ export function restoreRewriteCalls(params: {
     const preRestoreId = matches.id;
     const cacheControl = target.cache_control;
     replaceRecord(target, original);
+    assertRuntimeToolProofReplay({
+      role: "assistant",
+      original: pair.original,
+      restored: encode(target),
+    });
     if (cacheControl !== undefined) target.cache_control = cacheControl;
     for (const id of possibleIds) references.set(id, originalId);
     references.set(preRestoreId, originalId);
@@ -430,28 +444,40 @@ type CallSite = { id: string; value: JsonRecord; parent?: JsonRecord };
 function callSites(params: {
   family: RewriteWireFamily;
   body: unknown;
+  fromResponse?: boolean;
 }): CallSite[] {
   const body = record(params.body);
   if (!body) return [];
   const nodes: Array<{ node: unknown; parent?: JsonRecord }> = [];
   if (params.family === "openai:responses") {
-    for (const field of ["input", "output"]) {
-      const items = body[field];
-      if (!Array.isArray(items)) continue;
+    const items = body[params.fromResponse ? "output" : "input"];
+    if (Array.isArray(items)) {
       for (const item of items) {
-        const type = record(item)?.type;
-        if (type === "function_call" || type === "custom_tool_call")
+        const value = record(item);
+        if (value?.role !== undefined && value.role !== "assistant") continue;
+        if (
+          value?.type === "function_call" ||
+          value?.type === "custom_tool_call"
+        )
           nodes.push({ node: item, parent: body });
       }
     }
   } else {
-    const messages: unknown[] = Array.isArray(body.messages)
-      ? [...body.messages]
-      : [];
+    const messages: unknown[] =
+      !params.fromResponse && Array.isArray(body.messages)
+        ? [...body.messages]
+        : [];
     if (params.family === "anthropic:messages") {
-      if (Array.isArray(body.content)) messages.push(body);
+      if (params.fromResponse && Array.isArray(body.content))
+        messages.push(body);
       for (const message of messages) {
         const parent = record(message);
+        // Stream response snapshots omit role; request messages never may.
+        if (
+          parent?.role !== "assistant" &&
+          !(params.fromResponse && parent === body && parent.role === undefined)
+        )
+          continue;
         const content = parent?.content;
         if (!Array.isArray(content)) continue;
         for (const block of content) {
@@ -460,10 +486,11 @@ function callSites(params: {
         }
       }
     } else {
-      if (Array.isArray(body.choices))
+      if (params.fromResponse && Array.isArray(body.choices))
         messages.push(...body.choices.map((choice) => record(choice)?.message));
       for (const message of messages) {
         const parent = record(message);
+        if (parent?.role !== "assistant") continue;
         const calls = parent?.tool_calls;
         if (!Array.isArray(calls)) continue;
         for (const call of calls) nodes.push({ node: call, parent });

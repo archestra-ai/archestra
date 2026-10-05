@@ -102,7 +102,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const canManageExternalAgents = await userHasPermission(
         user.id,
         organizationId,
-        "agentSettings",
+        "organizationSettings",
         "update",
       );
       const filters = {

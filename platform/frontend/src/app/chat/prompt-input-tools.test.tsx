@@ -136,12 +136,11 @@ describe("chat composer typing performance", () => {
       data: undefined,
       isLoading: false,
     } as unknown as ReturnType<typeof useAppearanceSettings>);
-    // Provider settings visible (so the toolbar renders both selectors),
-    // everything else off (so the agent picker stays out of the tree).
+    // The full chat view, so the toolbar renders both provider selectors.
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
-          data: "chatProviderSettings" in permissions,
+          data: permissions.chat?.includes("full-view") === true,
           isPending: false,
           isLoading: false,
         }) as ReturnType<typeof useHasPermissions>,

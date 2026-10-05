@@ -488,7 +488,7 @@ test.describe("Agents", () => {
       url: "/api/user/permissions",
       body: makeUserPermissions({
         agent: ["read", "update", "delete"],
-        agentSettings: [],
+        organizationSettings: [],
       }),
     });
     await mswControl.use({

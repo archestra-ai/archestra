@@ -22,6 +22,18 @@ function createCapturingLogger() {
 }
 
 describe("log redaction", () => {
+  test("censors runtime bindings in request headers and launch secrets", () => {
+    const { logger, records } = createCapturingLogger();
+    logger.info({
+      request: { headers: { "x-archestra-runtime-binding": "runtime-proof" } },
+      spec: { secretEnv: { ARCHESTRA_AGENT_RUNTIME_BINDING: "runtime-proof" } },
+      bindingToken: "runtime-proof",
+      workspaceId: "workspace",
+    });
+    expect(JSON.stringify(records)).not.toContain("runtime-proof");
+    expect(records[0].workspaceId).toBe("workspace");
+  });
+
   test("censors credential keys at the top level", () => {
     const { logger, records } = createCapturingLogger();
 

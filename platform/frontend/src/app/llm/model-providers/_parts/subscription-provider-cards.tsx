@@ -161,6 +161,7 @@ function SubscriptionProviderCard({
             ) : (
               <PermissionButton
                 permissions={{ llmProviderApiKey: ["update"] }}
+                permissionScope={credential.id}
                 variant="outline"
                 size="sm"
                 onClick={() => onManage(credential)}

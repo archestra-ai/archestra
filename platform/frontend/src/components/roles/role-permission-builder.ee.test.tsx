@@ -11,7 +11,6 @@ describe("RolePermissionBuilder", () => {
       onChange: vi.fn(),
       userPermissions: {
         knowledgeSource: ["read", "create", "update", "delete", "query"],
-        knowledgeSettings: ["read", "update"],
       } as Permissions,
     };
     const { rerender } = render(
@@ -33,7 +32,7 @@ describe("RolePermissionBuilder", () => {
     rerender(
       <RolePermissionBuilder
         {...props}
-        permission={{ knowledgeSettings: ["read"] }}
+        permission={{ knowledgeSource: ["read"] }}
       />,
     );
     expect(
@@ -43,9 +42,9 @@ describe("RolePermissionBuilder", () => {
     ).not.toBeChecked();
     expect(
       screen.getByRole("checkbox", {
-        name: "Knowledge Settings permissions",
+        name: "Knowledge Sources Read",
       }),
-    ).toHaveAttribute("data-state", "indeterminate");
+    ).toBeChecked();
   });
 
   it("disables ungrantable actions and explains why", async () => {
@@ -57,7 +56,7 @@ describe("RolePermissionBuilder", () => {
         userPermissions={{ knowledgeSource: ["read"] }}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Knowledge" }));
+    await user.click(screen.getByRole("button", { name: "Other" }));
     const checkbox = screen.getByRole("checkbox", {
       name: "Knowledge Sources Create",
     });
@@ -86,7 +85,7 @@ describe("RolePermissionBuilder", () => {
     );
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(screen.getByRole("checkbox", { name: "Agents Read" }));
-    await user.click(screen.getByRole("button", { name: "Knowledge" }));
+    await user.click(screen.getByRole("button", { name: "Other" }));
     expect(
       screen.getByRole("checkbox", { name: "Knowledge Sources Read" }),
     ).toBeChecked();
@@ -113,7 +112,7 @@ describe("RolePermissionBuilder", () => {
       screen.getByRole("checkbox", { name: "Agents Delete" }),
     ).toBeChecked();
     expect(
-      screen.getByRole("checkbox", { name: "Agents Update" }),
+      screen.getByRole("checkbox", { name: "Agents Create" }),
     ).toBeDisabled();
     expect(
       screen.getByRole("checkbox", { name: "Skills Read" }),

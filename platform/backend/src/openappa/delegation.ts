@@ -37,6 +37,11 @@ export type AppaDelegationMarker = {
   promptDigest: string;
   /** Original provider call whose spawn opened this child. */
   spawnCallId?: string;
+  /**
+   * Scoped workspace session the proxy verified when it released this spawn.
+   * Absent on markers minted outside a runtime.
+   */
+  runtimeSessionId?: string;
 };
 
 /** Creates and verifies markers only when the signing secret is set. */
@@ -56,9 +61,17 @@ export function mintDelegationMarker(params: {
   /** The text the line is appended to; empty for a line that stands alone. */
   prompt: string;
   spawnCallId?: string;
+  /** Scoped workspace session. Omit outside a runtime; never copy a client header. */
+  runtimeSessionId?: string;
 }): string | undefined {
   const key = delegationKey();
   if (!key) return undefined;
+  if (
+    params.runtimeSessionId !== undefined &&
+    (params.runtimeSessionId.length === 0 || !params.spawnCallId)
+  ) {
+    return undefined;
+  }
   const promptDigest = digestOf(params.prompt);
   const nonce = params.spawnCallId
     ? delegationNonce({
@@ -69,6 +82,7 @@ export function mintDelegationMarker(params: {
         spawnerNativeId: params.spawnerNativeId,
         promptDigest,
         spawnCallId: params.spawnCallId,
+        runtimeSessionId: params.runtimeSessionId,
       })
     : randomBytes(NONCE_BYTES).toString("hex");
   const tag = delegationTag({
@@ -80,10 +94,13 @@ export function mintDelegationMarker(params: {
     promptDigest,
     nonce,
     spawnCallId: params.spawnCallId,
+    runtimeSessionId: params.runtimeSessionId,
   });
-  const token = params.spawnCallId
-    ? `appa2-${Buffer.from(params.spawnCallId).toString("base64url")}.${nonce}${tag}`
-    : `appa-${nonce}${tag}`;
+  const token = params.runtimeSessionId
+    ? `appa3-${Buffer.from(params.spawnCallId ?? "").toString("base64url")}.${Buffer.from(params.runtimeSessionId).toString("base64url")}.${nonce}${tag}`
+    : params.spawnCallId
+      ? `appa2-${Buffer.from(params.spawnCallId).toString("base64url")}.${nonce}${tag}`
+      : `appa-${nonce}${tag}`;
   return `${MARKER_PREFIX}${token} — child of ${params.parentId}.`;
 }
 
@@ -103,7 +120,11 @@ export function verifyDelegatedPrompt(params: {
   if (!key) return undefined;
   const token = parseMarkerToken(params.marker.token);
   if (!token) return undefined;
-  if (params.marker.spawnCallId !== token.spawnCallId) return undefined;
+  if (
+    params.marker.spawnCallId !== token.spawnCallId ||
+    params.marker.runtimeSessionId !== token.runtimeSessionId
+  )
+    return undefined;
   const actual = Buffer.from(token.tag, "utf8");
   // A line pushed as an item of its own closes no text, but a client may
   // still join it to the text before it.
@@ -119,6 +140,7 @@ export function verifyDelegatedPrompt(params: {
         promptDigest,
         nonce: token.nonce,
         spawnCallId: token.spawnCallId,
+        runtimeSessionId: params.marker.runtimeSessionId,
       }),
       "utf8",
     );
@@ -274,7 +296,7 @@ const TEAMMATE_ENVELOPE_CLOSE = "\n</teammate-message>";
 const NONCE_BYTES = 8;
 const TAG_HEX_LENGTH = 24;
 const DELEGATION_KEY_LABEL = "archestra.appa.delegation.v1";
-const MARKER_TOKEN = String.raw`(?:appa-[0-9a-f]{40}|appa2-[A-Za-z0-9_-]+\.[0-9a-f]{40})`;
+const MARKER_TOKEN = String.raw`(?:appa-[0-9a-f]{40}|appa2-[A-Za-z0-9_-]+\.[0-9a-f]{40}|appa3-[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[0-9a-f]{40})`;
 // Clients can send lines with CRLF endings.
 // Both regular expressions permit a carriage return at the end of the line.
 const MARKER_LINE = new RegExp(
@@ -294,6 +316,7 @@ function delegationNonce(params: {
   spawnerNativeId: string;
   promptDigest: string;
   spawnCallId: string;
+  runtimeSessionId?: string;
 }): string {
   return createHmac("sha256", params.key)
     .update("archestra.appa.delegation.nonce.v1\0")
@@ -305,6 +328,7 @@ function delegationNonce(params: {
         params.spawnerNativeId,
         params.promptDigest,
         params.spawnCallId,
+        ...(params.runtimeSessionId ? [params.runtimeSessionId] : []),
       ]),
     )
     .digest()
@@ -329,17 +353,19 @@ function delegationTag(params: {
   promptDigest: string;
   nonce: string;
   spawnCallId?: string;
+  runtimeSessionId?: string;
 }): string {
   return createHmac("sha256", params.key)
     .update(
       JSON.stringify([
-        params.spawnCallId ? "v2" : "v1",
+        params.runtimeSessionId ? "v3" : params.spawnCallId ? "v2" : "v1",
         params.organizationId,
         params.callerId ?? "",
         params.parentId,
         params.spawnerNativeId,
         params.promptDigest,
         ...(params.spawnCallId ? [params.spawnCallId] : []),
+        ...(params.runtimeSessionId ? [params.runtimeSessionId] : []),
         params.nonce,
       ]),
     )
@@ -367,6 +393,9 @@ function trailingMarker(text: string): AppaDelegationMarker | undefined {
     parentId: match[2],
     promptDigest: digestOf(trimmed.slice(0, lineStart)),
     ...(token.spawnCallId ? { spawnCallId: token.spawnCallId } : {}),
+    ...(token.runtimeSessionId
+      ? { runtimeSessionId: token.runtimeSessionId }
+      : {}),
   };
 }
 
@@ -389,9 +418,31 @@ function closingBody(text: string): string {
     : body;
 }
 
-function parseMarkerToken(
-  token: string,
-): { nonce: string; tag: string; spawnCallId?: string } | undefined {
+function parseMarkerToken(token: string):
+  | {
+      nonce: string;
+      tag: string;
+      spawnCallId?: string;
+      runtimeSessionId?: string;
+    }
+  | undefined {
+  const version3 =
+    /^appa3-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([0-9a-f]{40})$/.exec(token);
+  if (version3) {
+    const spawnCallId = Buffer.from(version3[1], "base64url").toString("utf8");
+    const runtimeSessionId = Buffer.from(version3[2], "base64url").toString(
+      "utf8",
+    );
+    if (spawnCallId.length === 0 || runtimeSessionId.length === 0) {
+      return undefined;
+    }
+    return {
+      spawnCallId,
+      runtimeSessionId,
+      nonce: version3[3].slice(0, NONCE_BYTES * 2),
+      tag: version3[3].slice(NONCE_BYTES * 2),
+    };
+  }
   if (token.startsWith("appa-")) {
     const body = token.slice("appa-".length);
     if (!/^[0-9a-f]{40}$/.test(body)) return undefined;

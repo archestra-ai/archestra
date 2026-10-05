@@ -1,18 +1,24 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import {
+  AGENT_TOOL_PREFIX,
   buildElicitationMandateInstruction,
+  isAgentTool,
+  OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
+  slugify,
   TimeInMs,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+  TOOL_START_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import AgentModel from "@/models/agent";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel, {
   type AllowedSpawnAlias,
@@ -53,6 +59,10 @@ import {
 import { underscoreLabeledPlatformToolName } from "@/openappa/request";
 import type { AppaRewriteReplay } from "@/openappa/rewrite-replay";
 import {
+  RUNTIME_TOOL_PROOF_ARGUMENT,
+  signRuntimeToolProof,
+} from "@/openappa/runtime-tool-claims";
+import {
   type AppaChildReturnRecord,
   admitPeerMessage,
   approveSpawnReturn,
@@ -68,8 +78,10 @@ import {
   notePrompt,
   type OpenAppaSession,
   processProxyResults,
+  returnRuntimeValue,
   sendPeerMessage,
   sharedPolicy,
+  startRuntimeChild,
   withCapturedGuardrailsActivation,
 } from "@/openappa/service";
 import {
@@ -95,6 +107,7 @@ import type {
   LlmProxyModelResponseContext,
   LlmProxyPlugin,
   LlmProxyRequestContext,
+  LlmProxyRuntimeToolProof,
   LlmProxyToolCallAnnotation,
   LlmProxyToolCallsContext,
   LlmProxyToolCallsOutcome,
@@ -136,6 +149,10 @@ type AppaPluginBinding = {
   adapter: AppaClientAdapter | undefined;
   request: AppaTrustedContext["request"];
   requestBody: unknown;
+  runtimeSessionId?: string;
+  runtimeTaskId?: string;
+  returnContract?: string;
+  sessionInitialized?: boolean;
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
   /**
@@ -227,6 +244,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       adapter: trajectory.adapter,
       request: trustedContext.request,
       requestBody: context.requestBody,
+      runtimeSessionId: trustedContext.runtimeSessionId,
+      runtimeTaskId: trustedContext.runtimeTaskId,
       turnOpen: false,
       completedHandbackReturn: undefined,
       chat,
@@ -346,6 +365,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       results,
       updates: childResultUpdates,
     });
+    const runtimeSpawns = await releasedRuntimeSpawns({
+      binding,
+      session: this.governedSession(binding),
+      toolResults,
+    });
     const nonHandbackResults = results
       .filter(
         (result) =>
@@ -357,6 +381,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // An answer to an issued question is recognized as the very result the
       // client sent, so a result nothing rewrote goes on as that object.
       .map((result) => {
+        if (runtimeSpawns.has(withoutTrajectoryStamp(result.id))) {
+          const content = runtimeLaunchHandle(result.content);
+          childResultUpdates[result.id] = content;
+          return { ...result, content };
+        }
         const content = childResultUpdates[result.id];
         return content === undefined ? result : { ...result, content };
       });
@@ -366,6 +395,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       encryptedChat: context.resources.get(APPA_REPLAY_ENCRYPTION) as
         | EncryptedChatAuditDisposition
         | undefined,
+      ...(context.resources.has(APPA_REPLAY_ENVELOPE)
+        ? {
+            replay: context.resources.get(
+              APPA_REPLAY_ENVELOPE,
+            ) as AppaRewriteReplay,
+          }
+        : {}),
       canonicalize: (name: string, namespace?: string) =>
         this.canonicalize(binding, { name, namespace }),
       isUserQuestion: (answer) =>
@@ -375,6 +411,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           verifiedNativeQuestionResults,
         }) || isIssuedQuestionAnswer(binding, answer),
       classifySpawnResult: (answer) => {
+        if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
+          return answer.isError ? "failed" : "pending";
+        }
         if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
           return undefined;
         if (binding.request.restoredNoticeCallIds?.has(answer.id))
@@ -389,7 +428,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.request.historicalControlToolName,
       isControlResult: (answer) => isOwnControlResult(binding, answer),
       trustedChat: binding.chat,
+      deliverReturnContract: (text) => {
+        binding.returnContract = text;
+      },
     });
+    binding.sessionInitialized = true;
     const toolResultUpdates = {
       ...childResultUpdates,
       ...Object.fromEntries(
@@ -443,16 +486,23 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // carrier. Peer proofs never take this path: they keep the fail-closed
       // branch below.
       if (context.resources.has(APPA_AUXILIARY_ANALYSIS)) return;
+      if (binding.session.parent_id) {
+        throw new ApiError(
+          409,
+          "OpenAPPA cannot deliver a child return contract without a replay session",
+        );
+      }
       const before = JSON.stringify(context.request);
+      const request = structuredClone(context.request);
       enterCapturedGuardrailsActivation("active");
-      binding.adapter?.stripCarrierMetadata(context.request);
-      stripPeerProofs(context.request);
+      binding.adapter?.stripCarrierMetadata(request);
+      stripPeerProofs(request);
       await admitRelayArrivals({
         binding,
         session: this.governedSession(binding),
-        request: context.request,
+        request,
       });
-      if (JSON.stringify(context.request) !== before) {
+      if (JSON.stringify(request) !== before) {
         throw new ApiError(
           409,
           "OpenAPPA cannot record a provider-visible rewrite without a replay session",
@@ -460,13 +510,60 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
       return;
     }
+    const recorder = context.resources.get(APPA_REPLAY_ENVELOPE) as
+      | AppaRewriteReplay
+      | undefined;
     const transform = async () => {
       if (binding) enterCapturedGuardrailsActivation("active");
       binding?.adapter?.stripCarrierMetadata(context.request);
       stripPeerProofs(context.request);
+      // Runtime proofs are removed only by the retained whole-call inverse;
+      // deleting an argument here would reconstruct provider history.
       // A compaction summarizes the history, so an unchecked message would
       // survive into the summary: messages are admitted before either turn.
       if (binding) {
+        if (binding.session.parent_id) {
+          // A derived native child is not the authenticated runtime workspace.
+          if (
+            !binding.sessionInitialized &&
+            binding.runtimeSessionId === binding.session.session_id
+          ) {
+            const started = await startRuntimeChild({
+              session: this.governedSession(binding),
+              ...(binding.child?.lineage?.spawnCallId
+                ? {
+                    spawnCallId: withoutTrajectoryStamp(
+                      binding.child.lineage.spawnCallId,
+                    ),
+                  }
+                : {}),
+            });
+            binding.returnContract = started.contract ?? binding.returnContract;
+            binding.sessionInitialized = true;
+          }
+          if (binding.returnContract) {
+            if (!recorder) {
+              throw new ApiError(
+                409,
+                "OpenAPPA cannot record the child return contract without a replay envelope",
+              );
+            }
+            if (
+              !appaWireFamily(context.interactionType) ||
+              !isRecord(context.request)
+            ) {
+              throw new ApiError(
+                409,
+                "This provider cannot receive the child return contract",
+              );
+            }
+            anchorConstantGuidance({
+              request: context.request,
+              interactionType: context.interactionType,
+              guidance: binding.returnContract,
+            });
+          }
+        }
         await admitRelayArrivals({
           binding,
           session: this.governedSession(binding),
@@ -516,6 +613,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
         const askUser = binding.request.tools?.askUser;
         const nativeQuestion =
+          !binding.runtimeSessionId &&
           binding.adapter?.nativeQuestion &&
           declaresNativeQuestion(
             binding,
@@ -568,9 +666,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.child?.lineage,
       );
     };
-    const recorder = context.resources.get(APPA_REPLAY_ENVELOPE) as
-      | AppaRewriteReplay
-      | undefined;
     if (recorder) {
       await recorder.rewriteEnvelope({ request: context.request, transform });
     } else {
@@ -879,7 +974,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // A peer send must name a released dispatch of the sender. Admit the
     // message call first, then bind the peer record to that call id.
     const policy = sharedPolicy(session.organization_id);
+    const runtimeCalls = await resolveRuntimeCalls({
+      binding,
+      calls,
+      resolution: this.resolution(binding),
+    });
     const evaluateOptions = {
+      spawnCallIds: new Set(
+        [...runtimeCalls].filter(([, call]) => call.spawn).map(([id]) => id),
+      ),
       ...this.resolution(binding),
       isUserQuestion: (name: string, namespace?: string) => {
         const tools = binding.request.tools;
@@ -897,7 +1000,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       isSpawn: (name: string, namespace?: string) =>
         binding.adapter?.isSpawnTool(name, namespace) === true,
       lineage: binding.child?.lineage,
-      supportsDelegation: binding.adapter !== undefined && !binding.chat,
+      supportsDelegation:
+        [...runtimeCalls.values()].some((call) => call.spawn) ||
+        (binding.adapter !== undefined && !binding.chat),
       ...(binding.request.tools
         ? {
             control: binding.request.tools.control,
@@ -954,9 +1059,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         !relays.has(call.id) &&
         !peerInbox.has(call.id),
     );
+    // Native approval must see the arguments the proof signs, without changing
+    // the original string-wrapped provider call retained for exact replay.
+    const evaluatedRest = rest.map((call) => {
+      const runtime = runtimeCalls.get(call.id);
+      return runtime?.stringArgs && runtime.wrapper
+        ? {
+            ...call,
+            arguments: { ...runtime.wrapper, tool_args: runtime.args },
+          }
+        : call;
+    });
     const decisions = rest.length
       ? await withCapturedGuardrailsActivation("active", () =>
-          evaluateToolCalls(session, rest, evaluateOptions, policy),
+          evaluateToolCalls(session, evaluatedRest, evaluateOptions, policy),
         )
       : [];
     const decisionById = new Map(
@@ -984,6 +1100,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const notice = binding.request.tools?.notice;
     const blocked: { id: string; name: string; reason: string }[] = [];
     const annotated: LlmProxyToolCallAnnotation[] = [];
+    const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
     const mint = this.delegationMinter(
       binding,
       { ...context, toolCalls: calls },
@@ -1044,6 +1161,46 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         continue;
       }
       if (decision.kind === "allow") {
+        const runtime = runtimeCalls.get(call.id);
+        if (runtime) {
+          const proof = signRuntimeToolProof({
+            session,
+            toolCallId: withoutTrajectoryStamp(call.id),
+            action: runtime.action,
+            arguments: runtime.args,
+            spawn: runtime.spawn,
+            secret: config.openappa.offerSigningSecret,
+          });
+          if (!proof)
+            throw new ApiError(
+              503,
+              "OpenAPPA could not protect this runtime call",
+            );
+          runtimeProofs.push({
+            id: call.id,
+            name: call.name,
+            action: runtime.action,
+            session,
+            spawn: runtime.spawn,
+            wrapped: runtime.wrapper !== undefined,
+          });
+          const signed = {
+            ...runtime.args,
+            [RUNTIME_TOOL_PROOF_ARGUMENT]: proof,
+          };
+          released.push({
+            ...call,
+            arguments: runtime.wrapper
+              ? {
+                  ...runtime.wrapper,
+                  tool_args: runtime.stringArgs
+                    ? JSON.stringify(signed)
+                    : signed,
+                }
+              : signed,
+          });
+          continue;
+        }
         // The runtime ruled on the call as the model wrote it; the marker is
         // platform text added after, for the child the call will start.
         const delegated =
@@ -1149,7 +1306,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       annotated.length === 0 &&
       !stamp &&
       handbackIds.size === 0 &&
-      relays.size === 0
+      relays.size === 0 &&
+      runtimeCalls.size === 0
     )
       return;
     return {
@@ -1157,6 +1315,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       toolCalls: stamp ? released.map(stamp) : released,
       ...(blocked.length > 0 ? { blocked } : {}),
       ...(annotated.length > 0 ? { annotated } : {}),
+      ...(runtimeProofs.length > 0 ? { runtimeProofs } : {}),
     };
   }
 
@@ -1218,6 +1377,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     enterCapturedGuardrailsActivation("active");
     // Check correlation data and the signing key before ChildEnd.
+    if (binding.runtimeSessionId === binding.session.session_id) {
+      if (!binding.runtimeTaskId) {
+        throw new ApiError(
+          409,
+          "The runtime turn has no authenticated task identity",
+        );
+      }
+      const outcome = await returnRuntimeValue({
+        session: this.governedSession(binding),
+        operationId: `runtime-return:${binding.runtimeTaskId}:${context.requestId}`,
+        value: context.responseText,
+      });
+      const admitted = outcome.kind === "held" ? outcome.reason : outcome.value;
+      context.resources.set(APPA_REPLAY_APPROVED_TEXT, admitted);
+      if (outcome.kind === "held") {
+        return { decision: "replace", responseText: outcome.reason };
+      }
+      return outcome.value === context.responseText
+        ? { decision: "release" }
+        : { decision: "replace", responseText: outcome.value };
+    }
     // If the runtime admits a value, the value crosses the boundary.
     // Fail before dispatch if the marker cannot be created.
     const childNativeId = binding.child?.lineage?.childNativeId;
@@ -1367,6 +1547,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         spawnerNativeId,
         prompt,
         spawnCallId: callId,
+        ...(binding.runtimeSessionId
+          ? { runtimeSessionId: binding.runtimeSessionId }
+          : {}),
       });
   }
 
@@ -1380,6 +1563,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding: AppaPluginBinding,
     call: LlmProxyToolCallsContext["toolCalls"][number],
   ): LlmProxyToolCallsContext["toolCalls"][number] {
+    if (binding.runtimeSessionId) return call;
     const native = binding.adapter?.nativeQuestion;
     const askUser = binding.request.tools?.askUser;
     if (
@@ -1483,6 +1667,172 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       namespace: call.namespace,
     };
   }
+}
+
+type RuntimeCall = {
+  action: string;
+  args: Record<string, unknown>;
+  wrapper?: Record<string, unknown>;
+  stringArgs?: boolean;
+  spawn: boolean;
+};
+
+const runtimeToolActions = new Set<string>(OPENAPPA_RUNTIME_TOOL_SHORT_NAMES);
+
+async function resolveRuntimeCalls(params: {
+  binding: AppaPluginBinding;
+  calls: readonly ToolCall[];
+  resolution: ToolNameResolution;
+}): Promise<Map<string, RuntimeCall>> {
+  const result = new Map<string, RuntimeCall>();
+  for (const call of params.calls) {
+    const [target] = normalizeToolCallsForPolicy([call], params.resolution);
+    const canonical = params.resolution.canonicalize(
+      target.toolCallName,
+      target.isRunToolDispatchTarget ? undefined : call.namespace,
+    );
+    const action =
+      archestraMcpBranding.getToolShortName(canonical) ?? canonical;
+    if (!runtimeToolActions.has(action) && !isAgentTool(action)) continue;
+    const wrapper = target.isRunToolDispatchTarget
+      ? argumentRecordOf(call.arguments)
+      : undefined;
+    const wrappedArgs = wrapper?.tool_args;
+    const stringArgs = typeof wrappedArgs === "string";
+    const targetArgs = stringArgs ? wrappedArgs : target.toolCallArgs;
+    if (
+      stringArgs &&
+      (targetArgs.trim().length === 0 ||
+        Buffer.byteLength(targetArgs, "utf8") > config.api.bodyLimit)
+    ) {
+      throw new ApiError(
+        409,
+        "Runtime target arguments exceed the JSON boundary",
+      );
+    }
+    const args = argumentRecordOf(targetArgs);
+    if (!args) {
+      if (stringArgs)
+        throw new ApiError(
+          409,
+          "Runtime target arguments must be a JSON object",
+        );
+      continue;
+    }
+    result.set(call.id, {
+      action,
+      args,
+      spawn: false,
+      ...(wrapper ? { wrapper, stringArgs } : {}),
+    });
+  }
+  if (
+    [...result.values()].some(
+      (call) =>
+        call.action === TOOL_START_RUN_SHORT_NAME || isAgentTool(call.action),
+    )
+  ) {
+    const targets = await AgentModel.findRuntimeTargets(
+      params.binding.session.organization_id,
+    );
+    const ids = new Set(targets.map((target) => target.id));
+    const names = new Set(
+      targets.map((target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`),
+    );
+    for (const call of result.values()) {
+      call.spawn =
+        call.action === TOOL_START_RUN_SHORT_NAME
+          ? typeof call.args.agent_id === "string" &&
+            ids.has(call.args.agent_id)
+          : names.has(call.action);
+    }
+  }
+  return result;
+}
+
+async function releasedRuntimeSpawns(params: {
+  binding: AppaPluginBinding;
+  session: OpenAppaSession;
+  toolResults: LlmProxyToolResultsContext["toolResults"];
+}): Promise<Set<string>> {
+  const possible = params.toolResults.filter((answer) => {
+    const name = params.binding.identity.canonicalize(
+      answer.name,
+      answer.namespace,
+    );
+    const action = archestraMcpBranding.getToolShortName(name) ?? name;
+    return (
+      action === "run_tool" ||
+      runtimeToolActions.has(action) ||
+      isAgentTool(action)
+    );
+  });
+  const calls = await OpenAppaSpawnCorrelationModel.releasedCalls({
+    organizationId: params.session.organization_id,
+    callerId: params.session.caller_id,
+    sessionId: params.session.session_id,
+    toolCallIds: possible.map((answer) => withoutTrajectoryStamp(answer.id)),
+  });
+  return new Set(
+    [...calls]
+      .filter(([, call]) => {
+        const action =
+          archestraMcpBranding.getToolShortName(call.tool) ?? call.tool;
+        return (
+          call.spawn &&
+          (action === TOOL_START_RUN_SHORT_NAME || isAgentTool(action))
+        );
+      })
+      .map(([id]) => id),
+  );
+}
+
+function runtimeLaunchHandle(content: unknown): string {
+  let value: unknown = content;
+  try {
+    if (typeof content === "string") value = JSON.parse(content);
+  } catch {
+    return "The runtime launch returned no verifiable handle.";
+  }
+  if (!isRecord(value))
+    return "The runtime launch returned no verifiable handle.";
+  if (Array.isArray(value.content)) {
+    const text = value.content.find(
+      (part) =>
+        isRecord(part) && part.type === "text" && typeof part.text === "string",
+    );
+    if (isRecord(text)) {
+      try {
+        value = JSON.parse(text.text as string);
+      } catch {
+        return "The runtime launch returned no verifiable handle.";
+      }
+    }
+  }
+  if (!isRecord(value))
+    return "The runtime launch returned no verifiable handle.";
+  const handle: Record<string, string> = {};
+  for (const key of ["session_id", "task_id", "agent_id"]) {
+    if (typeof value[key] === "string" && /^[a-f0-9-]{36}$/i.test(value[key]))
+      handle[key] = value[key];
+  }
+  if (
+    typeof value.state === "string" &&
+    [
+      "submitted",
+      "working",
+      "input-required",
+      "completed",
+      "failed",
+      "canceled",
+    ].includes(value.state)
+  ) {
+    handle.state = value.state;
+  }
+  return JSON.stringify({
+    ...handle,
+    message: "Use get_run to retrieve admitted runtime output.",
+  });
 }
 
 async function approveChildReturnCarriers(params: {
@@ -2994,6 +3344,12 @@ function issueChildTrajectoryReceipt(
     ...(lineage.childNativeId ? { childNativeId: lineage.childNativeId } : {}),
     spawnerNativeId: lineage.nativeParentId,
     spawnCallId: lineage.spawnCallId,
+    ...(getTrustedContext(context.resources)?.runtimeSessionId
+      ? {
+          runtimeSessionId: getTrustedContext(context.resources)
+            ?.runtimeSessionId,
+        }
+      : {}),
   });
   if (!footer) return;
   context.resources.set(APPA_CHILD_TRAJECTORY_RECEIPT, {
@@ -3614,6 +3970,7 @@ async function canonicalizeHitlAskUserCall(params: {
   const native = params.binding.adapter?.nativeQuestion;
   if (
     !hitl &&
+    !params.binding.runtimeSessionId &&
     native?.fromAskUser &&
     native.isAvailable?.(params.binding.requestHeaders) !== false &&
     declaresNativeQuestion(params.binding, native.toolName)
@@ -3774,7 +4131,8 @@ const OPENCODE_DELEGATED_TASK_GUIDANCE = [
 const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "The organization's guardrails policy can block a tool call and offer remedy plans in its ruling.",
   "A remedy plan is the policy's own way to continue, and execute_remedy_plan applies the plan through the policy.",
-  "If the plan fits the user's request, continue the task and apply the plan with execute_remedy_plan.",
+  "A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next.",
+  "Apply a fitting plan with execute_remedy_plan.",
   "Use the offer_id and plan from the ruling.",
   "If the user requires consent before applying a plan, ask the declared ask_user tool with that offer ID in remedy_offer_ids first. The platform loads the exact review without applying the plan. Never use an unbound question as authorization.",
   "The policy decides when the user must approve a plan.",

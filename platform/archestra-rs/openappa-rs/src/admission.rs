@@ -391,9 +391,12 @@ mod tests {
                 "CREATE TABLE IF NOT EXISTS openappa_rewrite_groups (
                    organization_id text NOT NULL,
                    group_id text NOT NULL,
+                   epoch integer NOT NULL,
                    status text NOT NULL,
                    protocol_version integer NOT NULL,
                    idle_ttl_ms integer NOT NULL,
+                   max_entries integer NOT NULL,
+                   max_bytes integer NOT NULL,
                    expires_at timestamptz NOT NULL,
                    touched_at timestamptz NOT NULL,
                    expired_at timestamptz,
@@ -410,8 +413,9 @@ mod tests {
                    organization_id text NOT NULL,
                    actor text NOT NULL,
                    root text NOT NULL,
-                   session_id text NOT NULL,
-                   forked_from text,
+                    session_id text NOT NULL,
+                    start_decision jsonb NOT NULL,
+                    forked_from text,
                    parent_id text,
                    caller_id text,
                    PRIMARY KEY (organization_id, actor)
@@ -420,8 +424,9 @@ mod tests {
                    organization_id text NOT NULL,
                    session_id text NOT NULL,
                    operation_id text NOT NULL,
-                   root text NOT NULL,
-                   status text NOT NULL,
+                    root text NOT NULL,
+                    status text NOT NULL,
+                    input jsonb NOT NULL,
                    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
                    PRIMARY KEY (organization_id, session_id, operation_id)
                  );",
@@ -511,8 +516,8 @@ mod tests {
             client
                 .execute(
                     "INSERT INTO openappa_operations \
-                     (organization_id, session_id, operation_id, root, status) \
-                     VALUES ($1, 'session', 'op', $2, 'pending')",
+                      (organization_id, session_id, operation_id, root, status, input) \
+                      VALUES ($1, 'session', 'op', $2, 'pending', '{}'::jsonb)",
                     &[&org, &"root-admission-wins"],
                 )
                 .unwrap();
@@ -857,8 +862,8 @@ mod tests {
         connect(url)
             .execute(
                 "INSERT INTO openappa_rewrite_groups \
-                 (organization_id, group_id, status, protocol_version, idle_ttl_ms, expires_at, touched_at) \
-                 VALUES ($1, $2, $3, 1, 86400000, clock_timestamp() - INTERVAL '1 hour', clock_timestamp())",
+                 (organization_id, group_id, epoch, status, protocol_version, idle_ttl_ms, max_entries, max_bytes, expires_at, touched_at) \
+                 VALUES ($1, $2, 1, $3, 1, 86400000, 4096, 16777216, clock_timestamp() - INTERVAL '1 hour', clock_timestamp())",
                 &[&org, &group, &status],
             )
             .unwrap();
@@ -884,8 +889,8 @@ mod tests {
         connect(url)
             .execute(
                 "INSERT INTO openappa_sessions \
-                 (organization_id, actor, root, session_id, forked_from, caller_id) \
-                 VALUES ($1, $2, $3, $4, $5, $6)",
+                 (organization_id, actor, root, session_id, forked_from, caller_id, start_decision) \
+                 VALUES ($1, $2, $3, $4, $5, $6, '{}'::jsonb)",
                 &[&org, &actor, &root, &session_id, &forked_from, &caller_id],
             )
             .unwrap();

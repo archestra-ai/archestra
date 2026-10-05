@@ -88,9 +88,9 @@ beforeEach(() => {
     data: true,
     isPending: false,
   } as unknown as ReturnType<typeof useHasPermissions>);
-  vi.mocked(useScopedCapabilities).mockReturnValue({
-    data: [],
-  } as unknown as ReturnType<typeof useScopedCapabilities>);
+  mockServiceAccountGrants([
+    { resource: "serviceAccount", action: "update", scope: account.id },
+  ]);
   vi.mocked(useAllPermissions).mockReturnValue({
     data: {},
   } as unknown as ReturnType<typeof useAllPermissions>);
@@ -164,3 +164,33 @@ test("shows key guidance in the header and the request example after the table",
     table.compareDocumentPosition(example) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
+
+test("offers row edits only on accounts the user holds an update grant for", async () => {
+  mockServiceAccountGrants([
+    { resource: "serviceAccount", action: "update", scope: "another-account" },
+  ]);
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ServiceAccountsSettingsPage />
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText("Automation worker")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", {
+      name: "Edit service account Automation worker",
+    }),
+  ).not.toBeInTheDocument();
+});
+
+function mockServiceAccountGrants(
+  grants: { resource: string; action: string; scope: string }[],
+) {
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: grants,
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
+}

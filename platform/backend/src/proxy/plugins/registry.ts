@@ -4,6 +4,12 @@ import {
   isDelegationMarkerItem,
   isDelegationMarkerLine,
 } from "@/openappa/delegation";
+import {
+  RUNTIME_TOOL_PROOF_ARGUMENT,
+  verifyRuntimeToolProof,
+} from "@/openappa/runtime-tool-claims";
+import type { OpenAppaSession } from "@/openappa/service";
+import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { canonicalJson } from "@/openappa/wire";
 import type {
   CommonToolResult,
@@ -91,10 +97,21 @@ export type LlmProxyToolCallAnnotation = {
   appended: string | Record<string, unknown>;
 };
 
+/** A signed execution proof added after the host approved the original arguments. */
+export type LlmProxyRuntimeToolProof = {
+  id: string;
+  name: string;
+  action: string;
+  session: OpenAppaSession;
+  spawn: boolean;
+  wrapped: boolean;
+};
+
 /**
  * Outcome of plugin tool call evaluation.
  * `blocked` lists calls replaced with notice calls.
  * `annotated` lists approved calls with appended delegation markers.
+ * `runtimeProofs` lists approved calls with signed execution proofs.
  */
 export type LlmProxyToolCallsOutcome =
   | {
@@ -102,6 +119,7 @@ export type LlmProxyToolCallsOutcome =
       toolCalls: readonly LlmProxyToolCall[];
       blocked?: readonly { id: string; name: string; reason: string }[];
       annotated?: readonly LlmProxyToolCallAnnotation[];
+      runtimeProofs?: readonly LlmProxyRuntimeToolProof[];
     }
   | { decision: "refuse"; refusal: LlmProxyToolCallRefusal };
 
@@ -341,6 +359,7 @@ export class LlmProxyPluginRegistry {
       // - Untouched
       // - Reported as blocked (replaced with a platform notice call)
       // - Reported as annotated (with only an approved delegation marker appended)
+      // - Reported with a valid runtime proof and otherwise unchanged arguments
       for (const entry of result.blocked ?? []) {
         // Validate that reported blocked calls were part of the input batch.
         if (given.get(entry.id)?.name !== entry.name) {
@@ -365,6 +384,20 @@ export class LlmProxyPluginRegistry {
         }
         annotations.set(entry.id, entry);
       }
+      const runtimeProofs = new Map<string, LlmProxyRuntimeToolProof>();
+      for (const entry of result.runtimeProofs ?? []) {
+        if (
+          given.get(entry.id)?.name !== entry.name ||
+          blockedIds.has(entry.id) ||
+          annotations.has(entry.id) ||
+          runtimeProofs.has(entry.id)
+        ) {
+          throw new Error(
+            `Finalizer ${plugin.id} reported an invalid runtime proof: ${entry.id}`,
+          );
+        }
+        runtimeProofs.set(entry.id, entry);
+      }
       const returned = new Set<string>();
       for (const call of result.toolCalls) {
         const original = given.get(call.id);
@@ -379,6 +412,21 @@ export class LlmProxyPluginRegistry {
           original.namespace === call.namespace &&
           original.arguments === canonicalJson(call.arguments);
         if (untouched || blockedIds.has(call.id)) continue;
+        const runtimeProof = runtimeProofs.get(call.id);
+        if (
+          runtimeProof &&
+          original.name === call.name &&
+          original.namespace === call.namespace &&
+          addsOnlyRuntimeProof({
+            before: original.arguments,
+            after: canonicalJson(call.arguments),
+            attachment: runtimeProof,
+            organizationId: context.organizationId,
+          })
+        ) {
+          runtimeProofs.delete(call.id);
+          continue;
+        }
         const annotation = annotations.get(call.id);
         if (
           !annotation ||
@@ -401,6 +449,11 @@ export class LlmProxyPluginRegistry {
       if (!unapplied.done) {
         throw new Error(
           `Finalizer ${plugin.id} reported an annotation it did not make: ${unapplied.value}`,
+        );
+      }
+      if (runtimeProofs.size > 0) {
+        throw new Error(
+          `Finalizer ${plugin.id} reported a runtime proof it did not attach`,
         );
       }
       toolCalls = result.toolCalls;
@@ -748,4 +801,75 @@ async function loadConfiguredLlmProxyPlugins(): Promise<
     }
   }
   return plugins;
+}
+
+/** Only the signed proof may differ from the arguments the policies approved. */
+function addsOnlyRuntimeProof(params: {
+  before: string;
+  after: string;
+  attachment: LlmProxyRuntimeToolProof;
+  organizationId: string;
+}): boolean {
+  const before = argumentRecord(params.before);
+  const after = argumentRecord(params.after);
+  if (!before || !after) return false;
+  const { attachment } = params;
+  const originalArgs = attachment.wrapped
+    ? runtimeArgumentRecord(before.tool_args)
+    : before;
+  const signedArgs = attachment.wrapped
+    ? runtimeArgumentRecord(after.tool_args)
+    : after;
+  if (
+    !originalArgs ||
+    !signedArgs ||
+    Object.hasOwn(originalArgs, RUNTIME_TOOL_PROOF_ARGUMENT)
+  )
+    return false;
+  const { [RUNTIME_TOOL_PROOF_ARGUMENT]: proof, ...remaining } = signedArgs;
+  if (canonicalJson(originalArgs) !== canonicalJson(remaining)) return false;
+  if (attachment.wrapped) {
+    const { tool_args: beforeArgs, ...beforeWrapper } = before;
+    const { tool_args: afterArgs, ...afterWrapper } = after;
+    if (
+      typeof beforeArgs !== typeof afterArgs ||
+      canonicalJson(beforeWrapper) !== canonicalJson(afterWrapper)
+    )
+      return false;
+  }
+  if (attachment.session.organization_id !== params.organizationId)
+    return false;
+  const verified = verifyRuntimeToolProof({
+    proof,
+    organizationId: params.organizationId,
+    callerId: attachment.session.caller_id,
+    action: attachment.action,
+    arguments: originalArgs,
+    secret: config.openappa.offerSigningSecret,
+  });
+  return (
+    verified !== null &&
+    verified.toolCallId === withoutTrajectoryStamp(attachment.id) &&
+    verified.spawn === attachment.spawn &&
+    verified.session.session_id === attachment.session.session_id &&
+    verified.session.parent_id === attachment.session.parent_id
+  );
+}
+
+/** Decode one dispatch layer for comparison only; never rewrite wire arguments. */
+function runtimeArgumentRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (typeof value === "string") {
+    if (Buffer.byteLength(value, "utf8") > config.api.bodyLimit)
+      return undefined;
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }

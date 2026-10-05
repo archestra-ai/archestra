@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
-  BUILT_IN_AGENT_IDS,
   isBuiltInCatalogId,
   MCP_HUMAN_RULING_META_KEY,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -14,7 +13,6 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import AgentModel from "@/models/agent";
 import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
@@ -31,6 +29,7 @@ import {
   clearHitlReview,
   consumeHitlRuling,
   formatHitlReviewMessage,
+  getHitlAskUserArguments,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import {
@@ -52,6 +51,7 @@ import {
   verifyPeerProof,
 } from "@/openappa/peer-claims";
 import { AppaRewriteReplay } from "@/openappa/rewrite-replay";
+import { bindRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -65,6 +65,11 @@ import {
   recallYellSession,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
+import {
+  authenticatedRuntimeSpender,
+  parseWorkloadPrincipal,
+  workloadSpenderMayUseOffer,
+} from "@/services/agent-runtime/runtime-identity";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
   firstPolicyRefusal,
@@ -87,6 +92,7 @@ import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
+import { resolveCallerScope } from "./caller-scope";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getUnassignedDiscoverableTools } from "./dynamic-tools";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
@@ -344,17 +350,13 @@ const registry = defineArchestraTools([
       const { organizationId, userId } = context;
       if (!organizationId || !userId)
         throw new ApiError(401, "Organization and user context are required");
-      const agent = await AgentModel.findById(context.agent.id);
-      if (
-        !agent ||
-        agent.organizationId !== organizationId ||
-        (context.agentId !== undefined && context.agentId !== agent.id)
-      ) {
+      const caller = await resolveCallerScope(context);
+      if (!caller)
         throw new ApiError(
           403,
           "Valid agent context for this organization is required",
         );
-      }
+      const { agent, scope } = caller;
       if (
         !(await userHasPermission(
           userId,
@@ -400,9 +402,7 @@ const registry = defineArchestraTools([
         });
         // SPDX-SnippetEnd
       }
-      const organizationScope =
-        agent.agentType === "agent" &&
-        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
+      const organizationScope = scope === "organization";
       const allowedIds = organizationScope
         ? null
         : await inspectableToolIds({ ...context, agentId: agent.id });
@@ -423,7 +423,7 @@ const registry = defineArchestraTools([
         catalogId: catalog.id,
       });
       return result({
-        scope: organizationScope ? "organization" : "agent",
+        scope,
         mcpServer: {
           id: catalog.id,
           name: catalog.name,
@@ -612,7 +612,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_REMEDY_PLANS_SHORT_NAME,
     title: "Read a blocked call's ruling and remedy plans",
     description:
-      "Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. The platform puts this call in the place of the blocked call. It runs nothing and changes nothing. When the ruling offers a plan that fits the user's request, apply that plan with execute_remedy_plan. Use the offer_id and plan from the ruling. execute_remedy_plan asks the user for approval when the policy requires it. After the plan is authorized, retry the original call. If the ruling offers no plan, explain the ruling to the user.",
+      "Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. The platform puts this call in the place of the blocked call. It runs nothing and changes nothing. A plan fits unless the narrower session could no longer do what the user asked for. Apply a fitting plan with execute_remedy_plan. Use the offer_id and plan from the ruling. execute_remedy_plan asks the user for approval when the policy requires it. After the plan is authorized, retry the original call. If the ruling offers no plan, explain the ruling to the user.",
     schema: NoticeArguments,
     // The advertised schema leaves out the signed offers only the proxy writes.
     publicSchema: NoticePublicArguments,
@@ -692,14 +692,17 @@ const registry = defineArchestraTools([
         },
         config.openappa.offerSigningSecret,
       );
-      const callerId = context.userId ? `user:${context.userId}` : undefined;
+      const nativeSpender = authenticatedRuntimeSpender({
+        userId: context.userId,
+        callerId: context.openappaSession?.caller_id,
+      });
       if (
         !context.organizationId ||
-        !callerId ||
+        !nativeSpender ||
         !claims ||
         claims.offer_id !== submittedSemantic.offer_id ||
         claims.organization_id !== context.organizationId ||
-        !offerOwnerCanBeSpentBy(claims.caller_id, callerId)
+        !offerOwnerCanBeSpentBy(claims.caller_id, nativeSpender)
       ) {
         return unknownOfferResult();
       }
@@ -716,9 +719,10 @@ const registry = defineArchestraTools([
       const reservation = await AppaRewriteReplay.reserveControlOutcome({
         session: outcomeSession,
         toolCallId,
-        spenderId: callerId,
+        spenderId: nativeSpender,
         requestIdentity: remedyRequestIdentity({
           claims,
+          spenderId: nativeSpender,
           arguments: submittedSemantic,
           controlToolName: execution?.tool_name ?? null,
           namespace: execution?.namespace ?? null,
@@ -759,7 +763,7 @@ const registry = defineArchestraTools([
             ruling = cachedRuling;
           } else if (cachedRuling === "none") {
             ruling = undefined;
-          } else if (context.mrtr) {
+          } else if (context.mrtr || parseWorkloadPrincipal(nativeSpender)) {
             // External MCP clients reach their native question tool through ask_user.
             // Stage the exact review first so the model cannot alter
             // the question or bind an answer to a different offer.
@@ -776,6 +780,29 @@ const registry = defineArchestraTools([
                 remedyArguments: unstampedRemedyArguments(args),
               },
             });
+            const display = await getHitlAskUserArguments({
+              session: reviewSession,
+              offerIds: [remedy.offer_id],
+            });
+            if (!display) {
+              throw new ApiError(503, "The approval review cannot be shown.");
+            }
+            try {
+              await bindRuntimeHitlReview({
+                session: reviewSession,
+                review: {
+                  offerId: remedy.offer_id,
+                  text: display.question,
+                  ...(review.tool ? { tool: review.tool } : {}),
+                  ...(review.arguments ? { arguments: review.arguments } : {}),
+                },
+              });
+            } catch (error) {
+              logger.warn(
+                { error, offerId: remedy.offer_id },
+                "Could not index the runtime OpenAPPA review",
+              );
+            }
             const pending = nativeReviewRequiredResult(remedy.offer_id);
             await completeControlOutcome({
               reservation,
@@ -804,7 +831,7 @@ const registry = defineArchestraTools([
 
       const byOffer = await executeRemedyByOffer({
         organizationId: context.organizationId,
-        callerId,
+        callerId: nativeSpender,
         sessionId: claims.session_id,
         ...(claims.parent_id ? { parentId: claims.parent_id } : {}),
         ...(claims.caller_id ? { ownerCallerId: claims.caller_id } : {}),
@@ -893,6 +920,12 @@ function offerOwnerCanBeSpentBy(
   spender: string | undefined,
 ): boolean {
   if (!owner || !spender) return false;
+  if (parseWorkloadPrincipal(spender)) {
+    return workloadSpenderMayUseOffer({ spender, ownerCallerId: owner });
+  }
+  if (owner.startsWith("agent-workspace:")) {
+    return parseWorkloadPrincipal(owner) !== null && owner === spender;
+  }
   if (owner.startsWith("user:")) return owner === spender;
   if (owner === "app:" || owner === "virtual-key:") return false;
   // Match native authorization: credential and opaque owners are org-scoped.
@@ -1154,13 +1187,17 @@ function peerExecution(params: {
     params.proof,
     config.openappa.offerSigningSecret,
   );
+  const callerId = authenticatedRuntimeSpender({
+    userId: context.userId,
+    callerId: context.openappaSession?.caller_id,
+  });
   if (
     !proof ||
-    !context.userId ||
+    !callerId ||
     !peerProofAuthorizes({
       proof,
       organizationId: context.organizationId,
-      callerId: `user:${context.userId}`,
+      callerId,
       action: params.action,
       messageId: params.messageId,
     })

@@ -322,6 +322,7 @@ function OauthClientsTable() {
         return (
           <TableRowActions
             itemName={row.original.client.name}
+            permissionScope={row.original.client.id}
             actions={[
               {
                 icon: <Pencil className="h-4 w-4" />,

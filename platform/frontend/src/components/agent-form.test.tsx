@@ -1427,11 +1427,11 @@ describe("AgentForm delegation state", () => {
     expect(useAgentDelegationsMock).toHaveBeenCalledWith(undefined);
   });
 
-  it("hides messaging-channel configuration without trigger read permission", () => {
+  it("hides messaging-channel configuration without organization settings access", () => {
     vi.mocked(useHasPermissions).mockImplementation(((
       permissions: unknown,
     ) => ({
-      data: !(permissions && "agentTrigger" in (permissions as object)),
+      data: !(permissions && "organizationSettings" in (permissions as object)),
     })) as typeof useHasPermissions);
 
     render(<AgentForm agentType="agent" agent={baseAgent} />);

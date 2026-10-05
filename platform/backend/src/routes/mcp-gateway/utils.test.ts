@@ -4305,6 +4305,18 @@ describe("createAgentServer tools/list", () => {
 describe("extractPassthroughHeaders", async () => {
   const { extractPassthroughHeaders } = await import("./utils");
 
+  test("never forwards the runtime credential even when explicitly allowlisted", () => {
+    expect(
+      extractPassthroughHeaders(
+        ["X-Archestra-Runtime-Binding", "x-correlation-id"],
+        {
+          "x-archestra-runtime-binding": "private-binding",
+          "x-correlation-id": "trace",
+        },
+      ),
+    ).toEqual({ "x-correlation-id": "trace" });
+  });
+
   test("returns undefined when allowlist is null", () => {
     expect(extractPassthroughHeaders(null, { "x-foo": "bar" })).toBeUndefined();
   });

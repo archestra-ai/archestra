@@ -11,6 +11,9 @@ export const REDACTED_LOG_PATHS = [
   "rawToken",
   "deviceCode",
   "passthroughHeaders",
+  "secretEnv",
+  "bindingToken",
+  "ARCHESTRA_AGENT_RUNTIME_BINDING",
   "apiKey",
   "token",
   "accessToken",
@@ -32,6 +35,15 @@ export const REDACTED_LOG_PATHS = [
     '["x-archestra-encrypted-chat-key"]',
     '*["x-archestra-encrypted-chat-key"]',
     '*.headers["x-archestra-encrypted-chat-key"]',
+    '["x-archestra-internal-call"]',
+    '*["x-archestra-internal-call"]',
+    '*.headers["x-archestra-internal-call"]',
+    '["x-archestra-runtime-binding"]',
+    '*["x-archestra-runtime-binding"]',
+    '*.headers["x-archestra-runtime-binding"]',
+    '["X-Archestra-Runtime-Binding"]',
+    '*["X-Archestra-Runtime-Binding"]',
+    '*.headers["X-Archestra-Runtime-Binding"]',
   ]);
 
 /**

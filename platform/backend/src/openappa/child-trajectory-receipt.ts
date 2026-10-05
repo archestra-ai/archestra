@@ -17,6 +17,8 @@ export type AppaChildTrajectoryReceipt = {
   childNativeId?: string;
   spawnerNativeId: string;
   spawnCallId?: string;
+  /** Scoped workspace session verified when this child was bound. Absent on v2. */
+  runtimeSessionId?: string;
 };
 
 const MARK_TOP = "▄█▄▄▄█▄";
@@ -37,7 +39,7 @@ const CARRIER = new RegExp(
   "g",
 );
 
-type ReceiptClaims = readonly [
+type ReceiptClaimsV2 = readonly [
   2,
   string,
   string | null,
@@ -47,6 +49,18 @@ type ReceiptClaims = readonly [
   string,
   string | null,
 ];
+type ReceiptClaimsV3 = readonly [
+  3,
+  string,
+  string | null,
+  string,
+  string,
+  string | null,
+  string,
+  string | null,
+  string,
+];
+type ReceiptClaims = ReceiptClaimsV2 | ReceiptClaimsV3;
 
 export function mintChildTrajectoryReceipt(params: {
   organizationId: string;
@@ -56,6 +70,8 @@ export function mintChildTrajectoryReceipt(params: {
   childNativeId?: string;
   spawnerNativeId: string;
   spawnCallId?: string;
+  /** Scoped workspace session. Omit outside a runtime; never copy a client header. */
+  runtimeSessionId?: string;
   format?: "full" | "inline";
 }): string | undefined {
   const { childId, childNativeId } = params;
@@ -66,22 +82,36 @@ export function mintChildTrajectoryReceipt(params: {
     !nonEmptyString(params.spawnerNativeId) ||
     (childNativeId !== undefined && !nonEmptyString(childNativeId)) ||
     (params.callerId !== undefined && !nonEmptyString(params.callerId)) ||
-    (params.spawnCallId !== undefined && !nonEmptyString(params.spawnCallId))
+    (params.spawnCallId !== undefined && !nonEmptyString(params.spawnCallId)) ||
+    (params.runtimeSessionId !== undefined &&
+      !nonEmptyString(params.runtimeSessionId))
   ) {
     return undefined;
   }
   const key = receiptKey();
   if (!key) return undefined;
-  const claims: ReceiptClaims = [
-    2,
-    params.organizationId,
-    params.callerId ?? null,
-    params.parentId,
-    childId,
-    childNativeId ?? null,
-    params.spawnerNativeId,
-    params.spawnCallId ?? null,
-  ];
+  const claims: ReceiptClaims = params.runtimeSessionId
+    ? [
+        3,
+        params.organizationId,
+        params.callerId ?? null,
+        params.parentId,
+        childId,
+        childNativeId ?? null,
+        params.spawnerNativeId,
+        params.spawnCallId ?? null,
+        params.runtimeSessionId,
+      ]
+    : [
+        2,
+        params.organizationId,
+        params.callerId ?? null,
+        params.parentId,
+        childId,
+        childNativeId ?? null,
+        params.spawnerNativeId,
+        params.spawnCallId ?? null,
+      ];
   const canonicalClaims = JSON.stringify(claims);
   if (Buffer.byteLength(canonicalClaims, "utf8") > MAX_CLAIMS_BYTES) {
     return undefined;
@@ -208,6 +238,7 @@ function parseToken(token: string):
       spawnerNativeId,
       spawnCallId,
     ] = claims;
+    const runtimeSessionId = claims.length === 9 ? claims[8] : undefined;
     return {
       receipt: {
         token: canonicalToken,
@@ -218,6 +249,7 @@ function parseToken(token: string):
         ...(childNativeId === null ? {} : { childNativeId }),
         spawnerNativeId,
         ...(spawnCallId === null ? {} : { spawnCallId }),
+        ...(runtimeSessionId ? { runtimeSessionId } : {}),
       },
       payload,
       tag,
@@ -228,7 +260,12 @@ function parseToken(token: string):
 }
 
 function isReceiptClaims(value: unknown): value is ReceiptClaims {
-  if (!Array.isArray(value) || value.length !== 8 || value[0] !== 2) {
+  if (!Array.isArray(value)) return false;
+  const version = value[0];
+  if (
+    (version !== 2 || value.length !== 8) &&
+    (version !== 3 || value.length !== 9)
+  ) {
     return false;
   }
   const [
@@ -240,6 +277,7 @@ function isReceiptClaims(value: unknown): value is ReceiptClaims {
     childNativeId,
     spawnerNativeId,
     spawnCallId,
+    runtimeSessionId,
   ] = value;
   return (
     nonEmptyString(organizationId) &&
@@ -248,7 +286,8 @@ function isReceiptClaims(value: unknown): value is ReceiptClaims {
     nonEmptyString(childId) &&
     (childNativeId === null || nonEmptyString(childNativeId)) &&
     nonEmptyString(spawnerNativeId) &&
-    (spawnCallId === null || nonEmptyString(spawnCallId))
+    (spawnCallId === null || nonEmptyString(spawnCallId)) &&
+    (version === 2 || nonEmptyString(runtimeSessionId))
   );
 }
 
@@ -268,7 +307,8 @@ function sameReceipt(
     left.childId === right.childId &&
     left.childNativeId === right.childNativeId &&
     left.spawnerNativeId === right.spawnerNativeId &&
-    left.spawnCallId === right.spawnCallId
+    left.spawnCallId === right.spawnCallId &&
+    left.runtimeSessionId === right.runtimeSessionId
   );
 }
 

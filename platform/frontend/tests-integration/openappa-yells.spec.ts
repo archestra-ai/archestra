@@ -70,7 +70,7 @@ for (const width of [1280, 390]) {
               ...permissions,
               openappaDiagnostics: ["read", "update"],
               openappaPolicy: ["read", "update"],
-              openappaSettings: ["read", "update"],
+              organizationSettings: ["read", "update"],
             },
           },
           {
@@ -299,10 +299,8 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
       body: {
         ...permissions,
         chat: ["read"],
-        file: [],
-        sandbox: [],
         openappaPolicy: [],
-        openappaSettings: [],
+        organizationSettings: [],
         openappaDiagnostics: ["read"],
       },
     },
@@ -377,8 +375,6 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
   await expect(tooltip).toContainText("Missing permissions");
   await expect(tooltip).toContainText("Chats: create");
   await expect(tooltip).toContainText("OpenAPPA Policy: read");
-  await expect(tooltip).toContainText("Files: manage");
-  await expect(tooltip).toContainText("Code Sandbox: execute");
   await expect(tooltip).not.toContainText("Diagnostics");
   const table = await page.getByRole("table").boundingBox();
   const download = await page

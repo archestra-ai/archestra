@@ -131,9 +131,9 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/openappa/trust-audience", {
     trust: ["suspicious", "trusted"],
     audiences: [
-      { name: "public", kind: "builtin", ruleCount: 0, firstRule: null },
-      { name: "internal", kind: "builtin", ruleCount: 0, firstRule: null },
-      { name: "self", kind: "builtin", ruleCount: 0, firstRule: null },
+      { name: "public", kind: "builtin" },
+      { name: "internal", kind: "builtin" },
+      { name: "self", kind: "builtin" },
     ],
     sources: [],
   }),

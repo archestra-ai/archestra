@@ -99,7 +99,7 @@ const SUB_PAGES: Record<string, { title: string; description: string }> = {
   "/openappa/trust-audience": {
     title: "Trust & audience",
     description:
-      "See the trust and audience levels your policy uses, where the people in each audience are looked up, and which rules name them.",
+      "See the trust and audience levels your policy uses, and where the people in each audience are looked up.",
   },
   "/openappa/yells": {
     title: "Yells",

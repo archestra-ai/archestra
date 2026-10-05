@@ -133,7 +133,7 @@ const WARNING_CLASSES =
 
 const ROW = "grid items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm";
 const AUDIENCE_COLUMNS =
-  "grid-cols-[1rem_minmax(0,1fr)] sm:grid-cols-[1rem_8rem_minmax(0,1fr)_auto]";
+  "grid-cols-[1rem_minmax(0,1fr)] sm:grid-cols-[1rem_8rem_minmax(0,1fr)]";
 
 function Section({
   id,
@@ -165,9 +165,6 @@ function AudienceRow({ level }: { level: AudienceLevel }) {
       <span className="font-mono">{level.name}</span>
       <span className="col-start-2 sm:col-start-auto">
         <AudienceFrom level={level} />
-      </span>
-      <span className="col-start-2 sm:col-start-auto sm:text-right">
-        <RuleCount level={level} />
       </span>
     </>
   );
@@ -245,20 +242,6 @@ function AudienceFrom({ level }: { level: AudienceLevel }) {
         </span>
       );
   }
-}
-
-function RuleCount({ level }: { level: AudienceLevel }) {
-  const label = `${level.ruleCount} ${level.ruleCount === 1 ? "rule" : "rules"}`;
-  if (!level.firstRule)
-    return <span className="text-muted-foreground">{label}</span>;
-  return (
-    <Link
-      href={policyLineHref(level.firstRule)}
-      className="underline-offset-4 hover:underline"
-    >
-      {label}
-    </Link>
-  );
 }
 
 function SourceRow({

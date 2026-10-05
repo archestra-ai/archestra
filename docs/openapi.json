@@ -336573,32 +336573,6 @@
                               "name": {
                                 "type": "string"
                               },
-                              "ruleCount": {
-                                "type": "integer",
-                                "minimum": -9007199254740991,
-                                "maximum": 9007199254740991
-                              },
-                              "firstRule": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "entry": {
-                                    "nullable": true,
-                                    "type": "string"
-                                  },
-                                  "line": {
-                                    "nullable": true,
-                                    "type": "integer",
-                                    "minimum": -9007199254740991,
-                                    "maximum": 9007199254740991
-                                  }
-                                },
-                                "required": [
-                                  "entry",
-                                  "line"
-                                ],
-                                "additionalProperties": false
-                              },
                               "kind": {
                                 "type": "string",
                                 "enum": [
@@ -336608,8 +336582,6 @@
                             },
                             "required": [
                               "name",
-                              "ruleCount",
-                              "firstRule",
                               "kind"
                             ],
                             "additionalProperties": false
@@ -336619,32 +336591,6 @@
                             "properties": {
                               "name": {
                                 "type": "string"
-                              },
-                              "ruleCount": {
-                                "type": "integer",
-                                "minimum": -9007199254740991,
-                                "maximum": 9007199254740991
-                              },
-                              "firstRule": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "entry": {
-                                    "nullable": true,
-                                    "type": "string"
-                                  },
-                                  "line": {
-                                    "nullable": true,
-                                    "type": "integer",
-                                    "minimum": -9007199254740991,
-                                    "maximum": 9007199254740991
-                                  }
-                                },
-                                "required": [
-                                  "entry",
-                                  "line"
-                                ],
-                                "additionalProperties": false
                               },
                               "kind": {
                                 "type": "string",
@@ -336696,8 +336642,6 @@
                             },
                             "required": [
                               "name",
-                              "ruleCount",
-                              "firstRule",
                               "kind",
                               "mappingLine",
                               "from",
@@ -336711,32 +336655,6 @@
                               "name": {
                                 "type": "string"
                               },
-                              "ruleCount": {
-                                "type": "integer",
-                                "minimum": -9007199254740991,
-                                "maximum": 9007199254740991
-                              },
-                              "firstRule": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "entry": {
-                                    "nullable": true,
-                                    "type": "string"
-                                  },
-                                  "line": {
-                                    "nullable": true,
-                                    "type": "integer",
-                                    "minimum": -9007199254740991,
-                                    "maximum": 9007199254740991
-                                  }
-                                },
-                                "required": [
-                                  "entry",
-                                  "line"
-                                ],
-                                "additionalProperties": false
-                              },
                               "kind": {
                                 "type": "string",
                                 "enum": [
@@ -336746,8 +336664,6 @@
                             },
                             "required": [
                               "name",
-                              "ruleCount",
-                              "firstRule",
                               "kind"
                             ],
                             "additionalProperties": false

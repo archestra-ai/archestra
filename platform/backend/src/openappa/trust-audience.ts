@@ -15,7 +15,6 @@ import {
   parsePolicyToml,
   tableHeaderLine,
   toolEntries,
-  toolHeaderLines,
 } from "./policy-text";
 
 /**
@@ -53,7 +52,7 @@ class OpenAppaTrustAudienceService {
     );
     const policy = asRecord(parsePolicyToml(rootContent)?.policy);
     const declared = declaredSources(batteries);
-    const named = rulesByAudience([
+    const named = audiencesNamedByRules([
       { entry: null, text: rootContent },
       ...batteries,
     ]);
@@ -64,22 +63,17 @@ class OpenAppaTrustAudienceService {
       ...[...mappings.keys()].filter((name) => name.startsWith("@")),
     ].map((name) => {
       const mapping = mappings.get(name);
-      const rules = {
-        name,
-        ruleCount: named.get(name)?.count ?? 0,
-        firstRule: named.get(name)?.first ?? null,
-      };
       if (mapping)
         return {
-          ...rules,
+          name,
           kind: "mapped",
           mappingLine: mapping.line,
           within: mapping.within,
           from: mapping.from.map((spelled) => selectorRef(spelled, declared)),
         };
       return {
-        ...rules,
-        kind: name !== "public" && rules.ruleCount > 0 ? "unmapped" : "builtin",
+        name,
+        kind: name !== "public" && named.has(name) ? "unmapped" : "builtin",
       };
     });
 
@@ -271,41 +265,16 @@ function templateMatches(template: string, selector: string): boolean {
   );
 }
 
-/**
- * How many rules name each audience in their `delta` or `requires`, and the
- * first, root first and then batteries in include order. A rule naming an
- * audience twice counts once.
- */
-function rulesByAudience(
-  files: PolicyFile[],
-): Map<
-  string,
-  { count: number; first: { entry: string | null; line: number | null } }
-> {
-  const named = new Map<
-    string,
-    { count: number; first: { entry: string | null; line: number | null } }
-  >();
-  for (const file of files) {
-    const entries = toolEntries(file.text);
-    const headers = toolHeaderLines(file.text);
-    const lines = headers.length === entries.length ? headers : [];
-    entries.forEach((entry, index) => {
-      const audiences = new Set([
-        ...audienceNames(asRecord(entry.delta)?.audience),
-        ...audienceNames(asRecord(entry.requires)?.audience),
-      ]);
-      for (const name of audiences) {
-        const seen = named.get(name);
-        if (seen) seen.count += 1;
-        else
-          named.set(name, {
-            count: 1,
-            first: { entry: file.entry, line: lines[index] ?? null },
-          });
-      }
-    });
-  }
+/** Every audience some rule names in its `delta` or `requires`. */
+function audiencesNamedByRules(files: PolicyFile[]): Set<string> {
+  const named = new Set<string>();
+  for (const file of files)
+    for (const entry of toolEntries(file.text)) {
+      for (const name of audienceNames(asRecord(entry.delta)?.audience))
+        named.add(name);
+      for (const name of audienceNames(asRecord(entry.requires)?.audience))
+        named.add(name);
+    }
   return named;
 }
 

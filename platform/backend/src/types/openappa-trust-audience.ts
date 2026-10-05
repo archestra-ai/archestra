@@ -22,10 +22,6 @@ export type AudienceSelectorRef = z.infer<typeof AudienceSelectorRefSchema>;
 const AudienceLevelBase = z.object({
   /** As rules spell it: `public`, `internal`, `self`, or `@<group>`. */
   name: z.string(),
-  /** Rules that name this audience in `delta` or `requires`, each counted once. */
-  ruleCount: z.number().int(),
-  /** The first such rule, root first, then batteries in include order. */
-  firstRule: PolicyLineRefSchema.nullable(),
 });
 
 /**

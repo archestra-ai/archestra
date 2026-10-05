@@ -29,10 +29,8 @@ describe("GET /api/openappa/trust-audience", () => {
     expect(response.statusCode).toBe(200);
     return response.json();
   };
-  const audience = (
-    body: { audiences: { name: string; ruleCount: number }[] },
-    name: string,
-  ) => body.audiences.find((level) => level.name === name);
+  const audience = (body: { audiences: { name: string }[] }, name: string) =>
+    body.audiences.find((level) => level.name === name);
   // The view reads the text, whether or not the runtime composes it.
   const saveRoot = async (content: string) => {
     const latest = await guardrailsPolicyService.get(ctx.organizationId);
@@ -85,15 +83,8 @@ describe("GET /api/openappa/trust-audience", () => {
           line: await batteryLine(ARCHESTRA, '{ template = "members"'),
         },
       ],
-      // The battery's rules require it; the root's do not name it.
-      firstRule: { entry: ARCHESTRA },
     });
-    expect(audience(body, "internal")?.ruleCount).toBeGreaterThan(0);
-    expect(audience(body, "self")).toMatchObject({
-      kind: "builtin",
-      ruleCount: 0,
-      firstRule: null,
-    });
+    expect(audience(body, "self")).toEqual({ name: "self", kind: "builtin" });
     expect(body.sources).toEqual([
       {
         name: "archestra",
@@ -112,7 +103,7 @@ describe("GET /api/openappa/trust-audience", () => {
     ]);
   });
 
-  test("an audience rules name but nothing maps is unmapped, and rules count once per audience", async () => {
+  test("an audience rules name but nothing maps is unmapped", async () => {
     const content = `[policy]
 version = 2
 trust_chain = ["untrusted", "reviewed", "trusted"]
@@ -138,23 +129,14 @@ delta = { trust = "untrusted", audience = ["public"] }
     const body = await view();
 
     expect(body.trust).toEqual(["untrusted", "reviewed", "trusted"]);
-    expect(audience(body, "self")).toEqual({
-      name: "self",
-      kind: "unmapped",
-      ruleCount: 2,
-      firstRule: { entry: null, line: 8 },
-    });
+    expect(audience(body, "self")).toEqual({ name: "self", kind: "unmapped" });
     expect(audience(body, "internal")).toMatchObject({
       kind: "mapped",
       from: [],
-      ruleCount: 1,
-      firstRule: { entry: null, line: 12 },
     });
     expect(audience(body, "public")).toEqual({
       name: "public",
       kind: "builtin",
-      ruleCount: 1,
-      firstRule: { entry: null, line: 17 },
     });
     expect(body.sources).toEqual([]);
   });
@@ -214,8 +196,6 @@ requires = { audience = { within = ["@eng"] } }
           ),
         },
       ],
-      ruleCount: 1,
-      firstRule: { entry: null, line: 13 },
     });
     const github = body.sources.find(
       (source: { name: string }) => source.name === "github",

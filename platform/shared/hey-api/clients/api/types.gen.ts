@@ -87324,19 +87324,9 @@ export type GetOpenappaTrustAudienceResponses = {
         trust: Array<string>;
         audiences: Array<{
             name: string;
-            ruleCount: number;
-            firstRule: {
-                entry: string | null;
-                line: number | null;
-            } | null;
             kind: 'builtin';
         } | {
             name: string;
-            ruleCount: number;
-            firstRule: {
-                entry: string | null;
-                line: number | null;
-            } | null;
             kind: 'mapped';
             mappingLine: number | null;
             from: Array<{
@@ -87348,11 +87338,6 @@ export type GetOpenappaTrustAudienceResponses = {
             within: string | null;
         } | {
             name: string;
-            ruleCount: number;
-            firstRule: {
-                entry: string | null;
-                line: number | null;
-            } | null;
             kind: 'unmapped';
         }>;
         sources: Array<{

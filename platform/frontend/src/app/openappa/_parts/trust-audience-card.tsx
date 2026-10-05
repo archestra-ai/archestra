@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,6 +16,7 @@ import {
   type AudienceLevel,
   useTrustAudience,
 } from "@/lib/openappa-trust-audience.query";
+import { cn } from "@/lib/utils/tailwind";
 import { policyLineHref, policyLineLabel } from "./policy-line-href";
 
 /** The Overview's trust chain and audiences, with who belongs to each audience. */
@@ -62,20 +63,7 @@ export function TrustAudienceCard() {
             </dd>
             <dt className="text-muted-foreground">Audience</dt>
             <dd>
-              <dl className="grid grid-cols-[minmax(0,6rem)_minmax(0,1fr)] gap-x-4 gap-y-2">
-                {view.data.audiences.map((level) => (
-                  <Fragment key={level.name}>
-                    <dt>
-                      <Badge variant="outline" className="font-mono">
-                        {level.name}
-                      </Badge>
-                    </dt>
-                    <dd className="self-center">
-                      <Members level={level} />
-                    </dd>
-                  </Fragment>
-                ))}
-              </dl>
+              <AudienceDiagram audiences={view.data.audiences} />
             </dd>
           </dl>
         )}
@@ -89,42 +77,132 @@ export function TrustAudienceCard() {
 // =============================================================================
 
 /**
- * Who the runtime counts in a level. A user's session carries its user as the
- * principal, which is `self` whenever a session has one; `internal` adds its
- * mapped sources to it.
+ * The audience chain as nested rings, `public` ⊇ `internal` ⊇ `self`, each group
+ * drawn inside the level it is declared `within`, and each source bubble on the
+ * ring it supplies members to.
+ */
+function AudienceDiagram({ audiences }: { audiences: AudienceLevel[] }) {
+  const level = (name: string) => audiences.find((each) => each.name === name);
+  const groupsWithin = (name: string | null) =>
+    audiences
+      .filter(
+        (each) =>
+          each.kind === "mapped" &&
+          each.name.startsWith("@") &&
+          (each.within ?? "public") === name,
+      )
+      .map((group) => (
+        <Ring
+          key={group.name}
+          level={group}
+          tone={TONES.group}
+          size="min-w-36"
+        />
+      ));
+  const publicLevel = level("public");
+  const internal = level("internal");
+  const self = level("self");
+  if (!publicLevel || !internal || !self) return null;
+
+  return (
+    <Ring
+      level={publicLevel}
+      tone={TONES.public}
+      size="mx-auto w-full max-w-2xl"
+    >
+      <Ring level={internal} tone={TONES.internal} size="w-[80%]">
+        <Ring level={self} tone={TONES.self} size="w-[55%] min-w-44">
+          {groupsWithin("self")}
+        </Ring>
+        {groupsWithin("internal")}
+      </Ring>
+      {groupsWithin("public")}
+    </Ring>
+  );
+}
+
+const TONES = {
+  public: "border-border bg-muted/30",
+  internal: "border-sky-500/40 bg-sky-500/5",
+  self: "border-violet-500/40 bg-violet-500/10",
+  group: "border-emerald-500/40 bg-emerald-500/10",
+};
+
+function Ring({
+  level,
+  tone,
+  size,
+  children,
+}: {
+  level: AudienceLevel;
+  tone: string;
+  size: string;
+  children?: ReactNode;
+}) {
+  const hasChildren = Array.isArray(children)
+    ? children.some((child) => (Array.isArray(child) ? child.length : child))
+    : Boolean(children);
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-center gap-3 rounded-[50%] border px-[8%] pt-7 pb-9 text-center",
+        size,
+        tone,
+        level.kind !== "mapped" && level.name !== "public" && "border-dashed",
+      )}
+    >
+      <div className="flex flex-col items-center gap-1.5">
+        <span className="font-mono text-sm font-medium">{level.name}</span>
+        <Members level={level} />
+      </div>
+      {hasChildren && (
+        <div className="flex w-full flex-wrap items-center justify-center gap-4">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Who the runtime counts in a level: the bubbles of the sources it reads, or,
+ * unmapped, the session's user, which a user's session carries as `self`.
  */
 function Members({ level }: { level: AudienceLevel }) {
-  if (level.kind === "mapped")
+  if (level.kind !== "mapped")
     return (
-      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {level.from.map((ref, index) => (
-          <Fragment key={`${ref.source}:${ref.selector}`}>
-            {index > 0 && <span className="text-muted-foreground">or</span>}
-            <span className="font-mono">
-              {ref.source}:{ref.selector}
-            </span>
-          </Fragment>
-        ))}
-        {level.within && (
-          <span className="text-muted-foreground">within {level.within}</span>
-        )}
-        <Link
-          href={policyLineHref({ entry: null, line: level.mappingLine })}
-          className="font-mono text-xs text-muted-foreground underline-offset-4 hover:underline"
-        >
-          {policyLineLabel({ entry: null, line: level.mappingLine })}
-        </Link>
+      <span className="text-xs text-muted-foreground">
+        {UNMAPPED_MEMBERS[level.name]}
       </span>
     );
   return (
-    <span className="text-muted-foreground">
-      {UNMAPPED_MEMBERS[level.name]}
+    <span className="flex flex-wrap items-center justify-center gap-1.5">
+      {level.from.map((ref) => (
+        <Link
+          key={`${ref.source}:${ref.selector}`}
+          href={policyLineHref(ref)}
+          title={
+            ref.declaredBy
+              ? `From the ${ref.declaredBy.battery} battery, ${policyLineLabel(ref)}`
+              : "No included battery declares this source"
+          }
+          className="rounded-full border bg-background px-2.5 py-0.5 font-mono text-xs shadow-xs hover:bg-accent"
+        >
+          {ref.source}:{ref.selector}
+        </Link>
+      ))}
+      <Link
+        href={policyLineHref({ entry: null, line: level.mappingLine })}
+        className="font-mono text-[11px] text-muted-foreground underline-offset-4 hover:underline"
+      >
+        {policyLineLabel({ entry: null, line: level.mappingLine })}
+      </Link>
     </span>
   );
 }
 
 const UNMAPPED_MEMBERS: Record<string, string> = {
-  public: "Anyone",
-  internal: "Only the session's user",
-  self: "The session's user",
+  public: "anyone",
+  internal: "only the session's user",
+  self: "the session's user",
 };

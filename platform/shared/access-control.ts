@@ -1712,6 +1712,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaCoverageEntities]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageTools]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageSummary]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaTrustAudience]: { openappaPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },

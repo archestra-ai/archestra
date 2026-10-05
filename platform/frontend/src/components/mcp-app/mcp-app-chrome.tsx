@@ -111,7 +111,7 @@ export function McpAppSettingsButton({
 }) {
   return (
     <PermissionButton
-      permissions={{ app: ["update"] }}
+      permissions={{}}
       type="button"
       onClick={onClick}
       disabled={!!disabledReason}

@@ -387,12 +387,14 @@ describe("upgrade access preservation", () => {
                   scope: account.id,
                   action,
                 })
-              : await userHasPermission(
-                  principal.id,
-                  org.id,
-                  "serviceAccount",
+              : // Update and delete are retired role actions now, so the
+                // stored role is read as it was before their retirement.
+                await heldBeforeRetirement({
+                  userId: principal.id,
+                  organizationId: org.id,
+                  resource: "serviceAccount",
                   action,
-                );
+                });
           }
         }
         // Deploying into a restricted environment. Before the conversion the
@@ -689,7 +691,7 @@ async function heldBeforeRetirement(params: {
   userId: string;
   organizationId: string;
   resource: Resource;
-  action: "admin" | "deploy-to-restricted";
+  action: "admin" | "deploy-to-restricted" | "read" | "update" | "delete";
 }): Promise<boolean> {
   const member = await MemberModel.getByUserId(
     params.userId,

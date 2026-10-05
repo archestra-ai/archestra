@@ -165,7 +165,7 @@ export function ToolPolicyBulkActionsBar({
     <Tooltip>
       <TooltipTrigger asChild>
         <PermissionButton
-          permissions={{ agent: ["update"], toolPolicy: ["update"] }}
+          permissions={{ toolPolicy: ["update"] }}
           size="sm"
           variant="outline"
           onClick={handleAutoConfigurePolicies}

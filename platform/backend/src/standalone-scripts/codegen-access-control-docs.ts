@@ -350,7 +350,9 @@ Permissions in Archestra are defined using a \`resource:action\` format, where:
 - **Resource**: The type of object or feature being accessed (e.g., \`agent\`, \`mcpGateway\`, \`llmProxy\`)
 - **Action**: The operation being performed (\`create\`, \`read\`, \`update\`, \`delete\`, \`admin\`)
 
-For example, \`agent:create\` allows creating agents, \`mcpGateway:update\` allows updating MCP gateways, and \`llmProxy:read\` allows viewing the LLM Proxy.
+For example, \`agent:create\` allows creating agents, \`mcpServerInstallation:create\` allows installing MCP servers, and \`llmProxy:read\` allows viewing the LLM Proxy.
+
+Agents, MCP gateways, the MCP registry, skills, apps, models, keys, OAuth clients and service accounts also have per-item grants. For these, a role decides who can open the section and create new items; who can see, edit, delete or share them is granted under Permissions, either on a single item or, for all items of a kind, from the list page's ⋯ menu (see [Scoped Resources](#scoped-resources)).
 
 ## Log Visibility
 

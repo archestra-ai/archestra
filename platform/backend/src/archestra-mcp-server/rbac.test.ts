@@ -4,6 +4,10 @@ import {
   type ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraToolFullName,
 } from "@archestra/shared";
+import {
+  allAvailableActions,
+  roleActionResourceFor,
+} from "@archestra/shared/access-control";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { UserModel } from "@/models";
@@ -12,6 +16,7 @@ import type { ArchestraContext } from ".";
 import {
   checkToolPermission,
   filterToolNamesByPermission,
+  isToolGrantGated,
   TOOL_PERMISSIONS,
 } from "./rbac";
 
@@ -33,6 +38,20 @@ afterEach(() => {
 // === Permission map completeness ===
 
 describe("TOOL_PERMISSIONS map", () => {
+  test("every tool is reachable through a role action or a per-object grant", () => {
+    // A tool gated on an action no role holds, with no grant path, is dead.
+    const unreachable = Object.entries(TOOL_PERMISSIONS)
+      .filter(([, perm]) => perm !== null)
+      .filter(
+        ([name, perm]) =>
+          !allAvailableActions[roleActionResourceFor(perm!.resource)]?.includes(
+            perm!.action as never,
+          ) && !isToolGrantGated(name as keyof typeof TOOL_PERMISSIONS),
+      )
+      .map(([name, perm]) => `${name}: ${perm!.resource}:${perm!.action}`);
+    expect(unreachable).toEqual([]);
+  });
+
   test("read_app reads and edit_app updates", () => {
     expect(TOOL_PERMISSIONS.read_app).toEqual({
       resource: "app",

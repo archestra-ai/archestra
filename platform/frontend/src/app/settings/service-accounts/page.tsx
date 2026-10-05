@@ -47,7 +47,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
   useServiceAccountLabelKeys,
@@ -103,12 +107,17 @@ export default function ServiceAccountsSettingsPage() {
   const setActionButton = useSetSettingsAction();
   const { data: canReadServiceAccounts, isPending: isCheckingPermissions } =
     useHasPermissions({ serviceAccount: ["read"] });
-  const { data: canUpdateServiceAccounts } = useHasPermissions({
-    serviceAccount: ["update"],
-  });
-  const { data: canDeleteServiceAccounts } = useHasPermissions({
-    serviceAccount: ["delete"],
-  });
+  const { data: scopedGrants } = useScopedCapabilities();
+  const canOnAccount = useCallback(
+    (account: ServiceAccount, action: "update" | "delete") =>
+      holdsItemGrant({
+        grants: scopedGrants,
+        resource: "serviceAccount",
+        action,
+        id: account.id,
+      }),
+    [scopedGrants],
+  );
   // Label filtering is server-side, so the value rides the query rather than
   // narrowing the already-fetched list in the browser.
   const labelsFilter = searchParams.get("labels") || undefined;
@@ -211,13 +220,24 @@ export default function ServiceAccountsSettingsPage() {
     matchDescription: hasActiveFilters ? "match these filters" : "exist",
   });
 
+  const canUpdateSelected = selectedAccounts.every((account) =>
+    canOnAccount(account, "update"),
+  );
+  const canDeleteSelected = selectedAccounts.every((account) =>
+    canOnAccount(account, "delete"),
+  );
+  const hasAnyRowActions = filteredServiceAccounts.some(
+    (account) =>
+      canOnAccount(account, "update") || canOnAccount(account, "delete"),
+  );
+
   const setDisabled = bulkSetDisabled.mutate;
   const renderRowActions = useCallback(
     (account: ServiceAccount) => (
       <TableRowActions
         itemName={account.name}
         actions={[
-          ...(canUpdateServiceAccounts
+          ...(canOnAccount(account, "update")
             ? [
                 {
                   icon: <Pencil className="h-4 w-4" />,
@@ -241,7 +261,7 @@ export default function ServiceAccountsSettingsPage() {
                 },
               ]
             : []),
-          ...(canDeleteServiceAccounts
+          ...(canOnAccount(account, "delete")
             ? [
                 {
                   icon: <Trash2 className="h-4 w-4" />,
@@ -254,7 +274,7 @@ export default function ServiceAccountsSettingsPage() {
         ]}
       />
     ),
-    [canDeleteServiceAccounts, canUpdateServiceAccounts, setDisabled],
+    [canOnAccount, setDisabled],
   );
 
   // `DataTable` sets the table's `minWidth` to the sum of these sizes, so the
@@ -321,7 +341,7 @@ export default function ServiceAccountsSettingsPage() {
       // the account dialog.
     ];
 
-    if (!canUpdateServiceAccounts && !canDeleteServiceAccounts) {
+    if (!hasAnyRowActions) {
       return baseColumns;
     }
 
@@ -335,7 +355,7 @@ export default function ServiceAccountsSettingsPage() {
         cell: ({ row }) => renderRowActions(row.original),
       },
     ];
-  }, [canDeleteServiceAccounts, canUpdateServiceAccounts, renderRowActions]);
+  }, [hasAnyRowActions, renderRowActions]);
 
   const closeDialog = () => {
     setIsCreateDialogOpen(false);
@@ -475,7 +495,13 @@ export default function ServiceAccountsSettingsPage() {
                   selectAllMatching={selectAllMatching}
                 >
                   <PermissionButton
-                    permissions={{ serviceAccount: ["update"] }}
+                    permissions={{}}
+                    disabled={!canUpdateSelected}
+                    tooltip={
+                      canUpdateSelected
+                        ? undefined
+                        : "You can't update every selected service account"
+                    }
                     variant="outline"
                     size="sm"
                     onClick={() => applyBulkDisabled(false)}
@@ -484,7 +510,13 @@ export default function ServiceAccountsSettingsPage() {
                     <span>Enable</span>
                   </PermissionButton>
                   <PermissionButton
-                    permissions={{ serviceAccount: ["update"] }}
+                    permissions={{}}
+                    disabled={!canUpdateSelected}
+                    tooltip={
+                      canUpdateSelected
+                        ? undefined
+                        : "You can't update every selected service account"
+                    }
                     variant="outline"
                     size="sm"
                     onClick={() => applyBulkDisabled(true)}
@@ -493,7 +525,13 @@ export default function ServiceAccountsSettingsPage() {
                     <span>Disable</span>
                   </PermissionButton>
                   <PermissionButton
-                    permissions={{ serviceAccount: ["delete"] }}
+                    permissions={{}}
+                    disabled={!canDeleteSelected}
+                    tooltip={
+                      canDeleteSelected
+                        ? undefined
+                        : "You can't delete every selected service account"
+                    }
                     variant="destructive"
                     size="sm"
                     onClick={() => setBulkDeleteOpen(true)}

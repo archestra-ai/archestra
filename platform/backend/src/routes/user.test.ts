@@ -56,7 +56,6 @@ describe("user routes", () => {
 
       // Verify admin has all resource permissions from allAvailableActions
       for (const [resource, actions] of Object.entries(allAvailableActions)) {
-        if (resource === "simpleView") continue; // admin has empty simpleView
         expect(permissions[resource]).toBeDefined();
         for (const action of actions) {
           expect(permissions[resource]).toContain(action);

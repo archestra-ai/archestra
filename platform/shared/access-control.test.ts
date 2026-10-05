@@ -22,6 +22,24 @@ import { ADMIN_ROLE_NAME } from "./roles";
 import { RouteId } from "./routes";
 
 describe("access-control", () => {
+  test("every route and page gate names an action its resource has", () => {
+    // A gate on an action no role can hold locks everyone out, silently.
+    const unreachable: string[] = [];
+    for (const [gate, permissions] of [
+      ...Object.entries(requiredEndpointPermissionsMap),
+      ...Object.entries(requiredPagePermissionsMap),
+    ]) {
+      for (const [resource, actions] of Object.entries(permissions ?? {})) {
+        for (const action of actions ?? []) {
+          if (!allAvailableActions[resource as Resource]?.includes(action)) {
+            unreachable.push(`${gate}: ${resource}:${action}`);
+          }
+        }
+      }
+    }
+    expect(unreachable).toEqual([]);
+  });
+
   test("every resource:action combination has a permissionDescription", () => {
     const missing: string[] = [];
 
@@ -228,7 +246,7 @@ describe("access-control", () => {
 
   describe("secrets routes", () => {
     // The secrets backend is organization configuration; reading one stored
-    // Vault reference serves the MCP catalog form, so it follows that form.
+    // Vault reference serves the MCP catalog form for one entry.
     test("the secrets backend is organization settings", () => {
       expect(requiredEndpointPermissionsMap[RouteId.GetSecretsType]).toEqual({
         organizationSettings: ["read"],
@@ -241,10 +259,9 @@ describe("access-control", () => {
       });
     });
 
-    test("reading a Vault reference follows MCP catalog editing", () => {
-      expect(requiredEndpointPermissionsMap[RouteId.GetSecret]).toEqual({
-        mcpRegistry: ["update"],
-      });
+    test("reading a Vault reference is decided per registry entry", () => {
+      // The handler requires an update grant on the owning entry.
+      expect(requiredEndpointPermissionsMap[RouteId.GetSecret]).toEqual({});
     });
   });
 
@@ -355,7 +372,7 @@ describe("buildForbiddenErrorMessage", () => {
     });
     expect(message).toContain("Missing permissions:");
     expect(message).toContain(
-      "agent:read (View and list agents, and use their code sandboxes and files)",
+      "agent:read (Open Agents, and use the code sandboxes and files of agents you can use)",
     );
     expect(message).toContain(
       "project:read (View projects and your own sessions inside them)",
@@ -396,16 +413,10 @@ describe("platform_admin predefined role", () => {
     expect(p.auditLog).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
     expect(p.openappaDiagnostics).toEqual(["read", "update"]);
-    // …and is otherwise the full admin set (modulo the UI-behavior resource).
+    // …and is otherwise the full admin set.
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
       if (
-        [
-          "log",
-          "auditLog",
-          "member",
-          "simpleView",
-          "openappaDiagnostics",
-        ].includes(resource)
+        ["log", "auditLog", "member", "openappaDiagnostics"].includes(resource)
       ) {
         continue;
       }

@@ -1848,14 +1848,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Check update permission (return 404 to avoid leaking existence)
+      // Refuse with 403 if the caller can see the agent, and with 404 if not,
+      // so a refused edit never reveals an agent the caller can't read.
       try {
         checker.require(existingAgent.agentType, {
           action: "update",
           scope: existingAgent.id,
         });
-      } catch {
-        throw new ApiError(404, "Agent not found");
+      } catch (error) {
+        try {
+          checker.require(existingAgent.agentType, {
+            action: "read",
+            scope: existingAgent.id,
+          });
+        } catch {
+          throw new ApiError(404, "Agent not found");
+        }
+        throw error;
       }
       requireAgentRuntimePermission({
         agentType: existingAgent.agentType,

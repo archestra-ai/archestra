@@ -3571,6 +3571,13 @@
       "when": 1791132816653,
       "tag": "0509_fold-rbac-settings-resources",
       "breakpoints": true
+    },
+    {
+      "idx": 510,
+      "version": "7",
+      "when": 1791162080909,
+      "tag": "0510_remove-simple-view-role-resource",
+      "breakpoints": true
     }
   ]
 }

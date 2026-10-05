@@ -361,7 +361,7 @@ describe("hasPermission", () => {
       makeCustomRole,
     }) => {
       const permissions: Permissions = {
-        agent: ["read", "create", "update", "delete"],
+        agent: ["read", "create", "delete"],
         mcpServerInstallation: ["update"],
         team: ["read"],
       };

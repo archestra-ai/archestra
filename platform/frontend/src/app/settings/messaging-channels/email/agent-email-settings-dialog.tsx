@@ -298,6 +298,7 @@ export function AgentEmailSettingsDialog({
               <PermissionButton
                 type="submit"
                 permissions={{ agent: ["update"] }}
+                permissionScope={agent?.id ?? ""}
                 disabled={updateAgentMutation.isPending}
               >
                 {updateAgentMutation.isPending ? "Saving..." : "Save settings"}

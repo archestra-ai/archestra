@@ -124,14 +124,7 @@ beforeEach(() => {
     push: pushMock,
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useAppAccess).mockReturnValue({
-    isAdmin: true,
-    isTeamAdmin: true,
-    canUpdate: true,
-    canDelete: true,
-    currentUserId: "user-1",
-    userTeamIds: new Set(),
     isPending: false,
-    canModify: true,
     canEdit: true,
     canDeleteApp: true,
   } as ReturnType<typeof useAppAccess>);
@@ -349,14 +342,7 @@ describe("OwnedAppCard", () => {
   it("disables settings, version history, and delete when the app is outside the caller's scope", () => {
     const onOpenSettings = vi.fn();
     vi.mocked(useAppAccess).mockReturnValue({
-      isAdmin: false,
-      isTeamAdmin: false,
-      canUpdate: true,
-      canDelete: true,
-      currentUserId: "user-2",
-      userTeamIds: new Set(),
       isPending: false,
-      canModify: false,
       canEdit: false,
       canDeleteApp: false,
     } as ReturnType<typeof useAppAccess>);

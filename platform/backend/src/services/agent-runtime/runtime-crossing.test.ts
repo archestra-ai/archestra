@@ -627,19 +627,80 @@ for (const transformed of [false, true]) {
     });
     if (transformed)
       await expect(transfer).rejects.toThrow("not admitted unchanged");
-    else
-      await expect(transfer).resolves.toMatchObject({
-        ticket: { sha256, size: bytes.length },
+    else {
+      const minted = await transfer;
+      expect(minted).toMatchObject({ ticket: { sha256, size: bytes.length } });
+      expect(minted.ticket).not.toHaveProperty("admittedBytes");
+      bytes.fill(0);
+      vi.mocked(backend.readWorkspaceTransferRange).mockRejectedValue(
+        new Error("the runtime snapshot changed"),
+      );
+      const stream = await workspaceTransferTickets.read({
+        ticket: workspaceTransferTickets.resolve(
+          minted.ticket.id,
+          minted.token,
+        ),
+        offset: 8,
+        length: 6,
       });
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream.stdout) chunks.push(Buffer.from(chunk));
+      await stream.completed;
+      expect(Buffer.concat(chunks).toString()).toBe("pinned");
+      expect(backend.readWorkspaceTransferRange).toHaveBeenCalledOnce();
+    }
     expect(JSON.parse(crossing.mock.calls[0][0].value)).toEqual({
       path: "report.txt",
       encoding: "utf8",
-      content: bytes.toString(),
+      content: "private pinned report",
       sha256,
     });
     expect(crossing.mock.calls[0][0].session).toEqual(seeded.child);
   });
 }
+
+test("an oversized protected export reads no bytes and issues no ticket", async ({
+  makeAgent,
+  makeMember,
+  makeOrganization,
+  makeUser,
+  seedAndAssignArchestraTools,
+}) => {
+  const seeded = await seededRun({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  });
+  vi.spyOn(backend, "runWorkspaceTransferCommand").mockResolvedValue({
+    transfer_id: "oversized",
+    path: "report.bin",
+    size: 4 * 1024 * 1024 + 1,
+    sha256: "0".repeat(64),
+    mtime_ns: "1",
+    ino: "1",
+  });
+  const reader = vi.spyOn(backend, "readWorkspaceTransferRange");
+  const crossing = vi.spyOn(openappa, "returnRuntimeValue");
+  await expect(
+    workspaceTransferTickets.mintDownload({
+      actor: {
+        kind: "user",
+        id: seeded.context.userId,
+        organizationId: seeded.organizationId,
+      },
+      taskId: seeded.task.id,
+      path: "report.bin",
+      crossing: { child: seeded.child, operationId: "oversized-export" },
+    }),
+  ).rejects.toThrow("limited to 4 MiB");
+  expect(reader).not.toHaveBeenCalled();
+  expect(crossing).not.toHaveBeenCalled();
+  expect(backend.runWorkspaceTransferCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({ args: ["discard", "oversized"] }),
+  );
+});
 
 async function runnable(params: {
   makeAgent: (overrides: Record<string, unknown>) => Promise<Agent>;

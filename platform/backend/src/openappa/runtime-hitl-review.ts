@@ -90,7 +90,7 @@ export async function awaitRuntimeHitlReview(params: {
     if (ruling) return ruling;
     if (!(await getHitlReview(params))) return "unavailable";
     try {
-      await setTimeout(500, undefined, { signal: params.signal });
+      await setTimeout(2_000, undefined, { signal: params.signal });
     } catch {
       return "unavailable";
     }
@@ -183,7 +183,7 @@ function offerKey(params: {
       ]),
     )
     .digest("base64url");
-  return `${CacheKey.OpenAppaRuntimeHitlReview}-${scope}`;
+  return `${CacheKey.OpenAppaRuntimeHitlReview}-offer-${scope}`;
 }
 
 function reviewKey(
@@ -193,5 +193,5 @@ function reviewKey(
   const scope = createHash("sha256")
     .update(JSON.stringify([organizationId, workspaceId]))
     .digest("base64url");
-  return `${CacheKey.OpenAppaRuntimeHitlReview}-${scope}`;
+  return `${CacheKey.OpenAppaRuntimeHitlReview}-index-${scope}`;
 }

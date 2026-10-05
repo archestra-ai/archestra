@@ -1432,6 +1432,30 @@ describe("APPA feature boundary", () => {
     ).rejects.toThrow();
   });
 
+  test("refuses oversized return contracts before host delivery or runtime launch", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "context", text: "x".repeat(64 * 1024 + 1) }),
+    );
+    const child = {
+      ...session,
+      session_id: "runtime-workspace",
+      parent_id: session.session_id,
+    };
+    await expect(
+      startRuntimeChild({ session: child, spawnCallId: "runtime-spawn" }),
+    ).rejects.toThrow("exceeds 64 KiB");
+    const delivery = vi.fn();
+    await expect(
+      processProxyResults({
+        session: child,
+        results: [],
+        canonicalize: (name) => name,
+        deliverReturnContract: delivery,
+      }),
+    ).rejects.toThrow("exceeds 64 KiB");
+    expect(delivery).not.toHaveBeenCalled();
+  });
+
   test("crosses a runtime value through canonical echo without ending pending calls", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);

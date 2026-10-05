@@ -535,6 +535,7 @@ async function startSession(params: {
   );
   if (decision.decision === "context") {
     if (decision.text && params.deliverReturnContract) {
+      validateReturnContract(decision.text);
       params.deliverReturnContract(decision.text);
       return;
     }
@@ -561,6 +562,7 @@ export async function startRuntimeChild(params: {
   });
   if (decision.decision === "ack") return {};
   if (decision.decision === "context" && decision.text) {
+    validateReturnContract(decision.text);
     return { contract: decision.text };
   }
   throw new ApiError(409, decisionMessage(decision));
@@ -1624,6 +1626,15 @@ export async function loadOfferReview(params: {
       "Failed to load OpenAPPA offer review",
     );
     throw openappaFailure(error);
+  }
+}
+
+function validateReturnContract(text: string): void {
+  if (Buffer.byteLength(text, "utf8") > 64 * 1024) {
+    throw new ApiError(
+      413,
+      "The OpenAPPA child return contract exceeds 64 KiB",
+    );
   }
 }
 

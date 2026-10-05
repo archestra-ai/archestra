@@ -100,7 +100,7 @@ export function AgentRunOpenappaReview({ taskId }: { taskId: string }) {
         <Button
           type="button"
           size="sm"
-          disabled={decide.isPending}
+          disabled={decide.isPending || !pending.offerId}
           onClick={() => submit("approve")}
         >
           <span>{decide.isPending ? "Saving…" : "Approve"}</span>
@@ -109,7 +109,7 @@ export function AgentRunOpenappaReview({ taskId }: { taskId: string }) {
           type="button"
           size="sm"
           variant="outline"
-          disabled={decide.isPending}
+          disabled={decide.isPending || !pending.offerId}
           onClick={() => submit("deny")}
         >
           <span>Deny</span>

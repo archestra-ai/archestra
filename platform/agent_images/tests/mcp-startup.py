@@ -39,6 +39,7 @@ class Gateway(ThreadingHTTPServer):
         self.calls = []
         self.catalog_sent = False
         self.discovery_failed = threading.Event()
+        self.binding_headers = []
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -51,16 +52,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
-        if self.path.startswith("/mcp"):
+        if self.path in ("/runtime-status", "/mcp/runtime-status"):
+            # Native attention callbacks are not model/MCP execution traffic.
+            self.respond({})
+        elif self.path.startswith("/mcp"):
+            self.record_runtime_binding()
             self.mcp(request)
         elif self.path.endswith("count_tokens"):
             self.respond({"input_tokens": 10})
         elif self.path.endswith("/runtime-status"):
             self.respond({})
         elif "/messages" in self.path or "/responses" in self.path or "/chat/completions" in self.path:
+            self.record_runtime_binding()
             self.llm(request)
         else:
             self.respond({})
+
+    def record_runtime_binding(self):
+        self.server.binding_headers.append((self.path, self.headers.get("X-Archestra-Runtime-Binding")))
 
     def mcp(self, request):
         if "id" not in request:
@@ -180,6 +189,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 class StartupTest(unittest.TestCase):
+    def test_missing_runtime_binding_is_fail_closed(self):
+        self.run_client("one_shot", missing_binding=True)
+
     def test_delegated_tui(self):
         self.run_client("one_shot")
 
@@ -211,7 +223,7 @@ class StartupTest(unittest.TestCase):
         def test_plain_cli(self):
             self.run_client("one_shot", plain=True)
 
-    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False, idle_resume=False):
+    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False, idle_resume=False, missing_binding=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             runtime = root / "runtime"
@@ -224,6 +236,10 @@ class StartupTest(unittest.TestCase):
             env = {**os.environ, "HOME": str(home), "TERM": "xterm-256color", "PATH": str(BIN) + os.pathsep + os.environ["PATH"], "ARCHESTRA_LLM_PROXY_PROTOCOL": "anthropic" if CLIENT == "claude-code" else "openai_chat" if CLIENT == "hermes" else "openai_responses", "ARCHESTRA_AGENT_RUNTIME_DIR": str(runtime), "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX": str(runtime / "turn"), "ARCHESTRA_AGENT_RUNTIME_MODE": mode, "ARCHESTRA_AGENT_RUNTIME_PLAIN": "1" if plain else "0", "ARCHESTRA_AGENT_RUNTIME_OPENAPPA": "1", "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL": "claude-sonnet-4-6" if CLIENT == "claude-code" else "gpt-6-astra" if CLIENT == "codex" else "gpt-4.1", "ARCHESTRA_AGENT_RUNTIME_TASK_ID": "startup-test", "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID": "startup-workspace", "ARCHESTRA_AGENT_RUNTIME_TASK": "Call each recovery tool, then reply STARTUP_OK.", "ARCHESTRA_MCP_GATEWAY_URL": origin + "/mcp", "ARCHESTRA_MCP_GATEWAY_TOKEN": "synthetic-token", "OPENAI_BASE_URL": origin + "/v1", "OPENAI_API_KEY": "synthetic-key", "ANTHROPIC_BASE_URL": origin, "ANTHROPIC_AUTH_TOKEN": "synthetic-key", "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}
             try:
                 for turn in range(2 if resume else 1):
+                    if missing_binding:
+                        env.pop("ARCHESTRA_AGENT_RUNTIME_BINDING", None)
+                    else:
+                        env["ARCHESTRA_AGENT_RUNTIME_BINDING"] = f"synthetic-runtime-binding-{turn}"
                     if turn:
                         env["ARCHESTRA_AGENT_RUNTIME_CONTINUE"] = "1"
                         env["ARCHESTRA_AGENT_RUNTIME_TASK"] = "Call each recovery tool again, then reply STARTUP_OK."
@@ -232,13 +248,23 @@ class StartupTest(unittest.TestCase):
                         server.catalog_sent = False
                         server.list_started.clear()
                         server.discovery_failed.clear()
+                        server.binding_headers.clear()
                         server.release.clear()
                     env["ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX"] = str(runtime / f"turn-{turn}")
                     turn_mode = "interactive" if turn and idle_resume else mode
                     if turn and idle_resume:
                         env["ARCHESTRA_AGENT_RUNTIME_MODE"] = turn_mode
                         env["ARCHESTRA_AGENT_RUNTIME_TASK"] = ""
-                    self.run_turn(root, home, runtime, env, server, turn_mode, plain, failure, hold, idle=bool(turn and idle_resume))
+                    if missing_binding:
+                        env["ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX"] = str(runtime / "missing-binding")
+                        refused = subprocess.run(["/bin/bash", str(BIN / ("archestra-" + CLIENT))], cwd=home, env=env, capture_output=True, timeout=10)
+                        self.assertNotEqual(refused.returncode, 0)
+                        self.assertIn(b"OpenAPPA runtime binding is required", refused.stdout + refused.stderr)
+                        self.assertFalse(server.requests, "A runtime without its binding submitted inference")
+                        self.assertFalse(server.binding_headers, "A runtime without its binding contacted the gateway")
+                        self.assertFalse((runtime / "missing-binding.result").exists(), "A runtime without its binding was marked successful")
+                    else:
+                        self.run_turn(root, home, runtime, env, server, turn_mode, plain, failure, hold, idle=bool(turn and idle_resume))
             finally:
                 server.release.set()
                 server.shutdown()
@@ -296,6 +322,8 @@ class StartupTest(unittest.TestCase):
                 if mode == "interactive" and len(server.calls) == 3 and len(server.requests) >= 4 and (runtime / "readable-transcript.json").exists():
                     break
             details = output.decode(errors="replace")[-6000:]
+            for path, binding in server.binding_headers:
+                self.assertEqual(binding, env["ARCHESTRA_AGENT_RUNTIME_BINDING"], f"{path}: missing or stale workspace binding")
             if failure:
                 self.assertTrue(server.discovery_failed.is_set(), details)
                 self.assertFalse(server.requests, details)

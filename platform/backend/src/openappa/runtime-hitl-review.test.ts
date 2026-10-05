@@ -109,6 +109,42 @@ test("parallel reviews remain queued when the first offer is answered", async ({
   });
 });
 
+test("concurrent owner decisions spend one staged review only", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+}) => {
+  const fixture = await createRuntime({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    actorKind: "user",
+  });
+  await stageAndBind(fixture, "concurrent");
+  const decide = (decision: "approve" | "deny") =>
+    decideRuntimeHitlReview({
+      ...fixture,
+      offerId: "concurrent",
+      reviewerUserId: fixture.actorUserId ?? "",
+      decision,
+    });
+  const results = await Promise.all([decide("approve"), decide("deny")]);
+  expect(results.filter((result) => result.status === "recorded")).toHaveLength(
+    1,
+  );
+  const ruling = await consumeHitlRuling({
+    session: fixture.session,
+    offerId: "concurrent",
+  });
+  expect(["approve", "deny"]).toContain(ruling);
+  expect(
+    await consumeHitlRuling({
+      session: fixture.session,
+      offerId: "concurrent",
+    }),
+  ).toBeUndefined();
+});
+
 test("disconnecting a runtime waiter does not dismiss or approve the review", async ({
   makeOrganization,
   makeUser,

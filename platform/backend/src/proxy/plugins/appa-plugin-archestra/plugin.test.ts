@@ -4221,14 +4221,14 @@ describe("delegation markers", () => {
                     content: [
                       {
                         type: "text",
-                        text: `[appa] Authorized. Tell the user in your reply which plan was accepted. Call the spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
+                        text: `[appa] Authorized. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
                       },
                     ],
                   })
                 : [
                     {
                       type: "input_text",
-                      text: `[appa] Authorized. Tell the user in your reply which plan was accepted. Call the spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
+                      text: `[appa] Authorized. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
                     },
                   ],
             },

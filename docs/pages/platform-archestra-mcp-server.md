@@ -2197,7 +2197,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `options[].label` | `string` | Yes | The option shown to the user. |
 | `options[].description` | `string` | No | Optional extra detail shown next to the option. |
 | `allowMultiple` | `boolean` | No | When true, the user may select more than one option. Defaults to false (exactly one). |
-| `remedy_offer_ids` | `string[]` | No | Exact offer IDs from the blocked ruling that this question asks the user to decide. Omit for ordinary questions. |
+| `remedy_offer_ids` | `string[]` | No | Exact offer IDs from the blocked ruling that this question asks the user to decide: a review execute_remedy_plan requires, or a plan that would prevent what the user asked for. Say in the question what it would prevent. Omit for ordinary questions. |
 
 ##### Output
 

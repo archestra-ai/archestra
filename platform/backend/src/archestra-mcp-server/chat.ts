@@ -108,7 +108,7 @@ const AskUserSchema = z
       .max(12)
       .optional()
       .describe(
-        "Exact offer IDs from the blocked ruling that this question asks the user to decide. Omit for ordinary questions.",
+        "Exact offer IDs from the blocked ruling that this question asks the user to decide: a review execute_remedy_plan requires, or a plan that would prevent what the user asked for. Say in the question what it would prevent. Omit for ordinary questions.",
       ),
   })
   .strict();

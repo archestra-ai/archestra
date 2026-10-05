@@ -1,6 +1,7 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { retryOnceOnDeadlock } from "@/database/deadlock";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
@@ -612,51 +613,59 @@ class LimitModel {
       return;
     }
 
-    await withDbTransaction(async (tx) => {
-      // Lock in the accumulator's order (limit id, then model) so a reset and
-      // a concurrent usage write cannot deadlock.
-      await tx
-        .select({ id: schema.limitsTable.id })
-        .from(schema.limitsTable)
-        .where(inArray(schema.limitsTable.id, limitIds))
-        .orderBy(schema.limitsTable.id)
-        .for("no key update");
-      const limits = await tx
-        .update(schema.limitsTable)
-        .set({ lastCleanup: now, updatedAt: now })
-        .where(inArray(schema.limitsTable.id, limitIds))
-        .returning({
-          id: schema.limitsTable.id,
-          limitType: schema.limitsTable.limitType,
-        });
+    // A usage row inserted after the locks below can still close a cycle
+    // with a usage write, so a deadlocked reset reruns once from scratch.
+    await retryOnceOnDeadlock(() =>
+      withDbTransaction(async (tx) => {
+        // Lock in the accumulator's order (limit id, then model) so a reset and
+        // a concurrent usage write cannot deadlock.
+        await tx
+          .select({ id: schema.limitsTable.id })
+          .from(schema.limitsTable)
+          .where(inArray(schema.limitsTable.id, limitIds))
+          .orderBy(schema.limitsTable.id)
+          .for("no key update");
+        const limits = await tx
+          .update(schema.limitsTable)
+          .set({ lastCleanup: now, updatedAt: now })
+          .where(inArray(schema.limitsTable.id, limitIds))
+          .returning({
+            id: schema.limitsTable.id,
+            limitType: schema.limitsTable.limitType,
+          });
 
-      const tokenCostLimitIds = limits
-        .filter((l) => l.limitType === "token_cost")
-        .map((l) => l.id);
+        const tokenCostLimitIds = limits
+          .filter((l) => l.limitType === "token_cost")
+          .map((l) => l.id);
 
-      if (tokenCostLimitIds.length === 0) {
-        return;
-      }
+        if (tokenCostLimitIds.length === 0) {
+          return;
+        }
 
-      await tx
-        .select({ id: schema.limitModelUsageTable.id })
-        .from(schema.limitModelUsageTable)
-        .where(inArray(schema.limitModelUsageTable.limitId, tokenCostLimitIds))
-        .orderBy(
-          schema.limitModelUsageTable.limitId,
-          schema.limitModelUsageTable.model,
-        )
-        .for("update");
-      // Reset model usage records for token_cost limits
-      await tx
-        .update(schema.limitModelUsageTable)
-        .set({
-          currentUsageTokensIn: 0,
-          currentUsageTokensOut: 0,
-          updatedAt: now,
-        })
-        .where(inArray(schema.limitModelUsageTable.limitId, tokenCostLimitIds));
-    });
+        await tx
+          .select({ id: schema.limitModelUsageTable.id })
+          .from(schema.limitModelUsageTable)
+          .where(
+            inArray(schema.limitModelUsageTable.limitId, tokenCostLimitIds),
+          )
+          .orderBy(
+            schema.limitModelUsageTable.limitId,
+            schema.limitModelUsageTable.model,
+          )
+          .for("update");
+        // Reset model usage records for token_cost limits
+        await tx
+          .update(schema.limitModelUsageTable)
+          .set({
+            currentUsageTokensIn: 0,
+            currentUsageTokensOut: 0,
+            updatedAt: now,
+          })
+          .where(
+            inArray(schema.limitModelUsageTable.limitId, tokenCostLimitIds),
+          );
+      }),
+    );
   }
 
   /**
@@ -898,23 +907,9 @@ class LimitModel {
         current_usage_tokens_out = ${usage}.current_usage_tokens_out + EXCLUDED.current_usage_tokens_out,
         updated_at = ${sql.param(new Date(), usage.updatedAt)}
     `;
-    try {
-      await db.execute(statement);
-    } catch (error) {
-      if (!isDeadlock(error)) throw error;
-      await db.execute(statement);
-    }
+    await retryOnceOnDeadlock(() => db.execute(statement));
   }
 }
-
-function isDeadlock(error: unknown): boolean {
-  for (let current = error; current instanceof Error; current = current.cause) {
-    if ((current as { code?: unknown }).code === DEADLOCK_DETECTED) return true;
-  }
-  return false;
-}
-
-const DEADLOCK_DETECTED = "40P01";
 
 /**
  * Service for validating if current usage has exceeded limits

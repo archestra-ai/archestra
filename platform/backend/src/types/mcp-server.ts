@@ -60,6 +60,23 @@ export const McpServerAgentUsageSchema = z.object({
 
 export type McpServerAgentUsage = z.infer<typeof McpServerAgentUsageSchema>;
 
+/**
+ * An agent with tools assigned from one specific install. `pinned` separates
+ * an assignment bound to this install (`agent_tools.mcp_server_id`) from an
+ * unpinned one that resolves to an install of the catalog at call time. The
+ * difference decides who loses access when the install is removed: a pinned
+ * agent loses it for every caller, while an unpinned agent only loses it for
+ * the callers whose call resolved to this install. Another user never
+ * resolves to someone's personal install.
+ */
+export const McpServerAssignedAgentSchema = McpServerAgentUsageSchema.extend({
+  pinned: z.boolean(),
+});
+
+export type McpServerAssignedAgent = z.infer<
+  typeof McpServerAssignedAgentSchema
+>;
+
 export const LocalMcpServerInstallationStatusSchema = z.enum(
   LOCAL_MCP_INSTALLATION_STATES,
 );
@@ -128,7 +145,7 @@ export const SelectMcpServerSchema = createSelectSchema(
    * Agents (profiles / MCP gateways) with tools explicitly assigned from this
    * server — statically pinned to it, or unpinned on a tool of its catalog.
    */
-  assignedAgents: z.array(McpServerAgentUsageSchema).optional(),
+  assignedAgents: z.array(McpServerAssignedAgentSchema).optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
   secretStorageType: SecretStorageTypeSchema.optional(),
   // SPDX-SnippetBegin

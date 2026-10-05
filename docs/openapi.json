@@ -301533,6 +301533,9 @@
                             "ownerEmail": {
                               "nullable": true,
                               "type": "string"
+                            },
+                            "pinned": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -301541,7 +301544,8 @@
                             "agentType",
                             "scope",
                             "ownerId",
-                            "ownerEmail"
+                            "ownerEmail",
+                            "pinned"
                           ],
                           "additionalProperties": false
                         }
@@ -302237,6 +302241,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -302245,7 +302252,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }
@@ -302808,6 +302816,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -302816,7 +302827,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }
@@ -303688,6 +303700,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -303696,7 +303711,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }
@@ -304591,6 +304607,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -304599,7 +304618,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }
@@ -306747,6 +306767,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -306755,7 +306778,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }

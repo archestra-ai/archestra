@@ -57,6 +57,7 @@ describe("MCP server soft-delete routes", () => {
           resourceId: schema.auditLogsTable.resourceId,
           before: schema.auditLogsTable.before,
           after: schema.auditLogsTable.after,
+          outcome: schema.auditLogsTable.outcome,
         })
         .from(schema.auditLogsTable)
         .where(
@@ -212,6 +213,108 @@ describe("MCP server soft-delete routes", () => {
       url: `/api/mcp_server/${server.id}/restore`,
     });
     expect(res.statusCode).toBe(409);
+  });
+
+  test("a member uninstalls only their own personal connection, never a shared one or another user's", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const admin = user;
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
+    const team = await makeTeam(organizationId, admin.id);
+    await makeTeamMember(team.id, user.id);
+
+    const own = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: user.id,
+    });
+    // Installing an org-wide connection records its installer as owner, but
+    // owning the row does not make it the member's own installation.
+    const orgInstalledByMember = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+      ownerId: user.id,
+    });
+    const orgInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+      ownerId: admin.id,
+    });
+    const refused = [
+      orgInstalledByMember,
+      orgInstall,
+      await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: team.id,
+        ownerId: admin.id,
+      }),
+      await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "personal",
+        ownerId: admin.id,
+      }),
+    ];
+
+    for (const server of refused) {
+      const denied = await app.inject({
+        method: "DELETE",
+        url: `/api/mcp_server/${server.id}`,
+      });
+      expect(denied.statusCode).toBe(403);
+      const [row] = await db
+        .select({ deletedAt: schema.mcpServersTable.deletedAt })
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(row.deletedAt).toBeNull();
+      // The refused attempt is still audited, as denied.
+      expect(await auditRow("mcpServer.deleted", server.id)).toMatchObject({
+        outcome: "denied",
+      });
+    }
+
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/mcp_server/${own.id}`,
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(await auditRow("mcpServer.deleted", own.id)).toMatchObject({
+      outcome: "success",
+      resourceType: "mcpServer",
+      before: { id: own.id, scope: "personal" },
+      after: null,
+    });
+
+    // Removing a shared installation stays an installation-admin action.
+    user = admin;
+    const adminRemoval = await app.inject({
+      method: "DELETE",
+      url: `/api/mcp_server/${orgInstall.id}`,
+    });
+    expect(adminRemoval.statusCode).toBe(200);
+    let adminAudit: Array<{ outcome: string; after: unknown }> = [];
+    for (let i = 0; i < 20 && adminAudit.length < 2; i++) {
+      adminAudit = await db
+        .select({
+          outcome: schema.auditLogsTable.outcome,
+          after: schema.auditLogsTable.after,
+        })
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceId, orgInstall.id));
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    // The member's refused attempt, then the admin's removal.
+    expect(adminAudit.map((r) => r.outcome).sort()).toEqual([
+      "denied",
+      "success",
+    ]);
   });
 
   test("delete-only roles see and restore their own connections but cannot recover other scopes", async ({

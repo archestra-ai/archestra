@@ -4487,6 +4487,8 @@ describe("mcp server core route coverage", () => {
           scope: "personal",
           ownerId: user.id,
           ownerEmail: user.email,
+          // Unpinned: resolves to an install at call time.
+          pinned: false,
         },
       ]);
     });

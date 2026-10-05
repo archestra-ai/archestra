@@ -35,7 +35,7 @@ import type {
   CredentialResolutionMode,
   InsertAgentTool,
   InternalMcpCatalogServerType,
-  McpServerAgentUsage,
+  McpServerAssignedAgent,
   ResourceVisibilityScope,
   SortDirection,
   UpdateAgentTool,
@@ -708,8 +708,8 @@ class AgentToolModel {
    */
   static async getAssignedAgentDetailsForMcpServers(
     mcpServerIds: string[],
-  ): Promise<Map<string, McpServerAgentUsage[]>> {
-    const agentsMap = new Map<string, McpServerAgentUsage[]>();
+  ): Promise<Map<string, McpServerAssignedAgent[]>> {
+    const agentsMap = new Map<string, McpServerAssignedAgent[]>();
     for (const mcpServerId of mcpServerIds) {
       agentsMap.set(mcpServerId, []);
     }
@@ -784,8 +784,12 @@ class AgentToolModel {
 
     // One agent can match both rules for the same server, so the union is
     // deduplicated here — the DISTINCT above only applies within each branch.
+    // Pinned rows come first, so an agent with both kinds is reported pinned.
     const seen = new Set<string>();
-    const assignments = [...pinned, ...dynamic]
+    const assignments = [
+      ...pinned.map((row) => ({ ...row, pinned: true })),
+      ...dynamic.map((row) => ({ ...row, pinned: false })),
+    ]
       .filter((row) => {
         const key = `${row.mcpServerId} ${row.agentId}`;
         if (seen.has(key)) return false;

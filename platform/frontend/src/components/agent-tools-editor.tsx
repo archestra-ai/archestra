@@ -45,6 +45,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useBulkUpdateAgentTools } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
@@ -928,7 +929,7 @@ function McpServerCard({
   onToggle: () => void;
 }) {
   return (
-    <button
+    <UnstyledButton
       type="button"
       onClick={isDisabled ? undefined : onToggle}
       disabled={isDisabled}
@@ -950,7 +951,7 @@ function McpServerCard({
               ? `${assignedCount}/${totalCount} tools`
               : `${totalCount} tools`}
       </span>
-    </button>
+    </UnstyledButton>
   );
 }
 
@@ -1333,7 +1334,7 @@ function ExpandableDescription({ description }: { description: string }) {
         {description}
       </div>
       {isTruncated && !expanded && (
-        <button
+        <UnstyledButton
           type="button"
           className="text-primary hover:underline mt-0.5"
           onClick={(e) => {
@@ -1343,10 +1344,10 @@ function ExpandableDescription({ description }: { description: string }) {
           }}
         >
           Show more...
-        </button>
+        </UnstyledButton>
       )}
       {expanded && (
-        <button
+        <UnstyledButton
           type="button"
           className="text-primary hover:underline mt-0.5"
           onClick={(e) => {
@@ -1356,7 +1357,7 @@ function ExpandableDescription({ description }: { description: string }) {
           }}
         >
           Show less
-        </button>
+        </UnstyledButton>
       )}
     </div>
   );
@@ -1640,8 +1641,7 @@ export function ToolChecklist({
         <div className="flex gap-1">
           <Button
             variant="ghost"
-            size="sm"
-            className="text-xs h-6 px-2"
+            size="xs"
             onClick={handleSelectAll}
             disabled={allSelected}
           >
@@ -1649,8 +1649,7 @@ export function ToolChecklist({
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            className="text-xs h-6 px-2"
+            size="xs"
             onClick={handleDeselectAll}
             disabled={noneSelected}
           >
@@ -1659,8 +1658,7 @@ export function ToolChecklist({
           {showResetToDefaults && (
             <Button
               variant="ghost"
-              size="sm"
-              className="text-xs h-6 px-2"
+              size="xs"
               onClick={() => onSelectionChange(effectiveDefaultToolIds)}
               disabled={selectionAtDefaults}
               title="Replace the selection with the default set assigned at creation"
@@ -1714,7 +1712,7 @@ export function ToolChecklist({
                     className="rounded-md border overflow-hidden"
                   >
                     <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-muted/40">
-                      <button
+                      <UnstyledButton
                         type="button"
                         onClick={() => toggleGroup(section.id)}
                         disabled={isSearching}
@@ -1732,12 +1730,11 @@ export function ToolChecklist({
                         <span className="text-xs text-muted-foreground shrink-0">
                           {totals.selected}/{totals.total}
                         </span>
-                      </button>
+                      </UnstyledButton>
                       <div className="flex gap-1 shrink-0">
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="text-xs h-5 px-1.5"
+                          size="xs"
                           onClick={() => setToolsSelected(section.tools, true)}
                           disabled={allGroupSelected}
                           aria-label={`${disableVariant ? "Disable all" : "Select all"} ${section.label} tools`}
@@ -1746,8 +1743,7 @@ export function ToolChecklist({
                         </Button>
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="text-xs h-5 px-1.5"
+                          size="xs"
                           onClick={() => setToolsSelected(section.tools, false)}
                           disabled={noneGroupSelected}
                           aria-label={`${disableVariant ? "Enable all" : "Clear"} ${section.label} tools`}

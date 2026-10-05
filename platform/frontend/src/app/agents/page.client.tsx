@@ -1122,6 +1122,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         <div className="flex items-center gap-2">
           {(canCreateAgent || canManageExternalAgents) && (
             <Button
+              size="sm"
               onClick={() => router.push(agentNewHref("agent"))}
               data-testid={E2eTestId.CreateAgentButton}
             >

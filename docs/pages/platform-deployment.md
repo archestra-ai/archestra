@@ -937,7 +937,7 @@ Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_
 - The Helm chart's runtime permissions in each execution namespace.
 - Outbound access from runtime workloads to your image registry, DNS, and Archestra's API, proxy, and gateway.
 
-Install the tested controller version before enabling the feature:
+The quickstart Docker image installs the controller in its KinD cluster when `ARCHESTRA_AGENT_RUNTIME_ENABLED=true`. On other clusters, install the tested version before enabling the feature:
 
 ```sh
 kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox-with-extensions.yaml

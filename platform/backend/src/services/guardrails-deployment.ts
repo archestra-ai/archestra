@@ -82,13 +82,18 @@ export async function firstPolicyRefusal(
     return { enabled: current.active, turnedOn: false };
   if (
     !userId ||
-    !(await userHasPermission(userId, organizationId, "organization", "update"))
+    !(await userHasPermission(
+      userId,
+      organizationId,
+      "organizationSettings",
+      "update",
+    ))
   )
     return {
       enabled: false,
       turnedOn: false,
       reason:
-        "Only an administrator can turn enforcement on, from the OpenAPPA policy page.",
+        "Turning enforcement on needs permission to update organization settings. Ask an administrator to turn it on from the OpenAPPA overview.",
     };
   return null;
 }

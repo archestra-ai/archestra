@@ -2708,7 +2708,7 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
     // The user may have accepted the plan through ask_user, so the text does
     // not credit the model with the choice.
     format!(
-        "[appa] {status}. Tell the user in your reply which plan was accepted. Call the {tool} tool again with exactly these arguments: {}",
+        "[appa] {status}. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the {tool} tool again with exactly these arguments: {}",
         call.arguments.get()
     )
 }
@@ -2878,7 +2878,7 @@ fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
 /// redispatch plan names another tool to run first). The hint says what to do
 /// and who decides; provider safety classifiers refused requests that told the
 /// model to skip the user.
-const UNEXECUTED_CALL_HINT: &str = "The tool did not run. If the ruling offers a plan that fits the user's request, apply that plan with the exact call that the ruling shows for it. If only the user can make this choice, ask the user with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. In questions and replies, describe the block and any plan in the ruling's own words, and do not guess who the readers are or how access would change. If the ruling offers no plan, explain the ruling to the user.";
+const UNEXECUTED_CALL_HINT: &str = "The tool did not run. A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next. Apply a fitting plan with the exact call that the ruling shows for it. If no plan fits, ask the user with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user, and say which part of their request the plan would prevent. In questions and replies, describe the block and any plan in the ruling's own words, and do not guess who the readers are beyond the audiences the ruling names. If the ruling offers no plan, explain the ruling to the user.";
 
 /// A result for a call this session never released. The code tells the proxy
 /// that nothing ran on the runtime's side: a remedy the gateway never ran
@@ -3335,7 +3335,9 @@ mod typed_tests {
         assert!(text.starts_with(&format!("{ruling}\n\nThe tool did not run.")));
         // A plan is carried out by the call the ruling shows, which for a
         // redispatch plan is another tool rather than the remedy tool.
-        assert!(text.contains("apply that plan with the exact call that the ruling shows for it"));
+        assert!(
+            text.contains("Apply a fitting plan with the exact call that the ruling shows for it")
+        );
         assert!(!text.contains("remedy tool"));
         // The same order of question tools as ask_user's own description.
         assert!(text.contains("the client's own question tool if it has one, otherwise ask_user"));
@@ -3393,7 +3395,9 @@ mod typed_tests {
         let (prefix, arguments) = text.split_once("exactly these arguments: ").unwrap();
         assert_eq!(
             prefix,
-            "[appa] Authorized. Tell the user in your reply which plan was accepted. Call the client_tool tool again with "
+            "[appa] Authorized. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, \
+             the session keeps its current label and calls that need the plan stay blocked. Call the client_tool tool \
+             again with "
         );
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),

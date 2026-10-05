@@ -220,6 +220,14 @@ describe("syncBuiltInAgents", () => {
     expect((await AgentModel.findById(previous.id))?.systemPrompt).toBe(
       BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG],
     );
+    await AgentModel.update(previous.id, {
+      systemPrompt:
+        "Configure this deployment's OpenAPPA policy. Load the appa-guide skill before policy work and follow its current workflow. Use your assigned policy and discovery tools to inspect the current effective policy and relevant agents, MCP gateways, and MCP server tools. When the user identifies a target, look it up by its ID before explaining or changing its rules; ask for clarification when the target is missing or unavailable, and keep changes scoped to it unless the user says otherwise. Preview proposed changes and explain their effects before publishing, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it. During initial setup, after saving the first policy, offer GitHub sync. List credentials visible to the user and select a connected organization GitHub App. If none is ready, call request_runtime_credential_setup so the user can create and connect one through the native chat dialog; never ask for secrets in chat. Then ask for the GitHub owner and repository name and create the private repository only after the user agrees.",
+    });
+    await syncBuiltInAgents();
+    expect((await AgentModel.findById(previous.id))?.systemPrompt).toBe(
+      BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG],
+    );
     expect(
       await ResourcePermissionPolicyModel.find({
         organizationId: organization.id,
@@ -350,6 +358,94 @@ describe("syncBuiltInAgents", () => {
       config.openappa.enabled = original;
     }
   });
+
+  test.for([
+    "missing",
+    "soft-deleted",
+  ] as const)("keeps the OpenAPPA agent's managed tools when the guide is %s", async (guideState, {
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    const withGuide = await makeOrganization();
+    const withoutGuide =
+      guideState === "soft-deleted" ? await makeOrganization() : null;
+    await syncBuiltInSkills();
+    const orgWithoutGuide = withoutGuide ?? (await makeOrganization());
+    if (guideState === "soft-deleted") {
+      const guide = await SkillModel.findBuiltIn({
+        organizationId: orgWithoutGuide.id,
+        sourceRef: builtInSkillSourceRef("appa-guide"),
+      });
+      await SkillModel.delete(guide?.id ?? "");
+    }
+    await syncBuiltInAgents();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncOpenAppaConfigAgentCapabilities();
+
+    const agentFor = async (organizationId: string) =>
+      (
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organizationId,
+        )
+      )?.id ?? "";
+    const guidedAgentId = await agentFor(withGuide.id);
+    const agentId = await agentFor(orgWithoutGuide.id);
+    const managedToolIds = (
+      await AgentToolModel.findToolIdsByAgent(guidedAgentId)
+    ).sort();
+    expect(managedToolIds).toHaveLength(20);
+    expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
+      managedToolIds,
+    );
+    expect(
+      (await AgentActivationSkillRuleModel.findPolicySnapshot(agentId))?.rules,
+    ).toEqual([]);
+    expect(await AgentSuggestedPromptModel.getForAgent(agentId)).toEqual(
+      OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+    );
+
+    await AgentToolModel.createManyIfNotExists(
+      agentId,
+      await ToolModel.findBuiltInToolIdsByNames([
+        archestraMcpBranding.getToolName("whoami"),
+      ]),
+    );
+    await syncOpenAppaConfigAgentCapabilities();
+    expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
+      managedToolIds,
+    );
+  });
+
+  test("leaves the OpenAPPA agent's tools alone while OpenAPPA is disabled", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = false;
+    const organization = await makeOrganization();
+    await syncBuiltInSkills();
+    await syncBuiltInAgents();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agentId =
+      (
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organization.id,
+        )
+      )?.id ?? "";
+    const manualToolIds = await ToolModel.findBuiltInToolIdsByNames([
+      archestraMcpBranding.getToolName("whoami"),
+    ]);
+    expect(manualToolIds).toHaveLength(1);
+    await AgentToolModel.createManyIfNotExists(agentId, manualToolIds);
+
+    await syncOpenAppaConfigAgentCapabilities();
+
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toEqual(
+      manualToolIds,
+    );
+    expect(await AgentSuggestedPromptModel.getForAgent(agentId)).toEqual([]);
+  });
+
   test("creates built-in agents for every organization", async ({
     makeOrganization,
   }) => {

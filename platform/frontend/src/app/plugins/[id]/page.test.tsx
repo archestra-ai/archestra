@@ -316,25 +316,19 @@ describe("PluginDetailPage", () => {
     ).toHaveAttribute("data-language", "powershell");
   });
 
-  it("attributes the vendor's own plugin to its author, not the deployment", async () => {
+  it("shows GitHub provenance for a marketplace import without a vendor byline", async () => {
     const user = userEvent.setup();
-    vi.mocked(useAppearanceSettings).mockReturnValue({
-      data: { appName: "Northstar" },
-    } as unknown as ReturnType<typeof useAppearanceSettings>);
     renderPage({
       ...BASE_PLUGIN,
       sourceKind: "github",
-      sourceRepo: "archestra-ai/OpenAPPA",
-      sourceMarketplaceRepo: "archestra-ai/OpenAPPA",
+      sourceRepo: "acme/policy-plugins",
+      sourceMarketplaceRepo: "acme/policy-plugins",
       sourceMarketplacePath: ".claude-plugin/marketplace.json",
-      sourceMarketplacePluginName: "appa-runtime",
+      sourceMarketplacePluginName: "policy-runtime",
     });
 
-    // The deployment is rebranded "Northstar" above, but the plugin is published
-    // by Archestra either way — rebranding must not rewrite someone else's byline.
-    expect(screen.getByText("Archestra")).toBeVisible();
-    expect(screen.queryByText("Northstar")).not.toBeInTheDocument();
-    expect(screen.queryByText("Imported from GitHub")).not.toBeInTheDocument();
+    expect(screen.getByText("Imported from GitHub")).toBeVisible();
+    expect(screen.queryByText("Archestra")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(screen.getByRole("menuitem", { name: "Updates" })).toBeVisible();
   });

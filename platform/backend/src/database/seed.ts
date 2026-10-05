@@ -410,20 +410,21 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     archestraMcpBranding.syncFromOrganization(
       await OrganizationModel.getById(organization.id),
     );
-    const guide = config.openappa.enabled
+    const enabled = config.openappa.enabled;
+    const guide = enabled
       ? await SkillModel.findBuiltIn({
           organizationId: organization.id,
           sourceRef: builtInSkillSourceRef("appa-guide"),
         })
       : null;
-    const toolIds =
-      guide && !guide.deletedAt
-        ? await ToolModel.findBuiltInToolIdsByNames(
-            toolShortNames.map((shortName) =>
-              archestraMcpBranding.getToolName(shortName),
-            ),
-          )
-        : [];
+    const liveGuide = guide && !guide.deletedAt ? guide : null;
+    const toolIds = enabled
+      ? await ToolModel.findBuiltInToolIdsByNames(
+          toolShortNames.map((shortName) =>
+            archestraMcpBranding.getToolName(shortName),
+          ),
+        )
+      : [];
 
     const agent = await AgentModel.getBuiltInAgent(
       BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
@@ -456,7 +457,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
           publishToOrganization: true,
         });
       }
-      if (!guide || guide.deletedAt) return agent.id;
+      if (!enabled) return agent.id;
 
       const currentTools = await tx
         .select({ toolId: schema.agentToolsTable.toolId })
@@ -476,33 +477,35 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
             .values(toolIds.map((toolId) => ({ agentId: agent.id, toolId })));
         }
       }
-      const snapshot = await AgentActivationSkillRuleModel.findPolicySnapshot(
-        agent.id,
-        tx,
-      );
-      const guideIsAssigned =
-        snapshot?.mode === "manual" &&
-        snapshot.rules.length === 1 &&
-        snapshot.rules[0].disposition === "allow" &&
-        snapshot.rules[0].reference.source === "native" &&
-        snapshot.rules[0].reference.skillId === guide.id;
-      if (!guideIsAssigned) {
-        await AgentActivationSkillRuleModel.replaceRules({
-          agentId: agent.id,
-          rules: [
-            {
-              disposition: "allow",
-              reference: { source: "native", skillId: guide.id },
-            },
-          ],
+      if (liveGuide) {
+        const snapshot = await AgentActivationSkillRuleModel.findPolicySnapshot(
+          agent.id,
           tx,
-        });
-        await AgentModel.setActivationSkillPolicyState({
-          id: agent.id,
-          mode: "manual",
-          revision: (snapshot?.revision ?? 0) + 1,
-          tx,
-        });
+        );
+        const guideIsAssigned =
+          snapshot?.mode === "manual" &&
+          snapshot.rules.length === 1 &&
+          snapshot.rules[0].disposition === "allow" &&
+          snapshot.rules[0].reference.source === "native" &&
+          snapshot.rules[0].reference.skillId === liveGuide.id;
+        if (!guideIsAssigned) {
+          await AgentActivationSkillRuleModel.replaceRules({
+            agentId: agent.id,
+            rules: [
+              {
+                disposition: "allow",
+                reference: { source: "native", skillId: liveGuide.id },
+              },
+            ],
+            tx,
+          });
+          await AgentModel.setActivationSkillPolicyState({
+            id: agent.id,
+            mode: "manual",
+            revision: (snapshot?.revision ?? 0) + 1,
+            tx,
+          });
+        }
       }
       const currentPrompts = await AgentSuggestedPromptModel.getForAgent(
         agent.id,
@@ -1395,8 +1398,7 @@ function shouldSyncBuiltInAgentSystemPrompt(params: {
   if (params.builtInAgentId === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG) {
     return (
       params.systemPrompt === null ||
-      params.systemPrompt === LEGACY_OPENAPPA_CONFIG_SYSTEM_PROMPT ||
-      params.systemPrompt === PREVIOUS_OPENAPPA_CONFIG_SYSTEM_PROMPT
+      SUPERSEDED_OPENAPPA_CONFIG_SYSTEM_PROMPTS.includes(params.systemPrompt)
     );
   }
   if (params.systemPrompt === null) {
@@ -1414,6 +1416,15 @@ const LEGACY_OPENAPPA_CONFIG_SYSTEM_PROMPT =
 
 const PREVIOUS_OPENAPPA_CONFIG_SYSTEM_PROMPT =
   "Configure this deployment's OpenAPPA policy. Load the appa-guide skill before policy work and follow its current workflow. Use your assigned policy and discovery tools to inspect the current effective policy and relevant agents, MCP gateways, and MCP server tools. When the user identifies a target, look it up by its ID before explaining or changing its rules; ask for clarification when the target is missing or unavailable, and keep changes scoped to it unless the user says otherwise. Preview proposed changes and explain their effects before publishing, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it.";
+
+const GUIDE_REQUIRED_OPENAPPA_CONFIG_SYSTEM_PROMPT =
+  "Configure this deployment's OpenAPPA policy. Load the appa-guide skill before policy work and follow its current workflow. Use your assigned policy and discovery tools to inspect the current effective policy and relevant agents, MCP gateways, and MCP server tools. When the user identifies a target, look it up by its ID before explaining or changing its rules; ask for clarification when the target is missing or unavailable, and keep changes scoped to it unless the user says otherwise. Preview proposed changes and explain their effects before publishing, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it. During initial setup, after saving the first policy, offer GitHub sync. List credentials visible to the user and select a connected organization GitHub App. If none is ready, call request_runtime_credential_setup so the user can create and connect one through the native chat dialog; never ask for secrets in chat. Then ask for the GitHub owner and repository name and create the private repository only after the user agrees.";
+
+const SUPERSEDED_OPENAPPA_CONFIG_SYSTEM_PROMPTS: readonly string[] = [
+  LEGACY_OPENAPPA_CONFIG_SYSTEM_PROMPT,
+  PREVIOUS_OPENAPPA_CONFIG_SYSTEM_PROMPT,
+  GUIDE_REQUIRED_OPENAPPA_CONFIG_SYSTEM_PROMPT,
+];
 
 const LEGACY_POLICY_CONFIG_SYSTEM_PROMPT = `Analyze this MCP tool and determine security policies:
 

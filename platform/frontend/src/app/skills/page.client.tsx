@@ -1440,14 +1440,6 @@ function listedSkillSource(item: ListedSkill): {
     return { label: `${item.skill.serverName} · MCP`, isRepo: false };
   }
   if (item.source === "plugin") {
-    const repo =
-      item.skill.sourceMarketplaceRepo ?? item.skill.sourceRepo ?? null;
-    const isOpenAppa =
-      item.skill.pluginName.toLowerCase() === "openappa" &&
-      repo?.toLowerCase() === "archestra-ai/openappa";
-    if (isOpenAppa) {
-      return { label: "OpenAPPA", isRepo: false };
-    }
     return { label: `${item.skill.pluginName} · Plugin`, isRepo: false };
   }
   if (item.skill.sourceType === "built_in") {
@@ -1484,21 +1476,6 @@ function ListedSkillIcon({
     );
   }
   if (item.source === "plugin") {
-    const repo =
-      item.skill.sourceMarketplaceRepo ?? item.skill.sourceRepo ?? null;
-    if (
-      item.skill.pluginName.toLowerCase() === "openappa" &&
-      repo?.toLowerCase() === "archestra-ai/openappa"
-    ) {
-      return (
-        <span
-          className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
-          aria-hidden
-        >
-          <OpenAppaSolidIcon className="size-6" />
-        </span>
-      );
-    }
     return <PluginSourceIcon plugin={item.skill} />;
   }
   if (item.skill.sourceRef === "builtin:appa-guide") {

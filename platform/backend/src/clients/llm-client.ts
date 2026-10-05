@@ -66,6 +66,7 @@ import {
   isVertexAiEnabled,
   resolveVertexLocation,
 } from "@/clients/gemini-client";
+import { internalCallHeader } from "@/clients/internal-call";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
@@ -218,6 +219,8 @@ export function createLLMModel(params: {
   appId?: string | null;
   /** See ProviderModelConfig.createModel — resolved only on the agent path. */
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
+  /** A platform guardrail call, exempt from blocking unrecognized clients. */
+  internalCall?: boolean;
 }): LLMModel {
   const {
     provider,
@@ -239,7 +242,9 @@ export function createLLMModel(params: {
   } = params;
 
   // Build headers for LLM Proxy
-  const clientHeaders: Record<string, string> = {};
+  const clientHeaders: Record<string, string> = params.internalCall
+    ? internalCallHeader()
+    : {};
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }

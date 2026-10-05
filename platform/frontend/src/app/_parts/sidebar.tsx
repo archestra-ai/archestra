@@ -152,7 +152,7 @@ function SidebarModeToggle({
       className={cn(
         "relative flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors",
         mode === value
-          ? "bg-background font-medium text-foreground shadow-sm"
+          ? "bg-sidebar-emphasis font-medium text-sidebar shadow-sm"
           : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -222,8 +222,8 @@ const NavPrimary = ({
           <span className="min-w-0 flex-1 truncate">{item.title}</span>
           {item.beta && (
             <Badge
-              variant="secondary"
-              className="ml-auto shrink-0 px-1.5 py-0 text-[10px] group-data-[collapsible=icon]:hidden"
+              variant="outline"
+              className="ml-auto shrink-0 border-sidebar-emphasis bg-sidebar px-1.5 py-0 text-[10px] text-sidebar-emphasis group-data-[collapsible=icon]:hidden"
             >
               {item.badgeLabel ?? "New"}
             </Badge>

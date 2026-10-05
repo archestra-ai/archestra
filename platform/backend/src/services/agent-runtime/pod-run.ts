@@ -3,7 +3,7 @@ import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
 import config from "@/config";
-import { isK8sNotFoundError } from "@/k8s/shared";
+import { describeK8sApiError, isK8sNotFoundError } from "@/k8s/shared";
 import logger from "@/logging";
 import {
   A2ATaskModel,
@@ -325,7 +325,7 @@ async function startAgentRunSession(params: {
         "Cleanup after a failed Agent Runtime launch will retry",
       );
     }
-    throw error;
+    throw describeLaunchFailure(error);
   }
 
   return session;
@@ -638,6 +638,19 @@ async function persistTranscript(params: {
         "Could not retain the complete Agent run transcript",
       );
     });
+}
+
+/**
+ * The launch error becomes the run's failure reason. A raw Kubernetes client
+ * error dumps status, body and every response header; keep only what an
+ * administrator can act on.
+ */
+function describeLaunchFailure(error: unknown): unknown {
+  const summary = describeK8sApiError(error);
+  if (!summary) return error;
+  return new Error(`Agent Runtime could not start the run. ${summary}.`, {
+    cause: error,
+  });
 }
 
 function delayMs(ms: number, signal?: AbortSignal): Promise<void> {

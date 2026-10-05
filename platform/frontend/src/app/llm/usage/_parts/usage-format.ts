@@ -2,8 +2,8 @@
  * Shared formatting for the My Usage page.
  *
  * Token counts here run to the hundreds of millions, where a fully punctuated
- * number is read as a length rather than a value. Costs stay exact: they are
- * small, and rounding money is how a page stops being trusted.
+ * number is read as a length rather than a value. Money goes through the
+ * shared `formatCurrency` instead.
  */
 
 const compactTokens = new Intl.NumberFormat(undefined, {
@@ -13,13 +13,6 @@ const compactTokens = new Intl.NumberFormat(undefined, {
 
 export function formatTokens(tokens: number): string {
   return compactTokens.format(tokens);
-}
-
-export function formatCost(cost: number): string {
-  // Sub-cent amounts are real at this granularity, and "$0.00" next to a
-  // non-zero token count reads as a bug rather than as a small number.
-  const decimals = cost !== 0 && Math.abs(cost) < 0.01 ? 4 : 2;
-  return `$${cost.toFixed(decimals)}`;
 }
 
 /** `share` of `total` as a whole percentage, guarding the empty-timeframe 0/0. */

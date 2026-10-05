@@ -1276,6 +1276,7 @@ export default function StatisticsPage() {
                           subscriptionCost={String(user.subscriptionCost)}
                           baselineCost={String(user.billedCost)}
                           tooltip="hover"
+                          precision="cents"
                           className="flex-wrap"
                         />
                       </TableCell>

@@ -452,9 +452,6 @@ export function ChatSidebarSection({
                 }}
               />
             )}
-            {(canUpdateConversation || canDeleteConversation) && (
-              <span className="w-4 shrink-0" aria-hidden />
-            )}
           </div>
         </SidebarMenuSubItem>
       );
@@ -475,6 +472,8 @@ export function ChatSidebarSection({
       generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
+    const showChatMenu =
+      editingId !== conv.id && (canUpdateConversation || canDeleteConversation);
     const showProjectActions =
       canUpdateConversation === true &&
       canReadProjects === true &&
@@ -490,8 +489,11 @@ export function ChatSidebarSection({
       <SidebarMenuSubItem key={conv.id}>
         <div
           className={cn(
-            "flex items-center justify-between w-full gap-2 rounded-md pr-2 hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            "relative flex items-center justify-between w-full gap-2 rounded-md pr-2 hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
             isCurrentConversation && "bg-sidebar-accent",
+            // Reserve the menu gutter only while the menu trigger is visible.
+            showChatMenu && "hover:pr-7 focus-within:pr-7",
+            showChatMenu && isMenuOpen && "pr-7",
           )}
         >
           {editingId === conv.id ? (
@@ -636,119 +638,116 @@ export function ChatSidebarSection({
               }}
             />
           )}
-          {/* Sibling of the row button (not nested inside it): interactive
-              controls must not be nested, and the trigger must be a real
-              button rather than a bare svg. */}
-          {editingId !== conv.id &&
-            (canUpdateConversation || canDeleteConversation) && (
-              <DropdownMenu
-                open={isMenuOpen}
-                onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
-              >
-                <DropdownMenuTrigger asChild>
-                  {/* A real button: ARIA menu attributes are not valid on a
+          {/* Absolute so the trigger never permanently narrows the title. */}
+          {showChatMenu && (
+            <DropdownMenu
+              open={isMenuOpen}
+              onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
+            >
+              <DropdownMenuTrigger asChild>
+                {/* A real button: ARIA menu attributes are not valid on a
                     bare <svg>, and an svg is not keyboard-operable. */}
-                  <UnstyledButton
-                    type="button"
-                    aria-label="Chat actions"
-                    className={cn(
-                      "shrink-0 transition-opacity",
-                      isMenuOpen
-                        ? "opacity-100"
-                        : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
-                    )}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <MoreHorizontal className="h-4 w-4 p-0" />
-                  </UnstyledButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="right">
-                  {canUpdateConversation && (
-                    <>
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTogglePin(conv.id, isPinned);
-                        }}
-                      >
-                        {isPinned ? (
-                          <>
-                            <PinOff className="h-4 w-4 mr-2" />
-                            Unpin
-                          </>
-                        ) : (
-                          <>
-                            <Pin className="h-4 w-4 mr-2" />
-                            Pin
-                          </>
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEdit(conv.id, displayTitle);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Rename
-                      </DropdownMenuItem>
-                      {canRegenerateTitle && (
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRegenerateTitle(conv.id);
-                          }}
-                          disabled={generateTitleMutation.isPending}
-                        >
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Regenerate title
-                        </DropdownMenuItem>
-                      )}
-                      {showProjectActions && (
-                        <ConversationProjectActions
-                          projectId={conv.projectId}
-                          projects={projectsData ?? []}
-                          isPending={
-                            updateConversationMutation.isPending ||
-                            createProjectMutation.isPending
-                          }
-                          onCreateProject={
-                            canCreateProject === true
-                              ? async (name) => {
-                                  const project =
-                                    await createProjectMutation.mutateAsync({
-                                      name,
-                                    });
-                                  if (project)
-                                    await handleChangeProject(
-                                      conv.id,
-                                      project.id,
-                                    );
-                                }
-                              : undefined
-                          }
-                          onProjectChange={(projectId) =>
-                            handleChangeProject(conv.id, projectId)
-                          }
-                        />
-                      )}
-                    </>
+                <UnstyledButton
+                  type="button"
+                  aria-label="Chat actions"
+                  className={cn(
+                    "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
+                    isMenuOpen
+                      ? "opacity-100"
+                      : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
                   )}
-                  {canDeleteConversation && (
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-4 w-4 p-0" />
+                </UnstyledButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="right">
+                {canUpdateConversation && (
+                  <>
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
-                        setDeleteConfirmId(conv.id);
+                        handleTogglePin(conv.id, isPinned);
                       }}
-                      className="text-destructive focus:text-destructive"
                     >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
+                      {isPinned ? (
+                        <>
+                          <PinOff className="h-4 w-4 mr-2" />
+                          Unpin
+                        </>
+                      ) : (
+                        <>
+                          <Pin className="h-4 w-4 mr-2" />
+                          Pin
+                        </>
+                      )}
                     </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartEdit(conv.id, displayTitle);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Rename
+                    </DropdownMenuItem>
+                    {canRegenerateTitle && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRegenerateTitle(conv.id);
+                        }}
+                        disabled={generateTitleMutation.isPending}
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Regenerate title
+                      </DropdownMenuItem>
+                    )}
+                    {showProjectActions && (
+                      <ConversationProjectActions
+                        projectId={conv.projectId}
+                        projects={projectsData ?? []}
+                        isPending={
+                          updateConversationMutation.isPending ||
+                          createProjectMutation.isPending
+                        }
+                        onCreateProject={
+                          canCreateProject === true
+                            ? async (name) => {
+                                const project =
+                                  await createProjectMutation.mutateAsync({
+                                    name,
+                                  });
+                                if (project)
+                                  await handleChangeProject(
+                                    conv.id,
+                                    project.id,
+                                  );
+                              }
+                            : undefined
+                        }
+                        onProjectChange={(projectId) =>
+                          handleChangeProject(conv.id, projectId)
+                        }
+                      />
+                    )}
+                  </>
+                )}
+                {canDeleteConversation && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteConfirmId(conv.id);
+                    }}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </SidebarMenuSubItem>
     );

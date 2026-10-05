@@ -16,7 +16,7 @@ import {
 import type { ChatStatus } from "ai";
 import { TerminalSquare, XIcon } from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   PromptInput,
@@ -1404,7 +1404,10 @@ const ArchestraPromptInput = ({
   );
 };
 
-export default ArchestraPromptInput;
+// Memoized so the chat page re-rendering on every streamed chunk does not
+// re-render the composer; its draft lives in PromptInputProvider, so typing
+// never re-renders the page either. Callers pass stable callbacks.
+export default memo(ArchestraPromptInput);
 
 // Older clients could leave serialized nullish sentinels in prompt storage.
 // They are state markers, not user drafts, and briefly painting one into the

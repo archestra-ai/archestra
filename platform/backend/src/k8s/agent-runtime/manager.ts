@@ -114,9 +114,38 @@ class AgentRuntimeManager {
   private clients: K8sClients | null = null;
   /** Cached: loading a kubeconfig touches the filesystem. */
   private clusterReachable: boolean | null = null;
+  /** Only a positive answer is cached, so installing the controller needs no restart. */
+  private sandboxApiInstalled = false;
 
   get isEnabled(): boolean {
     return config.agentRuntime.enabled && this.canReachCluster();
+  }
+
+  /**
+   * Reject a run on a cluster without the upstream Agent Sandbox controller.
+   * Every run is a `Sandbox` custom resource; without its CRD the create
+   * returns a bare 404 and the run fails before writing any output. API
+   * discovery needs no RBAC, so this works with namespaced runtime permissions.
+   */
+  async assertSandboxApiInstalled(): Promise<void> {
+    if (this.sandboxApiInstalled) return;
+    const resources = await this.requireClients()
+      .customObjectsApi.getAPIResources({
+        group: AGENT_SANDBOX_API.group,
+        version: AGENT_SANDBOX_API.version,
+      })
+      .catch((error) => {
+        if (isK8sNotFoundError(error)) return null;
+        throw error;
+      });
+    if (
+      !resources?.resources.some(
+        (resource) => resource.name === AGENT_SANDBOX_API.plural,
+      )
+    ) {
+      throw new ApiError(503, AGENT_SANDBOX_CONTROLLER_MISSING_MESSAGE);
+    }
+    this.sandboxApiInstalled = true;
   }
 
   /**
@@ -126,6 +155,7 @@ class AgentRuntimeManager {
    * schedulable without its egress isolation in force.
    */
   async launch(spec: AgentRunLaunchSpec): Promise<void> {
+    await this.assertSandboxApiInstalled();
     const clients = this.requireClients();
     const names = agentRuntimeNames(spec.frozenName);
     const { runtimeScope, ...runtimeSpec } = spec;
@@ -1830,6 +1860,8 @@ const AGENT_RUNTIME_COMPLETION_POLL_MS = 5_000;
 const AGENT_RUNTIME_INPUT_STAGING_POLL_MS = 500;
 const AGENT_RUNTIME_INPUT_STAGING_TIMEOUT_MS = 5 * 60_000;
 const AGENT_RUNTIME_ATTACH_TIMEOUT_MS = 60_000;
+const AGENT_SANDBOX_CONTROLLER_MISSING_MESSAGE =
+  "Agent Runtime needs the Agent Sandbox controller, and this cluster does not have it installed. Ask an administrator to install it.";
 
 function agentRuntimeTerminalAttachCommand(): string[] {
   return [AGENT_RUNTIME_ATTACH_SCRIPT];

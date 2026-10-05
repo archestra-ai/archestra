@@ -308,6 +308,10 @@ export const RouteId = {
     "openrouterChatCompletionsWithDefaultAgent",
   OpenrouterChatCompletionsWithAgent: "openrouterChatCompletionsWithAgent",
 
+  // Proxy Routes - Jev
+  JevDecisionsWithDefaultAgent: "jevDecisionsWithDefaultAgent",
+  JevDecisionsWithAgent: "jevDecisionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
@@ -731,6 +735,7 @@ export const RouteId = {
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
+  UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
   GenerateTelegramLinkCode: "generateTelegramLinkCode",
   ConnectNgrok: "connectNgrok",
   DisconnectNgrok: "disconnectNgrok",

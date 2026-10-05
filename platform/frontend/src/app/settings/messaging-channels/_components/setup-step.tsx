@@ -11,6 +11,7 @@ export function SetupStep({
   onAction,
   doneActionLabel,
   onDoneAction,
+  secondaryDoneAction,
   children,
 }: {
   title: string;
@@ -20,6 +21,8 @@ export function SetupStep({
   onAction?: () => void;
   doneActionLabel?: string;
   onDoneAction?: () => void;
+  /** Extra action shown beside the done action (e.g. "Unlink" next to "Relink"). */
+  secondaryDoneAction?: { label: string; onClick: () => void };
   children?: React.ReactNode;
 }) {
   return (
@@ -48,7 +51,17 @@ export function SetupStep({
               </div>
             </div>
           </CardTitle>
-          <div className="shrink-0">
+          <div className="shrink-0 flex items-center gap-2">
+            {done && secondaryDoneAction && (
+              <Button
+                variant="outline"
+                onClick={secondaryDoneAction.onClick}
+                size="sm"
+                className="text-xs"
+              >
+                {secondaryDoneAction.label}
+              </Button>
+            )}
             {done && onDoneAction ? (
               <Button variant="outline" onClick={onDoneAction} size="sm">
                 {doneActionLabel}

@@ -542,6 +542,100 @@ describe("buildUserContent", () => {
     expect(note).toContain("repair.sqlite");
     expect(note).not.toContain("/home/sandbox");
   });
+
+  test("keeps an image inline and also stages it into the sandbox", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "image/png",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "photo.png",
+      },
+    ];
+    const stager = recordingStager([
+      { path: "/home/sandbox/attachments/photo.png" },
+    ]);
+
+    const { content, note } = await buildUserContent(
+      "Post this photo",
+      attachments,
+      { ...geminiOpts(PDF_AND_IMAGES), stageAttachments: stager.fn },
+    );
+
+    expect(fileMediaTypes(content)).toEqual(["image/png"]);
+    expect(stager.calls).toEqual([[attachments[0]]]);
+    expect(note).toContain(
+      '"photo.png" at /home/sandbox/attachments/photo.png',
+    );
+  });
+
+  test("stages sandbox-only files and images in one batch with pointers for both", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "image/jpeg",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "photo.jpg",
+      },
+      {
+        contentType: "application/octet-stream",
+        contentBase64: Buffer.from("sqlite-bytes").toString("base64"),
+        name: "repair.sqlite",
+      },
+    ];
+    const stager = recordingStager([
+      { path: "/home/sandbox/attachments/repair.sqlite" },
+      { path: "/home/sandbox/attachments/photo.jpg" },
+    ]);
+
+    const { content, note } = await buildUserContent("Inspect", attachments, {
+      ...geminiOpts(PDF_AND_IMAGES),
+      stageAttachments: stager.fn,
+    });
+
+    expect(stager.calls).toHaveLength(1);
+    expect(fileMediaTypes(content)).toEqual(["image/jpeg"]);
+    expect(note).toContain("/home/sandbox/attachments/repair.sqlite");
+    expect(note).toContain("/home/sandbox/attachments/photo.jpg");
+  });
+
+  test("does not report an image whose sandbox copy failed — it is still inline", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "image/png",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "photo.png",
+      },
+    ];
+    const stager = recordingStager([{ error: true }]);
+
+    const { content, note } = await buildUserContent("Look", attachments, {
+      ...geminiOpts(PDF_AND_IMAGES),
+      stageAttachments: stager.fn,
+    });
+
+    expect(fileMediaTypes(content)).toEqual(["image/png"]);
+    expect(note).toBe("");
+  });
+
+  test("keeps an image over the sandbox limit inline without staging it", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "image/png",
+        contentBase64: VALID_IMAGE_BASE64,
+        name: "photo.png",
+      },
+    ];
+    const stager = recordingStager([]);
+
+    const { content, note } = await buildUserContent("Look", attachments, {
+      ...geminiOpts(PDF_AND_IMAGES),
+      sandboxByteLimit: 1024,
+      stageAttachments: stager.fn,
+    });
+
+    expect(stager.calls).toHaveLength(0);
+    expect(fileMediaTypes(content)).toEqual(["image/png"]);
+    expect(note).toBe("");
+  });
 });
 
 describe("executeA2AMessage current turn assembly", () => {

@@ -5,7 +5,7 @@ import {
   foldCitationSources,
 } from "@archestra/shared";
 import { Info } from "lucide-react";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import { stripAssistantProtocolMarkers } from "@/components/chat/chat-messages.utils";
@@ -27,7 +27,8 @@ interface EditableAssistantMessageProps {
   citationParts?: KnowledgeGraphCitationsProps["parts"];
   editDisabled?: boolean;
   isStreaming?: boolean;
-  onStartEdit: (partKey: string) => void;
+  /** Omit for a read-only transcript: hides edit. */
+  onStartEdit?: (partKey: string) => void;
   onCancelEdit: () => void;
   onSave: (
     messageId: string,
@@ -35,11 +36,17 @@ interface EditableAssistantMessageProps {
     newText: string,
   ) => Promise<void>;
   feedback?: ChatMessageFeedback | null;
-  onFeedbackChange?: (feedback: ChatMessageFeedback | null) => void;
+  onFeedbackChange?: (
+    messageId: string,
+    feedback: ChatMessageFeedback | null,
+  ) => void;
   feedbackDisabled?: boolean;
 }
 
-export function EditableAssistantMessage({
+// Memoized so a streamed chunk, which re-renders the whole transcript, only
+// re-renders the bubble whose text changed. Callers pass stable callbacks
+// (see ChatMessages) so the memo holds.
+export const EditableAssistantMessage = memo(function EditableAssistantMessage({
   messageId,
   partIndex,
   partKey,
@@ -76,7 +83,7 @@ export function EditableAssistantMessage({
     folded && folded.entries.length > 0 ? folded.displayText : visibleText;
 
   const handleStartEdit = () => {
-    onStartEdit(partKey);
+    onStartEdit?.(partKey);
   };
 
   if (isEditing) {
@@ -134,10 +141,13 @@ export function EditableAssistantMessage({
           <div className="pointer-events-none absolute top-full left-0 z-10 pt-1 opacity-0 transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 @2xl/chat:top-1/2 @2xl/chat:left-full @2xl/chat:pt-0 @2xl/chat:pl-2 @2xl/chat:-translate-y-1/2">
             <MessageActions
               textToCopy={visibleText}
-              onEditClick={handleStartEdit}
+              onEditClick={onStartEdit && handleStartEdit}
               editDisabled={editDisabled}
               feedback={feedback}
-              onFeedbackChange={onFeedbackChange}
+              onFeedbackChange={
+                onFeedbackChange &&
+                ((nextFeedback) => onFeedbackChange(messageId, nextFeedback))
+              }
               feedbackDisabled={feedbackDisabled}
             />
           </div>
@@ -145,4 +155,4 @@ export function EditableAssistantMessage({
       </div>
     </Message>
   );
-}
+});

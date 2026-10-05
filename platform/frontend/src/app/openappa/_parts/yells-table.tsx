@@ -239,9 +239,7 @@ export function YellsTable() {
 function useYellInvestigation(yell: OpenAppaYell) {
   const router = useRouter();
   const { href, agents, permissions } = useOpenAppaChatLaunch({
-    promptKey: "explainPolicy",
-    yellId: yell.id,
-    hasArchive: yell.hasArchive,
+    subject: { kind: "yell", yellId: yell.id },
   });
   const archive = useOpenAppaYellArchive();
   return {

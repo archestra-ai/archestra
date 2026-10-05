@@ -80,3 +80,32 @@ describe("EditableUserMessage edit mode", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 });
+
+describe("EditableUserMessage actions", () => {
+  const viewProps = {
+    messageId: "message-1",
+    partIndex: 0,
+    partKey: "part-1",
+    text: "original",
+    isEditing: false,
+    onCancelEdit: vi.fn(),
+    onSave: vi.fn().mockResolvedValue(undefined),
+  };
+
+  it("offers edit and regenerate on the owner's transcript", () => {
+    render(<EditableUserMessage {...viewProps} onStartEdit={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Regenerate" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers only copy on a read-only transcript", () => {
+    render(<EditableUserMessage {...viewProps} />);
+
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Regenerate" })).toBeNull();
+  });
+});

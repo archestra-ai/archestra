@@ -83,6 +83,7 @@ import {
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
+import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
 import {
   type AgentUsage,
   agentOwnerLabel,
@@ -306,6 +307,10 @@ export function McpServerCard({
   );
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
+  // Install is offered only while the viewer has no connection they can use —
+  // the same rule as the registry's Installed filter and the server page.
+  const isInstalledForViewer =
+    isMcpServerInstalledForViewer(allServersForCatalog);
 
   // The distinct agents that can reach this catalog item, across every install
   // of it — the audience affected if those installs go away. Shared with the
@@ -407,15 +412,22 @@ export function McpServerCard({
   const oauthFailedServer =
     oauthFailedServers.find((s) => canReauthenticate(s)) ??
     oauthFailedServers[0];
-  const oauthReauthIndicator = oauthFailedServer ? (
-    <OAuthReauthIndicator
-      onActivate={
-        canReauthenticate(oauthFailedServer)
-          ? () => goToItemPage("credentials")
-          : undefined
-      }
-    />
-  ) : null;
+  // Worst live issue first, since issues are kind-ordered; an item whose only
+  // trouble the viewer muted still shows it, muted.
+  const statusIssue =
+    issues?.find((issue) => !issue.muted) ?? issues?.[0] ?? null;
+  // The issue badge already says "Needs re-authentication"; a second marker
+  // for the same failure on the same row only repeats it.
+  const oauthReauthIndicator =
+    oauthFailedServer && statusIssue?.kind !== "needs-reauth" ? (
+      <OAuthReauthIndicator
+        onActivate={
+          canReauthenticate(oauthFailedServer)
+            ? () => goToItemPage("credentials")
+            : undefined
+        }
+      />
+    ) : null;
 
   const isInstalling = isCardShowingInstallInProgress({
     deploymentFailed: isDeploymentFailed,
@@ -522,10 +534,6 @@ export function McpServerCard({
   const deploymentStatusIndicator = deploymentSummary ? (
     <DeploymentStatusIconDot summary={deploymentSummary} />
   ) : null;
-  // Worst live issue first, since issues are kind-ordered; an item whose only
-  // trouble the viewer muted still shows it, muted.
-  const statusIssue =
-    issues?.find((issue) => !issue.muted) ?? issues?.[0] ?? null;
   const primaryIssueAction = statusIssue ? (
     <McpServerIssueNotice
       item={item}
@@ -872,7 +880,7 @@ export function McpServerCard({
         {!isInstalling && (
           <>
             {uninstallButton}
-            {!hasPersonalConnection && remoteInstallButton}
+            {!isInstalledForViewer && remoteInstallButton}
           </>
         )}
       </div>
@@ -948,7 +956,7 @@ export function McpServerCard({
         {!isInstalling && (
           <>
             {uninstallButton}
-            {!hasPersonalConnection && localInstallButton}
+            {!isInstalledForViewer && localInstallButton}
           </>
         )}
       </div>

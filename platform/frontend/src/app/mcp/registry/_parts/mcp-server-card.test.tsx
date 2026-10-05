@@ -113,8 +113,8 @@ vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
   }),
 }));
 
-vi.mock("./mcp-registry-visibility", () => ({
-  hasMcpRegistryInstallForViewer: () => true,
+vi.mock("./mcp-registry-visibility", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./mcp-registry-visibility")>()),
   matchesMcpRegistryOwnershipFilters: () => true,
   mcpRegistryInstallPriority: () => 0,
 }));
@@ -195,6 +195,8 @@ const personalInstall = {
   name: "some-remote-server",
   ownerId: CURRENT_USER_ID,
   teamId: null,
+  scope: "personal",
+  canUseCredential: true,
   serverType: "remote",
   reinstallRequired: false,
   assignedAgents: [],
@@ -473,6 +475,74 @@ describe("McpServerCard uninstall permission", () => {
     );
 
     expect(screen.queryByTestId("oauth-reauth-state")).toBeNull();
+  });
+
+  it("does not offer Install when a team connection already serves the viewer", () => {
+    useMcpServersMock.mockReturnValue({
+      data: [
+        {
+          ...personalInstall,
+          ownerId: "teammate",
+          scope: "team",
+          teamId: "team-a",
+          canUseCredential: true,
+        },
+      ],
+    });
+    renderCard(card);
+
+    expect(
+      screen.queryByRole("button", { name: `Install ${item.name}` }),
+    ).toBeNull();
+  });
+
+  it("offers Install when only a colleague's personal connection exists", () => {
+    useMcpServersMock.mockReturnValue({
+      data: [
+        {
+          ...personalInstall,
+          ownerId: "colleague",
+          users: ["colleague"],
+          canUseCredential: false,
+        },
+      ],
+    });
+    renderCard(card);
+
+    expect(
+      screen.getByRole("button", { name: `Install ${item.name}` }),
+    ).toBeInTheDocument();
+  });
+
+  it("reports a failed OAuth refresh once when its issue badge is already shown", () => {
+    vi.mocked(useFeature).mockImplementation(
+      (flag) =>
+        (flag === "mcpServerAlertingEnabled") as unknown as ReturnType<
+          typeof useFeature
+        >,
+    );
+    useMcpServersMock.mockReturnValue({
+      data: [{ ...personalInstall, oauthRefreshError: "refresh_failed" }],
+    });
+    renderCard(
+      cloneElement(card, {
+        issues: [
+          {
+            kind: "needs-reauth",
+            audience: "you",
+            catalogId: item.id,
+            serverId: personalInstall.id,
+            detail: null,
+            since: null,
+            fingerprint: "v1:needs-reauth:test",
+            muted: false,
+            mutedReason: null,
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getAllByText("Needs re-authentication")).toHaveLength(1);
   });
 
   it("overlays a local runtime status dot on the icon with its status tooltip", async () => {

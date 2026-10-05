@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactElement } from "react";
+import { cloneElement, type ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/auth.query");
@@ -85,6 +85,8 @@ const personalInstall = {
   name: "some-remote-server",
   ownerId: CURRENT_USER_ID,
   teamId: null,
+  scope: "personal",
+  canUseCredential: true,
   serverType: "remote",
   reinstallRequired: false,
   assignedAgents: [],
@@ -169,6 +171,45 @@ describe("McpServerTable uninstall permission", () => {
     expect(screen.queryByText("Uninstall MCP Server")).not.toBeInTheDocument();
   });
 
+  it("reads Installed without an Install action when an organization connection serves the viewer", () => {
+    const orgInstall = {
+      ...personalInstall,
+      ownerId: "someone-else",
+      scope: "org",
+      canUseCredential: true,
+    } as InstalledServer;
+    useMcpServersMock.mockReturnValue({ data: [orgInstall] });
+    renderTable(
+      cloneElement(table, {
+        getServerInfo: () => ({ installedServer: orgInstall }),
+      }),
+    );
+
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Install some-remote-server" }),
+    ).toBeNull();
+  });
+
+  it("offers Install, not Installed, when only a colleague's connection exists", () => {
+    const colleagueInstall = {
+      ...personalInstall,
+      ownerId: "colleague",
+      canUseCredential: false,
+    } as InstalledServer;
+    useMcpServersMock.mockReturnValue({ data: [colleagueInstall] });
+    renderTable(
+      cloneElement(table, {
+        getServerInfo: () => ({ installedServer: colleagueInstall }),
+      }),
+    );
+
+    expect(screen.queryByText("Installed")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Install some-remote-server" }),
+    ).toBeInTheDocument();
+  });
+
   it("moves local runtime state to an icon dot and keeps Status installation-only", async () => {
     const user = userEvent.setup();
     const localItem = {
@@ -182,6 +223,7 @@ describe("McpServerTable uninstall permission", () => {
       catalogId: localItem.id,
       serverType: "local",
     } as InstalledServer;
+    useMcpServersMock.mockReturnValue({ data: [localInstall] });
 
     renderTable(
       <McpServerTable

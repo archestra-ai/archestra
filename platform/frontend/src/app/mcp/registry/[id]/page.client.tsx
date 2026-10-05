@@ -98,6 +98,7 @@ import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
+import { isMcpServerInstalledForViewer } from "../_parts/mcp-registry-visibility";
 import {
   getMcpServerActionModel,
   mcpServerAction,
@@ -514,7 +515,9 @@ function CatalogItemDetails({
             variant={variant}
             deploymentSummary={deploymentSummary}
             deploymentFeedState={deploymentFeedState}
-            connectionsCount={connectionsCount}
+            isInstalledForViewer={isMcpServerInstalledForViewer(
+              allServersForCatalog,
+            )}
           />
         )
       }
@@ -917,16 +920,22 @@ function ServerStatus({
   variant,
   deploymentSummary,
   deploymentFeedState,
-  connectionsCount,
+  isInstalledForViewer,
 }: {
   variant: "builtin" | "local" | "remote";
   deploymentSummary: DeploymentStatusSummary | null;
   /** Whether pod statuses can arrive at all, and whether any have yet. */
   deploymentFeedState: McpDeploymentFeedState;
-  connectionsCount: number;
+  /** The registry card's rule, so this page and the card's Install agree. */
+  isInstalledForViewer: boolean;
 }) {
   if (variant === "builtin") {
     return <Badge variant="secondary">Built-in</Badge>;
+  }
+  // Somebody else's connection (visible to an admin) does not install the
+  // server for the viewer, however its pod is doing.
+  if (!isInstalledForViewer) {
+    return <span className={typeRole({ role: "body" })}>Not installed</span>;
   }
   // A dot is a claim about a pod, so it is drawn only where a pod's state was
   // actually reported.
@@ -943,22 +952,19 @@ function ServerStatus({
       </span>
     );
   }
-  if (connectionsCount > 0) {
-    // No summary means no deployment entry for any of this server's ids. The
-    // feed's own state decides what that means, never the absence of an entry
-    // — the same rule the list's `installedStatusLabel` follows. A remote
-    // server has no pod at all, so "Installed" is its whole runtime story.
-    return (
-      <span className={typeRole({ role: "body" })}>
-        {variant === "remote" || deploymentFeedState === "disabled"
-          ? "Installed"
-          : deploymentFeedState === "loading"
-            ? "Checking…"
-            : "Status unavailable"}
-      </span>
-    );
-  }
-  return <span className={typeRole({ role: "body" })}>Not installed</span>;
+  // No summary means no deployment entry for any of this server's ids. The
+  // feed's own state decides what that means, never the absence of an entry
+  // — the same rule the list's `installedStatusLabel` follows. A remote
+  // server has no pod at all, so "Installed" is its whole runtime story.
+  return (
+    <span className={typeRole({ role: "body" })}>
+      {variant === "remote" || deploymentFeedState === "disabled"
+        ? "Installed"
+        : deploymentFeedState === "loading"
+          ? "Checking…"
+          : "Status unavailable"}
+    </span>
+  );
 }
 
 /** Keep operational failures visible even while Overview is collapsed. */

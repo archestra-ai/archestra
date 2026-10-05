@@ -282,9 +282,9 @@ function SidebarTrigger({
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
       variant="ghost"
-      size="icon"
+      size="icon-xs"
       aria-expanded={!isCollapsed}
-      className={cn("relative size-7", className)}
+      className={cn("relative", className)}
       onClick={(event) => {
         onClick?.(event);
         toggleSidebar();

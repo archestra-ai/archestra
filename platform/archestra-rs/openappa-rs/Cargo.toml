@@ -9,11 +9,11 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Actor-scoped peer messaging from OpenAPPA #593 and the `archestra` annotator builtin from #595.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "26cf1b91286073c77e104f8c0fdd5644cac7a553", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "26cf1b91286073c77e104f8c0fdd5644cac7a553" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "26cf1b91286073c77e104f8c0fdd5644cac7a553", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "26cf1b91286073c77e104f8c0fdd5644cac7a553" }
+# Actor-scoped peer messaging from OpenAPPA #593, the `archestra` annotator builtin from #595, and the `search_tools` battery rule from #596.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "93a07ff4a9171a550d989f2ff7183d841bbe001c", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "93a07ff4a9171a550d989f2ff7183d841bbe001c" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "93a07ff4a9171a550d989f2ff7183d841bbe001c", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "93a07ff4a9171a550d989f2ff7183d841bbe001c" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

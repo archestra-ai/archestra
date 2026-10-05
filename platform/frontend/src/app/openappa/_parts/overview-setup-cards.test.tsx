@@ -415,3 +415,19 @@ test("hidden docs links keep the branded client coverage explanation", async () 
   );
   expect(screen.queryByRole("link")).not.toBeInTheDocument();
 });
+
+test("links 'more' to clients and 'OpenAPPA session headers' to session-headers", async () => {
+  show("unrecognized");
+  const moreLink = await screen.findByRole("link", { name: /^more/ });
+  expect(moreLink).toHaveAttribute(
+    "href",
+    expect.stringContaining("platform-ai-tool-guardrails#clients"),
+  );
+  const headersLink = screen.getByRole("link", {
+    name: /^OpenAPPA session headers/,
+  });
+  expect(headersLink).toHaveAttribute(
+    "href",
+    expect.stringContaining("platform-ai-tool-guardrails#session-headers"),
+  );
+});

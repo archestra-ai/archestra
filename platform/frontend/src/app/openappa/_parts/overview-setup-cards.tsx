@@ -167,10 +167,8 @@ function EnforcementCard({ next }: { next: boolean }) {
           )}
         </span>
       }
-      action={null}
-    >
-      <div className="space-y-3 pt-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      action={
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Switch
               id="openappa-overview-enforcement"
@@ -198,8 +196,8 @@ function EnforcementCard({ next }: { next: boolean }) {
             <span>Ask about the policy</span>
           </OpenAppaChatButton>
         </div>
-      </div>
-    </StatusCard>
+      }
+    />
   );
 }
 
@@ -350,9 +348,9 @@ export function UnrecognizedClientsCard() {
             <>
               <span>
                 Guardrails work with natively supported clients like {appName}{" "}
-                chat, Claude Code, Codex,{" "}
+                chat, Claude Code, Codex, and{" "}
               </span>
-              <GuardrailsDocsLink anchor="clients">and more</GuardrailsDocsLink>
+              <GuardrailsDocsLink anchor="clients">more</GuardrailsDocsLink>
               <span>, and with any client that correctly sends </span>
               <GuardrailsDocsLink anchor="session-headers">
                 OpenAPPA session headers

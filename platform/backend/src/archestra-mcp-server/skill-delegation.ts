@@ -3,6 +3,7 @@ import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
+import type { RequestLookups } from "@/auth/request-lookups";
 import logger from "@/logging";
 import { AgentModel, SkillModel } from "@/models";
 import { reportSkillActivation } from "@/observability/metrics/skill";
@@ -53,16 +54,17 @@ export async function getSkillDelegationTools(context: {
   agentId: string;
   organizationId: string;
   userId?: string;
+  lookups?: RequestLookups;
 }): Promise<Tool[]> {
-  const { agentId, organizationId, userId } = context;
+  const { agentId, organizationId, userId, lookups } = context;
 
   if (!isRealUser(userId)) {
     return [];
   }
 
   const [skills, targetsBySlug] = await Promise.all([
-    findAgentDesignatedSkills({ agentId, organizationId, userId }),
-    findDelegationTargetsBySlug({ agentId, organizationId, userId }),
+    findAgentDesignatedSkills({ agentId, organizationId, userId, lookups }),
+    findDelegationTargetsBySlug({ agentId, organizationId, userId, lookups }),
   ]);
 
   const seenNames = new Set<string>();
@@ -319,13 +321,18 @@ async function findAgentDesignatedSkills(params: {
   agentId: string;
   organizationId: string;
   userId: string;
+  lookups?: RequestLookups;
 }): Promise<Skill[]> {
-  const { agentId, organizationId, userId } = params;
+  const { agentId, organizationId, userId, lookups } = params;
 
   const available = await listAvailableAgentSkills({
     organizationId,
     userId,
     agentId,
+    ...(lookups && {
+      environmentId: await lookups.agentEnvironmentId(agentId),
+      lookups,
+    }),
   });
   return available
     .filter((skill) => skill.source === "native")
@@ -344,17 +351,21 @@ async function findDelegationTargetsBySlug(params: {
   agentId: string;
   organizationId: string;
   userId: string;
+  lookups?: RequestLookups;
 }): Promise<Map<string, { id: string; name: string }>> {
-  const { agentId, organizationId, userId } = params;
+  const { agentId, organizationId, userId, lookups } = params;
 
   const [environmentId, isAgentAdmin] = await Promise.all([
-    AgentModel.findEnvironmentId(agentId),
+    lookups
+      ? lookups.agentEnvironmentId(agentId)
+      : AgentModel.findEnvironmentId(agentId),
     ResourcePermissions.allows({
       userId: userId,
       organizationId: organizationId,
       resource: "agent",
       scope: "*",
       action: "update",
+      lookups,
     }),
   ]);
 
@@ -364,6 +375,7 @@ async function findDelegationTargetsBySlug(params: {
     organizationId,
     excludeAgentId: agentId,
     environmentId,
+    lookups,
   });
 
   const bySlug = new Map<string, { id: string; name: string }>();

@@ -1,6 +1,7 @@
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import { AgentModel } from "@/models";
+import type { PrincipalSource } from "@/models/resource-permission-subject";
 import { listPluginSkills } from "@/plugins/plugin-skills";
 import { listExternalMcpSkills } from "@/services/external-mcp-skills";
 import { listAccessibleCatalogSkills } from "@/skills/skill-catalog-prompt";
@@ -17,6 +18,7 @@ export interface SkillAvailabilityContext {
   agentId?: string;
   /** Draft or pending-edit environment override; takes precedence over agentId. */
   environmentId?: string | null;
+  lookups?: PrincipalSource;
 }
 
 export type PolicyIndependentAvailableAgentSkill =
@@ -64,6 +66,7 @@ export async function listPolicyIndependentAvailableAgentSkills(
       organizationId: params.organizationId,
       userId: params.userId,
       environmentId,
+      lookups: params.lookups,
     }),
     config.mcpGateway.skillsEnabled
       ? listExternalMcpSkills({

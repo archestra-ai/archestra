@@ -18,6 +18,7 @@ import { findAgentAccessContextById } from "./agent-access-context";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type PrincipalSource,
 } from "./resource-permission-subject";
 import TeamLabelModel from "./team-label";
 
@@ -87,6 +88,7 @@ class AgentTeamModel {
     isAgentAdmin: boolean;
     agentAccessContext?: AgentAccessContext | null;
     action?: "read" | "use";
+    lookups?: PrincipalSource;
   }): Promise<boolean> {
     const {
       userId,
@@ -94,6 +96,7 @@ class AgentTeamModel {
       isAgentAdmin,
       agentAccessContext,
       action = "read",
+      lookups,
     } = params;
     logger.debug(
       { userId, agentId, isAgentAdmin },
@@ -107,10 +110,10 @@ class AgentTeamModel {
     }
 
     const table = schema.agentsTable;
-    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
-      organizationId: agent.organizationId,
-      userId,
-    });
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      lookups,
+      { organizationId: agent.organizationId, userId },
+    );
     const [granted] = await db
       .select({ id: table.id })
       .from(table)

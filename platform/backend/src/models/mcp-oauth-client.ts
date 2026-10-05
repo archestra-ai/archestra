@@ -18,6 +18,7 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import { OauthClientLabelModel } from "./entity-labels";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 import UserModel from "./user";
 
 class McpOauthClientModel {
@@ -36,6 +37,12 @@ class McpOauthClientModel {
       ? await OauthClientLabelModel.getIdsMatchingLabels(params.labels)
       : undefined;
     if (labelFilteredIds?.length === 0) return [];
+    const principal = params.viewer
+      ? await ResourcePermissionSubjectModel.resolvePrincipal({
+          organizationId: params.organizationId,
+          userId: params.viewer.userId,
+        })
+      : null;
 
     const rows = await db
       .select()
@@ -53,10 +60,9 @@ class McpOauthClientModel {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          params.viewer
+          principal
             ? ResourcePermissionPolicyModel.grantCondition({
-                organizationId: params.organizationId,
-                userId: params.viewer.userId,
+                ...principal,
                 resource: "mcpOauthClient",
                 scopeColumn: schema.oauthClientsTable.id,
                 action: "read",

@@ -7,6 +7,7 @@ import {
   SkillTeamModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import {
   explainAssignmentRejection,
   publishesSkills,
@@ -310,12 +311,17 @@ class AgentSkillAssignmentService {
       }
     }
 
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId: params.organizationId,
+      userId: params.userId,
+    });
     const accessible = await Promise.all(
       skills.map((skill) =>
         SkillTeamModel.userHasSkillAccess({
           organizationId: params.organizationId,
           userId: params.userId,
           skill,
+          principal,
         }),
       ),
     );

@@ -1,5 +1,6 @@
 import logger from "@/logging";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import type { GrantPrincipal } from "@/models/resource-permission-subject";
 import type { AclEntry } from "@/types";
 import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
 import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
@@ -38,6 +39,7 @@ import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 export async function resolveParentPassages(params: {
   results: VectorSearchResult[];
   userAcl: AclEntry[];
+  grantPrincipals?: GrantPrincipal[] | null;
   bypassAcl?: boolean;
   environmentId?: string | null;
   retrievalBackend?: KnowledgeRetrievalBackend;
@@ -45,6 +47,7 @@ export async function resolveParentPassages(params: {
   const {
     results,
     userAcl,
+    grantPrincipals,
     bypassAcl = false,
     environmentId,
     retrievalBackend = knowledgeRetrievalBackend,
@@ -61,6 +64,7 @@ export async function resolveParentPassages(params: {
   const siblings = await retrievalBackend.findParentSiblings({
     parents,
     userAcl,
+    grantPrincipals,
     bypassAcl,
     environmentId,
   });

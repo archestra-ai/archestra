@@ -15,6 +15,7 @@ import {
 import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { prepareAppaRequest } from "@/openappa/request";
+import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as appaService from "@/openappa/service";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import {
@@ -3041,6 +3042,98 @@ function identityStub(
 }
 
 describe("AppaPluginArchestra", () => {
+  for (const { name, wrapped } of [
+    { name: "archestra__get_run", wrapped: false },
+    { name: "archestra__get_run", wrapped: true },
+    { name: "agent__worker", wrapped: false },
+    { name: "agent__worker", wrapped: true },
+  ]) {
+    test(`releases approved ${name} calls through the registry, wrapped=${wrapped}`, async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      config.openappa.offerSigningSecret = "plugin-runtime-proof-test-key";
+      const organization = await makeOrganization();
+      if (name === "agent__worker") {
+        await makeAgent({
+          organizationId: organization.id,
+          name: "Worker",
+          runtime: {
+            image: "test:local",
+            command: null,
+            inferenceProtocol: "openai_responses",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: 24,
+            idleTimeoutMinutes: 5,
+          },
+        });
+      }
+      const context = requestContext({
+        sessionId: "runtime-source",
+        organizationId: organization.id,
+      });
+      trustedOf(context).request.tools = stubRequestTools();
+      const evaluate = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockResolvedValue([{ kind: "allow" }]);
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(new AppaPluginArchestra([new AppaChatAdapter()]));
+      const args =
+        name === "agent__worker"
+          ? { prompt: "Prepare a report" }
+          : { run_id: "example-run" };
+      const calls = [
+        {
+          id: "runtime-call",
+          name: wrapped ? "archestra__run_tool" : name,
+          arguments: wrapped ? { tool_name: name, tool_args: args } : args,
+        },
+      ];
+      try {
+        await registry.onSessionInit(context);
+        const validate = vi.fn(async () => null);
+        const outcome = await registry.onToolCalls(
+          { ...context, toolCalls: calls },
+          validate,
+        );
+        expect(validate).toHaveBeenCalledWith(calls);
+        expect(outcome.decision).toBe("allow");
+        if (outcome.decision !== "allow") throw new Error("Expected approval");
+        const released = outcome.toolCalls[0].arguments as Record<
+          string,
+          unknown
+        >;
+        const signed = wrapped
+          ? (released.tool_args as Record<string, unknown>)
+          : released;
+        const { runtime_proof: proof, ...original } = signed;
+        expect(original).toEqual(args);
+        expect(
+          verifyRuntimeToolProof({
+            proof,
+            organizationId: organization.id,
+            callerId: "user:user",
+            action: name === "archestra__get_run" ? "get_run" : name,
+            arguments: original,
+            secret: config.openappa.offerSigningSecret,
+          }),
+        ).toMatchObject({
+          toolCallId: "runtime-call",
+          spawn: name === "agent__worker",
+          session: { session_id: "runtime-source" },
+        });
+      } finally {
+        evaluate.mockRestore();
+        await registry.complete(context);
+      }
+    });
+  }
+
   test("evaluates a child request under its minted id as a parent branch", async ({
     makeOrganization,
   }) => {

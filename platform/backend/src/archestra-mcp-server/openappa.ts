@@ -45,6 +45,7 @@ import {
   peerProofAuthorizes,
   verifyPeerProof,
 } from "@/openappa/peer-claims";
+import { bindRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -58,6 +59,11 @@ import {
   recallYellSession,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
+import {
+  authenticatedRuntimeSpender,
+  parseWorkloadPrincipal,
+  workloadSpenderMayUseOffer,
+} from "@/services/agent-runtime/runtime-identity";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
   firstPolicyRefusal,
@@ -745,6 +751,22 @@ const registry = defineArchestraTools([
                 remedyArguments: unstampedRemedyArguments(args),
               },
             });
+            try {
+              await bindRuntimeHitlReview({
+                session: reviewSession,
+                review: {
+                  offerId: remedy.offer_id,
+                  text: review.text,
+                  ...(review.tool ? { tool: review.tool } : {}),
+                  ...(review.arguments ? { arguments: review.arguments } : {}),
+                },
+              });
+            } catch (error) {
+              logger.warn(
+                { error, offerId: remedy.offer_id },
+                "Could not index the runtime OpenAPPA review",
+              );
+            }
             return nativeReviewRequiredResult(remedy.offer_id);
           } else if (context.elicitation) {
             // Archestra Chat keeps its inline approval card.
@@ -765,9 +787,25 @@ const registry = defineArchestraTools([
         }
       }
 
+      const spender = authenticatedRuntimeSpender({
+        userId: context.userId,
+        callerId: context.openappaSession?.caller_id,
+      });
+      if (
+        !spender ||
+        (parseWorkloadPrincipal(spender) &&
+          !workloadSpenderMayUseOffer({
+            spender,
+            ownerCallerId: claims.caller_id,
+          })) ||
+        (parseWorkloadPrincipal(claims.caller_id) &&
+          claims.caller_id !== spender)
+      ) {
+        return unknownOfferResult();
+      }
       const byOffer = await executeRemedyByOffer({
         organizationId: context.organizationId,
-        ...(context.userId ? { callerId: `user:${context.userId}` } : {}),
+        callerId: spender,
         sessionId: claims.session_id,
         ...(claims.parent_id ? { parentId: claims.parent_id } : {}),
         ...(claims.caller_id ? { ownerCallerId: claims.caller_id } : {}),
@@ -1040,13 +1078,17 @@ function peerExecution(params: {
     params.proof,
     config.openappa.offerSigningSecret,
   );
+  const callerId = authenticatedRuntimeSpender({
+    userId: context.userId,
+    callerId: context.openappaSession?.caller_id,
+  });
   if (
     !proof ||
-    !context.userId ||
+    !callerId ||
     !peerProofAuthorizes({
       proof,
       organizationId: context.organizationId,
-      callerId: `user:${context.userId}`,
+      callerId,
       action: params.action,
       messageId: params.messageId,
     })

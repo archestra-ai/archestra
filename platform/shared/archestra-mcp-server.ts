@@ -1158,10 +1158,31 @@ export function buildElicitationMandateInstruction(params?: {
  * The model never writes these arguments. The proxy strips them from provider history
  * and tool declarations to keep provider state clean.
  */
+export const OPENAPPA_RUNTIME_TOOL_SHORT_NAMES = [
+  TOOL_START_RUN_SHORT_NAME,
+  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
+  TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_POST_RUN_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
   [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers"],
   [TOOL_LIST_PEER_MESSAGES_SHORT_NAME]: ["peer_proof"],
   [TOOL_READ_PEER_MESSAGE_SHORT_NAME]: ["peer_proof"],
+  [TOOL_START_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_STEER_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_GET_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_LIST_RUNS_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_LIST_AGENT_RUNS_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_READ_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_POST_RUN_FILE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
     "execution",
     "protected",

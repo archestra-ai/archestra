@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import config from "@/config";
+import { childSessionId } from "@/openappa/actor";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { mintDelegationMarker } from "@/openappa/delegation";
 import { prepareAppaRequest } from "@/openappa/request";
@@ -9,6 +10,7 @@ import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
+import { appaTrajectory } from "./session-identity";
 import type { AppaMatchContext } from "./types";
 
 describe("APPA child trajectory adapters", () => {
@@ -1359,6 +1361,506 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
   });
 });
 
+describe("runtime workspace anchor", () => {
+  const claudeCode = new AppaClaudeCodeAdapter();
+  const codex = new AppaCodexAdapter();
+  const openCode = new AppaOpenCodeAdapter();
+  const chat = new AppaChatAdapter();
+  const callerId = "user:user";
+  const workspace = "workspace";
+  const child = (nativeId: string) => childSessionId(workspace, nativeId);
+
+  test("binds Claude, Codex, and OpenCode children under the trusted workspace root", () => {
+    expect(
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "anthropic:messages",
+          body: { messages: [] },
+        }),
+      ),
+    ).toEqual({
+      sessionId: child("a1"),
+      parentId: workspace,
+      lineage: {
+        source: "native",
+        nativeParentId: "s1",
+        childNativeId: "a1",
+      },
+    });
+    expect(
+      codex.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "user-agent": "codex_cli_rs/0.99.0",
+            "x-codex-turn-metadata": JSON.stringify({
+              parent_thread_id: "t0",
+              thread_id: "t1",
+            }),
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "openai:responses",
+          body: {},
+        }),
+      ),
+    ).toEqual({
+      sessionId: child("t1"),
+      parentId: workspace,
+      lineage: {
+        source: "native",
+        nativeParentId: "t0",
+        childNativeId: "t1",
+      },
+    });
+    expect(
+      openCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "user-agent": "opencode/1.18.31",
+            "x-opencode-session": "c",
+            "x-session-id": "p",
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "openai:chatCompletions",
+          body: { messages: [] },
+        }),
+      ),
+    ).toEqual({
+      sessionId: child("c"),
+      parentId: workspace,
+      lineage: {
+        source: "native",
+        nativeParentId: "p",
+        childNativeId: "c",
+      },
+    });
+  });
+
+  test("keeps distinct children when the trusted workspace session already has a parent", () => {
+    const first = claudeCode.bindChildTrajectory(
+      runtimeRoot({
+        headers: {
+          "x-claude-code-session-id": "s1",
+          "x-claude-code-agent-id": "a1",
+          "x-appa-session-id": workspace,
+        },
+        interactionType: "anthropic:messages",
+        body: {},
+        parentId: `${callerId}|conversation`,
+      }),
+    );
+    const second = claudeCode.bindChildTrajectory(
+      runtimeRoot({
+        headers: {
+          "x-claude-code-session-id": "s1",
+          "x-claude-code-agent-id": "a2",
+          "x-appa-session-id": workspace,
+        },
+        interactionType: "anthropic:messages",
+        body: {},
+        parentId: `${callerId}|conversation`,
+      }),
+    );
+    expect(first?.sessionId).toBe(child("a1"));
+    expect(second?.sessionId).toBe(child("a2"));
+    expect(first?.parentId).toBe(workspace);
+    expect(second?.parentId).toBe(workspace);
+    expect(first?.sessionId).not.toBe(second?.sessionId);
+  });
+
+  test("keeps the native parent path when the workspace header is absent", () => {
+    expect(
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+          },
+          interactionType: "anthropic:messages",
+          body: {},
+          claim: false,
+        }),
+      ),
+    ).toEqual({
+      sessionId: "s1:a1",
+      parentId: "s1",
+      lineage: {
+        source: "native",
+        nativeParentId: "s1",
+        childNativeId: "a1",
+      },
+    });
+  });
+
+  test("rejects a claim that is not the trusted root and does not match the minted child", () => {
+    expect(() =>
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": "workspace:other",
+          },
+          interactionType: "anthropic:messages",
+          body: {},
+        }),
+      ),
+    ).toThrow(ApiError);
+    expect(() =>
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": workspace,
+            "x-appa-parent-id": "other-root",
+          },
+          interactionType: "anthropic:messages",
+          body: {},
+        }),
+      ),
+    ).toThrow(ApiError);
+  });
+
+  test("does not treat an explicit child-session claim as a workspace anchor", () => {
+    expect(
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": "s1:a1",
+            "x-appa-parent-id": "s1",
+          },
+          interactionType: "anthropic:messages",
+          body: {},
+          workspace: "s1:a1",
+        }),
+      ),
+    ).toEqual({
+      sessionId: "s1:a1",
+      parentId: "s1",
+      lineage: {
+        source: "native",
+        nativeParentId: "s1",
+        childNativeId: "a1",
+      },
+    });
+  });
+
+  test("rejects a signed marker or receipt that names a different parent or child", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    expect(() =>
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "anthropic:messages",
+          body: {
+            messages: [
+              {
+                role: "user",
+                content: opening({ parentId: "other-root", spawner: "s1" }),
+              },
+            ],
+          },
+        }),
+      ),
+    ).toThrow(ApiError);
+    const forged = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId,
+      parentId: workspace,
+      childId: child("evil"),
+      childNativeId: "a1",
+      spawnerNativeId: "s1",
+    });
+    expect(() =>
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "anthropic:messages",
+          body: {
+            messages: [{ role: "assistant", content: `${forged}\n\nok` }],
+          },
+        }),
+      ),
+    ).toThrow(ApiError);
+  });
+
+  test("keeps an agreeing marker and receipt, and ignores a tampered receipt", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    expect(
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "anthropic:messages",
+          body: {
+            messages: [
+              {
+                role: "user",
+                content: opening({ parentId: workspace, spawner: "s1" }),
+              },
+            ],
+          },
+        }),
+      ),
+    ).toMatchObject({
+      sessionId: child("a1"),
+      parentId: workspace,
+      lineage: { source: "marker", nativeParentId: "s1", childNativeId: "a1" },
+    });
+    const receipt = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId,
+      parentId: workspace,
+      childId: child("a1"),
+      childNativeId: "a1",
+      spawnerNativeId: "s1",
+      spawnCallId: "spawn-call",
+    });
+    expect(
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "anthropic:messages",
+          body: {
+            messages: [{ role: "assistant", content: `${receipt}\n\nok` }],
+          },
+        }),
+      ),
+    ).toMatchObject({
+      sessionId: child("a1"),
+      parentId: workspace,
+      lineage: {
+        source: "receipt",
+        nativeParentId: "s1",
+        childNativeId: "a1",
+        spawnCallId: "spawn-call",
+      },
+    });
+    const tampered = receipt?.replace("appact2-", "appact2-x");
+    expect(
+      claudeCode.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-session-id": "s1",
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "anthropic:messages",
+          body: {
+            messages: [{ role: "user", content: `${tampered}\n\nok` }],
+            tools: [{ name: "Bash" }],
+          },
+        }),
+      ),
+    ).toMatchObject({
+      sessionId: child("a1"),
+      parentId: workspace,
+      lineage: { source: "native", childNativeId: "a1" },
+    });
+  });
+
+  test("does not anchor a guardian review or a client with no native child binding", () => {
+    expect(
+      codex.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "user-agent": "codex_cli_rs/0.99.0",
+            "x-openai-subagent": "guardian",
+            "x-codex-turn-metadata": JSON.stringify({
+              parent_thread_id: "t0",
+              thread_id: "review",
+            }),
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "openai:responses",
+          body: { model: "codex-auto-review" },
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      chat.bindChildTrajectory(
+        runtimeRoot({
+          headers: {
+            "x-claude-code-agent-id": "a1",
+            "x-appa-session-id": workspace,
+          },
+          interactionType: "openai:chatCompletions",
+          body: {},
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
+  test("binds a grandchild under a signed intermediate parent and rejects a foreign or missing anchor", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const runtimeSessionId = `${callerId}|${workspace}`;
+    const childId = child("a1");
+    const grandchildId = childSessionId(childId, "g1");
+    expect(
+      claudeCode.bindChildTrajectory(
+        nestedChild({
+          parentId: childId,
+          runtimeSessionId,
+          agentId: "g1",
+        }),
+      ),
+    ).toMatchObject({
+      sessionId: grandchildId,
+      parentId: childId,
+      lineage: {
+        source: "marker",
+        nativeParentId: "s1",
+        childNativeId: "g1",
+      },
+    });
+    const receipt = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId,
+      parentId: childId,
+      childId: grandchildId,
+      childNativeId: "g1",
+      spawnerNativeId: "s1",
+      spawnCallId: "spawn-g",
+      runtimeSessionId,
+    });
+    expect(
+      claudeCode.bindChildTrajectory(
+        nestedChild({
+          parentId: childId,
+          runtimeSessionId,
+          agentId: "g1",
+          receipt,
+        }),
+      ),
+    ).toMatchObject({
+      sessionId: grandchildId,
+      parentId: childId,
+      lineage: { source: "receipt", childNativeId: "g1" },
+    });
+    const codexMarker = mintDelegationMarker({
+      organizationId: "org",
+      callerId,
+      parentId: child("t1"),
+      spawnerNativeId: "t0",
+      prompt: "continue",
+      spawnCallId: "spawn-g",
+      runtimeSessionId,
+    });
+    const codexContext = runtimeRoot({
+      headers: {
+        "user-agent": "codex_cli_rs/0.99.0",
+        "x-codex-turn-metadata": JSON.stringify({
+          parent_thread_id: "t0",
+          thread_id: "g1",
+        }),
+        "x-appa-session-id": workspace,
+      },
+      interactionType: "openai:responses",
+      body: {
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [
+              { type: "input_text", text: `continue\n\n${codexMarker}` },
+            ],
+          },
+        ],
+      },
+    });
+    if (!codexContext.trustedContext)
+      throw new Error("expected trusted context");
+    codexContext.trustedContext.runtimeSessionId = runtimeSessionId;
+    expect(codex.bindChildTrajectory(codexContext)).toMatchObject({
+      sessionId: childSessionId(child("t1"), "g1"),
+      parentId: child("t1"),
+      lineage: { source: "marker", nativeParentId: "t0", childNativeId: "g1" },
+    });
+    expect(() =>
+      claudeCode.bindChildTrajectory(
+        nestedChild({
+          parentId: childId,
+          runtimeSessionId: `${callerId}|other-workspace`,
+          agentId: "g1",
+        }),
+      ),
+    ).toThrow(ApiError);
+    expect(() =>
+      claudeCode.bindChildTrajectory(
+        nestedChild({
+          parentId: childId,
+          agentId: "g1",
+        }),
+      ),
+    ).toThrow(ApiError);
+    const forged = nestedChild({
+      parentId: childId,
+      runtimeSessionId,
+      agentId: "g1",
+    });
+    const marker = forged.trustedContext?.request.delegation?.markers[0];
+    if (!marker) throw new Error("expected a nested marker");
+    const last = marker.token.length - 1;
+    marker.token = `${marker.token.slice(0, last)}${marker.token[last] === "0" ? "1" : "0"}`;
+    const forgedBind = claudeCode.bindChildTrajectory(forged);
+    expect(forgedBind?.parentId).not.toBe(childId);
+    expect(forgedBind?.sessionId).not.toBe(grandchildId);
+  });
+
+  test("scopes the anchored child for the session that admits results and signs controls", () => {
+    const trusted = runtimeRoot({
+      headers: {
+        "user-agent": "claude-code/1",
+        "x-claude-code-session-id": "s1",
+        "x-claude-code-agent-id": "a1",
+        "x-appa-session-id": workspace,
+      },
+      interactionType: "anthropic:messages",
+      body: { messages: [] },
+    }).trustedContext;
+    if (!trusted) throw new Error("expected trusted context");
+    const trajectory = appaTrajectory({
+      adapters: [claudeCode],
+      headers: {
+        "user-agent": "claude-code/1",
+        "x-claude-code-session-id": "s1",
+        "x-claude-code-agent-id": "a1",
+        "x-appa-session-id": workspace,
+      },
+      requestBody: { messages: [] },
+      trustedContext: trusted,
+    });
+    expect(trajectory.session).toMatchObject({
+      session_id: `${callerId}|${child("a1")}`,
+      parent_id: `${callerId}|${workspace}`,
+      caller_id: callerId,
+    });
+    expect(trajectory.child?.lineage?.nativeParentId).toBe("s1");
+  });
+});
+
 const SECRET = "adapter-test-secret-0123456789abcdef";
 const PROMPT = "Look into the flaky test.";
 
@@ -1377,6 +1879,76 @@ function opening(params: {
     spawnCallId: params.spawnCallId,
   });
   return `${PROMPT}\n\n${marker}`;
+}
+
+function nestedChild(params: {
+  parentId: string;
+  agentId: string;
+  runtimeSessionId?: string;
+  receipt?: string;
+}): AppaMatchContext {
+  const marker = mintDelegationMarker({
+    organizationId: "org",
+    callerId: "user:user",
+    parentId: params.parentId,
+    spawnerNativeId: "s1",
+    prompt: "continue",
+    spawnCallId: "spawn-g",
+    ...(params.runtimeSessionId
+      ? { runtimeSessionId: params.runtimeSessionId }
+      : {}),
+  });
+  const context = runtimeRoot({
+    headers: {
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": params.agentId,
+      "x-appa-session-id": "workspace",
+    },
+    interactionType: "anthropic:messages",
+    body: {
+      messages: [
+        { role: "user", content: `continue\n\n${marker}` },
+        ...(params.receipt
+          ? [{ role: "assistant", content: params.receipt }]
+          : []),
+      ],
+      tools: [{ name: "Bash" }],
+    },
+  });
+  const trusted = context.trustedContext;
+  if (!trusted) throw new Error("expected trusted context");
+  trusted.runtimeSessionId = "user:user|workspace";
+  return context;
+}
+
+/** A runtime root the proxy already bound, plus the client's static session claim. */
+function runtimeRoot(params: {
+  headers: Record<string, string>;
+  interactionType: string;
+  body: unknown;
+  workspace?: string;
+  parentId?: string;
+  claim?: boolean;
+}): AppaMatchContext {
+  const workspace = params.workspace ?? "workspace";
+  const context = delegated(params);
+  const trusted = context.trustedContext;
+  if (!trusted) throw new Error("expected trusted context");
+  trusted.session = {
+    organization_id: "org",
+    caller_id: "user:user",
+    session_id: `user:user|${workspace}`,
+    ...(params.parentId ? { parent_id: params.parentId } : {}),
+  };
+  if (params.claim !== false) {
+    trusted.claims = {
+      sessionId: params.headers["x-appa-session-id"],
+      ...(params.headers["x-appa-parent-id"]
+        ? { parentId: params.headers["x-appa-parent-id"] }
+        : {}),
+    };
+  }
+  return context;
 }
 
 /** A match context whose trusted request read the body's markers. */

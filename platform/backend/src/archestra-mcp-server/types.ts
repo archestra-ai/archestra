@@ -10,6 +10,12 @@ import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-c
  */
 export interface ArchestraContext {
   openappaSession?: import("@/openappa/service").OpenAppaSession;
+  /** Proxy-authenticated source of a runtime handoff, never client-selected. */
+  openappaRuntimeCall?: {
+    session: import("@/openappa/service").OpenAppaSession;
+    toolCallId: string;
+    spawn: boolean;
+  };
   /** A verified, short-lived connection setup session; authentication and RBAC still apply. */
   connectionSetupBypass?: boolean;
   agent: {

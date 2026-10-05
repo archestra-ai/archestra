@@ -5,6 +5,7 @@ import {
   getArchestraToolShortName,
   isAgentTool,
   isSkillTool,
+  OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -20,11 +21,18 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
+import OpenAppaSessionModel from "@/models/openappa-session";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
+import {
+  RUNTIME_TOOL_PROOF_ARGUMENT,
+  verifyRuntimeToolProof,
+} from "@/openappa/runtime-tool-claims";
 import {
   isAppaDelegatedRun,
   openappaEnabled,
   openappaYellEnabled,
 } from "@/openappa/service";
+import { authenticatedRuntimeSpender } from "@/services/agent-runtime/runtime-identity";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
@@ -263,7 +271,25 @@ function getPluginToolNames(): ReadonlySet<string> {
 
 export function getArchestraMcpTools() {
   return brandTools(
-    getAllTools().filter((tool) => isToolRuntimeEnabled(tool.name)),
+    getAllTools()
+      .filter((tool) => isToolRuntimeEnabled(tool.name))
+      .map((tool) => {
+        const short = archestraMcpBranding.getToolShortName(tool.name);
+        if (!short || !runtimeToolNames.has(short)) return tool;
+        return {
+          ...tool,
+          inputSchema: {
+            ...tool.inputSchema,
+            properties: {
+              ...tool.inputSchema.properties,
+              [RUNTIME_TOOL_PROOF_ARGUMENT]: {
+                type: "string",
+                description: "Source-session proof supplied by the proxy.",
+              },
+            },
+          },
+        };
+      }),
   );
 }
 
@@ -307,6 +333,54 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  const runtimeProof = args?.[RUNTIME_TOOL_PROOF_ARGUMENT];
+  if (runtimeProof !== undefined) {
+    const action = archestraMcpBranding.getToolShortName(toolName) ?? toolName;
+    const verified = context.organizationId
+      ? verifyRuntimeToolProof({
+          proof: runtimeProof,
+          organizationId: context.organizationId,
+          callerId: authenticatedRuntimeSpender({
+            userId: context.userId,
+            callerId: context.openappaSession?.caller_id,
+          }),
+          action,
+          arguments: args ?? {},
+          secret: config.openappa.offerSigningSecret,
+        })
+      : null;
+    if (!verified || (!runtimeToolNames.has(action) && !isAgentTool(action))) {
+      return errorResult(
+        "OpenAPPA could not verify this runtime tool's source.",
+      );
+    }
+    const source = await OpenAppaSessionModel.familySession({
+      organizationId: verified.session.organization_id,
+      sessionId: verified.session.session_id,
+      callerId: verified.session.caller_id,
+    });
+    if (!source || source.parentId !== (verified.session.parent_id ?? null)) {
+      return errorResult(
+        "OpenAPPA could not find the recorded source session.",
+      );
+    }
+    const released = await OpenAppaSpawnCorrelationModel.releasedCalls({
+      organizationId: verified.session.organization_id,
+      callerId: verified.session.caller_id,
+      sessionId: verified.session.session_id,
+      toolCallIds: [verified.toolCallId],
+    });
+    if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
+      return errorResult("OpenAPPA has no matching released runtime call.");
+    }
+    context = {
+      ...context,
+      openappaRuntimeCall: verified,
+      currentToolCallId: verified.toolCallId,
+    };
+    const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args ?? {};
+    args = original;
+  }
   if (
     archestraMcpBranding.getToolShortName(toolName) === "yell" &&
     (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
@@ -428,6 +502,8 @@ export async function executeArchestraTool(
     throw error;
   }
 }
+
+const runtimeToolNames = new Set<string>(OPENAPPA_RUNTIME_TOOL_SHORT_NAMES);
 
 /**
  * Validates a built-in tool call without executing it.

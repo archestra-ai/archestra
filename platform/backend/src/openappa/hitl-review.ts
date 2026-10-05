@@ -45,6 +45,24 @@ export async function getHitlReview(params: {
   return review?.offerId === params.offerId ? review : undefined;
 }
 
+/** Observe a human ruling without spending the remedy's one-time approval. */
+export async function peekHitlRuling(params: {
+  session: OpenAppaSession;
+  offerId: string;
+}): Promise<HitlRuling | undefined> {
+  for (const ruling of ["deny", "none", "approve"] as const) {
+    const entry = await cacheManager.get<{
+      offerId: string;
+      ruling: HitlRuling;
+    }>(rulingKey(params.session, params.offerId, ruling), {
+      throwOnError: true,
+    });
+    if (entry?.offerId === params.offerId && entry.ruling === ruling)
+      return ruling;
+  }
+  return undefined;
+}
+
 export async function getHitlAskUserArguments(params: {
   session: OpenAppaSession;
   offerIds: readonly string[];

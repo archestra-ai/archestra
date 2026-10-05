@@ -351,6 +351,24 @@ Session receipts belong to authorized users within an organization. A personal o
 
 Interactive approval uses the client's native question tool or gateway `ask_user` elicitation. The ruling is recorded under the offer's signed session, including a child session when the gateway call has no session header. Approval in a parent session does not authorize a separate child offer.
 
+## Agent Runtimes
+
+The launcher issues a turn-scoped `X-Archestra-Runtime-Binding` for the saved workspace, run, actor, and Agent. The proxy verifies it against the runtime's virtual key. The gateway verifies it against its authenticated token. Both restore the stored OpenAPPA parent relationship. User runs keep `user:<id>`; non-user runs use `agent-workspace:<workspace id>`, so key rotation does not reset their trajectory. Binding credentials stay in secret environment variables and are not forwarded to providers or MCP servers.
+
+The proxy treats runtime launches as spawns and signs a `runtime_proof` over the source session, call ID, target, arguments, and spawn status. Wrapped `run_tool` calls carry it in `tool_args`. The gateway verifies the proof and released-call receipt before dispatch. The launcher binds the child before staging inputs or starting its process. Steering and writes address that registered child again to inherit the parent's current restrictions. Child-return contracts are injected before inference. Native child identity and signed workspace lineage support direct and nested CLI children without trusting the static workspace header as a child claim.
+
+```text
+Parent -> Proxy: propose runtime launch
+Proxy -> Gateway: allowed spawn + signed source proof
+Gateway -> Runtime: bind child, inherit restrictions, then deliver inputs
+Runtime -> Proxy: model calls and results under the stored child identity
+Gateway -> Parent: get_run returns the recorded admitted ChildReturn
+```
+
+Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_run` returns only the exact admitted value for that task; unrelated sessions and oversized values are withheld. File reads cross the same boundary. Downloads check the pinned content, size, and checksum before issuing a ticket, and require admission without transformation. Protected exports are limited to 4 MiB. Owner HTTP views remain separate human surfaces; cross-runtime external publishing is refused without an egress crossing.
+
+Runtime human reviews use the run page rather than native forms that may auto-decline. Shared-cache entries retain separate offers for ten minutes. Only the run's user owner can record a ruling for its exact signed session and offer. `ask_user` waits without consuming approval; the remedy retry spends it. Denial, timeout, disconnection, or the absence of an eligible reviewer leaves the call blocked. Existing non-runtime elicitation is unchanged.
+
 ## Persistence and current limits
 
 The Rust binding stores event batches, policy snapshots, sessions, and receipts in PostgreSQL. Completed receipts commit with runtime events. Repeated results return their saved output. Interrupted work fails closed.

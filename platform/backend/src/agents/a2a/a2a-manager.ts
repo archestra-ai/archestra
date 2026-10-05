@@ -181,6 +181,11 @@ export interface A2ASystemParams {
    * repeating the frame on every persisted turn.
    */
   ephemeralExecutionPrefix?: string;
+  /**
+   * Verified OpenAPPA source for a runtime spawn or steer. Server-built only.
+   * Protocol requests cannot set this.
+   */
+  runtimeCrossing?: import("@/services/agent-runtime/runtime-crossing").RuntimeCrossing;
 }
 
 /**
@@ -656,6 +661,7 @@ export class A2AManager {
                 llmApiKeyId: agent.llmApiKeyId,
                 runMode: systemParams?.runtimeMode ?? "one_shot",
                 titleUserId: actor.kind === "user" ? actor.id : undefined,
+                runtimeCrossing: systemParams?.runtimeCrossing,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,
               });

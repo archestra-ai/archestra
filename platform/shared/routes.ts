@@ -532,6 +532,8 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
+  GetAgentRunOpenappaReview: "getAgentRunOpenappaReview",
+  DecideAgentRunOpenappaReview: "decideAgentRunOpenappaReview",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",

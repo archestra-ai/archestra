@@ -44,6 +44,11 @@ export interface ChildReturnRecord {
   spawnCallId?: string
   /** The client-native child identity, when the child named one. */
   childNativeId?: string
+  /**
+   * The operation that durably recorded this crossing. An echo keeps its
+   * `:echo` suffix so a task prefix still matches.
+   */
+  operationId?: string
   /** The exact bytes the runtime admitted across the child boundary. */
   value: string
 }
@@ -160,9 +165,9 @@ export declare function loadChildAddresses(organizationId: string, childSessionI
 
 /**
  * Loads the child returns a parent's family durably crossed, from the
- * retained ChildEnd operations in PostgreSQL. This is the authority the
- * parent side verifies an arriving completion against; nothing the client
- * carries proves a return.
+ * retained ChildEnd and admitted ChildReturn operations in PostgreSQL. This
+ * is the authority the parent side verifies an arriving completion against;
+ * nothing the client carries proves a return.
  */
 export declare function loadChildReturns(organizationId: string, parentSessionId: string): Promise<Array<ChildReturnRecord>>
 

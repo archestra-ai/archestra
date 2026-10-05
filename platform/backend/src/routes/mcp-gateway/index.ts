@@ -14,6 +14,11 @@ import {
   isWellFormedAppaId,
   sessionFromHeaders,
 } from "@/openappa/service";
+import {
+  RUNTIME_BINDING_HEADER,
+  resolveGatewayRuntimeSession,
+  resolveRuntimeSessionForWorkspace,
+} from "@/services/agent-runtime/runtime-identity";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import { CONNECTION_SETUP_CONTEXT_PARAM } from "@/services/connection-setup-context";
 import {
@@ -364,17 +369,59 @@ async function handleMcpPostRequest(
         400,
         "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
       );
-    openappaSession =
-      namedSession !== undefined &&
-      tokenAuthContext?.organizationId &&
-      tokenAuthContext.userId
-        ? sessionFromHeaders({
-            headers: request.headers,
+    const runtimeSession =
+      tokenAuthContext?.organizationId && !tokenAuthContext.userId
+        ? await resolveGatewayRuntimeSession({
             organizationId: tokenAuthContext.organizationId,
-            callerId: `user:${tokenAuthContext.userId}`,
-            scope: `user:${tokenAuthContext.userId}`,
+            agentId: profileId,
+            token: tokenAuthContext,
+            bindingToken: readHeader(request, RUNTIME_BINDING_HEADER),
+            secret: config.openappa.offerSigningSecret,
+            sessionName:
+              typeof namedSession === "string" ? namedSession : undefined,
+            runTaskId: runId,
           })
-        : undefined;
+        : { kind: "none" as const };
+    if (runtimeSession.kind === "reject") {
+      throw new ApiError(400, runtimeSession.message);
+    }
+    openappaSession =
+      runtimeSession.kind === "session"
+        ? sessionFromHeaders({
+            headers: {
+              [APPA_SESSION_HEADER.toLowerCase()]:
+                runtimeSession.identity.workloadName,
+            },
+            organizationId: runtimeSession.identity.organizationId,
+            callerId: runtimeSession.identity.principal,
+            scope: runtimeSession.identity.principal,
+          })
+        : namedSession !== undefined &&
+            tokenAuthContext?.organizationId &&
+            tokenAuthContext.userId
+          ? sessionFromHeaders({
+              headers: request.headers,
+              organizationId: tokenAuthContext.organizationId,
+              callerId: `user:${tokenAuthContext.userId}`,
+              scope: `user:${tokenAuthContext.userId}`,
+            })
+          : undefined;
+    if (runtimeSession.kind === "session") {
+      const workspace = await resolveRuntimeSessionForWorkspace({
+        organizationId: runtimeSession.identity.organizationId,
+        workspaceId: runtimeSession.identity.workspaceId,
+      });
+      if (
+        !workspace ||
+        workspace.session.session_id !== openappaSession?.session_id
+      ) {
+        throw new ApiError(
+          400,
+          "The runtime gateway request has no bound workspace",
+        );
+      }
+      openappaSession = workspace.session;
+    }
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
     reply.status(error.statusCode);

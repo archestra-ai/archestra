@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 const operations = schema.openappaOperationsTable;
@@ -12,6 +12,46 @@ export type AllowedSpawnAlias = {
 };
 
 class OpenAppaSpawnCorrelationModel {
+  static async releasedCalls(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    sessionId: string;
+    toolCallIds: string[];
+  }): Promise<Map<string, { spawn: boolean; tool: string }>> {
+    if (params.toolCallIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        operationId: operations.operationId,
+        tool: sql<string>`COALESCE(${operations.input}->'semantic'->>'tool', ${operations.input}->'context'->>'tool', ${operations.input}->>'tool', '')`,
+        spawn: sql<string>`COALESCE(${operations.input}->'semantic'->>'spawn', ${operations.input}->>'spawn', 'false')`,
+      })
+      .from(operations)
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.sessionId),
+          params.callerId
+            ? eq(operations.callerId, params.callerId)
+            : isNull(operations.callerId),
+          inArray(
+            operations.operationId,
+            params.toolCallIds.map((id) => `call:${id}`),
+          ),
+          eq(operations.status, "complete"),
+          sql`${operations.decision}->>'decision' = 'allow_call'`,
+        ),
+      );
+    return new Map(
+      rows.map((row) => [
+        row.operationId.slice(5),
+        {
+          spawn: row.spawn === "true",
+          tool: row.tool,
+        },
+      ]),
+    );
+  }
+
   /**
    * Recovers only the signed spawn binding stored with a child's own event.
    * A parent's sole open call could belong to a different async child.

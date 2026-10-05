@@ -21,6 +21,7 @@ import {
 } from "@/openappa/offer-claims";
 import { signPeerProof } from "@/openappa/peer-claims";
 import * as openappaService from "@/openappa/service";
+import { workloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -326,6 +327,47 @@ describe("OpenAPPA tool execution", () => {
     ]);
   });
 
+  test("a workload principal can read its own peer proof and not a user's", async () => {
+    const workspaceId = "11111111-1111-4111-8111-111111111111";
+    const principal = workloadPrincipal(workspaceId);
+    const read = vi
+      .spyOn(openappaService, "readPeerMessage")
+      .mockResolvedValue({
+        content: [{ type: "text", text: "held" }],
+      });
+    const context = {
+      agent: mockContext.agent,
+      organizationId: orgId,
+      openappaSession: {
+        organization_id: orgId,
+        caller_id: principal,
+        session_id: `${principal}|workspace-a`,
+      },
+    };
+
+    await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+      {
+        message_id: "message-1",
+        peer_proof: peerProof({ caller_id: principal }),
+      },
+      context,
+    );
+    expect(read).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ caller_id: principal }),
+      }),
+    );
+
+    await expect(
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+        { message_id: "message-1", peer_proof: peerProof() },
+        context,
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
   test("a peer read cannot supply its own recipient or source label", async () => {
     const read = vi.spyOn(openappaService, "readPeerMessage");
     const response = await executeArchestraTool(
@@ -549,6 +591,76 @@ describe("OpenAPPA tool execution", () => {
     for (const member of ["execution", "protected", "payload", "signature"]) {
       expect(text).not.toContain(`"${member}"`);
     }
+  });
+
+  test("a workload spender executes only its own remedy offer", async () => {
+    const workspaceId = "22222222-2222-4222-8222-222222222222";
+    const principal = workloadPrincipal(workspaceId);
+    const other = workloadPrincipal("33333333-3333-4333-8333-333333333333");
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(null);
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockResolvedValue({
+        result: { content: [{ type: "text", text: "Authorized" }] },
+        known: true,
+      });
+    const context = {
+      agent: mockContext.agent,
+      organizationId: orgId,
+      openappaSession: {
+        organization_id: orgId,
+        caller_id: principal,
+        session_id: `${principal}|workspace-a`,
+      },
+    };
+    const owned = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: orgId,
+        sessionId: `${principal}|workspace-a`,
+        callerId: principal,
+        offerId: "offer-owned",
+      }),
+      TEST_SIGNING_SECRET,
+    );
+
+    const accepted = await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-owned", plan: "keep", ...owned },
+      context,
+    );
+    expect(accepted.isError).toBeFalsy();
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callerId: principal,
+        ownerCallerId: principal,
+      }),
+    );
+
+    executeSpy.mockClear();
+    const foreign = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: orgId,
+        sessionId: `${other}|workspace-b`,
+        callerId: other,
+        offerId: "offer-foreign",
+      }),
+      TEST_SIGNING_SECRET,
+    );
+    const rejected = await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-foreign", plan: "keep", ...foreign },
+      context,
+    );
+    expect(rejected.isError).toBe(true);
+    expect(executeSpy).not.toHaveBeenCalled();
+
+    const stolen = await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-owned", plan: "keep", ...owned },
+      mockContext,
+    );
+    expect(stolen.isError).toBe(true);
+    expect(executeSpy).not.toHaveBeenCalled();
   });
 
   test("executes unreviewed remedy offer immediately without prompting", async () => {

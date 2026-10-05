@@ -91,6 +91,7 @@ import {
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 import { OAuthReauthIndicator } from "./oauth-reauth-indicator";
+import { isOwnPersonalInstall } from "./uninstall-scope";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -293,16 +294,17 @@ export function McpServerCard({
     (s) => s.catalogId === item.id,
   );
 
-  // Find the current user's personal connection for this catalog item
-  const personalServer = mcpServerOfCurrentCatalogItem?.find(
-    (s) => s.ownerId === currentUserId && !s.teamId,
+  // Find the current user's personal connection for this catalog item. An
+  // org-wide install the user created is not theirs to uninstall here.
+  const personalServer = mcpServerOfCurrentCatalogItem?.find((s) =>
+    isOwnPersonalInstall(s, currentUserId),
   );
 
   const allServersForCatalog = (allMcpServers ?? []).filter(
     (s) => s.catalogId === item.id,
   );
-  const personalServersForCatalog = allServersForCatalog.filter(
-    (s) => s.ownerId === currentUserId && !s.teamId,
+  const personalServersForCatalog = allServersForCatalog.filter((s) =>
+    isOwnPersonalInstall(s, currentUserId),
   );
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
@@ -331,7 +333,12 @@ export function McpServerCard({
     return install
       ? [
           {
-            server: { id: install.id, name: install.name },
+            server: {
+              id: install.id,
+              name: install.name,
+              scope: install.scope,
+              teamId: install.teamId,
+            },
             assignedAgents: install.assignedAgents ?? [],
           },
         ]

@@ -2,8 +2,15 @@ import type { archestraApiTypes } from "@archestra/shared";
 
 type McpServerFromApi = archestraApiTypes.GetMcpServersResponses["200"][number];
 
-/** An agent as the API reports it against one MCP server install. */
-type ApiAgentUsage = NonNullable<McpServerFromApi["assignedAgents"]>[number];
+/**
+ * An agent as the API reports it against one MCP server install. `pinned`
+ * only describes an explicit assignment to one install, so the catalog-wide
+ * usage (which also lists auto-mode agents) leaves it out.
+ */
+type ApiAgentUsage = Omit<
+  NonNullable<McpServerFromApi["assignedAgents"]>[number],
+  "pinned"
+>;
 
 /**
  * How an agent reaches the server: through an explicit tool assignment, or

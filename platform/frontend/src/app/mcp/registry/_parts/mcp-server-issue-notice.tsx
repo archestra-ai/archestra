@@ -290,6 +290,8 @@ export function McpServerIssueNotice({
           server: {
             id: removableConnection.id,
             name: removableConnection.name,
+            scope: removableConnection.scope,
+            teamId: removableConnection.teamId,
           },
           assignedAgents: removableConnection.assignedAgents ?? [],
         },

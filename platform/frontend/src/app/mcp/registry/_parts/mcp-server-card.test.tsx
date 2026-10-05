@@ -307,6 +307,61 @@ describe("McpServerCard uninstall permission", () => {
     expect(await screen.findByText("Uninstall MCP Server")).toBeInTheDocument();
   });
 
+  it("offers no Uninstall for an organization connection the user installed", () => {
+    // An org install records its installer as owner; Uninstall on the card
+    // would have targeted the connection every org agent resolves to.
+    useMcpServersMock.mockReturnValue({
+      data: [{ ...personalInstall, scope: "org" }],
+    });
+    renderCard(card);
+
+    expect(screen.queryByRole("button", { name: "Uninstall" })).toBeNull();
+  });
+
+  it("warns only about agents pinned to the personal connection being removed", async () => {
+    const user = userEvent.setup();
+    const agent = {
+      agentType: "agent",
+      ownerId: null,
+      ownerEmail: null,
+    };
+    useMcpServersMock.mockReturnValue({
+      data: [
+        {
+          ...personalInstall,
+          scope: "personal",
+          assignedAgents: [
+            {
+              ...agent,
+              id: "a-org",
+              name: "Org Assistant",
+              scope: "org",
+              pinned: false,
+            },
+            {
+              ...agent,
+              id: "a-mine",
+              name: "My Gateway",
+              scope: "personal",
+              pinned: true,
+            },
+          ],
+        },
+      ],
+    });
+    renderCard(card);
+
+    await user.click(screen.getByRole("button", { name: "Uninstall" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(
+      "Only this personal connection is removed",
+    );
+    expect(dialog).toHaveTextContent("Used by 1 agent");
+    expect(dialog).toHaveTextContent("My Gateway");
+    expect(dialog).not.toHaveTextContent("Org Assistant");
+  });
+
   it("opens server settings once from the keyboard without activating the card", async () => {
     const user = userEvent.setup();
     renderCard(card);

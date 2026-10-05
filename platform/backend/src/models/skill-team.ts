@@ -2,6 +2,7 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /**
  * Grant-based access checks for skills, plus the retired `skill_team`
@@ -18,13 +19,20 @@ class SkillTeamModel {
     userId?: string;
   }): Promise<string[]> {
     const { organizationId, userId } = params;
+    const principal =
+      userId === undefined
+        ? null
+        : await ResourcePermissionSubjectModel.resolvePrincipal({
+            organizationId,
+            userId,
+          });
     const rows = await db
       .select({ id: schema.skillsTable.id })
       .from(schema.skillsTable)
       .where(
         and(
           eq(schema.skillsTable.organizationId, organizationId),
-          userId === undefined
+          principal === null
             ? ResourcePermissionPolicyModel.organizationAccessCondition({
                 organizationId,
                 resource: "skill",
@@ -32,8 +40,7 @@ class SkillTeamModel {
                 action: "read",
               })
             : ResourcePermissionPolicyModel.grantCondition({
-                organizationId,
-                userId,
+                ...principal,
                 resource: "skill",
                 action: "read",
                 scopeColumn: schema.skillsTable.id,
@@ -62,6 +69,10 @@ class SkillTeamModel {
     if (skill.organizationId !== organizationId) return false;
     const action = params.action ?? "read";
     if (userId !== undefined) {
+      const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+        organizationId,
+        userId,
+      });
       const [granted] = await db
         .select({ id: schema.skillsTable.id })
         .from(schema.skillsTable)
@@ -69,8 +80,7 @@ class SkillTeamModel {
           and(
             eq(schema.skillsTable.id, skill.id),
             ResourcePermissionPolicyModel.grantCondition({
-              organizationId,
-              userId,
+              ...principal,
               resource: "skill",
               action,
               scopeColumn: schema.skillsTable.id,

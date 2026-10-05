@@ -12,10 +12,18 @@ import {
   widenToPreset,
 } from "@archestra/shared";
 import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
-import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  inArray,
+  or,
+  type SQL,
+  type SQLWrapper,
+  sql,
+} from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
-import TeamModel from "./team";
 
 export default class ResourcePermissionPolicyModel {
   /**
@@ -402,47 +410,55 @@ export default class ResourcePermissionPolicyModel {
       );
   }
 
-  /** SQL counterpart of the resolver, applied before list pagination/counts. */
+  /**
+   * SQL counterpart of the resolver, applied before list pagination/counts.
+   * The caller's subjects are resolved up front, so the predicate is a
+   * primary-key probe plus a JSONB containment test per row.
+   */
   static grantCondition(params: {
-    organizationId: string | SQLWrapper;
-    userId: string;
+    organizationId: string;
+    subjects: PermissionSubject[];
     resource: ScopedResource;
     scopeColumn: SQLWrapper;
     action: ResourcePermissionAction;
     includeWildcard?: boolean;
-  }) {
-    const serviceAccountId = params.userId.startsWith("service-account:")
-      ? params.userId.slice("service-account:".length)
-      : null;
-    const member = sql`EXISTS (SELECT 1 FROM member grant_member WHERE grant_member.organization_id = ${params.organizationId} AND grant_member.user_id = ${params.userId})`;
-    const account = sql`EXISTS (SELECT 1 FROM service_accounts grant_account WHERE grant_account.organization_id = ${params.organizationId} AND grant_account.id::text = ${serviceAccountId} AND NOT grant_account.disabled)`;
-    const membership = TeamModel.effectiveMembershipCondition({
-      userId: params.userId,
-      teamIdColumn: sql`grant_entry->'subject'->>'id'`,
-    });
-    const inheritedRole = sql`EXISTS (SELECT 1 FROM team grant_team WHERE grant_team.organization_id = ${params.organizationId} AND ${TeamModel.effectiveMembershipCondition({ userId: params.userId, teamIdColumn: sql`grant_team.id` })} AND grant_role.identifier = ANY(grant_team.roles))`;
-    const role = sql`EXISTS (
-      SELECT 1 FROM (
-        SELECT role AS identifier, id FROM organization_role WHERE organization_id = ${params.organizationId}
-        UNION ALL SELECT builtin, builtin FROM unnest(ARRAY['admin','platform_admin','editor','member']) builtin
-      ) grant_role
-      WHERE grant_role.id = grant_entry->'subject'->>'id'
-      AND (${serviceAccountId ? sql`EXISTS (SELECT 1 FROM service_accounts a WHERE a.organization_id = ${params.organizationId} AND a.id::text = ${serviceAccountId} AND grant_role.identifier = ANY(string_to_array(a.role, ',')))` : sql`EXISTS (SELECT 1 FROM member m WHERE m.organization_id = ${params.organizationId} AND m.user_id = ${params.userId} AND grant_role.identifier = ANY(string_to_array(m.role, ','))) OR ${inheritedRole}`})
-    )`;
-    return sql<boolean>`(${serviceAccountId ? account : member}) AND EXISTS (
-      SELECT 1 FROM resource_permission_policies grant_policy,
-        jsonb_array_elements(grant_policy.grants) grant_entry
+  }): SQL<boolean> {
+    if (params.subjects.length === 0) return sql<boolean>`false`;
+    const candidates = params.subjects.map(
+      (subject) =>
+        sql`${JSON.stringify([{ subject, actions: [params.action] }])}`,
+    );
+    return sql<boolean>`EXISTS (
+      SELECT 1 FROM resource_permission_policies grant_policy
       WHERE grant_policy.organization_id = ${params.organizationId}
         AND grant_policy.resource = ${params.resource}
         AND ((${params.includeWildcard !== false} AND grant_policy.scope = '*') OR grant_policy.scope = ${params.scopeColumn}::text)
-        AND (grant_entry->'actions') ? ${params.action}
-        AND (
-          (grant_entry->'subject'->>'type' = 'organization' AND grant_entry->'subject'->>'id' = '*')
-          OR (grant_entry->'subject'->>'type' = ${serviceAccountId ? "serviceAccount" : "user"} AND grant_entry->'subject'->>'id' = ${serviceAccountId ?? params.userId})
-          OR (${serviceAccountId ? sql`false` : sql`grant_entry->'subject'->>'type' = 'team' AND ${membership}`})
-          OR (grant_entry->'subject'->>'type' = 'role' AND ${role})
-        )
+        AND grant_policy.grants @> ANY(ARRAY[${sql.join(candidates, sql`, `)}]::jsonb[])
     )`;
+  }
+
+  /**
+   * {@link grantCondition} for a query that is not fenced to one
+   * organization: each row is checked against the caller's subjects in the
+   * row's own organization.
+   */
+  static grantConditionForAny(params: {
+    principals: GrantPrincipal[];
+    organizationColumn: SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+    action: ResourcePermissionAction;
+  }): SQL<boolean> {
+    const { principals, organizationColumn, resource, scopeColumn, action } =
+      params;
+    if (principals.length === 0) return sql<boolean>`false`;
+    return sql<boolean>`(${sql.join(
+      principals.map(
+        (principal) =>
+          sql`(${organizationColumn} = ${principal.organizationId} AND ${ResourcePermissionPolicyModel.grantCondition({ ...principal, resource, scopeColumn, action })})`,
+      ),
+      sql` OR `,
+    )})`;
   }
 
   /**

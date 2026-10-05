@@ -47,6 +47,9 @@ import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "./resource-permission-subject";
 import SecretModel from "./secret";
 import ToolModel, { toolUiResourceUriSql } from "./tool";
 
@@ -261,7 +264,7 @@ class InternalMcpCatalogModel {
       return [];
     }
 
-    const baseListCondition = InternalMcpCatalogModel.buildListCondition(
+    const baseListCondition = await InternalMcpCatalogModel.buildListCondition(
       options,
       false,
     );
@@ -306,7 +309,7 @@ class InternalMcpCatalogModel {
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
-    const baseListCondition = InternalMcpCatalogModel.buildListCondition(
+    const baseListCondition = await InternalMcpCatalogModel.buildListCondition(
       options,
       includeApps,
     );
@@ -367,6 +370,8 @@ class InternalMcpCatalogModel {
     } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
+    const principals =
+      await InternalMcpCatalogModel.resolveListPrincipals(options);
 
     const baseSearchCondition = or(
       ilike(schema.internalMcpCatalogTable.name, `%${query}%`),
@@ -378,20 +383,20 @@ class InternalMcpCatalogModel {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const searchCondition = and(
       baseSearchCondition,
-      userId && organizationId
-        ? McpCatalogTeamModel.readCondition({ organizationId, userId })
+      principals.viewer
+        ? McpCatalogTeamModel.readCondition(principals.viewer)
         : undefined,
-      ...(options?.readGrantContext
+      ...(principals.readGrant
         ? [
             or(
               eq(
                 schema.internalMcpCatalogTable.organizationId,
-                options.readGrantContext.organizationId,
+                principals.readGrant.organizationId,
               ),
               isNull(schema.internalMcpCatalogTable.organizationId),
             ),
             ResourcePermissionPolicyModel.grantCondition({
-              ...options.readGrantContext,
+              ...principals.readGrant,
               resource: "mcpRegistry",
               scopeColumn: schema.internalMcpCatalogTable.id,
               action: "read",
@@ -1798,11 +1803,13 @@ class InternalMcpCatalogModel {
     }
   }
 
-  private static buildListCondition(
+  private static async buildListCondition(
     options: CatalogListOptions | undefined,
     includeApps: boolean,
-  ): SQL | undefined {
+  ): Promise<SQL | undefined> {
     const { userId, environmentId } = options ?? {};
+    const principals =
+      await InternalMcpCatalogModel.resolveListPrincipals(options);
 
     const listConditions = [
       // Hidden runtime variants and legacy preset rows are never surfaced.
@@ -1810,27 +1817,22 @@ class InternalMcpCatalogModel {
       // Hide soft-deleted catalog items from the registry.
       notDeleted(schema.internalMcpCatalogTable),
     ];
-    if (userId && options?.organizationId) {
+    if (principals.viewer) {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      listConditions.push(
-        McpCatalogTeamModel.readCondition({
-          organizationId: options.organizationId,
-          userId,
-        }),
-      );
+      listConditions.push(McpCatalogTeamModel.readCondition(principals.viewer));
       // SPDX-SnippetEnd
     }
     if (environmentId !== undefined) {
       listConditions.push(catalogInEnvironmentPredicate(environmentId));
     }
-    if (options?.readGrantContext) {
+    if (principals.readGrant) {
       listConditions.push(
         or(
           eq(
             schema.internalMcpCatalogTable.organizationId,
-            options.readGrantContext.organizationId,
+            principals.readGrant.organizationId,
           ),
           isNull(schema.internalMcpCatalogTable.organizationId),
         ) as SQL,
@@ -1840,7 +1842,7 @@ class InternalMcpCatalogModel {
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       listConditions.push(
         ResourcePermissionPolicyModel.grantCondition({
-          ...options.readGrantContext,
+          ...principals.readGrant,
           resource: "mcpRegistry",
           scopeColumn: schema.internalMcpCatalogTable.id,
           action: "read",
@@ -1905,6 +1907,33 @@ class InternalMcpCatalogModel {
    * over all active tools: a UI resource on a hidden tool still means the
    * server provides UI.
    */
+  private static async resolveListPrincipals(
+    options: CatalogListOptions | undefined,
+  ): Promise<{
+    viewer: GrantPrincipal | null;
+    readGrant: GrantPrincipal | null;
+  }> {
+    const viewer =
+      options?.userId && options.organizationId
+        ? await ResourcePermissionSubjectModel.resolvePrincipal({
+            userId: options.userId,
+            organizationId: options.organizationId,
+          })
+        : null;
+    const context = options?.readGrantContext;
+    if (!context) return { viewer, readGrant: null };
+    const sameCaller =
+      viewer !== null &&
+      context.userId === options?.userId &&
+      context.organizationId === viewer.organizationId;
+    return {
+      viewer,
+      readGrant: sameCaller
+        ? viewer
+        : await ResourcePermissionSubjectModel.resolvePrincipal(context),
+    };
+  }
+
   private static async getToolStats(
     catalogIds: string[],
   ): Promise<Map<string, { toolCount: number; providesUi: boolean }>> {

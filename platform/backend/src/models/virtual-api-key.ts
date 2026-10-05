@@ -35,6 +35,7 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import { VirtualApiKeyLabelModel } from "./entity-labels";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -1129,24 +1130,27 @@ class VirtualApiKeyModel {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   private static async getAccessibleIds(params: {
-    organizationId: string | null;
+    organizationId: string;
     userId: string;
     providerApiKeyId?: string;
   }): Promise<string[]> {
     const { organizationId, userId, providerApiKeyId } = params;
 
     const table = schema.virtualApiKeysTable;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId,
+      userId,
+    });
     const rows = await db
       .select({ id: table.id })
       .from(table)
       .where(
         and(
-          organizationId ? eq(table.organizationId, organizationId) : undefined,
+          eq(table.organizationId, organizationId),
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId: organizationId ?? table.organizationId,
+            ...principal,
             resource: "llmVirtualKey",
             scopeColumn: table.id,
-            userId,
             action: "read",
           }),
           providerApiKeyId

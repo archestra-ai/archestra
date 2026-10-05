@@ -15,6 +15,9 @@ import {
   normalizeCatalogTeamInput,
 } from "@/types/catalog-team-level";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "./resource-permission-subject";
 
 interface CatalogTeamDetail {
   id: string;
@@ -34,6 +37,12 @@ class McpCatalogTeamModel {
     organizationId: string,
   ): Promise<string[]> {
     const catalog = schema.internalMcpCatalogTable;
+    const principal = isAdmin
+      ? null
+      : await ResourcePermissionSubjectModel.resolvePrincipal({
+          organizationId,
+          userId,
+        });
     const rows = await db
       .select({ id: catalog.id })
       .from(catalog)
@@ -43,9 +52,7 @@ class McpCatalogTeamModel {
             eq(catalog.organizationId, organizationId),
             isNull(catalog.organizationId),
           ),
-          isAdmin
-            ? undefined
-            : McpCatalogTeamModel.readCondition({ organizationId, userId }),
+          principal ? McpCatalogTeamModel.readCondition(principal) : undefined,
         ),
       );
     return rows.map((row) => row.id);
@@ -65,22 +72,24 @@ class McpCatalogTeamModel {
    *   grants rather than a registry policy it never had. A registry-wide grant
    *   still reaches it, as it did before.
    */
-  static readCondition(params: { organizationId: string; userId: string }) {
+  static readCondition(principal: GrantPrincipal) {
     const catalog = schema.internalMcpCatalogTable;
-    const { organizationId, userId } = params;
+    const { organizationId } = principal;
+    const isMember = principal.subjects.some(
+      (subject) => subject.type === "user",
+    );
     return or(
       and(
         inArray(catalog.id, [
           ARCHESTRA_MCP_CATALOG_ID,
           PLAYWRIGHT_MCP_CATALOG_ID,
         ]),
-        sql`EXISTS (SELECT 1 FROM member builtin_member WHERE builtin_member.organization_id = ${organizationId} AND builtin_member.user_id = ${userId})`,
+        isMember ? sql`true` : sql`false`,
       ),
       and(
         sql`${catalog.serverType} <> 'app'`,
         ResourcePermissionPolicyModel.grantCondition({
-          organizationId,
-          userId,
+          ...principal,
           resource: "mcpRegistry",
           scopeColumn: sql`coalesce(${catalog.parentCatalogItemId}, ${catalog.id})`,
           action: "read",
@@ -92,8 +101,7 @@ class McpCatalogTeamModel {
           // Whoever manages the whole registry reaches app backing catalogs
           // as before; they held that reach through the registry, not the app.
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId,
-            userId,
+            ...principal,
             resource: "mcpRegistry",
             scopeColumn: catalog.id,
             action: "read",
@@ -105,8 +113,7 @@ class McpCatalogTeamModel {
             AND backing_app.organization_id = ${organizationId}
             AND backing_app.deleted_at IS NULL
             AND ${ResourcePermissionPolicyModel.grantCondition({
-              organizationId,
-              userId,
+              ...principal,
               resource: "app",
               scopeColumn: sql`backing_app.id`,
               action: "read",
@@ -162,6 +169,10 @@ class McpCatalogTeamModel {
     if (catalog.organizationId && catalog.organizationId !== organizationId) {
       return false;
     }
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId,
+      userId,
+    });
     // Opening an item follows the same rule as listing it, so a built-in or
     // an app backing catalog that a list shows also opens.
     if (!params.action || params.action === "read") {
@@ -171,7 +182,7 @@ class McpCatalogTeamModel {
         .where(
           and(
             eq(schema.internalMcpCatalogTable.id, catalogId),
-            McpCatalogTeamModel.readCondition({ organizationId, userId }),
+            McpCatalogTeamModel.readCondition(principal),
           ),
         )
         .limit(1);
@@ -191,16 +202,14 @@ class McpCatalogTeamModel {
           ),
           or(
             ResourcePermissionPolicyModel.grantCondition({
-              organizationId,
-              userId,
+              ...principal,
               resource: "mcpRegistry",
               scopeColumn: grantScope,
               action: params.action,
             }),
             // A reader finds the item, so the caller's own check answers 403.
             ResourcePermissionPolicyModel.grantCondition({
-              organizationId,
-              userId,
+              ...principal,
               resource: "mcpRegistry",
               scopeColumn: grantScope,
               action: "read",

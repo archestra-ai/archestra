@@ -3,6 +3,7 @@ import type { ScopedResource } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import db from "@/database";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /** Authoritative read check: does a grant give this user read on the object? */
 export default class ResourcePermissionAccessModel {
@@ -13,9 +14,13 @@ export default class ResourcePermissionAccessModel {
     scope: string;
     includeWildcard?: boolean;
   }): Promise<boolean> {
+    const principal =
+      await ResourcePermissionSubjectModel.resolvePrincipal(params);
     const result = await db.execute<{ allowed: boolean }>(
       sql`SELECT ${ResourcePermissionPolicyModel.grantCondition({
-        ...params,
+        ...principal,
+        resource: params.resource,
+        includeWildcard: params.includeWildcard,
         scopeColumn: sql`${params.scope}::text`,
         action: "read",
       })} AS allowed`,

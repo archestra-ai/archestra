@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { type SQLWrapper, sql } from "drizzle-orm";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /** Live grant checks keep indexed content in sync with permission edits and revocations. */
 export default class KbDocumentAccessModel {
-  static condition(params: {
+  static async condition(params: {
     userAcl: readonly string[];
     documentId: SQLWrapper;
     connectorId: SQLWrapper;
@@ -35,11 +36,17 @@ export default class KbDocumentAccessModel {
       resource: "knowledgeConnector" as const,
       scopeColumn: params.connectorId,
     };
+    const principals = principal
+      ? await ResourcePermissionSubjectModel.resolvePrincipals({
+          userId: principal,
+        })
+      : null;
     const access = (context: typeof fileContext | typeof connectorContext) =>
-      principal
-        ? ResourcePermissionPolicyModel.grantCondition({
+      principals
+        ? ResourcePermissionPolicyModel.grantConditionForAny({
             ...context,
-            userId: principal,
+            principals,
+            organizationColumn: params.organizationId,
             action: "use",
           })
         : ResourcePermissionPolicyModel.organizationAccessCondition({

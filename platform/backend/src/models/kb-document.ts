@@ -95,7 +95,7 @@ class KbDocumentModel {
     const d = schema.kbDocumentsTable;
     const aclFilter = params.bypassAcl
       ? undefined
-      : KbDocumentAccessModel.condition({
+      : await KbDocumentAccessModel.condition({
           userAcl: params.userAcl,
           documentId: d.id,
           connectorId: d.connectorId,
@@ -1075,7 +1075,7 @@ class KbDocumentModel {
       : sql`EXISTS (
             SELECT 1 FROM kb_chunks c
             WHERE c.document_id = d.id
-              AND ${KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}
+              AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}
           )`;
 
     const rows = await db.execute(sql`

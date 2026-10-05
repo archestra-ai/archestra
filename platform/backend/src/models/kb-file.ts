@@ -5,6 +5,7 @@ import type { AclEntry } from "@/types";
 import type { KnowledgeFileVisibility } from "@/types/knowledge-file";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /**
  * Who a caller is, for repository-listing purposes.
@@ -33,7 +34,7 @@ class KbFileModel {
   }) {
     const where = and(
       eq(schema.kbFilesTable.organizationId, params.organizationId),
-      KbFileModel.visibleTo(params.viewer),
+      await KbFileModel.visibleTo(params),
       ...(params.labelFilteredIds !== undefined
         ? [inArray(schema.kbFilesTable.id, params.labelFilteredIds)]
         : []),
@@ -75,7 +76,7 @@ class KbFileModel {
         and(
           eq(schema.kbFilesTable.id, params.id),
           eq(schema.kbFilesTable.organizationId, params.organizationId),
-          KbFileModel.visibleTo(params.viewer),
+          await KbFileModel.visibleTo(params),
         ),
       )
       .limit(1);
@@ -95,7 +96,7 @@ class KbFileModel {
         and(
           inArray(schema.kbFilesTable.id, params.ids),
           eq(schema.kbFilesTable.organizationId, params.organizationId),
-          KbFileModel.visibleTo(params.viewer),
+          await KbFileModel.visibleTo(params),
         ),
       );
   }
@@ -356,11 +357,14 @@ class KbFileModel {
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
           viewer
-            ? ResourcePermissionPolicyModel.grantCondition({
-                organizationId: schema.knowledgeBasesTable.organizationId,
+            ? ResourcePermissionPolicyModel.grantConditionForAny({
+                principals:
+                  await ResourcePermissionSubjectModel.resolvePrincipals({
+                    userId: viewer.userId,
+                  }),
+                organizationColumn: schema.knowledgeBasesTable.organizationId,
                 resource: "knowledgeBase",
                 scopeColumn: schema.knowledgeBasesTable.id,
-                userId: viewer.userId,
                 action: "read",
               })
             : undefined,
@@ -591,13 +595,17 @@ class KbFileModel {
    * as a WHERE fragment rather than a post-filter so pagination counts stay
    * truthful.
    */
-  private static visibleTo(viewer: KbFileViewer) {
-    const table = schema.kbFilesTable;
+  private static async visibleTo(params: {
+    organizationId: string;
+    viewer: KbFileViewer;
+  }) {
     return ResourcePermissionPolicyModel.grantCondition({
-      organizationId: table.organizationId,
+      ...(await ResourcePermissionSubjectModel.resolvePrincipal({
+        organizationId: params.organizationId,
+        userId: params.viewer.userId,
+      })),
       resource: "knowledgeFile",
-      scopeColumn: table.id,
-      userId: viewer.userId,
+      scopeColumn: schema.kbFilesTable.id,
       action: "read",
     });
   }

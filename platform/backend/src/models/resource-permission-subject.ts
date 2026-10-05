@@ -33,6 +33,42 @@ export default class ResourcePermissionSubjectModel {
     };
   }
 
+  /**
+   * {@link resolvePrincipal} in the given organization, or in every
+   * organization the caller belongs to for a query that is not fenced to one.
+   */
+  static async resolvePrincipals(params: {
+    userId: string;
+    organizationId?: string;
+  }): Promise<GrantPrincipal[]> {
+    const { userId } = params;
+    const organizationIds = params.organizationId
+      ? [{ id: params.organizationId }]
+      : userId.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)
+        ? await db
+            .select({ id: schema.serviceAccountsTable.organizationId })
+            .from(schema.serviceAccountsTable)
+            .where(
+              eq(
+                schema.serviceAccountsTable.id,
+                userId.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length),
+              ),
+            )
+        : await db
+            .selectDistinct({ id: schema.membersTable.organizationId })
+            .from(schema.membersTable)
+            .where(eq(schema.membersTable.userId, userId));
+    const principals = await Promise.all(
+      organizationIds.map(({ id }) =>
+        ResourcePermissionSubjectModel.resolvePrincipal({
+          userId,
+          organizationId: id,
+        }),
+      ),
+    );
+    return principals.filter((principal) => principal.subjects.length > 0);
+  }
+
   static async search(params: { organizationId: string; query: string }) {
     const pattern = `%${params.query.replace(/[\\%_]/g, "\\$&")}%`;
     const [users, teams, accounts, roles] = await Promise.all([

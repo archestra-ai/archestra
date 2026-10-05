@@ -181,7 +181,7 @@ class KbChunkModel {
         AND c.${col} IS NOT NULL
         ${envFilter}
         ${metadataPredicate}
-        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
       ORDER BY c.${col} <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
     `,
@@ -257,7 +257,7 @@ class KbChunkModel {
         AND kbc.deleted_at IS NULL
         ${environmentFilter}
         ${metadataPredicate}
-        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
     `);
 
     const verifiedById = new Map(
@@ -484,7 +484,7 @@ class KbChunkModel {
         AND kbc.deleted_at IS NULL
         AND c.content NOT LIKE 'data:image/%'
         ${envFilter}
-        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
     `);
 
     return rows.rows as unknown as Array<{
@@ -567,7 +567,7 @@ class KbChunkModel {
         AND kbc.deleted_at IS NULL
         AND c.content NOT LIKE 'data:image/%'
         ${envFilter}
-        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
       ORDER BY c.document_id, c.parent_index, c.chunk_index
     `);
 
@@ -714,7 +714,7 @@ class KbChunkModel {
         AND (${matchPredicate})
         ${envFilter}
         ${metadataPredicate}
-        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
     `;
 
     const statement = bm25

@@ -2,7 +2,9 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "./resource-permission-subject";
 
 /**
  * Grant-based access checks for skills, plus the retired `skill_team`
@@ -64,15 +66,19 @@ class SkillTeamModel {
     userId?: string;
     skill: { id: string; organizationId: string };
     action?: "read" | "use";
+    /** The caller's resolved subjects, for a check repeated across skills. */
+    principal?: GrantPrincipal;
   }): Promise<boolean> {
     const { skill, organizationId, userId } = params;
     if (skill.organizationId !== organizationId) return false;
     const action = params.action ?? "read";
     if (userId !== undefined) {
-      const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
-        organizationId,
-        userId,
-      });
+      const principal =
+        params.principal ??
+        (await ResourcePermissionSubjectModel.resolvePrincipal({
+          organizationId,
+          userId,
+        }));
       const [granted] = await db
         .select({ id: schema.skillsTable.id })
         .from(schema.skillsTable)

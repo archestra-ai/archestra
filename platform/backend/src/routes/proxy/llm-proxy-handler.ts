@@ -1819,7 +1819,15 @@ export async function handleLLMProxy<
         !APPA_CLIENT_ADAPTERS.some((adapter) =>
           adapter.matches({ headers: headersForExtraction, requestBody: body }),
         );
-      if (unsupportedClient && unsupportedClientAction === "block") {
+      // The platform's own guardrail models bypass instead of being blocked.
+      const platformGuardrailCall =
+        platformLoopback &&
+        (source === "guardrail:annotator" || source === "guardrail:dual_llm");
+      if (
+        unsupportedClient &&
+        unsupportedClientAction === "block" &&
+        !platformGuardrailCall
+      ) {
         throw new ApiError(
           400,
           "Guardrails do not recognize this client, so the proxy blocked the request. Add an X-Appa-Session-ID header to each request, or ask an administrator to allow unrecognized clients.",

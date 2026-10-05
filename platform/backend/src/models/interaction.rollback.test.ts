@@ -4736,6 +4736,59 @@ describe("InteractionModel", () => {
           otherOrg: [],
         });
       });
+
+      test("keeps accruing past the 32-bit range", async ({
+        makeAgent,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const agent = await makeAgent({
+          organizationId: org.id,
+          access: "personal",
+        });
+        const orgLimit = await LimitModel.create({
+          entityType: "organization",
+          entityId: org.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: null,
+        });
+        const agentLimit = await LimitModel.create({
+          entityType: "agent",
+          entityId: agent.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: null,
+        });
+        const nearInt32Max = 2 ** 31 - 10;
+        await db.insert(schema.limitModelUsageTable).values({
+          limitId: agentLimit.id,
+          model: "gpt-4o",
+          currentUsageTokensIn: nearInt32Max,
+          currentUsageTokensOut: nearInt32Max,
+        });
+
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({
+            profileId: agent.id,
+            inputTokens: 100,
+            outputTokens: 200,
+          }),
+        );
+
+        expect(
+          await countersFor({ org: orgLimit.id, agent: agentLimit.id }),
+        ).toEqual({
+          org: [{ model: "gpt-4o", tokensIn: 100, tokensOut: 200 }],
+          agent: [
+            {
+              model: "gpt-4o",
+              tokensIn: nearInt32Max + 100,
+              tokensOut: nearInt32Max + 200,
+            },
+          ],
+        });
+      });
     });
   });
 

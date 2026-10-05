@@ -890,7 +890,7 @@ class LimitModel {
         GROUP BY ${limits.id}
       )
       INSERT INTO ${usage} (limit_id, model, current_usage_tokens_in, current_usage_tokens_out)
-      SELECT limit_id, ${model}, refs * ${inputTokens}::integer, refs * ${outputTokens}::integer
+      SELECT limit_id, ${model}, refs * ${inputTokens}::bigint, refs * ${outputTokens}::bigint
       FROM matched
       ORDER BY limit_id
       ON CONFLICT (limit_id, model) DO UPDATE SET

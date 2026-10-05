@@ -4740,6 +4740,7 @@ describe("InteractionModel", () => {
       test("keeps accruing past the 32-bit range", async ({
         makeAgent,
         makeOrganization,
+        makeVirtualApiKey,
       }) => {
         const org = await makeOrganization();
         const agent = await makeAgent({
@@ -4787,6 +4788,30 @@ describe("InteractionModel", () => {
               tokensOut: nearInt32Max + 200,
             },
           ],
+        });
+
+        // Two refs to one key double an increment that alone fits in 32 bits.
+        const virtualKey = await makeVirtualApiKey(org.id);
+        const keyLimit = await LimitModel.create({
+          entityType: "virtual_key",
+          entityId: virtualKey.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: null,
+        });
+        const halfInt32 = 2 ** 30 + 1;
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({
+            profileId: agent.id,
+            virtualKeyId: virtualKey.id,
+            passthroughVirtualKeyId: virtualKey.id,
+            inputTokens: halfInt32,
+            outputTokens: 1,
+          }),
+        );
+
+        expect(await countersFor({ key: keyLimit.id })).toEqual({
+          key: [{ model: "gpt-4o", tokensIn: 2 * halfInt32, tokensOut: 2 }],
         });
       });
     });

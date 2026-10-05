@@ -77,6 +77,7 @@ export async function captureYellReport<T>(params: {
   }
 }
 
+/** @internal exported for tests */
 export const REPORT_ENDPOINT = "https://appa-yell-wkjbuewj5a-ew.a.run.app";
 // Matches the upstream reporter's compressed-size ceiling.
 const MAX_ARCHIVE_BYTES = 28 * 1024 * 1024;

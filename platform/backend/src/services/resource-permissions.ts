@@ -28,9 +28,6 @@ import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
-import RoleCompositionModel from "@/models/role-composition";
-import ServiceAccountModel from "@/models/service-account";
-import TeamModel from "@/models/team";
 import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { resyncAppBackingInstallScope } from "@/services/apps/app-mcp-backing";
 import type { ListInternalMcpCatalog } from "@/types";
@@ -728,43 +725,8 @@ export class ResourcePermissions {
     userId: string;
     organizationId: string;
   }): Promise<PermissionSubject[]> {
-    const subjects: PermissionSubject[] = [{ type: "organization", id: "*" }];
-    let identifiers: string[];
-    if (params.userId.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)) {
-      const id = params.userId.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length);
-      const account = await ServiceAccountModel.findById(
-        id,
-        params.organizationId,
-      );
-      if (!account || account.disabled) return [];
-      subjects.push({ type: "serviceAccount", id });
-      identifiers = account.role.split(",");
-    } else {
-      const member = await MemberModel.getByUserId(
-        params.userId,
-        params.organizationId,
-      );
-      if (!member) return [];
-      const [teamIds, sources] = await Promise.all([
-        TeamModel.getUserTeamIds(params.userId),
-        RoleCompositionModel.getUserSources(params),
-      ]);
-      subjects.push(
-        { type: "user", id: params.userId },
-        ...teamIds.map((id) => ({ type: "team" as const, id })),
-      );
-      identifiers = sources.map((source) => source.role);
-    }
-    const roles = await ResourcePermissionSubjectModel.getRoleIds({
-      organizationId: params.organizationId,
-      identifiers,
-    });
-    subjects.push(
-      ...roles.map(({ id }) => ({ type: "role" as const, id })),
-      ...identifiers
-        .filter((id) => PredefinedRoleNameSchema.safeParse(id).success)
-        .map((id) => ({ type: "role" as const, id })),
-    );
+    const { subjects } =
+      await ResourcePermissionSubjectModel.resolvePrincipal(params);
     return subjects;
   }
 }

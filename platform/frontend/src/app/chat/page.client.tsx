@@ -3138,6 +3138,7 @@ export function ChatPageContent({
         <EmptyContent>
           {!canCreateAgent ? (
             <ButtonWithTooltip
+              size="sm"
               disabled
               disabledText={"You don't have permission to create agents"}
             >
@@ -3145,7 +3146,7 @@ export function ChatPageContent({
               Create Agent
             </ButtonWithTooltip>
           ) : (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href="/agents/new">
                 <Plus className="h-4 w-4" />
                 Create Agent
@@ -3174,7 +3175,7 @@ export function ChatPageContent({
               The conversation may have been deleted, or you may not have
               permission to view it.
             </p>
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href="/chat">Start a new chat</Link>
             </Button>
           </CardContent>
@@ -3204,7 +3205,7 @@ export function ChatPageContent({
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center pb-8">
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href="/chat">Start a new chat</Link>
             </Button>
           </CardContent>
@@ -3474,7 +3475,10 @@ export function ChatPageContent({
                               been deleted.
                             </span>
                           </div>
-                          <Button onClick={() => router.push("/chat")}>
+                          <Button
+                            size="sm"
+                            onClick={() => router.push("/chat")}
+                          >
                             <Plus className="h-4 w-4" />
                             New Conversation
                           </Button>
@@ -4081,7 +4085,11 @@ function ReviewChatNoKeyNotice({ onKeyAdded }: { onKeyAdded: () => void }) {
             submission. The replay on the right plays without a key.
           </span>
         </div>
-        <Button className="shrink-0" onClick={() => setIsDialogOpen(true)}>
+        <Button
+          size="sm"
+          className="shrink-0"
+          onClick={() => setIsDialogOpen(true)}
+        >
           <Plus className="h-4 w-4" />
           Add API key
         </Button>

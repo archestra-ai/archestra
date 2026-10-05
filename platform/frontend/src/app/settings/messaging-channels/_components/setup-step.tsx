@@ -63,21 +63,11 @@ export function SetupStep({
               </Button>
             )}
             {done && onDoneAction ? (
-              <Button
-                variant="outline"
-                onClick={onDoneAction}
-                size="sm"
-                className="text-xs"
-              >
+              <Button variant="outline" onClick={onDoneAction} size="sm">
                 {doneActionLabel}
               </Button>
             ) : !done && onAction && ctaLabel ? (
-              <Button
-                variant="outline"
-                onClick={onAction}
-                size="sm"
-                className="text-xs"
-              >
+              <Button variant="outline" onClick={onAction} size="sm">
                 {ctaLabel}
               </Button>
             ) : !done ? (

@@ -63,6 +63,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
   useCancelAgentRun,
@@ -646,7 +647,7 @@ export function ChatSidebarSection({
               <DropdownMenuTrigger asChild>
                 {/* A real button: ARIA menu attributes are not valid on a
                     bare <svg>, and an svg is not keyboard-operable. */}
-                <button
+                <UnstyledButton
                   type="button"
                   aria-label="Chat actions"
                   className={cn(
@@ -658,7 +659,7 @@ export function ChatSidebarSection({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <MoreHorizontal className="h-4 w-4 p-0" />
-                </button>
+                </UnstyledButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="right">
                 {canUpdateConversation && (
@@ -826,7 +827,7 @@ export function ChatSidebarSection({
               onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
             >
               <DropdownMenuTrigger asChild>
-                <button
+                <UnstyledButton
                   type="button"
                   aria-label="Run actions"
                   className={cn(
@@ -837,7 +838,7 @@ export function ChatSidebarSection({
                   )}
                 >
                   <MoreHorizontal className="size-4" />
-                </button>
+                </UnstyledButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="right">
                 <DropdownMenuItem
@@ -950,7 +951,7 @@ export function ChatSidebarSection({
             onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
           >
             <DropdownMenuTrigger asChild>
-              <button
+              <UnstyledButton
                 type="button"
                 aria-label="Project actions"
                 className={cn(
@@ -961,7 +962,7 @@ export function ChatSidebarSection({
                 )}
               >
                 <MoreHorizontal className="h-4 w-4 p-0" />
-              </button>
+              </UnstyledButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="right">
               <DropdownMenuItem
@@ -1021,7 +1022,7 @@ export function ChatSidebarSection({
             onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
           >
             <DropdownMenuTrigger asChild>
-              <button
+              <UnstyledButton
                 type="button"
                 aria-label="App actions"
                 className={cn(
@@ -1032,7 +1033,7 @@ export function ChatSidebarSection({
                 )}
               >
                 <MoreHorizontal className="h-4 w-4 p-0" />
-              </button>
+              </UnstyledButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="right">
               <DropdownMenuItem
@@ -1217,7 +1218,8 @@ function CollapsibleSidebarGroup({
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
-              className="group/section h-8 w-full justify-start gap-1 px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-transparent"
+              size="sm"
+              className="group/section w-full justify-start gap-1 px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-transparent"
             >
               <span>{label}</span>
               <ChevronDown

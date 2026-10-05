@@ -584,7 +584,8 @@ function PermissionsEditor({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
+                  size="xs"
+                  className="font-normal text-muted-foreground"
                   aria-label={`Why ${grant.name} has access: ${grant.via}`}
                 >
                   <span>{grant.via}</span>
@@ -763,6 +764,7 @@ function PermissionsEditor({
                 <WizardFooter className="sm:justify-end">
                   <Button
                     type="submit"
+                    size="sm"
                     disabled={
                       !dirty ||
                       mutation.isPending ||

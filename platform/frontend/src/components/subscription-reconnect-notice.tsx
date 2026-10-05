@@ -63,8 +63,8 @@ export function SubscriptionReconnectNotice({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="ml-auto h-6 shrink-0 bg-background px-2 text-xs"
+            size="xs"
+            className="ml-auto shrink-0 bg-background"
             onClick={() => setOpen(true)}
           >
             Reconnect

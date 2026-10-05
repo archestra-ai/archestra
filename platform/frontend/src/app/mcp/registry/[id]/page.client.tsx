@@ -530,6 +530,7 @@ function CatalogItemDetails({
           {showChatButton && (
             <Button
               variant="outline"
+              size="sm"
               disabled={isChatCreating}
               onClick={() => startChat(item)}
             >
@@ -538,7 +539,7 @@ function CatalogItemDetails({
             </Button>
           )}
           {canModify && effectiveTab !== "yaml" && (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href={mcpServerActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
                 {editAction.label}
@@ -550,7 +551,7 @@ function CatalogItemDetails({
             (canModify && !isPlaywright)) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon-sm">
                   <MoreHorizontal className="h-4 w-4" />
                   <span className="sr-only">More actions</span>
                 </Button>

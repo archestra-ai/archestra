@@ -9,6 +9,7 @@ import {
   terminalActionClass,
   terminalCodeClass,
 } from "@/components/terminal-surface";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -67,7 +68,7 @@ export function TerminalBlock({ code, rows, header }: TerminalBlockProps) {
               />
             </div>
           ) : (
-            <button
+            <UnstyledButton
               type="button"
               onClick={() => onCopy(row.code, index)}
               aria-label="Copy to clipboard"
@@ -84,7 +85,7 @@ export function TerminalBlock({ code, rows, header }: TerminalBlockProps) {
               ) : (
                 <Copy className="size-3.5" strokeWidth={2} />
               )}
-            </button>
+            </UnstyledButton>
           )}
           <pre
             className={cn(

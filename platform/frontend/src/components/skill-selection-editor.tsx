@@ -106,7 +106,7 @@ function SkillPill({ skill, tone, onRemove }: SkillPillProps) {
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 max-w-[260px] gap-1.5 rounded-r-none border-r-0 px-3 text-xs"
+            className="max-w-[260px] rounded-r-none border-r-0 text-xs"
           >
             <span
               className={cn(
@@ -121,8 +121,8 @@ function SkillPill({ skill, tone, onRemove }: SkillPillProps) {
         <Button
           type="button"
           variant="outline"
-          size="sm"
-          className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
+          size="icon-sm"
+          className="rounded-l-none text-muted-foreground hover:text-destructive"
           onClick={onRemove}
           aria-label={skill.removeLabel ?? `Remove ${skill.name}`}
         >
@@ -149,8 +149,8 @@ function SkillPill({ skill, tone, onRemove }: SkillPillProps) {
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 w-6 shrink-0 p-0"
+            size="icon-xs"
+            className="shrink-0"
             onClick={() => setOpen(false)}
             aria-label="Close"
           >

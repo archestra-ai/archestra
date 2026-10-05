@@ -1,5 +1,5 @@
 {
-  "id": "9d7308ae-13cb-48a4-8090-5a7cd41a799d",
+  "id": "f854f895-805e-4373-8c64-239fcf2f5da5",
   "prevId": "cfe74a4f-b08e-4af2-883f-8d59917c1ca5",
   "version": "7",
   "dialect": "postgresql",
@@ -14397,6 +14397,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "synced_at": {
+          "name": "synced_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -18039,13 +18045,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "log_content_mode": {
-          "name": "log_content_mode",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'full'"
         },
         "allow_tool_auto_assignment": {
           "name": "allow_tool_auto_assignment",

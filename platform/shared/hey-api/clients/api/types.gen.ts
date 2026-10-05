@@ -87667,7 +87667,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -87691,7 +87691,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path?: never;
@@ -87775,7 +87775,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87961,7 +87961,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87976,7 +87976,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path: {
@@ -88065,7 +88065,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -88207,6 +88207,7 @@ export type GetOrganizationResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -88401,6 +88402,7 @@ export type UpdateAppearanceSettingsData = {
         slimChatErrorUi?: boolean;
         chatPlaceholders?: Array<string> | null;
         animateChatPlaceholders?: boolean;
+        collapseSidebarByDefault?: boolean;
     };
     path?: never;
     query?: never;
@@ -88532,6 +88534,7 @@ export type UpdateAppearanceSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -88740,6 +88743,7 @@ export type UpdateSecuritySettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -88943,6 +88947,7 @@ export type UpdateMcpSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -89146,6 +89151,7 @@ export type UpdateSkillsSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -89350,6 +89356,7 @@ export type UpdateAgentSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -89569,6 +89576,7 @@ export type UpdateConnectionSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -89803,6 +89811,7 @@ export type UpdateIntegrationSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -90016,6 +90025,7 @@ export type UpdateDefaultEnvironmentResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -90224,6 +90234,7 @@ export type UpdateAuthSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -90434,6 +90445,7 @@ export type UpdateKnowledgeSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -90634,6 +90646,7 @@ export type DropEmbeddingConfigResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -91184,6 +91197,7 @@ export type CompleteOnboardingResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        collapseSidebarByDefault: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -108252,7 +108266,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     }>;
 };
@@ -108336,7 +108350,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
     };
 };
 

@@ -20,7 +20,7 @@ Permissions in Archestra are defined using a `resource:action` format, where:
 
 For example, `agent:create` allows creating agents, `mcpServerInstallation:create` allows installing MCP servers, and `llmProxy:read` allows viewing the LLM Proxy.
 
-Agents, MCP gateways, the MCP registry, skills, apps, models, keys, OAuth clients and service accounts also have per-item grants. For these, a role decides who can open the section and create new items; who can see, edit, delete or share a specific item is granted on that item's Permissions tab (see [Scoped Resources](#scoped-resources)).
+Agents, MCP gateways, the MCP registry, skills, apps, models, keys, OAuth clients and service accounts also have per-item grants. For these, a role decides who can open the section and create new items; who can see, edit, delete or share them is granted under Permissions, either on a single item or, for all items of a kind, from the list page's ⋯ menu (see [Scoped Resources](#scoped-resources)).
 
 ## Log Visibility
 
@@ -107,7 +107,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Projects | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
-| Simple View | `enable` |
 
 
 ## Custom Roles
@@ -239,7 +238,6 @@ The following table lists all available permissions that can be assigned to cust
 | `scheduledTask:delete` | Delete scheduled tasks |
 | `serviceAccount:read` | Open Service Accounts |
 | `serviceAccount:create` | Create service accounts |
-| `simpleView:enable` | Collapse the app sidebar by default |
 | `skill:read` | Open Skills |
 | `skill:create` | Create new agent skills |
 | `skill:delete` | Permanently delete skills from the trash |

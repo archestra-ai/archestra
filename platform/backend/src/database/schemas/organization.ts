@@ -270,6 +270,11 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(true),
 
+  /** Whether the app sidebar starts collapsed for people who haven't toggled it yet */
+  collapseSidebarByDefault: boolean("collapse_sidebar_by_default")
+    .notNull()
+    .default(false),
+
   /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator. PNG or SVG. */
   iconLogo: text("icon_logo"),
 

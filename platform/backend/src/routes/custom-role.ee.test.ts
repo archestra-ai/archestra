@@ -94,40 +94,6 @@ describe("custom role routes", () => {
     expect(response.json().permission).toEqual({ agent: ["read"] });
   });
 
-  test("accepts a UI-only permission the author's own role does not hold", async ({
-    makeCustomRole,
-    makeMember,
-    makeUser,
-  }) => {
-    // `simpleView:enable` is a display preference, not a privilege: admin
-    // deliberately holds less of it than member, so granting it is exempt
-    // from the no-escalation rule. An author without it must still be able to
-    // hand it to a role.
-    const author = await makeUser();
-    const authorRole = await makeCustomRole(organizationId, {
-      role: "role_maker",
-      name: "Role Maker",
-      permission: { ac: ["create"], agent: ["read"] },
-    });
-    await makeMember(author.id, organizationId, { role: authorRole.role });
-    authenticatedUser = author;
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/roles",
-      payload: {
-        name: "Collapsed Sidebar",
-        permission: { agent: ["read"], simpleView: ["enable"] },
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json().permission).toEqual({
-      agent: ["read"],
-      simpleView: ["enable"],
-    });
-  });
-
   test("rejects creating a role with permissions the user does not have", async ({
     makeCustomRole,
     makeMember,
@@ -682,8 +648,8 @@ describe("custom role routes", () => {
     makeMember,
     makeUser,
   }) => {
-    // Same divergence as on create: editing a role to switch on a UI-only
-    // preference, or leaving a vestigial action in place, is not escalation.
+    // Same as on create: leaving a vestigial action in place is not
+    // escalation.
     const author = await makeUser();
     const authorRole = await makeCustomRole(organizationId, {
       role: "role_editor",
@@ -704,17 +670,13 @@ describe("custom role routes", () => {
       payload: {
         permission: {
           agent: ["read"],
-          simpleView: ["enable"],
           invitation: ["read"],
         },
       },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().permission).toEqual({
-      agent: ["read"],
-      simpleView: ["enable"],
-    });
+    expect(response.json().permission).toEqual({ agent: ["read"] });
   });
 
   test("PUT /api/roles/admin rejects update to predefined role", async () => {

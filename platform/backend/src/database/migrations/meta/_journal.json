@@ -3571,6 +3571,13 @@
       "when": 1791132816653,
       "tag": "0509_fold-rbac-settings-resources",
       "breakpoints": true
+    },
+    {
+      "idx": 510,
+      "version": "7",
+      "when": 1791152008019,
+      "tag": "0510_open_timeslip",
+      "breakpoints": true
     }
   ]
 }

@@ -285,8 +285,9 @@ export function PermissionExplorer({
                   PER_ITEM_RESOURCES.has(resource),
                 ) && (
                   <p className="pt-3 text-xs text-muted-foreground">
-                    Which specific items someone can see, edit, delete or share
-                    is set on each item's Permissions tab.
+                    Who can see, edit, delete or share these items isn't set
+                    here. Use Permissions on a single item, or Permissions in a
+                    list page's ⋯ menu for all of them.
                   </p>
                 )}
               </section>
@@ -422,7 +423,6 @@ const actionLabels: Record<Action, string> = {
   update: "Update",
   delete: "Delete",
   cancel: "Cancel",
-  enable: "Enable",
   query: "Query",
   impersonate: "Impersonate",
   "full-view": "Full view",

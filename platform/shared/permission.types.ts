@@ -15,7 +15,6 @@ export const actions = [
   "update",
   "delete",
   "cancel",
-  "enable",
   "query",
   "impersonate",
   "full-view",
@@ -73,7 +72,6 @@ export const resources = [
   "serviceAccount",
   "auditLog",
   "accessPolicies",
-  "simpleView",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -113,7 +111,6 @@ export const resourceLabels: Record<Resource, string> = {
   accessPolicies: "Access Policies",
   organizationSettings: "Organization Settings",
   scheduledTask: "Scheduled Tasks",
-  simpleView: "Simple View",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -160,7 +157,6 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Organization-wide settings: appearance, authentication, agents and security, LLM, MCP, skills, knowledge, OpenAPPA enforcement, messaging channels, site notifications, and the secrets backend",
   knowledgeSource:
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
-  simpleView: "Collapse the app sidebar by default",
   organization: "Organization (internal, used by authentication system)",
 };
 
@@ -193,14 +189,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmCost",
   ],
   OpenAPPA: ["openappaPolicy", "openappaDiagnostics"],
-  Other: [
-    "chat",
-    "project",
-    "simpleView",
-    "knowledgeSource",
-    "log",
-    "auditLog",
-  ],
+  Other: ["chat", "project", "knowledgeSource", "log", "auditLog"],
   Administration: [
     "accessPolicies",
     "member",

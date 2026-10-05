@@ -337694,7 +337694,6 @@
                                   "update",
                                   "delete",
                                   "cancel",
-                                  "enable",
                                   "query",
                                   "impersonate",
                                   "full-view",
@@ -338050,7 +338049,6 @@
                           "update",
                           "delete",
                           "cancel",
-                          "enable",
                           "query",
                           "impersonate",
                           "full-view",
@@ -338104,7 +338102,6 @@
                             "update",
                             "delete",
                             "cancel",
-                            "enable",
                             "query",
                             "impersonate",
                             "full-view",
@@ -338448,7 +338445,6 @@
                             "update",
                             "delete",
                             "cancel",
-                            "enable",
                             "query",
                             "impersonate",
                             "full-view",
@@ -338756,7 +338752,6 @@
                           "update",
                           "delete",
                           "cancel",
-                          "enable",
                           "query",
                           "impersonate",
                           "full-view",
@@ -338832,7 +338827,6 @@
                             "update",
                             "delete",
                             "cancel",
-                            "enable",
                             "query",
                             "impersonate",
                             "full-view",
@@ -339734,6 +339728,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -340040,6 +340037,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -340484,6 +340482,9 @@
                   },
                   "animateChatPlaceholders": {
                     "type": "boolean"
+                  },
+                  "collapseSidebarByDefault": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -340836,6 +340837,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -341142,6 +341146,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -342193,6 +342198,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -342499,6 +342507,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -343147,6 +343156,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -343453,6 +343465,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -344101,6 +344114,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -344407,6 +344423,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -345067,6 +345084,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -345373,6 +345393,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -346096,6 +346117,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -346402,6 +346426,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -347140,6 +347165,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -347446,6 +347474,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -348164,6 +348193,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -348470,6 +348502,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -349132,6 +349165,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -349438,6 +349474,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -350131,6 +350168,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -350437,6 +350477,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -351067,6 +351108,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -351373,6 +351417,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -353191,6 +353236,9 @@
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     },
+                    "collapseSidebarByDefault": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -353497,6 +353545,7 @@
                     "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
+                    "collapseSidebarByDefault",
                     "iconLogo",
                     "iconLogoDark",
                     "chatErrorSupportMessage",
@@ -415802,7 +415851,6 @@
                               "update",
                               "delete",
                               "cancel",
-                              "enable",
                               "query",
                               "impersonate",
                               "full-view",
@@ -416083,7 +416131,6 @@
                         "update",
                         "delete",
                         "cancel",
-                        "enable",
                         "query",
                         "impersonate",
                         "full-view",

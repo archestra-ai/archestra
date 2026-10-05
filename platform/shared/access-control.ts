@@ -85,7 +85,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   organizationSettings: ["read", "update"],
 
   // UI behavior resources
-  simpleView: ["enable"],
 
   // Administration
 
@@ -148,7 +147,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Administration
 
   // UI behavior resources
-  simpleView: [],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -215,7 +213,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Administration
 
   // UI behavior resources
-  simpleView: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -227,20 +224,13 @@ export const memberPermissions: Record<Resource, Action[]> = {
  * roles, the org default role) and by the UI that previews it: a role may
  * only be granted by someone who already holds every permission it carries.
  * Returns the `resource:action` pairs the granter is missing (empty = OK).
- *
- * UI-behavior resources are exempt — predefined admin deliberately holds
- * LESS than member on those (e.g. `simpleView`), so including them would
- * make ordinary grants impossible.
  */
 export function findUngrantablePermissions(
   granterPermissions: Permissions,
   rolePermissions: Permissions,
 ): string[] {
-  const exemptUiResources: Resource[] = ["simpleView"];
-
   const missing: string[] = [];
   for (const [resource, actions] of Object.entries(rolePermissions)) {
-    if (exemptUiResources.includes(resource as Resource)) continue;
     const granterActions = granterPermissions[resource as Resource] || [];
     const realActions = allAvailableActions[resource as Resource] || [];
     for (const action of actions ?? []) {
@@ -272,7 +262,6 @@ export function withDerivedPermissions(permissions: Permissions): Permissions {
 
 export const adminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
-  simpleView: [],
 };
 
 /**
@@ -286,7 +275,6 @@ export const adminPermissions: Record<Resource, Action[]> = {
 export const platformAdminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
   openappaDiagnostics: ["read", "update"],
-  simpleView: [],
   log: ["read"],
   auditLog: ["read"],
   member: allAvailableActions.member.filter((a) => a !== "impersonate"),
@@ -489,7 +477,6 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
 
   // UI behavior
-  "simpleView:enable": "Collapse the app sidebar by default",
 
   // Administration
 };

@@ -387,7 +387,7 @@ describe("OrganizationCostsPage", () => {
     // The Cost column must read as spend. It rendered the savings percentage
     // ("0%") for everyone without subscription usage while `tooltip` was left
     // at its "never" default.
-    expect(await findByText("$41.4405")).toBeInTheDocument();
+    expect(await findByText("$41.44")).toBeInTheDocument();
     expect(queryByText("0%")).not.toBeInTheDocument();
   });
 

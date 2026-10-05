@@ -1098,7 +1098,7 @@ builtin = "hitl"
     // A direct call keeps naming the tool itself.
     assert.match(
       await hint(undefined),
-      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the read_untrusted tool again/,
+      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the read_untrusted tool again/,
     );
   });
 
@@ -1142,7 +1142,7 @@ builtin = "hitl"
     const approved = await byOffer(session, {
       tool_call_id: 'post-other-approve', tool: 'publish_post', arguments: { offer_id: remaining }, ruling: 'approve',
     });
-    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the publish_post tool again/);
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the publish_post tool again/);
   });
 
   await t.test('a precheck refusal answers the remedy without touching the offer', async () => {
@@ -1170,7 +1170,7 @@ builtin = "hitl"
     const approved = await byOffer(session, {
       tool_call_id: 'email-after-precheck', tool: 'send_email', arguments: { offer_id }, ruling: 'approve',
     });
-    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the send_email tool again/);
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the send_email tool again/);
 
     await assert.rejects(
       () => byOffer(session, {

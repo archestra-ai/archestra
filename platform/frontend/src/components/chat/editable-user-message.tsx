@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, BookPlus, FileText, Paperclip } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   AttachmentImage,
@@ -67,7 +67,10 @@ interface EditableUserMessageProps {
   ) => Promise<void>;
 }
 
-export function EditableUserMessage({
+// Memoized so a streamed chunk, which re-renders the whole transcript, skips
+// every user bubble. Callers pass stable callbacks and attachment arrays (see
+// ChatMessages) so the memo holds.
+export const EditableUserMessage = memo(function EditableUserMessage({
   messageId,
   partIndex,
   partKey,
@@ -245,7 +248,7 @@ export function EditableUserMessage({
       </div>
     </Message>
   );
-}
+});
 
 /**
  * "Save to knowledge" on an attachment chip in the message stream.

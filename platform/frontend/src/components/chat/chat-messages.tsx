@@ -104,6 +104,7 @@ import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
 import { UPSTREAM_IDLE_THRESHOLD_SECONDS } from "@/lib/chat/stream-stall.hook";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
@@ -495,42 +496,47 @@ export function ChatMessages({
     }
   }, [isEditing]);
 
-  const handleStartEdit = (partKey: string, messageId?: string) => {
+  // Every per-message handler keeps one identity across renders: a streamed
+  // chunk re-renders this list, and a fresh handler would defeat the memoized
+  // message rows below, re-rendering the whole transcript on every token and
+  // starving the composer of main-thread time.
+  const handleStartEdit = useCallback((partKey: string, messageId?: string) => {
     setEditingPartKey(partKey);
     // Always reset editingMessageId to prevent stale state when switching
     // between editing user messages (which pass messageId) and assistant messages (which don't)
     setEditingMessageId(messageId ?? null);
-  };
+  }, []);
 
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     setEditingPartKey(null);
     setEditingMessageId(null);
-  };
+  }, []);
 
-  const handleSaveAssistantMessage = async (
-    messageId: string,
-    partIndex: number,
-    newText: string,
-  ) => {
-    const data = await updateChatMessageMutation.mutateAsync({
-      messageId,
-      partIndex,
-      text: newText,
-    });
+  const handleSaveAssistantMessage = useStableCallback(
+    async (messageId: string, partIndex: number, newText: string) => {
+      const data = await updateChatMessageMutation.mutateAsync({
+        messageId,
+        partIndex,
+        text: newText,
+      });
 
-    // Update local state to reflect the change immediately
-    if (onMessagesUpdate && data?.messages) {
-      onMessagesUpdate(data.messages as UIMessage[]);
-    }
-  };
+      // Update local state to reflect the change immediately
+      if (onMessagesUpdate && data?.messages) {
+        onMessagesUpdate(data.messages as UIMessage[]);
+      }
+    },
+  );
 
-  const handleSaveUserMessage = async (
-    messageId: string,
-    partIndex: number,
-    newText: string,
-  ) => {
-    await onRegenerateUserMessage?.({ messageId, partIndex, text: newText });
-  };
+  const handleSaveUserMessage = useStableCallback(
+    async (messageId: string, partIndex: number, newText: string) => {
+      await onRegenerateUserMessage?.({ messageId, partIndex, text: newText });
+    },
+  );
+
+  const handleMessageFeedback = useStableCallback(
+    (messageId: string, feedback: ChatMessageFeedback | null) =>
+      onMessageFeedback?.(messageId, feedback),
+  );
 
   const pendingToolCalls = useMemo(
     () => filterOptimisticToolCalls(messages, optimisticToolCalls),
@@ -1145,12 +1151,9 @@ export function ChatMessages({
                                         onSave={handleSaveAssistantMessage}
                                         feedback={getMessageFeedback(message)}
                                         onFeedbackChange={
-                                          onMessageFeedback &&
-                                          ((feedback) =>
-                                            onMessageFeedback(
-                                              message.id,
-                                              feedback,
-                                            ))
+                                          onMessageFeedback
+                                            ? handleMessageFeedback
+                                            : undefined
                                         }
                                         feedbackDisabled={feedbackDisabled}
                                       />
@@ -1182,9 +1185,9 @@ export function ChatMessages({
                                   onSave={handleSaveAssistantMessage}
                                   feedback={getMessageFeedback(message)}
                                   onFeedbackChange={
-                                    onMessageFeedback &&
-                                    ((feedback) =>
-                                      onMessageFeedback(message.id, feedback))
+                                    onMessageFeedback
+                                      ? handleMessageFeedback
+                                      : undefined
                                   }
                                   feedbackDisabled={feedbackDisabled}
                                 />
@@ -1203,7 +1206,7 @@ export function ChatMessages({
                                   text={part.text}
                                   isEditing={editingPartKey === partKey}
                                   editDisabled={isResponseInProgress}
-                                  attachments={extractFileAttachments(
+                                  attachments={getFileAttachments(
                                     message.parts,
                                   )}
                                   conversationId={conversationId}
@@ -1315,7 +1318,7 @@ export function ChatMessages({
                                   text=""
                                   isEditing={editingPartKey === partKey}
                                   editDisabled={isResponseInProgress}
-                                  attachments={extractFileAttachments(
+                                  attachments={getFileAttachments(
                                     message.parts,
                                   )}
                                   conversationId={conversationId}
@@ -3258,9 +3261,36 @@ function ContextCompactionTimelineEvent({
   );
 }
 
-function getSkillAttribution(
-  metadata: unknown,
-): { name: string; href?: string } | undefined {
+// Derived per-message props are cached by the message's own (immutable) parts
+// and metadata objects, so an untouched message hands its memoized row the
+// same references on every streamed chunk instead of fresh, equal copies.
+const fileAttachmentsByParts = new WeakMap<
+  UIMessage["parts"],
+  ReturnType<typeof extractFileAttachments>
+>();
+
+function getFileAttachments(parts: UIMessage["parts"] | undefined) {
+  if (!parts) return undefined;
+  if (!fileAttachmentsByParts.has(parts)) {
+    fileAttachmentsByParts.set(parts, extractFileAttachments(parts));
+  }
+  return fileAttachmentsByParts.get(parts);
+}
+
+type SkillAttribution = { name: string; href?: string } | undefined;
+const skillAttributionByMetadata = new WeakMap<object, SkillAttribution>();
+
+function getSkillAttribution(metadata: unknown): SkillAttribution {
+  if (typeof metadata !== "object" || metadata === null) {
+    return parseSkillAttribution(metadata);
+  }
+  if (!skillAttributionByMetadata.has(metadata)) {
+    skillAttributionByMetadata.set(metadata, parseSkillAttribution(metadata));
+  }
+  return skillAttributionByMetadata.get(metadata);
+}
+
+function parseSkillAttribution(metadata: unknown): SkillAttribution {
   const parsed = ChatMessageMetadataSchema.safeParse(metadata).data;
   if (parsed?.skill) return parsed.skill;
   return parsed?.externalMcpSkill

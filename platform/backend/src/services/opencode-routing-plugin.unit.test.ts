@@ -71,7 +71,13 @@ describe("OpenCode routing plugin", () => {
 
       await hooks.config(config);
       expect(config).toMatchObject({
-        enabled_providers: ["anthropic", "google", "openai", "cerebras"],
+        enabled_providers: [
+          "anthropic",
+          "google",
+          "openai",
+          "cerebras",
+          "zhipuai",
+        ],
         disabled_providers: ["direct"],
         small_model: "google/gemini-model",
         provider: {
@@ -248,6 +254,64 @@ describe("OpenCode routing plugin", () => {
       else process.env.CEREBRAS_API_KEY = originalCerebrasKey;
       delete (globalThis as unknown as Record<PropertyKey, unknown>)[
         Symbol.for("archestra.opencode.llmProxyFetchGuard")
+      ];
+      delete (globalThis as unknown as Record<PropertyKey, unknown>)[
+        Symbol.for("archestra.opencode.directFetch")
+      ];
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps login providers discoverable before credentials exist without enabling inference", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-plugin-login-"));
+    const file = path.join(root, "archestra-llm-proxy.mjs");
+    const routes = {
+      openai: "https://example.com/v1/openai",
+      anthropic: "https://example.com/v1/anthropic/v1",
+    };
+    const outboundFetch = vi.fn().mockResolvedValue(new Response("ok"));
+    vi.stubGlobal("fetch", outboundFetch);
+    vi.stubEnv("XDG_DATA_HOME", path.join(root, "data"));
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    try {
+      await writeFile(
+        file,
+        renderOpenCodeRoutingPlugin({ routes, headers: {} }),
+      );
+      const module = await import(pathToFileURL(file).href);
+      const hooks = await module.ArchestraLlmProxy();
+      const config = {
+        enabled_providers: ["direct"],
+        disabled_providers: ["openai", "direct"],
+        provider: {},
+      };
+
+      await hooks.config(config);
+      expect(config.enabled_providers).toEqual(["openai", "anthropic"]);
+      expect(config.disabled_providers).toEqual(["direct"]);
+      expect(config.provider).toEqual({});
+      await expect(
+        hooks["chat.params"]({
+          provider: { id: "openai", options: { baseURL: routes.openai } },
+        }),
+      ).rejects.toThrow("restart OpenCode");
+      expect(() =>
+        globalThis.fetch("https://api.openai.com/v1/responses"),
+      ).toThrow("Blocked a direct provider inference request");
+      expect(outboundFetch).not.toHaveBeenCalled();
+
+      await globalThis.fetch("https://auth.openai.com/oauth/token");
+      expect(outboundFetch).toHaveBeenCalledOnce();
+      expect((outboundFetch.mock.calls[0][0] as Request).url).toBe(
+        "https://auth.openai.com/oauth/token",
+      );
+    } finally {
+      delete (globalThis as unknown as Record<PropertyKey, unknown>)[
+        Symbol.for("archestra.opencode.llmProxyFetchGuard")
+      ];
+      delete (globalThis as unknown as Record<PropertyKey, unknown>)[
+        Symbol.for("archestra.opencode.directFetch")
       ];
       await rm(root, { recursive: true, force: true });
     }

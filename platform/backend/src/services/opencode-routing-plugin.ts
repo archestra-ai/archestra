@@ -83,7 +83,8 @@ export const ArchestraLlmProxy = async () => ({
     });
     activeRoutes = Object.fromEntries(eligible);
     proxyOrigins = computeProxyOrigins(activeRoutes);
-    const providerIds = eligible.map(([providerId]) => providerId);
+    // The login picker also uses this list; credentials gate inference, not discovery.
+    const providerIds = Object.keys(routes);
     config.enabled_providers = providerIds;
     if (Array.isArray(config.disabled_providers)) {
       config.disabled_providers = config.disabled_providers.filter((id) => !providerIds.includes(id));
@@ -110,6 +111,11 @@ export const ArchestraLlmProxy = async () => ({
     const providerId = input.provider.id ?? input.provider.info?.id;
     const expected = activeRoutes[providerId];
     if (!expected) {
+      if (Object.prototype.hasOwnProperty.call(routes, providerId)) {
+        throw new Error(
+          'OpenCode provider "' + providerId + '" is supported but has no authenticated proxy connection. Sign in to the provider, then restart OpenCode to load the credentials. Direct inference stays blocked.',
+        );
+      }
       throw new Error(
         'OpenCode provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
       );

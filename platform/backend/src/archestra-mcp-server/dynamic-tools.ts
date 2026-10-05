@@ -234,8 +234,6 @@ export async function isArchestraToolAvailableToAgent(params: {
   userId?: string;
   organizationId?: string;
   exclusionSets?: AgentToolExclusionSets;
-  /** The agent's MCP tools, when the caller already loaded them. */
-  assignedTools?: Tool[];
   lookups?: RequestLookups;
 }): Promise<boolean> {
   const shortName = archestraMcpBranding.getToolShortName(params.toolName);
@@ -250,9 +248,10 @@ export async function isArchestraToolAvailableToAgent(params: {
       params.agentId,
       agent,
     ));
-  const assignedTools =
-    params.assignedTools ??
-    (await ToolModel.getMcpToolsByAgent(params.agentId, agent));
+  const assignedTools = await ToolModel.getMcpToolsByAgent(
+    params.agentId,
+    agent,
+  );
   if (
     assignedTools.some(
       (tool) =>

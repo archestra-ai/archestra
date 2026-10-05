@@ -58,7 +58,8 @@ interface EditableUserMessageProps {
   canSaveToKnowledge?: boolean;
   /** Skill the user invoked via slash command for this message, if any. */
   skill?: { name: string; href?: string };
-  onStartEdit: (partKey: string, messageId: string) => void;
+  /** Omit for a read-only transcript: hides edit and regenerate. */
+  onStartEdit?: (partKey: string, messageId: string) => void;
   onCancelEdit: () => void;
   onSave: (
     messageId: string,
@@ -95,7 +96,7 @@ export const EditableUserMessage = memo(function EditableUserMessage({
   const { setIsSaving } = editor;
 
   const handleStartEdit = () => {
-    onStartEdit(partKey, messageId);
+    onStartEdit?.(partKey, messageId);
   };
 
   const handleRegenerateClick = async () => {
@@ -228,8 +229,8 @@ export const EditableUserMessage = memo(function EditableUserMessage({
             <div className="absolute right-full top-1/2 -translate-y-1/2 pr-2">
               <MessageActions
                 textToCopy={text}
-                onEditClick={handleStartEdit}
-                onRegenerateClick={handleRegenerateClick}
+                onEditClick={onStartEdit && handleStartEdit}
+                onRegenerateClick={onStartEdit && handleRegenerateClick}
                 isRegenerateConfirming={isRegenerateConfirming}
                 editDisabled={editDisabled}
                 className={cn(

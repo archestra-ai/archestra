@@ -360,6 +360,14 @@ export const handlers: HttpHandler[] = [
   // sidebar. Default empty so dialog open doesn't blow up the leak guard.
   ...getJson("/api/chat/conversations", []),
   ...getJson("/api/chat/conversations/:id/openappa-status", null),
+  ...getJson("/api/agent-runs/:taskId/openappa-review", {
+    status: "none",
+    canDecide: false,
+    offerId: null,
+    text: null,
+    tool: null,
+    arguments: null,
+  }),
   ...getJson("/api/roles", {
     data: [],
     pagination: {

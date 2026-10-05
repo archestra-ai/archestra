@@ -10188,7 +10188,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.body).not.toContain("archestra__get_remedy_plans");
       expect(response.body).not.toContain("NATIVE REFUSAL");
       expect(response.body).not.toContain("defers its tools");
-      expect(response.body).not.toContain("cannot use Guardrails");
+      expect(response.body).not.toContain(
+        "Guardrails do not recognize this client",
+      );
       expect(response.body).not.toContain("cps1_");
       expect(response.body).not.toContain(token);
       expect(events).toEqual([]);
@@ -10212,7 +10214,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       body: string;
     }) => {
       expect(response.statusCode, response.body).toBe(400);
-      expect(response.body).toContain("This client cannot use Guardrails");
+      expect(response.body).toContain(
+        "Guardrails do not recognize this client",
+      );
       expect(providerRequests).toHaveLength(0);
       expect(events).toEqual([]);
       expect(evaluatePolicies).not.toHaveBeenCalled();
@@ -10395,7 +10399,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           400,
         );
         expect(response.body, item.label).toContain(
-          "This client cannot use Guardrails",
+          "Guardrails do not recognize this client",
         );
         expect(providerRequests, item.label).toHaveLength(0);
         expect(events, item.label).toEqual([]);

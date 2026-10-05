@@ -1849,7 +1849,8 @@ describe("mapProviderError - Fallback behavior", () => {
       error: {
         type: "api_error",
         code: ArchestraInternalErrorCode.ProviderOverloaded,
-        message: "Our servers are currently overloaded. Please try again later.",
+        message:
+          "Our servers are currently overloaded. Please try again later.",
         param: null,
       },
     };

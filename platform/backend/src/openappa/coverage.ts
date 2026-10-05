@@ -3,7 +3,6 @@ import {
   calculatePaginationMeta,
   parseFullToolName,
 } from "@archestra/shared";
-import { parse as parseToml } from "smol-toml";
 import { getUnassignedDiscoverableTools } from "@/archestra-mcp-server/dynamic-tools";
 import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
 import { getAgentTypePermissionChecker } from "@/auth";
@@ -26,6 +25,12 @@ import type {
   CoverageToolsQuery,
 } from "@/types/openappa-coverage";
 import { openappaBatteriesService } from "./batteries";
+import {
+  asRecord,
+  type ToolEntry,
+  toolEntries,
+  toolHeaderLines,
+} from "./policy-text";
 
 /**
  * Which rule of the policy governs each tool reachable through a visible
@@ -839,50 +844,6 @@ function compareTargets(
 // Parsing
 // =============================================================================
 
-/** One `[[policy.tool]]` entry, as far as coverage reads it. */
-type ToolEntry = {
-  name: string;
-  delta: unknown;
-  requires: unknown;
-  annotator: unknown;
-};
-
-/** Every `[[policy.tool]]` entry with a string name, in text order. */
-function toolEntries(text: string): ToolEntry[] {
-  let document: Record<string, unknown>;
-  try {
-    document = parseToml(text) as Record<string, unknown>;
-  } catch {
-    return [];
-  }
-  const policy = asRecord(document.policy);
-  const tools = Array.isArray(policy?.tool) ? policy.tool : [];
-  return tools.flatMap((tool) => {
-    const entry = asRecord(tool);
-    return entry && typeof entry.name === "string"
-      ? [
-          {
-            name: entry.name,
-            delta: entry.delta,
-            requires: entry.requires,
-            annotator: entry.annotator,
-          },
-        ]
-      : [];
-  });
-}
-
-/**
- * The 1-based line of every `[[policy.tool]]` header. The parser keeps no
- * positions, so the n-th header is the n-th entry's line whenever every entry
- * is written as a header.
- */
-function toolHeaderLines(text: string): number[] {
-  return text
-    .split("\n")
-    .flatMap((line, index) => (TOOL_HEADER.test(line) ? [index + 1] : []));
-}
-
 function splitSelector(name: string): {
   base: string;
   selector: string | null;
@@ -955,12 +916,6 @@ function optionalList<K extends string>(
   return value === null ? {} : ({ [key]: value } as Record<K, string[]>);
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
 // =============================================================================
 // Ordering and paging
 // =============================================================================
@@ -987,5 +942,3 @@ function page<T>(
 
 /** A battery rule's name: `mcp/<namespace>/<tool>`. */
 const CANONICAL_RULE_NAME = /^mcp\/([^/]+)\/(.+)$/;
-
-const TOOL_HEADER = /^\s*\[\[\s*policy\s*\.\s*tool\s*\]\]/;

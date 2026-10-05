@@ -2708,7 +2708,7 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
     // The user may have accepted the plan through ask_user, so the text does
     // not credit the model with the choice.
     format!(
-        "[appa] {status}. Tell the user in your reply which plan was accepted. Call the {tool} tool again with exactly these arguments: {}",
+        "[appa] {status}. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the {tool} tool again with exactly these arguments: {}",
         call.arguments.get()
     )
 }
@@ -3393,7 +3393,9 @@ mod typed_tests {
         let (prefix, arguments) = text.split_once("exactly these arguments: ").unwrap();
         assert_eq!(
             prefix,
-            "[appa] Authorized. Tell the user in your reply which plan was accepted. Call the client_tool tool again with "
+            "[appa] Authorized. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, \
+             the session keeps its current label and calls that need the plan stay blocked. Call the client_tool tool \
+             again with "
         );
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),

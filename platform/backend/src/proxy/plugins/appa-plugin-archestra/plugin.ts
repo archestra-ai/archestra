@@ -3880,7 +3880,8 @@ function appendNativeDelegationGuidance(
 const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "The organization's guardrails policy can block a tool call and offer remedy plans in its ruling.",
   "A remedy plan is the policy's own way to continue, and execute_remedy_plan applies the plan through the policy.",
-  "When a ruling offers a plan that fits the user's request, apply that plan with execute_remedy_plan.",
+  "A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next.",
+  "Apply a fitting plan with execute_remedy_plan.",
   "Use the offer_id and plan from the ruling.",
   "The policy decides when the user must approve a plan.",
   "In that case, execute_remedy_plan returns review_required.",

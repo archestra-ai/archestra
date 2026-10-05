@@ -1854,7 +1854,11 @@ export function mapProviderError(
       // The Responses stream frame carries the normalized code in `code`,
       // since that schema has no `internal_code` field.
       const internalCode =
-        typeof part.internal_code === "string" ? part.internal_code : part.code;
+        typeof part.internal_code === "string"
+          ? part.internal_code
+          : part === nested
+            ? part.code
+            : undefined;
       responseBody = JSON.stringify({
         error: {
           message: part.message,

@@ -394,6 +394,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **Archestra MCP Server**:
 
 - Tools must be explicitly assigned to Agents (not auto-injected)
+- Exception: while OpenAPPA is enabled, the policy read tools in `IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES` (`shared/archestra-mcp-server.ts`) are listed and admitted for every agent and gateway, subject to RBAC, exclusions, and the delegated-run gate; policy writes stay assignment-only
 - Tools prefixed with `archestra__` to avoid conflicts
 - Implementation: `backend/src/archestra-mcp-server/` (modular directory with one file per tool group)
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`

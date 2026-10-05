@@ -42,7 +42,7 @@ export const TOOL_PERMISSIONS: Record<
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   list_guardrails_battery_fits: { resource: "openappaPolicy", action: "read" },
   inspect_guardrails_server: { resource: "openappaPolicy", action: "read" },
-  validate_guardrails_policy: { resource: "openappaPolicy", action: "update" },
+  validate_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   preview_guardrails_policy_change: {
     resource: "openappaPolicy",
     action: "read",

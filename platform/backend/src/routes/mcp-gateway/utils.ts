@@ -6,6 +6,7 @@ import {
   hasArchestraTokenPrefix,
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
+  isImplicitOpenAppaReadToolShortName,
   isSkillTool,
   MCP_EXECUTED_AS_META_KEY,
   MCP_GATEWAY_OAUTH_SCOPE,
@@ -60,6 +61,7 @@ import {
   resolveDynamicTool,
 } from "@/archestra-mcp-server/dynamic-tools";
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
+import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { LRUCacheManager } from "@/cache-manager";
 import {
@@ -95,7 +97,10 @@ import {
 import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
-import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import {
+  agentToolExclusionsService,
+  isToolIdentityExcluded,
+} from "@/services/agent-tool-exclusions";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import {
   appLaunchToolDescription,
@@ -285,32 +290,6 @@ const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 ]);
-const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
-  "get_guardrails_policy",
-  "list_guardrails_battery_fits",
-  "inspect_guardrails_server",
-  "validate_guardrails_policy",
-  "preview_guardrails_policy_change",
-  "update_guardrails_policy",
-  "get_guardrails_policy_change_status",
-  "load_skill",
-  "list_mcp_server_deployments",
-  "get_mcp_server_tools",
-  "search_tools",
-  "ask_user",
-]);
-
-/**
- * The tools the gateway advertises to every OpenAPPA session without an
- * assignment: the control, notice and inbox tools, and `yell` while agent
- * reporting is on.
- */
-function isImplicitOpenAppaTool(shortName: string | null | undefined): boolean {
-  return (
-    APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "") ||
-    (openappaYellEnabled() && shortName === "yell")
-  );
-}
 
 /**
  * Creates an MCP server for the given agent.
@@ -417,7 +396,7 @@ export async function createAgentServer(params: {
     // filter runs BEFORE filterExposedTools, so an excluded always-exposed
     // built-in is dropped here and never re-admitted below. Empty (no-op)
     // unless the agent's accessAllTools setting is on.
-    const { tools: fetchedMcpTools } =
+    const { tools: fetchedMcpTools, exclusionSets } =
       await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
 
     // SEP-2243: a tool definition with an invalid x-mcp-header annotation must
@@ -502,14 +481,18 @@ export async function createAgentServer(params: {
       }
       return shortName === "yell" && openappaYellEnabled();
     });
-    const implicitPolicyTools =
-      openappaEnabled() && agent.agentType === "agent"
-        ? getArchestraMcpTools().filter((tool) =>
-            APPA_POLICY_TOOL_SHORT_NAMES.has(
-              archestraMcpBranding.getToolShortName(tool.name) ?? "",
+    const implicitPolicyTools = openappaEnabled()
+      ? getArchestraMcpTools().filter(
+          (tool) =>
+            isImplicitOpenAppaReadToolShortName(
+              archestraMcpBranding.getToolShortName(tool.name),
+            ) &&
+            !isToolIdentityExcluded(
+              { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: tool.name },
+              exclusionSets,
             ),
-          )
-        : [];
+        )
+      : [];
     const implicitAskUserTools = getImplicitAskUserTools();
     const candidateTools = dedupeToolsByName(
       [
@@ -543,8 +526,6 @@ export async function createAgentServer(params: {
       toolExposureMode: agent.toolExposureMode ?? "full",
       advertiseUiResourceTools: surface.advertiseUiTools,
       autoToolMode: agent.accessAllTools,
-      advertiseOpenAppaPolicyTools:
-        surface.keepChatOnlyTools && openappaEnabled(),
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
     const permittedTools = surface.keepChatOnlyTools
@@ -2403,16 +2384,10 @@ function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
   advertiseUiResourceTools: boolean;
   autoToolMode: boolean;
-  advertiseOpenAppaPolicyTools: boolean;
   tools: McpListToolCandidate[];
 }) {
-  const {
-    toolExposureMode,
-    advertiseUiResourceTools,
-    autoToolMode,
-    advertiseOpenAppaPolicyTools,
-    tools,
-  } = params;
+  const { toolExposureMode, advertiseUiResourceTools, autoToolMode, tools } =
+    params;
   return tools.filter((tool) => {
     // `search_and_run_only` hides every tool behind search_tools/run_tool, but
     // the meta tools themselves and the always-exposed skill path must stay
@@ -2430,14 +2405,8 @@ function filterExposedTools(params: {
     // operator chose. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
-          (advertiseOpenAppaPolicyTools &&
-            APPA_POLICY_TOOL_SHORT_NAMES.has(
-              archestraMcpBranding.getToolShortName(tool.name) ?? "",
-            )) ||
           (openappaEnabled() &&
-            isImplicitOpenAppaTool(
-              archestraMcpBranding.getToolShortName(tool.name),
-            )) ||
+            isOpenappaTool(archestraMcpBranding.getToolShortName(tool.name))) ||
           isTaskControlTool(tool.name) ||
           isAlwaysExposedTool(tool.name) ||
           (advertiseUiResourceTools &&

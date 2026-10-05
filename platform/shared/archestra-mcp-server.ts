@@ -870,6 +870,32 @@ export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
 }
 
 /**
+ * Side-effect-free OpenAPPA policy tools every agent and gateway may list and
+ * run while OpenAPPA is enabled, without an assignment. Per-tool RBAC,
+ * exclusions and the delegated-run gate still apply; policy writes stay
+ * assignment-only.
+ */
+export const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES = [
+  "get_guardrails_policy",
+  "list_guardrails_battery_fits",
+  "inspect_guardrails_server",
+  "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
+  "get_guardrails_policy_change_status",
+  "get_openappa_yell",
+] as const satisfies readonly ArchestraToolShortName[];
+
+const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
+  IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES,
+);
+
+export function isImplicitOpenAppaReadToolShortName(
+  shortName: string | null | undefined,
+): boolean {
+  return IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET.has(shortName ?? "");
+}
+
+/**
  * Built-in tools that do NOT bypass policy evaluation. Most built-ins are
  * auto-trusted, but these ingest external content (e.g. knowledge-base
  * documents) that can carry prompt injection, so their invocations and

@@ -55,7 +55,7 @@ The editor accepts `[policy]`, `[server_aliases]`, `[credentials]`, and URL bind
 
 Revision `0` is an unsaved starter template (`initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts)). It includes the bundled Archestra battery, an Archestra server alias, `internal = ["archestra:members"]`, `context_control = true`, and a local wildcard annotator (`noop`). The wildcard annotator adds no restrictions to uncovered tools. Explicit tool rules always take precedence over the wildcard.
 
-Saving revision `1` through MCP local publication can auto-enable enforcement if the caller has `organization:update`. Direct HTTP PUT saves and GitHub imports do not auto-enable enforcement. The explicit deployment toggle API checks `organizationSettings:update`.
+Saving revision `1` through MCP local publication can auto-enable enforcement if the caller has `organizationSettings:update`, the same permission the explicit deployment toggle API checks. Direct HTTP PUT saves and GitHub imports do not auto-enable enforcement.
 
 `ask_user` has its own advertisement path. Policy authoring tools stay available to agent profiles while beta is on. The `yell` tool follows the reporting flag rather than the deployment switch, but still requires session and call correlation.
 

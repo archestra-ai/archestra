@@ -376,6 +376,32 @@ describe("guardrails policy authoring", () => {
     expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
   });
 
+  test("a custom role that can flip the enforcement switch turns it on with its first saved policy", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+  }) => {
+    const author = await makeUser();
+    const role = await makeCustomRole(orgId, {
+      permission: {
+        openappaPolicy: ["read", "update"],
+        organizationSettings: ["read", "update"],
+      },
+    });
+    await makeMember(author.id, orgId, { role: role.role });
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const saved = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content, expectedRevision: 0 },
+      { organizationId: orgId, userId: author.id, agent },
+    );
+    expect(saved.structuredContent?.enforcement).toMatchObject({
+      enabled: true,
+      turnedOn: true,
+    });
+    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(true);
+  });
+
   test("granting a battery a credential needs credential update, removing it does not", async ({
     makeUser,
     makeCustomRole,

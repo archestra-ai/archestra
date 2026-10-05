@@ -849,6 +849,7 @@ export const RouteId = {
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
+  AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",
   GetOpenAppaYells: "getOpenAppaYells",
   GetOpenAppaYellsSummary: "getOpenAppaYellsSummary",
   DownloadOpenAppaYell: "downloadOpenAppaYell",

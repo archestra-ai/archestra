@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   ComposeBatteryInput,
   ComposedPolicy,
@@ -133,6 +133,16 @@ class OpenAppaDeclarations {
   publishBridgeToken(): string {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
     return OPENAPPA_BRIDGE_TOKEN_ENV;
+  }
+
+  /** Whether an `Authorization` header carries this process's bridge bearer. */
+  presentsBridgeToken(authorization: string | undefined): boolean {
+    const expected = Buffer.from(`Bearer ${this.bridgeToken}`);
+    const presented = Buffer.from(authorization ?? "");
+    return (
+      presented.length === expected.length &&
+      timingSafeEqual(presented, expected)
+    );
   }
 
   /** Read a root document's declarations and resolve every include entry. */

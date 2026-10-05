@@ -3,7 +3,7 @@ title: Overview
 category: Archestra Platform
 order: -1
 description: High-level architecture overview of Archestra Platform components
-lastUpdated: 2026-10-05
+lastUpdated: 2026-07-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -28,6 +28,6 @@ Archestra is a set of composable components. Most organizations already run tool
 
 **[LLM & MCP Proxies](/docs/platform-llm-proxy)** — Drop-in proxy between your apps and LLM providers. [MCP Gateway](/docs/platform-mcp-gateway) provides a single endpoint for all MCP tools. Works with any framework: n8n, LangChain, Vercel AI, Pydantic AI, Mastra.
 
-**[Security & Guardrails](/docs/platform-ai-tool-guardrails)** use OpenAPPA to check tool calls against session trust, audiences, and history. Protection depends on active enforcement, policy coverage, and a supported client. **[Observability](/docs/platform-observability)** includes Prometheus metrics, OpenTelemetry tracing, and [per-team cost tracking](/docs/platform-costs-and-limits).
+**[Security & Guardrails](/docs/platform-ai-tool-guardrails#the-lethal-trifecta)** and **[Observability](/docs/platform-observability)** — Deterministic tool invocation policies and trusted data policies that cannot be bypassed by prompt injection. Prometheus metrics, OpenTelemetry tracing, and [per-team cost tracking](/docs/platform-costs-and-limits).
 
 See [Pricing Model](/docs/platform-pricing-model) for licensing details.

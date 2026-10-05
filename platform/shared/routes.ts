@@ -849,6 +849,7 @@ export const RouteId = {
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
+  // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
   AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",
   GetOpenAppaYells: "getOpenAppaYells",
   GetOpenAppaYellsSummary: "getOpenAppaYellsSummary",

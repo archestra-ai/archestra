@@ -241,7 +241,7 @@ context_control = true
 name = "noop"
 
 # Labels each sandbox command (run_command) with the organization's
-# default model, through Archestra's LLM proxy.
+# default model, through the LLM proxy.
 [[policy.annotator]]
 name = "archestra.run-command"
 builtin = "archestra"

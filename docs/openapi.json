@@ -333798,7 +333798,8 @@
                               "llm",
                               "jev",
                               "claude_code",
-                              "hitl"
+                              "hitl",
+                              "archestra"
                             ]
                           },
                           "request": {},

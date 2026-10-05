@@ -33,7 +33,7 @@ export async function stageHitlReview(params: {
   // veto an approval while its atomic claimant is committing the ruling.
   await cacheManager.set(
     stagePresenceKey(params.session, params.review.offerId),
-    { offerId: params.review.offerId },
+    params.review,
     HITL_REVIEW_TTL_MS,
   );
   await cacheManager.set(
@@ -50,7 +50,15 @@ export async function getHitlReview(params: {
   const review = await cacheManager.get<PendingHitlReview>(
     reviewKey(params.session, params.offerId),
   );
-  return review?.offerId === params.offerId ? review : undefined;
+  if (review?.offerId === params.offerId) return review;
+  // Native clients still need the exact review text to bind their following
+  // remedy call. This immutable context is not a claimable pending stage.
+  if ((await peekHitlRuling(params)) !== "approve") return undefined;
+  const approved = await cacheManager.get<PendingHitlReview>(
+    stagePresenceKey(params.session, params.offerId),
+    { throwOnError: true },
+  );
+  return approved?.offerId === params.offerId ? approved : undefined;
 }
 
 /** Observe a human ruling without spending the remedy's one-time approval. */

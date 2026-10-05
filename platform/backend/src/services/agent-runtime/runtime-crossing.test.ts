@@ -1025,6 +1025,8 @@ async function seededRun(params: {
   makeUser: () => Promise<{ id: string }>;
   seedAndAssignArchestraTools: (agentId: string) => Promise<unknown>;
 }) {
+  // This fixture fakes execution I/O; availability must not depend on a host kubeconfig.
+  vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
   const actor = await params.makeUser();
   const org = await params.makeOrganization();
   await params.makeMember(actor.id, org.id, { role: "member" });

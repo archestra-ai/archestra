@@ -3,6 +3,7 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   consumeHitlRuling,
   getHitlAskUserArguments,
+  getHitlReview,
   recordHitlRuling,
   stageHitlReview,
 } from "./hitl-review";
@@ -170,5 +171,39 @@ test("a later genuine denial revokes an approval that has not been spent", async
   );
   expect(
     await consumeHitlRuling({ session: active, offerId: "revoked" }),
+  ).toBeUndefined();
+});
+
+test("approved native review context remains readable without reopening its claim", async () => {
+  const active = session("native-continuation");
+  const review = {
+    offerId: "continuation",
+    text: "The exact reviewed QA action",
+    tool: "mcp/example/write",
+    arguments: '{"value":1}',
+  };
+  await stageHitlReview({ session: active, review });
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: review.offerId,
+      ruling: "approve",
+    }),
+  ).toBe(true);
+  expect(
+    await getHitlReview({ session: active, offerId: review.offerId }),
+  ).toEqual(review);
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: review.offerId,
+      ruling: "approve",
+    }),
+  ).toBe(false);
+  expect(
+    await consumeHitlRuling({ session: active, offerId: review.offerId }),
+  ).toBe("approve");
+  expect(
+    await getHitlReview({ session: active, offerId: review.offerId }),
   ).toBeUndefined();
 });

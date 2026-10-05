@@ -467,7 +467,7 @@ Client matching selects syntax rather than authority. After authentication, the 
 
 A custom adapter implements `AppaClientAdapter` and registers in `APPA_CLIENT_ADAPTERS`. It extracts sessions, classifies tools, maps native questions, and parses spawn/return events. Implementing only session extraction leaves child and question protections inactive. See [`types.ts`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/types.ts).
 
-### Client Constraints
+### Client constraints
 
 Notice restoration and turn accounting run on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices stay in history.
 

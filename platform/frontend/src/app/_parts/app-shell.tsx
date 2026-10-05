@@ -1,9 +1,8 @@
 "use client";
 
 import { APP_RECORDING_RENDER_ROUTE } from "@archestra/shared";
-import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { MOBILE_HEADER_ACTIONS_CONTAINER_ID } from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
@@ -23,7 +22,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
 import { MAIN_CONTENT_ID } from "@/lib/app-shell-region";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   ConnectivityProvider,
   useConnectivity,
@@ -42,10 +41,6 @@ import {
   EnvSiteNotificationBar,
   SiteNotificationBar,
 } from "./site-notification-bar";
-
-const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
-  simpleView: ["enable"],
-};
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -99,12 +94,7 @@ export function AppShell({ children }: AppShellProps) {
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
   const isViewportLocked = isChat || isProjectDetail;
-  const { data: shouldCollapse, isSuccess: permissionLoaded } =
-    useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
-  const [sidebarOpen, setSidebarOpen] = useSidebarOpenState({
-    shouldCollapse: shouldCollapse === true,
-    permissionLoaded,
-  });
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpenState();
   // Every signed-in user sees the active banner.
   const { data: notification } = useActiveSiteNotification({
     enabled: !isAuthPage && !isBrowserPreview && !isAppRuntime && !isReview,
@@ -269,37 +259,45 @@ function NavAwareSidebarCircleToggle() {
 }
 
 /**
- * Sidebar width, resolved without a jump.
- *
- * The width a user ends up with depends on a permission that arrives over the
- * network, so rendering the shell before it lands means guessing. Guess with
- * the width this browser last used (the sidebar already writes it to a cookie
- * on every toggle) and the guess is right for everyone but a first-ever
- * visitor. Once the permission resolves it wins, unless the user has since
- * moved the sidebar themselves.
+ * Whether the sidebar is open: the person's own last choice, remembered in
+ * this browser, and open until they make one.
  */
-function useSidebarOpenState({
-  shouldCollapse,
-  permissionLoaded,
-}: {
-  shouldCollapse: boolean;
-  permissionLoaded: boolean;
-}): [boolean, (open: boolean) => void] {
-  const [userChoice, setUserChoice] = useState<boolean | null>(null);
-  const lastKnown = useRef<boolean | null>(null);
-  lastKnown.current ??= readSidebarStateCookie();
+function useSidebarOpenState(): [boolean, (open: boolean) => void] {
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const remembered = useSyncExternalStore(
+    subscribeToStorage,
+    readRememberedSidebarOpen,
+    () => null,
+  );
 
-  const open =
-    userChoice ??
-    (permissionLoaded ? !shouldCollapse : (lastKnown.current ?? true));
+  const open = choice ?? remembered ?? true;
+  const setOpen = useCallback((next: boolean) => {
+    setChoice(next);
+    try {
+      window.localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, String(next));
+    } catch {
+      // Storage can be unavailable (private mode); the choice still holds
+      // for this page.
+    }
+  }, []);
 
-  return [open, setUserChoice];
+  return [open, setOpen];
 }
 
-function readSidebarStateCookie(): boolean | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(/(?:^|;\s*)sidebar_state=(true|false)/);
-  return match ? match[1] === "true" : null;
+const SIDEBAR_OPEN_STORAGE_KEY = "archestra-sidebar-open";
+
+function readRememberedSidebarOpen(): boolean | null {
+  try {
+    const stored = window.localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
+    return stored === "true" ? true : stored === "false" ? false : null;
+  } catch {
+    return null;
+  }
+}
+
+function subscribeToStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
 }
 
 // Visually hidden until focused; the first tab stop on every authenticated

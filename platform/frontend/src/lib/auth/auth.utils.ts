@@ -70,6 +70,23 @@ export function hasPermissions(
   return true;
 }
 
+/** Whether the grants include `action` on this one item, or on every item. */
+export function holdsItemGrant(params: {
+  grants: readonly ScopedPermission[] | undefined;
+  resource: ScopedPermission["resource"];
+  action: ScopedPermission["action"];
+  id: string;
+}): boolean {
+  return (
+    params.grants?.some(
+      (grant) =>
+        grant.resource === params.resource &&
+        grant.action === params.action &&
+        (grant.scope === "*" || grant.scope === params.id),
+    ) ?? false
+  );
+}
+
 /** A page may discover a granted object; mutations still use exact target checks. */
 export function hasPagePermissions(params: {
   userPermissions: Permissions | undefined;

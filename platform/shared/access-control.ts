@@ -28,17 +28,17 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: ["read", "create", "update", "delete"],
-  skill: ["read", "create", "update", "delete"],
+  agent: ["read", "create", "delete"],
+  skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
-  app: ["read", "create", "update", "delete"],
+  app: ["read", "create"],
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "update"],
-  llmProviderApiKey: ["read", "create", "update", "delete"],
-  llmVirtualKey: ["read", "create", "update", "delete"],
-  llmOauthClient: ["read", "create", "update", "delete"],
+  llmProviderApiKey: ["read", "create"],
+  llmVirtualKey: ["read", "create"],
+  llmOauthClient: ["read", "create"],
   // "update" covers the whole model row, generation parameters included. An
   // extra "admin" action once gated `configuredParameters` on the grounds that
   // model rows are global, but pricing and `ignored` are equally global and
@@ -50,10 +50,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: ["read", "create", "update", "delete"],
-  mcpOauthClient: ["read", "create", "update", "delete"],
+  mcpGateway: ["read", "create", "delete"],
+  mcpOauthClient: ["read", "create"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
@@ -72,7 +72,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
-  serviceAccount: ["read", "create", "update", "delete"],
+  serviceAccount: ["read", "create"],
   auditLog: ["read", "admin"],
   accessPolicies: ["read", "update"],
   member: ["read", "create", "update", "delete", "impersonate"],
@@ -85,7 +85,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   organizationSettings: ["read", "update"],
 
   // UI behavior resources
-  simpleView: ["enable"],
 
   // Administration
 
@@ -95,26 +94,26 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
-  agent: ["read", "create", "update", "delete"],
-  skill: ["read", "create", "update", "delete"],
+  agent: ["read", "create", "delete"],
+  skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
-  app: ["read", "create", "update", "delete"],
+  app: ["read", "create"],
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "update"],
-  llmProviderApiKey: ["read", "create", "update", "delete"],
-  llmVirtualKey: ["read", "create", "update", "delete"],
-  llmOauthClient: ["read", "create", "update", "delete"],
+  llmProviderApiKey: ["read", "create"],
+  llmVirtualKey: ["read", "create"],
+  llmOauthClient: ["read", "create"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: ["read", "create", "update", "delete"],
-  mcpOauthClient: ["read", "create", "update", "delete"],
+  mcpGateway: ["read", "create", "delete"],
+  mcpOauthClient: ["read", "create"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create", "update", "delete"],
@@ -148,7 +147,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Administration
 
   // UI behavior resources
-  simpleView: [],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -156,10 +154,10 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
-  agent: ["read", "create", "update", "delete"],
-  skill: ["read", "create", "update", "delete"],
+  agent: ["read", "create", "delete"],
+  skill: ["read", "create", "delete"],
   plugin: [],
-  app: ["read", "create", "update", "delete"],
+  app: ["read", "create"],
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
@@ -176,10 +174,10 @@ export const memberPermissions: Record<Resource, Action[]> = {
   llmCost: [],
 
   // MCP
-  mcpGateway: ["read", "create", "update", "delete"],
+  mcpGateway: ["read", "create", "delete"],
   mcpOauthClient: ["read"],
   toolPolicy: ["read"],
-  mcpRegistry: ["read", "update"],
+  mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   environment: ["read"],
   // minting installation tokens from a stored App credential is privileged;
@@ -215,7 +213,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Administration
 
   // UI behavior resources
-  simpleView: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
@@ -227,20 +224,13 @@ export const memberPermissions: Record<Resource, Action[]> = {
  * roles, the org default role) and by the UI that previews it: a role may
  * only be granted by someone who already holds every permission it carries.
  * Returns the `resource:action` pairs the granter is missing (empty = OK).
- *
- * UI-behavior resources are exempt — predefined admin deliberately holds
- * LESS than member on those (e.g. `simpleView`), so including them would
- * make ordinary grants impossible.
  */
 export function findUngrantablePermissions(
   granterPermissions: Permissions,
   rolePermissions: Permissions,
 ): string[] {
-  const exemptUiResources: Resource[] = ["simpleView"];
-
   const missing: string[] = [];
   for (const [resource, actions] of Object.entries(rolePermissions)) {
-    if (exemptUiResources.includes(resource as Resource)) continue;
     const granterActions = granterPermissions[resource as Resource] || [];
     const realActions = allAvailableActions[resource as Resource] || [];
     for (const action of actions ?? []) {
@@ -272,7 +262,6 @@ export function withDerivedPermissions(permissions: Permissions): Permissions {
 
 export const adminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
-  simpleView: [],
 };
 
 /**
@@ -286,7 +275,6 @@ export const adminPermissions: Record<Resource, Action[]> = {
 export const platformAdminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
   openappaDiagnostics: ["read", "update"],
-  simpleView: [],
   log: ["read"],
   auditLog: ["read"],
   member: allAvailableActions.member.filter((a) => a !== "impersonate"),
@@ -365,48 +353,38 @@ export const permissionDescriptions: Record<string, string> = {
   "openappaDiagnostics:update": "Resolve and reopen organization yells",
   "openappaDiagnostics:admin": "Read consult logs across the organization",
   // Agents
-  "agent:read": "View and list agents, and use their code sandboxes and files",
+  "agent:read":
+    "Open Agents, and use the code sandboxes and files of agents you can use",
   "agent:create": "Create new agents",
-  "agent:update": "Modify agent configuration and settings",
-  "agent:delete": "Delete agents",
-  "skill:read": "View agent skills allowed by your resource grants",
+  "agent:delete": "Open the trash of deleted agents",
+  "skill:read": "Open Skills",
   "skill:create": "Create new agent skills",
-  "skill:update": "Modify agent skill content allowed by your resource grants",
-  "skill:delete": "Delete agent skills",
+  "skill:delete": "Permanently delete skills from the trash",
   "plugin:read": "View plugins and their file metadata",
   "plugin:create": "Create plugins",
   "plugin:update": "Modify plugin metadata and files",
   "plugin:delete": "Delete plugins",
-  "app:read": "View MCP Apps allowed by your resource grants",
+  "app:read": "Open Apps",
   "app:create": "Create new MCP Apps",
-  "app:update":
-    "Modify MCP Apps and their tools allowed by your resource grants",
-  "app:delete": "Delete MCP Apps",
   "scheduledTask:read": "View scheduled tasks and their run history",
   "scheduledTask:create": "Create new scheduled tasks and trigger runs",
   "scheduledTask:update": "Modify scheduled task configuration",
   "scheduledTask:delete": "Delete scheduled tasks",
 
   // MCP
-  "mcpGateway:read": "View and list MCP gateways",
+  "mcpGateway:read": "Open MCP Gateways",
   "mcpGateway:create": "Create new MCP gateways",
-  "mcpGateway:update": "Modify MCP gateway configuration",
-  "mcpGateway:delete": "Delete MCP gateways",
-  "mcpOauthClient:read": "View MCP OAuth client registrations",
+  "mcpGateway:delete": "Open the trash of deleted MCP gateways",
+  "mcpOauthClient:read": "Open MCP OAuth client registrations",
   "mcpOauthClient:create": "Create MCP OAuth client registrations",
-  "mcpOauthClient:update": "Modify MCP OAuth client registrations",
-  "mcpOauthClient:delete": "Delete MCP OAuth client registrations",
   "toolPolicy:read":
     "View tools, tool invocation policies, and trusted data policies",
   "toolPolicy:create": "Register tools and create security policies",
   "toolPolicy:update":
     "Modify tools, tool configuration, and security policies",
   "toolPolicy:delete": "Remove tools and security policies",
-  "mcpRegistry:read": "Browse the MCP server registry",
+  "mcpRegistry:read": "Open the MCP registry and use its built-in servers",
   "mcpRegistry:create": "Add servers to the MCP registry",
-  "mcpRegistry:update": "Modify MCP registry entries",
-  "mcpRegistry:delete":
-    "Remove, view deleted, and restore MCP registry entries within your access",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
@@ -425,22 +403,15 @@ export const permissionDescriptions: Record<string, string> = {
   // LLM
   "llmProxy:read": "View the LLM Proxy and its connection details",
   "llmProxy:update": "Modify LLM Proxy configuration",
-  "llmProviderApiKey:read": "View LLM provider API keys",
+  "llmProviderApiKey:read": "Open LLM provider API keys",
   "llmProviderApiKey:create": "Add new LLM provider API keys",
-  "llmProviderApiKey:update":
-    "Modify LLM provider API key configuration and visibility",
-  "llmProviderApiKey:delete": "Remove LLM provider API keys",
-  "llmVirtualKey:read": "View LLM virtual keys",
+  "llmVirtualKey:read": "Open LLM virtual keys",
   "llmVirtualKey:create": "Create LLM virtual keys",
-  "llmVirtualKey:update": "Modify LLM virtual keys and their visibility",
-  "llmVirtualKey:delete": "Delete LLM virtual keys",
-  "llmOauthClient:read": "View LLM OAuth client registrations",
+  "llmOauthClient:read": "Open LLM OAuth client registrations",
   "llmOauthClient:create": "Create LLM OAuth client registrations",
-  "llmOauthClient:update": "Modify LLM OAuth client registrations",
-  "llmOauthClient:delete": "Delete LLM OAuth client registrations",
   "llmModel:read": "View synced LLM models and capabilities",
   "llmModel:update":
-    "Modify LLM model pricing, modality and generation-parameter settings",
+    "Sync the model catalog and see every model, including ones not shared with you",
   "llmLimit:read": "View token usage limits",
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
@@ -484,10 +455,8 @@ export const permissionDescriptions: Record<string, string> = {
   "apiKey:read": "View API keys",
   "apiKey:create": "Create API keys",
   "apiKey:delete": "Delete API keys",
-  "serviceAccount:read": "View service accounts",
+  "serviceAccount:read": "Open Service Accounts",
   "serviceAccount:create": "Create service accounts",
-  "serviceAccount:update": "Modify service accounts",
-  "serviceAccount:delete": "Delete service accounts",
   "auditLog:read": "View audit log records of your own administrative actions",
   "auditLog:admin":
     "View every audit event in your organization (also requires Read)",
@@ -508,7 +477,6 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
 
   // UI behavior
-  "simpleView:enable": "Collapse the app sidebar by default",
 
   // Administration
 };
@@ -643,11 +611,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UnpinAgent]: {},
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
-  [RouteId.TransferSkillOwnership]: { skill: ["update"] },
+  // Ownership transfers on per-entry resources need update and
+  // manage-permissions grants on the entry itself (authorizeOwnershipTransfer).
+  [RouteId.TransferSkillOwnership]: {},
   [RouteId.TransferPluginOwnership]: { plugin: ["update"] },
   [RouteId.TransferProjectOwnership]: { project: ["update"] },
-  [RouteId.TransferAppOwnership]: { app: ["update"] },
-  [RouteId.TransferMcpCatalogOwnership]: { mcpRegistry: ["update"] },
+  [RouteId.TransferAppOwnership]: {},
+  [RouteId.TransferMcpCatalogOwnership]: {},
   [RouteId.TransferRemoteAgentOwnership]: { organizationSettings: ["update"] },
   [RouteId.TransferAgentOwnership]: {},
   [RouteId.UpdateAgent]: {},
@@ -842,9 +812,9 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpRegistry: ["read"],
   },
   [RouteId.ValidateDeploymentYaml]: { mcpRegistry: ["read"] },
-  [RouteId.ResetDeploymentYaml]: {
-    mcpRegistry: ["update"],
-  },
+  // Like preview and validate: the handler requires configure-deployment-spec
+  // on the entry itself.
+  [RouteId.ResetDeploymentYaml]: { mcpRegistry: ["read"] },
   [RouteId.GetK8sImagePullSecrets]: {
     mcpRegistry: ["read"],
   },
@@ -1509,10 +1479,9 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   },
   // Only returns Vault references (never values), for prefilling the MCP
-  // catalog form in BYOS mode — so it follows the form, not the settings.
-  [RouteId.GetSecret]: {
-    mcpRegistry: ["update"],
-  },
+  // catalog form in BYOS mode. The handler requires an update grant on the
+  // registry entry whose configuration the secret is.
+  [RouteId.GetSecret]: {},
 
   // Incoming Email Routes
   [RouteId.GetIncomingEmailStatus]: {

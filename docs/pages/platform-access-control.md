@@ -18,7 +18,9 @@ Permissions in Archestra are defined using a `resource:action` format, where:
 - **Resource**: The type of object or feature being accessed (e.g., `agent`, `mcpGateway`, `llmProxy`)
 - **Action**: The operation being performed (`create`, `read`, `update`, `delete`, `admin`)
 
-For example, `agent:create` allows creating agents, `mcpGateway:update` allows updating MCP gateways, and `llmProxy:read` allows viewing the LLM Proxy.
+For example, `agent:create` allows creating agents, `mcpServerInstallation:create` allows installing MCP servers, and `llmProxy:read` allows viewing the LLM Proxy.
+
+Agents, MCP gateways, the MCP registry, skills, apps, models, keys, OAuth clients and service accounts also have per-item grants. For these, a role decides who can open the section and create new items; who can see, edit, delete or share them is granted under Permissions, either on a single item or, for all items of a kind, from the list page's ⋯ menu (see [Scoped Resources](#scoped-resources)).
 
 ## Log Visibility
 
@@ -46,22 +48,22 @@ Full access to core resources, but cannot change organization settings or manage
 
 | Resource | Actions |
 |----------|--------|
-| Agents | `read`, `create`, `update`, `delete` |
-| Skills | `read`, `create`, `update`, `delete` |
+| Agents | `read`, `create`, `delete` |
+| Skills | `read`, `create`, `delete` |
 | Plugins | `read`, `create`, `update`, `delete` |
-| Apps | `read`, `create`, `update`, `delete` |
+| Apps | `read`, `create` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read`, `update` |
-| LLM Provider API Keys | `read`, `create`, `update`, `delete` |
-| LLM Virtual Keys | `read`, `create`, `update`, `delete` |
-| LLM OAuth Clients | `read`, `create`, `update`, `delete` |
+| LLM Provider API Keys | `read`, `create` |
+| LLM Virtual Keys | `read`, `create` |
+| LLM OAuth Clients | `read`, `create` |
 | LLM Models | `read`, `update` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | LLM Cost Analytics | `read` |
-| MCP Gateways | `read`, `create`, `update`, `delete` |
-| MCP OAuth Clients | `read`, `create`, `update`, `delete` |
+| MCP Gateways | `read`, `create`, `delete` |
+| MCP OAuth Clients | `read`, `create` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
-| MCP Registry | `read`, `create`, `update`, `delete` |
+| MCP Registry | `read`, `create` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
 | Credentials | `read`, `create`, `update`, `delete` |
@@ -83,19 +85,19 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 
 | Resource | Actions |
 |----------|--------|
-| Agents | `read`, `create`, `update`, `delete` |
-| Skills | `read`, `create`, `update`, `delete` |
-| Apps | `read`, `create`, `update`, `delete` |
+| Agents | `read`, `create`, `delete` |
+| Skills | `read`, `create`, `delete` |
+| Apps | `read`, `create` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read`, `create` |
 | LLM OAuth Clients | `read` |
 | LLM Models | `read` |
-| MCP Gateways | `read`, `create`, `update`, `delete` |
+| MCP Gateways | `read`, `create`, `delete` |
 | MCP OAuth Clients | `read` |
 | Tools & Policies | `read` |
-| MCP Registry | `read`, `update` |
+| MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
 | Credentials | `read` |
@@ -105,7 +107,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Projects | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
-| Simple View | `enable` |
 
 
 ## Custom Roles
@@ -151,17 +152,14 @@ The following table lists all available permissions that can be assigned to cust
 | `ac:delete` | Delete custom roles |
 | `accessPolicies:read` | View access policies for all resource types |
 | `accessPolicies:update` | Edit access policies and grant access across all resource types |
-| `agent:read` | View and list agents, and use their code sandboxes and files |
+| `agent:read` | Open Agents, and use the code sandboxes and files of agents you can use |
 | `agent:create` | Create new agents |
-| `agent:update` | Modify agent configuration and settings |
-| `agent:delete` | Delete agents |
+| `agent:delete` | Open the trash of deleted agents |
 | `apiKey:read` | View API keys |
 | `apiKey:create` | Create API keys |
 | `apiKey:delete` | Delete API keys |
-| `app:read` | View MCP Apps allowed by your resource grants |
+| `app:read` | Open Apps |
 | `app:create` | Create new MCP Apps |
-| `app:update` | Modify MCP Apps and their tools allowed by your resource grants |
-| `app:delete` | Delete MCP Apps |
 | `auditLog:read` | View audit log records of your own administrative actions |
 | `auditLog:admin` | View every audit event in your organization (also requires Read) |
 | `chat:read` | View and access chat conversations |
@@ -192,35 +190,24 @@ The following table lists all available permissions that can be assigned to cust
 | `llmLimit:update` | Modify existing usage limits |
 | `llmLimit:delete` | Remove usage limits |
 | `llmModel:read` | View synced LLM models and capabilities |
-| `llmModel:update` | Modify LLM model pricing, modality and generation-parameter settings |
-| `llmOauthClient:read` | View LLM OAuth client registrations |
+| `llmModel:update` | Sync the model catalog and see every model, including ones not shared with you |
+| `llmOauthClient:read` | Open LLM OAuth client registrations |
 | `llmOauthClient:create` | Create LLM OAuth client registrations |
-| `llmOauthClient:update` | Modify LLM OAuth client registrations |
-| `llmOauthClient:delete` | Delete LLM OAuth client registrations |
-| `llmProviderApiKey:read` | View LLM provider API keys |
+| `llmProviderApiKey:read` | Open LLM provider API keys |
 | `llmProviderApiKey:create` | Add new LLM provider API keys |
-| `llmProviderApiKey:update` | Modify LLM provider API key configuration and visibility |
-| `llmProviderApiKey:delete` | Remove LLM provider API keys |
 | `llmProxy:read` | View the LLM Proxy and its connection details |
 | `llmProxy:update` | Modify LLM Proxy configuration |
-| `llmVirtualKey:read` | View LLM virtual keys |
+| `llmVirtualKey:read` | Open LLM virtual keys |
 | `llmVirtualKey:create` | Create LLM virtual keys |
-| `llmVirtualKey:update` | Modify LLM virtual keys and their visibility |
-| `llmVirtualKey:delete` | Delete LLM virtual keys |
 | `log:read` | View your own LLM proxy and MCP tool call logs in the active organization |
 | `log:admin` | View every LLM and MCP log in your organization (also requires Read) |
-| `mcpGateway:read` | View and list MCP gateways |
+| `mcpGateway:read` | Open MCP Gateways |
 | `mcpGateway:create` | Create new MCP gateways |
-| `mcpGateway:update` | Modify MCP gateway configuration |
-| `mcpGateway:delete` | Delete MCP gateways |
-| `mcpOauthClient:read` | View MCP OAuth client registrations |
+| `mcpGateway:delete` | Open the trash of deleted MCP gateways |
+| `mcpOauthClient:read` | Open MCP OAuth client registrations |
 | `mcpOauthClient:create` | Create MCP OAuth client registrations |
-| `mcpOauthClient:update` | Modify MCP OAuth client registrations |
-| `mcpOauthClient:delete` | Delete MCP OAuth client registrations |
-| `mcpRegistry:read` | Browse the MCP server registry |
+| `mcpRegistry:read` | Open the MCP registry and use its built-in servers |
 | `mcpRegistry:create` | Add servers to the MCP registry |
-| `mcpRegistry:update` | Modify MCP registry entries |
-| `mcpRegistry:delete` | Remove, view deleted, and restore MCP registry entries within your access |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |
@@ -249,15 +236,11 @@ The following table lists all available permissions that can be assigned to cust
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |
 | `scheduledTask:update` | Modify scheduled task configuration |
 | `scheduledTask:delete` | Delete scheduled tasks |
-| `serviceAccount:read` | View service accounts |
+| `serviceAccount:read` | Open Service Accounts |
 | `serviceAccount:create` | Create service accounts |
-| `serviceAccount:update` | Modify service accounts |
-| `serviceAccount:delete` | Delete service accounts |
-| `simpleView:enable` | Collapse the app sidebar by default |
-| `skill:read` | View agent skills allowed by your resource grants |
+| `skill:read` | Open Skills |
 | `skill:create` | Create new agent skills |
-| `skill:update` | Modify agent skill content allowed by your resource grants |
-| `skill:delete` | Delete agent skills |
+| `skill:delete` | Permanently delete skills from the trash |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |

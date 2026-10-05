@@ -100,7 +100,7 @@ export const inspectA2aRemoteAgent = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and use their code sandboxes and files
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const listA2aRemoteAgents = <ThrowOnError extends boolean = false>(options?: Options<ListA2aRemoteAgentsData, ThrowOnError>) => (options?.client ?? client).get<ListA2aRemoteAgentsResponses, ListA2aRemoteAgentsErrors, ThrowOnError>({ url: '/api/a2a/remote-agents', ...options });
 
@@ -146,7 +146,7 @@ export const deleteA2aRemoteAgent = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and use their code sandboxes and files
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const getA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<GetA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).get<GetA2aRemoteAgentResponses, GetA2aRemoteAgentErrors, ThrowOnError>({ url: '/api/a2a/remote-agents/{id}', ...options });
 
@@ -329,7 +329,7 @@ export const getAgentCredentialReadiness = <ThrowOnError extends boolean = false
  *
  * Authorization:
  *
- * `mcpGateway:read`: View and list MCP gateways
+ * `mcpGateway:read`: Open MCP Gateways
  */
 export const getDefaultMcpGateway = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultMcpGatewayData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultMcpGatewayResponses, GetDefaultMcpGatewayErrors, ThrowOnError>({ url: '/api/mcp-gateways/default', ...options });
 
@@ -586,7 +586,7 @@ export const updateAgentKnowledgeSourceExclusions = <ThrowOnError extends boolea
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getAgentActivationSkills = <ThrowOnError extends boolean = false>(options?: Options<GetAgentActivationSkillsData, ThrowOnError>) => (options?.client ?? client).get<GetAgentActivationSkillsResponses, GetAgentActivationSkillsErrors, ThrowOnError>({ url: '/api/agents/activation-skills', ...options });
 
@@ -599,7 +599,7 @@ export const getAgentActivationSkills = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getAgentActivationSkillPolicy = <ThrowOnError extends boolean = false>(options: Options<GetAgentActivationSkillPolicyData, ThrowOnError>) => (options.client ?? client).get<GetAgentActivationSkillPolicyResponses, GetAgentActivationSkillPolicyErrors, ThrowOnError>({ url: '/api/agents/{id}/activation-skill-policy', ...options });
 
@@ -612,7 +612,7 @@ export const getAgentActivationSkillPolicy = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const patchAgentActivationSkillPolicy = <ThrowOnError extends boolean = false>(options: Options<PatchAgentActivationSkillPolicyData, ThrowOnError>) => (options.client ?? client).patch<PatchAgentActivationSkillPolicyResponses, PatchAgentActivationSkillPolicyErrors, ThrowOnError>({
     url: '/api/agents/{id}/activation-skill-policy',
@@ -632,7 +632,7 @@ export const patchAgentActivationSkillPolicy = <ThrowOnError extends boolean = f
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getAgentSkills = <ThrowOnError extends boolean = false>(options: Options<GetAgentSkillsData, ThrowOnError>) => (options.client ?? client).get<GetAgentSkillsResponses, GetAgentSkillsErrors, ThrowOnError>({ url: '/api/agents/{id}/skills', ...options });
 
@@ -645,7 +645,7 @@ export const getAgentSkills = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const updateAgentSkills = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentSkillsData, ThrowOnError>) => (options.client ?? client).put<UpdateAgentSkillsResponses, UpdateAgentSkillsErrors, ThrowOnError>({
     url: '/api/agents/{id}/skills',
@@ -665,7 +665,7 @@ export const updateAgentSkills = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getAgentSkillExclusions = <ThrowOnError extends boolean = false>(options: Options<GetAgentSkillExclusionsData, ThrowOnError>) => (options.client ?? client).get<GetAgentSkillExclusionsResponses, GetAgentSkillExclusionsErrors, ThrowOnError>({ url: '/api/agents/{id}/skill-exclusions', ...options });
 
@@ -678,7 +678,7 @@ export const getAgentSkillExclusions = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const updateAgentSkillExclusions = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentSkillExclusionsData, ThrowOnError>) => (options.client ?? client).put<UpdateAgentSkillExclusionsResponses, UpdateAgentSkillExclusionsErrors, ThrowOnError>({
     url: '/api/agents/{id}/skill-exclusions',
@@ -1673,7 +1673,7 @@ export const reviewAppRecording = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps and their tools allowed by your resource grants
+ * None (no additional RBAC permission required)
  */
 export const transferAppOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferAppOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferAppOwnershipResponses, TransferAppOwnershipErrors, ThrowOnError>({
     url: '/api/apps/{id}/transfer-ownership',
@@ -1726,7 +1726,7 @@ export const createApp = <ThrowOnError extends boolean = false>(options: Options
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  */
 export const getExternalApp = <ThrowOnError extends boolean = false>(options: Options<GetExternalAppData, ThrowOnError>) => (options.client ?? client).get<GetExternalAppResponses, GetExternalAppErrors, ThrowOnError>({ url: '/api/apps/external/{catalogId}', ...options });
 
@@ -1739,7 +1739,7 @@ export const getExternalApp = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  */
 export const getAppLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<GetAppLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<GetAppLabelKeysResponses, GetAppLabelKeysErrors, ThrowOnError>({ url: '/api/apps/labels/keys', ...options });
 
@@ -1752,7 +1752,7 @@ export const getAppLabelKeys = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  */
 export const getAppLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetAppLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<GetAppLabelValuesResponses, GetAppLabelValuesErrors, ThrowOnError>({ url: '/api/apps/labels/values', ...options });
 
@@ -1765,7 +1765,7 @@ export const getAppLabelValues = <ThrowOnError extends boolean = false>(options?
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  */
 export const getAppTemplates = <ThrowOnError extends boolean = false>(options?: Options<GetAppTemplatesData, ThrowOnError>) => (options?.client ?? client).get<GetAppTemplatesResponses, GetAppTemplatesErrors, ThrowOnError>({ url: '/api/app-templates', ...options });
 
@@ -1791,7 +1791,7 @@ export const openAppInChat = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  * `chat:create`: Start new chat conversations
  */
 export const openExternalAppInChat = <ThrowOnError extends boolean = false>(options: Options<OpenExternalAppInChatData, ThrowOnError>) => (options.client ?? client).post<OpenExternalAppInChatResponses, OpenExternalAppInChatErrors, ThrowOnError>({
@@ -1838,7 +1838,7 @@ export const pinApp = <ThrowOnError extends boolean = false>(options: Options<Pi
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  */
 export const unpinExternalApp = <ThrowOnError extends boolean = false>(options: Options<UnpinExternalAppData, ThrowOnError>) => (options.client ?? client).delete<UnpinExternalAppResponses, UnpinExternalAppErrors, ThrowOnError>({ url: '/api/apps/external/{mcpServerId}/pin', ...options });
 
@@ -1851,7 +1851,7 @@ export const unpinExternalApp = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  */
 export const pinExternalApp = <ThrowOnError extends boolean = false>(options: Options<PinExternalAppData, ThrowOnError>) => (options.client ?? client).put<PinExternalAppResponses, PinExternalAppErrors, ThrowOnError>({
     url: '/api/apps/external/{mcpServerId}/pin',
@@ -3404,7 +3404,7 @@ export const createChatOpsDmBinding = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and use their code sandboxes and files
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const applyChatOpsBindingPlan = <ThrowOnError extends boolean = false>(options: Options<ApplyChatOpsBindingPlanData, ThrowOnError>) => (options.client ?? client).post<ApplyChatOpsBindingPlanResponses, ApplyChatOpsBindingPlanErrors, ThrowOnError>({
@@ -4049,7 +4049,7 @@ export const bulkDeleteEnvironments = <ThrowOnError extends boolean = false>(opt
  * Authorization:
  *
  * `mcpServerInstallation:read`: View installed MCP servers and their status
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getExternalMcpSkills = <ThrowOnError extends boolean = false>(options?: Options<GetExternalMcpSkillsData, ThrowOnError>) => (options?.client ?? client).get<GetExternalMcpSkillsResponses, GetExternalMcpSkillsErrors, ThrowOnError>({ url: '/api/skills/external', ...options });
 
@@ -4063,7 +4063,7 @@ export const getExternalMcpSkills = <ThrowOnError extends boolean = false>(optio
  * Authorization:
  *
  * `mcpServerInstallation:read`: View installed MCP servers and their status
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getExternalMcpSkillUsageStatistics = <ThrowOnError extends boolean = false>(options: Options<GetExternalMcpSkillUsageStatisticsData, ThrowOnError>) => (options.client ?? client).get<GetExternalMcpSkillUsageStatisticsResponses, GetExternalMcpSkillUsageStatisticsErrors, ThrowOnError>({ url: '/api/skills/external/usage-statistics', ...options });
 
@@ -4077,7 +4077,7 @@ export const getExternalMcpSkillUsageStatistics = <ThrowOnError extends boolean 
  * Authorization:
  *
  * `mcpServerInstallation:read`: View installed MCP servers and their status
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getExternalMcpSkill = <ThrowOnError extends boolean = false>(options: Options<GetExternalMcpSkillData, ThrowOnError>) => (options.client ?? client).get<GetExternalMcpSkillResponses, GetExternalMcpSkillErrors, ThrowOnError>({ url: '/api/skills/external/{id}', ...options });
 
@@ -4837,7 +4837,7 @@ export const getInteraction = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `mcpRegistry:update`: Modify MCP registry entries
+ * None (no additional RBAC permission required)
  */
 export const transferMcpCatalogOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferMcpCatalogOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferMcpCatalogOwnershipResponses, TransferMcpCatalogOwnershipErrors, ThrowOnError>({
     url: '/api/internal_mcp_catalog/{id}/transfer-ownership',
@@ -4890,7 +4890,7 @@ export const createInternalMcpCatalogItem = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `mcpRegistry:read`: Browse the MCP server registry
+ * `mcpRegistry:read`: Open the MCP registry and use its built-in servers
  */
 export const unmuteMcpCatalogAlert = <ThrowOnError extends boolean = false>(options: Options<UnmuteMcpCatalogAlertData, ThrowOnError>) => (options.client ?? client).delete<UnmuteMcpCatalogAlertResponses, UnmuteMcpCatalogAlertErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/alert-mutes/{kind}', ...options });
 
@@ -4903,7 +4903,7 @@ export const unmuteMcpCatalogAlert = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `mcpRegistry:read`: Browse the MCP server registry
+ * `mcpRegistry:read`: Open the MCP registry and use its built-in servers
  */
 export const muteMcpCatalogAlert = <ThrowOnError extends boolean = false>(options: Options<MuteMcpCatalogAlertData, ThrowOnError>) => (options.client ?? client).put<MuteMcpCatalogAlertResponses, MuteMcpCatalogAlertErrors, ThrowOnError>({
     url: '/api/internal_mcp_catalog/{id}/alert-mutes/{kind}',
@@ -5073,7 +5073,7 @@ export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `mcpRegistry:read`: Browse the MCP server registry
+ * `mcpRegistry:read`: Open the MCP registry and use its built-in servers
  */
 export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentYamlPreviewData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentYamlPreviewResponses, GetDeploymentYamlPreviewErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/deployment-yaml-preview', ...options });
 
@@ -5086,7 +5086,7 @@ export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `mcpRegistry:read`: Browse the MCP server registry
+ * `mcpRegistry:read`: Open the MCP registry and use its built-in servers
  */
 export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ValidateDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ValidateDeploymentYamlResponses, ValidateDeploymentYamlErrors, ThrowOnError>({
     url: '/api/internal_mcp_catalog/validate-deployment-yaml',
@@ -5106,7 +5106,7 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `mcpRegistry:update`: Modify MCP registry entries
+ * `mcpRegistry:read`: Open the MCP registry and use its built-in servers
  */
 export const resetDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ResetDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ResetDeploymentYamlResponses, ResetDeploymentYamlErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/reset-deployment-yaml', ...options });
 
@@ -5119,7 +5119,7 @@ export const resetDeploymentYaml = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `mcpRegistry:read`: Browse the MCP server registry
+ * `mcpRegistry:read`: Open the MCP registry and use its built-in servers
  */
 export const getK8sImagePullSecrets = <ThrowOnError extends boolean = false>(options?: Options<GetK8sImagePullSecretsData, ThrowOnError>) => (options?.client ?? client).get<GetK8sImagePullSecretsResponses, GetK8sImagePullSecretsErrors, ThrowOnError>({ url: '/api/k8s/image-pull-secrets', ...options });
 
@@ -5132,7 +5132,7 @@ export const getK8sImagePullSecrets = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `mcpRegistry:read`: Browse the MCP server registry
+ * `mcpRegistry:read`: Open the MCP registry and use its built-in servers
  */
 export const getInternalMcpCatalogLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<GetInternalMcpCatalogLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<GetInternalMcpCatalogLabelKeysResponses, GetInternalMcpCatalogLabelKeysErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/labels/keys', ...options });
 
@@ -5145,7 +5145,7 @@ export const getInternalMcpCatalogLabelKeys = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * `mcpRegistry:read`: Browse the MCP server registry
+ * `mcpRegistry:read`: Open the MCP registry and use its built-in servers
  */
 export const getInternalMcpCatalogLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetInternalMcpCatalogLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<GetInternalMcpCatalogLabelValuesResponses, GetInternalMcpCatalogLabelValuesErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/labels/values', ...options });
 
@@ -6275,7 +6275,7 @@ export const getLlmModels = <ThrowOnError extends boolean = false>(options?: Opt
  *
  * Authorization:
  *
- * `llmModel:update`: Modify LLM model pricing, modality and generation-parameter settings
+ * `llmModel:update`: Sync the model catalog and see every model, including ones not shared with you
  */
 export const syncLlmModels = <ThrowOnError extends boolean = false>(options?: Options<SyncLlmModelsData, ThrowOnError>) => (options?.client ?? client).post<SyncLlmModelsResponses, SyncLlmModelsErrors, ThrowOnError>({ url: '/api/llm-models/sync', ...options });
 
@@ -6341,7 +6341,7 @@ export const updateModel = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Authorization:
  *
- * `llmOauthClient:read`: View LLM OAuth client registrations
+ * `llmOauthClient:read`: Open LLM OAuth client registrations
  */
 export const llmOauthClientLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<LlmOauthClientLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<LlmOauthClientLabelKeysResponses, LlmOauthClientLabelKeysErrors, ThrowOnError>({ url: '/api/llm-oauth-clients/labels/keys', ...options });
 
@@ -6354,7 +6354,7 @@ export const llmOauthClientLabelKeys = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `llmOauthClient:read`: View LLM OAuth client registrations
+ * `llmOauthClient:read`: Open LLM OAuth client registrations
  */
 export const llmOauthClientLabelValues = <ThrowOnError extends boolean = false>(options?: Options<LlmOauthClientLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<LlmOauthClientLabelValuesResponses, LlmOauthClientLabelValuesErrors, ThrowOnError>({ url: '/api/llm-oauth-clients/labels/values', ...options });
 
@@ -6466,7 +6466,7 @@ export const bulkDeleteLlmOauthClients = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `llmProviderApiKey:read`: View LLM provider API keys
+ * `llmProviderApiKey:read`: Open LLM provider API keys
  */
 export const llmProviderApiKeyLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<LlmProviderApiKeyLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<LlmProviderApiKeyLabelKeysResponses, LlmProviderApiKeyLabelKeysErrors, ThrowOnError>({ url: '/api/llm-provider-api-keys/labels/keys', ...options });
 
@@ -6479,7 +6479,7 @@ export const llmProviderApiKeyLabelKeys = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `llmProviderApiKey:read`: View LLM provider API keys
+ * `llmProviderApiKey:read`: Open LLM provider API keys
  */
 export const llmProviderApiKeyLabelValues = <ThrowOnError extends boolean = false>(options?: Options<LlmProviderApiKeyLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<LlmProviderApiKeyLabelValuesResponses, LlmProviderApiKeyLabelValuesErrors, ThrowOnError>({ url: '/api/llm-provider-api-keys/labels/values', ...options });
 
@@ -6525,7 +6525,7 @@ export const createLlmProviderApiKey = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `llmProviderApiKey:read`: View LLM provider API keys
+ * `llmProviderApiKey:read`: Open LLM provider API keys
  */
 export const getAvailableLlmProviderApiKeys = <ThrowOnError extends boolean = false>(options?: Options<GetAvailableLlmProviderApiKeysData, ThrowOnError>) => (options?.client ?? client).get<GetAvailableLlmProviderApiKeysResponses, GetAvailableLlmProviderApiKeysErrors, ThrowOnError>({ url: '/api/llm-provider-api-keys/available', ...options });
 
@@ -6714,7 +6714,7 @@ export const reportAgentRuntimeStatus = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `mcpOauthClient:read`: View MCP OAuth client registrations
+ * `mcpOauthClient:read`: Open MCP OAuth client registrations
  */
 export const mcpOauthClientLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<McpOauthClientLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<McpOauthClientLabelKeysResponses, McpOauthClientLabelKeysErrors, ThrowOnError>({ url: '/api/mcp-oauth-clients/labels/keys', ...options });
 
@@ -6727,7 +6727,7 @@ export const mcpOauthClientLabelKeys = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `mcpOauthClient:read`: View MCP OAuth client registrations
+ * `mcpOauthClient:read`: Open MCP OAuth client registrations
  */
 export const mcpOauthClientLabelValues = <ThrowOnError extends boolean = false>(options?: Options<McpOauthClientLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<McpOauthClientLabelValuesResponses, McpOauthClientLabelValuesErrors, ThrowOnError>({ url: '/api/mcp-oauth-clients/labels/values', ...options });
 
@@ -9098,7 +9098,7 @@ export const updatePlugin = <ThrowOnError extends boolean = false>(options: Opti
  * Authorization:
  *
  * `plugin:read`: View plugins and their file metadata
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getPluginSkills = <ThrowOnError extends boolean = false>(options?: Options<GetPluginSkillsData, ThrowOnError>) => (options?.client ?? client).get<GetPluginSkillsResponses, GetPluginSkillsErrors, ThrowOnError>({ url: '/api/skills/plugins', ...options });
 
@@ -9112,7 +9112,7 @@ export const getPluginSkills = <ThrowOnError extends boolean = false>(options?: 
  * Authorization:
  *
  * `plugin:read`: View plugins and their file metadata
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getPluginSkillUsageStatistics = <ThrowOnError extends boolean = false>(options: Options<GetPluginSkillUsageStatisticsData, ThrowOnError>) => (options.client ?? client).get<GetPluginSkillUsageStatisticsResponses, GetPluginSkillUsageStatisticsErrors, ThrowOnError>({ url: '/api/skills/plugins/{pluginId}/usage-statistics', ...options });
 
@@ -9126,7 +9126,7 @@ export const getPluginSkillUsageStatistics = <ThrowOnError extends boolean = fal
  * Authorization:
  *
  * `plugin:read`: View plugins and their file metadata
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getPluginSkill = <ThrowOnError extends boolean = false>(options: Options<GetPluginSkillData, ThrowOnError>) => (options.client ?? client).get<GetPluginSkillResponses, GetPluginSkillErrors, ThrowOnError>({ url: '/api/skills/plugins/{pluginId}', ...options });
 
@@ -9416,7 +9416,7 @@ export const getProjectConversations = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and use their code sandboxes and files
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  * `project:read`: View projects and your own sessions inside them
  */
 export const getProjectRuns = <ThrowOnError extends boolean = false>(options: Options<GetProjectRunsData, ThrowOnError>) => (options.client ?? client).get<GetProjectRunsResponses, GetProjectRunsErrors, ThrowOnError>({ url: '/api/projects/{id}/runs', ...options });
@@ -9456,7 +9456,7 @@ export const pinProject = <ThrowOnError extends boolean = false>(options: Option
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  * `project:read`: View projects and your own sessions inside them
  */
 export const getProjectApps = <ThrowOnError extends boolean = false>(options: Options<GetProjectAppsData, ThrowOnError>) => (options.client ?? client).get<GetProjectAppsResponses, GetProjectAppsErrors, ThrowOnError>({ url: '/api/projects/{id}/apps', ...options });
@@ -9470,7 +9470,7 @@ export const getProjectApps = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  * `project:read`: View projects and your own sessions inside them
  */
 export const unlinkProjectApp = <ThrowOnError extends boolean = false>(options: Options<UnlinkProjectAppData, ThrowOnError>) => (options.client ?? client).delete<UnlinkProjectAppResponses, UnlinkProjectAppErrors, ThrowOnError>({ url: '/api/projects/{id}/apps/{appId}', ...options });
@@ -9484,7 +9484,7 @@ export const unlinkProjectApp = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  * `project:read`: View projects and your own sessions inside them
  */
 export const linkProjectApp = <ThrowOnError extends boolean = false>(options: Options<LinkProjectAppData, ThrowOnError>) => (options.client ?? client).put<LinkProjectAppResponses, LinkProjectAppErrors, ThrowOnError>({ url: '/api/projects/{id}/apps/{appId}', ...options });
@@ -9842,7 +9842,7 @@ export const getSecretsType = <ThrowOnError extends boolean = false>(options?: O
  *
  * Authorization:
  *
- * `mcpRegistry:update`: Modify MCP registry entries
+ * None (no additional RBAC permission required)
  */
 export const getSecret = <ThrowOnError extends boolean = false>(options: Options<GetSecretData, ThrowOnError>) => (options.client ?? client).get<GetSecretResponses, GetSecretErrors, ThrowOnError>({ url: '/api/secrets/{id}', ...options });
 
@@ -9868,7 +9868,7 @@ export const checkSecretsConnectivity = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `serviceAccount:read`: View service accounts
+ * `serviceAccount:read`: Open Service Accounts
  */
 export const serviceAccountLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<ServiceAccountLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<ServiceAccountLabelKeysResponses, ServiceAccountLabelKeysErrors, ThrowOnError>({ url: '/api/service-accounts/labels/keys', ...options });
 
@@ -9881,7 +9881,7 @@ export const serviceAccountLabelKeys = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `serviceAccount:read`: View service accounts
+ * `serviceAccount:read`: Open Service Accounts
  */
 export const serviceAccountLabelValues = <ThrowOnError extends boolean = false>(options?: Options<ServiceAccountLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<ServiceAccountLabelValuesResponses, ServiceAccountLabelValuesErrors, ThrowOnError>({ url: '/api/service-accounts/labels/values', ...options });
 
@@ -10165,7 +10165,7 @@ export const updateSiteNotification = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getSkillMarketplace = <ThrowOnError extends boolean = false>(options?: Options<GetSkillMarketplaceData, ThrowOnError>) => (options?.client ?? client).get<GetSkillMarketplaceResponses, GetSkillMarketplaceErrors, ThrowOnError>({ url: '/api/skill-marketplace', ...options });
 
@@ -10178,7 +10178,7 @@ export const getSkillMarketplace = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `skill:update`: Modify agent skill content allowed by your resource grants
+ * None (no additional RBAC permission required)
  */
 export const transferSkillOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferSkillOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferSkillOwnershipResponses, TransferSkillOwnershipErrors, ThrowOnError>({
     url: '/api/skills/{id}/transfer-ownership',
@@ -10198,7 +10198,7 @@ export const transferSkillOwnership = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const skillLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<SkillLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<SkillLabelKeysResponses, SkillLabelKeysErrors, ThrowOnError>({ url: '/api/skills/labels/keys', ...options });
 
@@ -10211,7 +10211,7 @@ export const skillLabelKeys = <ThrowOnError extends boolean = false>(options?: O
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const skillLabelValues = <ThrowOnError extends boolean = false>(options?: Options<SkillLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<SkillLabelValuesResponses, SkillLabelValuesErrors, ThrowOnError>({ url: '/api/skills/labels/values', ...options });
 
@@ -10342,7 +10342,7 @@ export const getSkillVersion = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const getSkillSourceRepos = <ThrowOnError extends boolean = false>(options?: Options<GetSkillSourceReposData, ThrowOnError>) => (options?.client ?? client).get<GetSkillSourceReposResponses, GetSkillSourceReposErrors, ThrowOnError>({ url: '/api/skills/source-repos', ...options });
 
@@ -10447,7 +10447,7 @@ export const enableSkillToolDefaults = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const searchSkillCatalog = <ThrowOnError extends boolean = false>(options?: Options<SearchSkillCatalogData, ThrowOnError>) => (options?.client ?? client).get<SearchSkillCatalogResponses, SearchSkillCatalogErrors, ThrowOnError>({ url: '/api/skills/catalog/search', ...options });
 
@@ -10460,7 +10460,7 @@ export const searchSkillCatalog = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const discoverGithubSkills = <ThrowOnError extends boolean = false>(options: Options<DiscoverGithubSkillsData, ThrowOnError>) => (options.client ?? client).post<DiscoverGithubSkillsResponses, DiscoverGithubSkillsErrors, ThrowOnError>({
     url: '/api/skills/github/discover',
@@ -10480,7 +10480,7 @@ export const discoverGithubSkills = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  */
 export const previewGithubSkill = <ThrowOnError extends boolean = false>(options: Options<PreviewGithubSkillData, ThrowOnError>) => (options.client ?? client).post<PreviewGithubSkillResponses, PreviewGithubSkillErrors, ThrowOnError>({
     url: '/api/skills/github/preview',
@@ -10520,7 +10520,7 @@ export const importGithubSkills = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and use their code sandboxes and files
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const deleteSkillSandboxArtifact = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillSandboxArtifactData, ThrowOnError>) => (options.client ?? client).delete<DeleteSkillSandboxArtifactResponses, DeleteSkillSandboxArtifactErrors, ThrowOnError>({ url: '/api/skill-sandbox/artifacts/{artifactId}', ...options });
 
@@ -10533,7 +10533,7 @@ export const deleteSkillSandboxArtifact = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and use their code sandboxes and files
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const getSkillSandboxArtifact = <ThrowOnError extends boolean = false>(options: Options<GetSkillSandboxArtifactData, ThrowOnError>) => (options.client ?? client).get<GetSkillSandboxArtifactResponses, unknown, ThrowOnError>({ url: '/api/skill-sandbox/artifacts/{artifactId}', ...options });
 
@@ -10546,7 +10546,7 @@ export const getSkillSandboxArtifact = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and use their code sandboxes and files
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const updateSkillSandboxArtifactContent = <ThrowOnError extends boolean = false>(options: Options<UpdateSkillSandboxArtifactContentData, ThrowOnError>) => (options.client ?? client).put<UpdateSkillSandboxArtifactContentResponses, UpdateSkillSandboxArtifactContentErrors, ThrowOnError>({
     url: '/api/skill-sandbox/artifacts/{artifactId}/content',
@@ -10566,7 +10566,7 @@ export const updateSkillSandboxArtifactContent = <ThrowOnError extends boolean =
  *
  * Authorization:
  *
- * `agent:read`: View and list agents, and use their code sandboxes and files
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const getSkillSandboxConversationArtifacts = <ThrowOnError extends boolean = false>(options: Options<GetSkillSandboxConversationArtifactsData, ThrowOnError>) => (options.client ?? client).get<GetSkillSandboxConversationArtifactsResponses, GetSkillSandboxConversationArtifactsErrors, ThrowOnError>({ url: '/api/skill-sandbox/conversations/{conversationId}/artifacts', ...options });
 
@@ -10744,7 +10744,7 @@ export const getMyUsageBreakdown = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `app:read`: View MCP Apps allowed by your resource grants
+ * `app:read`: Open Apps
  * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
  *
  * App details are limited to apps visible to the caller; `app:admin` includes every app in the active organization.
@@ -10761,7 +10761,7 @@ export const getAppStatistics = <ThrowOnError extends boolean = false>(options?:
  * Authorization:
  *
  * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
- * `skill:read`: View agent skills allowed by your resource grants
+ * `skill:read`: Open Skills
  *
  * Skill details are limited to skills visible to the caller; `skill:admin` includes every skill in the active organization.
  */
@@ -11225,7 +11225,7 @@ export const rotateUserToken = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * `llmVirtualKey:read`: View LLM virtual keys
+ * `llmVirtualKey:read`: Open LLM virtual keys
  */
 export const virtualApiKeyLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<VirtualApiKeyLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<VirtualApiKeyLabelKeysResponses, VirtualApiKeyLabelKeysErrors, ThrowOnError>({ url: '/api/llm-virtual-keys/labels/keys', ...options });
 
@@ -11238,7 +11238,7 @@ export const virtualApiKeyLabelKeys = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `llmVirtualKey:read`: View LLM virtual keys
+ * `llmVirtualKey:read`: Open LLM virtual keys
  */
 export const virtualApiKeyLabelValues = <ThrowOnError extends boolean = false>(options?: Options<VirtualApiKeyLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<VirtualApiKeyLabelValuesResponses, VirtualApiKeyLabelValuesErrors, ThrowOnError>({ url: '/api/llm-virtual-keys/labels/values', ...options });
 

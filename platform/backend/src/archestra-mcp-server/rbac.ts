@@ -4,7 +4,10 @@ import type {
   ResourcePermissionAction,
   ScopedResource,
 } from "@archestra/shared";
-import { roleActionResourceFor } from "@archestra/shared/access-control";
+import {
+  allAvailableActions,
+  roleActionResourceFor,
+} from "@archestra/shared/access-control";
 import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
@@ -90,7 +93,11 @@ export const TOOL_PERMISSIONS: Record<
   deploy_mcp_server: { resource: "mcpRegistry", action: "update" },
   list_mcp_server_deployments: { resource: "mcpRegistry", action: "read" },
   get_mcp_server_logs: { resource: "mcpRegistry", action: "read" },
-  reload_mcp_server_tools: { resource: "mcpRegistry", action: "update" },
+  // Same gate as the ReloadMcpServerTools route: a subset of reinstalling.
+  reload_mcp_server_tools: {
+    resource: "mcpServerInstallation",
+    action: "create",
+  },
 
   // Teams
   create_team: { resource: "team", action: "create" },
@@ -369,6 +376,20 @@ export async function checkToolPermission(
         );
 
   const scopedAction = SCOPED_CATALOG_TOOLS[typedShortName];
+  // People can edit what they create, so a role that can create the resource
+  // reaches its per-item tools before it owns any item. The handler still
+  // checks the specific item.
+  if (
+    !allowed &&
+    isToolGrantGated(typedShortName) &&
+    (await userHasPermission(
+      context.userId,
+      context.organizationId,
+      roleActionResourceFor(perm.resource),
+      "create",
+    ))
+  )
+    return null;
   if (
     !allowed &&
     scopedAction &&
@@ -411,8 +432,11 @@ export async function checkToolPermission(
       },
       "[ArchestraMCP] rbac denied tool execution",
     );
+    const resource = roleActionResourceFor(perm.resource);
     return errorResult(
-      `You do not have permission to perform this action (requires ${perm.resource}:${perm.action}).`,
+      allAvailableActions[resource]?.includes(perm.action as never)
+        ? `You do not have permission to perform this action (requires ${perm.resource}:${perm.action}).`
+        : `You do not have permission to perform this action (requires the ${perm.action} grant on the item).`,
     );
   }
 
@@ -527,6 +551,12 @@ export async function filterToolNamesByPermission(
       SCOPED_CATALOG_TOOLS[shortName as ArchestraToolShortName];
     if (
       permResults.get(`${perm.resource}:${perm.action}`) ||
+      // Same rule as checkToolPermission: creators reach per-item tools.
+      (isToolGrantGated(shortName as ArchestraToolShortName) &&
+        (permissions[roleActionResourceFor(perm.resource)]?.includes(
+          "create",
+        ) ??
+          false)) ||
       (scopedAction && scopedActions.has(scopedAction)) ||
       resourceGrants.some(
         (grant) =>
@@ -542,6 +572,16 @@ export async function filterToolNamesByPermission(
   }
 
   return allowed;
+}
+
+/**
+ * Whether a per-object grant can open this tool, independently of the role.
+ * @public — the coverage test uses it to prove every tool stays reachable.
+ */
+export function isToolGrantGated(shortName: ArchestraToolShortName): boolean {
+  return Boolean(
+    SCOPED_CATALOG_TOOLS[shortName] || SCOPED_RESOURCE_TOOLS[shortName],
+  );
 }
 
 // Only handlers that enforce the exact object action or filter their list in

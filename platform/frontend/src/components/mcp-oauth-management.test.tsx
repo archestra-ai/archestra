@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import {
   useCreateMcpOauthClient,
   useDeleteMcpOauthClient,
@@ -61,6 +65,7 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);
+  mockClientGrants(["update", "delete"]);
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
   } as ReturnType<typeof useSession>);
@@ -96,10 +101,10 @@ describe("McpOauthManagement", () => {
         ({
           data:
             "mcpOauthClient" in permission &&
-            (permission.mcpOauthClient.includes("read") ||
-              permission.mcpOauthClient.includes("update")),
+            permission.mcpOauthClient.includes("read"),
         }) as ReturnType<typeof useHasPermissions>,
     );
+    mockClientGrants(["update"]);
 
     render(<McpOauthManagement resourceId="resource-1" resourceKind="agent" />);
 
@@ -140,4 +145,28 @@ describe("McpOauthManagement", () => {
     );
     expect(screen.getByText("Delete OAuth Client")).toBeInTheDocument();
   });
+
+  it("hides edit and delete when grants cover a different client", () => {
+    mockClientGrants(["update", "delete"], "other");
+
+    render(<McpOauthManagement resourceId="resource-1" resourceKind="agent" />);
+
+    expect(screen.getByText("Assigned client")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit Assigned client" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete Assigned client" }),
+    ).not.toBeInTheDocument();
+  });
 });
+
+function mockClientGrants(actions: string[], scope = assignedClient.id) {
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: actions.map((action) => ({
+      resource: "mcpOauthClient",
+      action,
+      scope,
+    })),
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
+}

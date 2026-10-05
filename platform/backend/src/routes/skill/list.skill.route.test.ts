@@ -161,11 +161,14 @@ describe("GET /api/skills", () => {
 
   test("forAgentId lists the effective Auto-mode skills published by a gateway", async ({
     makeAgent,
-    makeMember,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    // The test app already made this user a member; editing the gateway's
+    // environment view takes the admin's organization-wide grants.
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const gateway = await makeAgent({
       name: "Skill Gateway",
       organizationId: ctx.organizationId,

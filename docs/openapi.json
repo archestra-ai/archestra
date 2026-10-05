@@ -43290,7 +43290,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "List configured outbound A2A agents.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
+        "description": "List configured outbound A2A agents.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "parameters": [
           {
             "schema": {
@@ -44591,7 +44591,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Get one configured outbound A2A agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
+        "description": "Get one configured outbound A2A agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "parameters": [
           {
             "schema": {
@@ -54364,7 +54364,7 @@
         "tags": [
           "MCP Gateway"
         ],
-        "description": "Get default MCP Gateway\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpGateway:read`: View and list MCP gateways",
+        "description": "Get default MCP Gateway\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpGateway:read`: Open MCP Gateways",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -65607,7 +65607,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "List a paginated, searchable view of effective or policy-eligible skills for an internal agent or draft\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "List a paginated, searchable view of effective or policy-eligible skills for an internal agent or draft\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -66111,7 +66111,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get an internal agent's skill activation policy\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Get an internal agent's skill activation policy\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -66839,7 +66839,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Apply a revisioned update to an internal agent's skill activation policy\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Apply a revisioned update to an internal agent's skill activation policy\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -67718,7 +67718,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get the skills this gateway publishes over MCP: the explicitly assigned set, plus whether Auto mode ('access all skills') is on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Get the skills this gateway publishes over MCP: the explicitly assigned set, plus whether Auto mode ('access all skills') is on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -68054,7 +68054,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Replace the skills this gateway publishes over MCP (full replace of the assigned set) and set Auto mode\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Replace the skills this gateway publishes over MCP (full replace of the assigned set) and set Auto mode\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -68422,7 +68422,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get the agent's Auto-skill-mode exclusions: skills removed from its published skill surface while 'access all skills' is on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Get the agent's Auto-skill-mode exclusions: skills removed from its published skill surface while 'access all skills' is on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -68753,7 +68753,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Replace the agent's Auto-skill-mode exclusions (full replace of the excluded skill set)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Replace the agent's Auto-skill-mode exclusions (full replace of the excluded skill set)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -89943,7 +89943,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools allowed by your resource grants",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -90225,10 +90225,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "app:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -91677,7 +91676,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Resolve an external UI-providing app by catalog id: its UI resource and the caller's accessible installs (for the standalone run page's install selector).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants",
+        "description": "Resolve an external UI-providing app by catalog id: its UI resource and the caller's accessible installs (for the standalone run page's install selector).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
         "parameters": [
           {
             "schema": {
@@ -92043,7 +92042,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Get all label keys used by apps\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants",
+        "description": "Get all label keys used by apps\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -92301,7 +92300,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Get all label values used by apps\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants",
+        "description": "Get all label values used by apps\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
         "parameters": [
           {
             "schema": {
@@ -92570,7 +92569,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "List the curated starter templates a new app can use.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants",
+        "description": "List the curated starter templates a new app can use.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -93127,7 +93126,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Open an external (MCP-server) UI app in chat: create a conversation and return its id to navigate to. When the tool needs no inputs the app is seeded already rendered (no model turn); when it has required inputs the conversation is created empty and the response carries an opening prompt for the client to send.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants\n`chat:create`: Start new chat conversations",
+        "description": "Open an external (MCP-server) UI app in chat: create a conversation and return its id to navigate to. When the tool needs no inputs the app is seeded already rendered (no model turn); when it has required inputs the conversation is created empty and the response carries an opening prompt for the client to send.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`chat:create`: Start new chat conversations",
         "requestBody": {
           "required": true,
           "content": {
@@ -93990,7 +93989,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Pin an external (MCP-server) UI app for the current user, identified by install + resource + tool (several tools of one server can share a UI resource, so the tool name pins one tile, not the group). Personal — does not affect other members.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants",
+        "description": "Pin an external (MCP-server) UI app for the current user, identified by install + resource + tool (several tools of one server can share a UI resource, so the tool name pins one tile, not the group). Personal — does not affect other members.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
         "requestBody": {
           "required": true,
           "content": {
@@ -94291,7 +94290,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Remove the current user's pin on an external app. Idempotent; intentionally no access check, so a stale pin on an install the user lost access to can still be cleared. `resourceUri` and `toolName` ride the query string (DELETE carries no body).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants",
+        "description": "Remove the current user's pin on an external app. Idempotent; intentionally no access check, so a stale pin on an install the user lost access to can still be cleared. `resourceUri` and `toolName` ride the query string (DELETE carries no body).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
         "parameters": [
           {
             "schema": {
@@ -142108,7 +142107,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Atomically apply ChatOps assignments, channel settings, and pending direct-message bindings for an agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Atomically apply ChatOps assignments, channel settings, and pending direct-message bindings for an agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -153950,7 +153949,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List Skills dynamically projected from the caller's accessible MCP server installations.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "List Skills dynamically projected from the caller's accessible MCP server installations.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -154320,7 +154319,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Get recent activation statistics for one external MCP Skill from an accessible installation.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Get recent activation statistics for one external MCP Skill from an accessible installation.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -154666,7 +154665,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Fetch and digest-verify the current bytes of an external MCP Skill from one accessible installation.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Fetch and digest-verify the current bytes of an external MCP Skill from one accessible installation.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -240694,7 +240693,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -240976,10 +240975,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpRegistry:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -243723,7 +243721,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Dismiss one catalog-level MCP alert for the calling user only. The fingerprint pins it to one failure episode.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Dismiss one catalog-level MCP alert for the calling user only. The fingerprint pins it to one failure episode.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
         "requestBody": {
           "required": true,
           "content": {
@@ -244062,7 +244060,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Restore one dismissed catalog-level MCP alert to the calling user's view.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Restore one dismissed catalog-level MCP alert to the calling user's view.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
         "parameters": [
           {
             "schema": {
@@ -250776,7 +250774,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Generate a deployment YAML template preview. Requires configure-deployment-spec on this MCP registry entry.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Generate a deployment YAML template preview. Requires configure-deployment-spec on this MCP registry entry.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
         "parameters": [
           {
             "schema": {
@@ -251052,7 +251050,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Validate a deployment YAML template. Requires configure-deployment-spec on the supplied catalogId, or on all MCP registry entries when catalogId is omitted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Validate a deployment YAML template. Requires configure-deployment-spec on the supplied catalogId, or on all MCP registry entries when catalogId is omitted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
         "requestBody": {
           "required": true,
           "content": {
@@ -251354,7 +251352,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Reset the deployment YAML to default by clearing the custom YAML. Requires configure-deployment-spec on this MCP registry entry.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Reset the deployment YAML to default by clearing the custom YAML. Requires configure-deployment-spec on this MCP registry entry.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
         "parameters": [
           {
             "schema": {
@@ -251619,7 +251617,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpRegistry:update"
+            "mcpRegistry:read"
           ]
         }
       }
@@ -251630,7 +251628,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "List Kubernetes docker-registry secrets available for imagePullSecrets\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "List Kubernetes docker-registry secrets available for imagePullSecrets\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -251904,7 +251902,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get all label keys used by catalog items\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Get all label keys used by catalog items\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -252162,7 +252160,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get all label values for catalog items\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Get all label values for catalog items\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
         "parameters": [
           {
             "schema": {
@@ -286993,7 +286991,7 @@
         "tags": [
           "LLM Models"
         ],
-        "description": "Sync models from providers for all visible API keys and store them in the database\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Modify LLM model pricing, modality and generation-parameter settings",
+        "description": "Sync models from providers for all visible API keys and store them in the database\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Sync the model catalog and see every model, including ones not shared with you",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -289119,7 +289117,7 @@
         "tags": [
           "LLM OAuth Clients"
         ],
-        "description": "Get all label keys used by LLM OAuth clients\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:read`: View LLM OAuth client registrations",
+        "description": "Get all label keys used by LLM OAuth clients\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:read`: Open LLM OAuth client registrations",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -289377,7 +289375,7 @@
         "tags": [
           "LLM OAuth Clients"
         ],
-        "description": "Get all label values used by LLM OAuth clients\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:read`: View LLM OAuth client registrations",
+        "description": "Get all label values used by LLM OAuth clients\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:read`: Open LLM OAuth client registrations",
         "parameters": [
           {
             "schema": {
@@ -292460,7 +292458,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Get all label keys used by model provider API keys\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:read`: View LLM provider API keys",
+        "description": "Get all label keys used by model provider API keys\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:read`: Open LLM provider API keys",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -292718,7 +292716,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Get all label values used by model provider API keys\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:read`: View LLM provider API keys",
+        "description": "Get all label values used by model provider API keys\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:read`: Open LLM provider API keys",
         "parameters": [
           {
             "schema": {
@@ -294257,7 +294255,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Get LLM provider API keys available for the current user to use\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:read`: View LLM provider API keys",
+        "description": "Get LLM provider API keys available for the current user to use\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:read`: Open LLM provider API keys",
         "parameters": [
           {
             "schema": {
@@ -298109,7 +298107,7 @@
         "tags": [
           "MCP OAuth Clients"
         ],
-        "description": "Get all label keys used by MCP OAuth clients\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpOauthClient:read`: View MCP OAuth client registrations",
+        "description": "Get all label keys used by MCP OAuth clients\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpOauthClient:read`: Open MCP OAuth client registrations",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -298367,7 +298365,7 @@
         "tags": [
           "MCP OAuth Clients"
         ],
-        "description": "Get all label values used by MCP OAuth clients\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpOauthClient:read`: View MCP OAuth client registrations",
+        "description": "Get all label values used by MCP OAuth clients\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpOauthClient:read`: Open MCP OAuth client registrations",
         "parameters": [
           {
             "schema": {
@@ -338315,7 +338313,6 @@
                                   "update",
                                   "delete",
                                   "cancel",
-                                  "enable",
                                   "query",
                                   "impersonate",
                                   "full-view",
@@ -338671,7 +338668,6 @@
                           "update",
                           "delete",
                           "cancel",
-                          "enable",
                           "query",
                           "impersonate",
                           "full-view",
@@ -338725,7 +338721,6 @@
                             "update",
                             "delete",
                             "cancel",
-                            "enable",
                             "query",
                             "impersonate",
                             "full-view",
@@ -339069,7 +339064,6 @@
                             "update",
                             "delete",
                             "cancel",
-                            "enable",
                             "query",
                             "impersonate",
                             "full-view",
@@ -339377,7 +339371,6 @@
                           "update",
                           "delete",
                           "cancel",
-                          "enable",
                           "query",
                           "impersonate",
                           "full-view",
@@ -339453,7 +339446,6 @@
                             "update",
                             "delete",
                             "cancel",
-                            "enable",
                             "query",
                             "impersonate",
                             "full-view",
@@ -366285,7 +366277,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List the portable Skills embedded in the plugins visible to the caller.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:read`: View plugins and their file metadata\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "List the portable Skills embedded in the plugins visible to the caller.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:read`: View plugins and their file metadata\n`skill:read`: Open Skills",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -366655,7 +366647,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Get recent activation statistics for one Skill from an accessible plugin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:read`: View plugins and their file metadata\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Get recent activation statistics for one Skill from an accessible plugin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:read`: View plugins and their file metadata\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -367001,7 +366993,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Read one Skill embedded in a plugin, with its bundled resource files.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:read`: View plugins and their file metadata\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Read one Skill embedded in a plugin, with its bundled resource files.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:read`: View plugins and their file metadata\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -373517,7 +373509,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files\n`project:read`: View projects and your own sessions inside them",
+        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -374641,7 +374633,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Apps linked into the project. Each member sees only the linked apps they can read themselves.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants\n`project:read`: View projects and your own sessions inside them",
+        "description": "Apps linked into the project. Each member sees only the linked apps they can read themselves.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -374942,7 +374934,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Link an app into the project. Any project member who can read the app may link it; the app keeps its own permissions. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants\n`project:read`: View projects and your own sessions inside them",
+        "description": "Link an app into the project. Any project member who can read the app may link it; the app keeps its own permissions. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -375230,7 +375222,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Unlink an app from the project. The app itself is not changed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants\n`project:read`: View projects and your own sessions inside them",
+        "description": "Unlink an app from the project. The app itself is not changed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -383950,7 +383942,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Get a secret by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Get a secret by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -384243,10 +384235,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpRegistry:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -384520,7 +384511,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Get all label keys used by service accounts\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:read`: View service accounts",
+        "description": "Get all label keys used by service accounts\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:read`: Open Service Accounts",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -384778,7 +384769,7 @@
         "tags": [
           "Service Accounts"
         ],
-        "description": "Get all label values used by service accounts\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:read`: View service accounts",
+        "description": "Get all label values used by service accounts\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:read`: Open Service Accounts",
         "parameters": [
           {
             "schema": {
@@ -390655,7 +390646,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "The static skill marketplace: one clone URL for the whole deployment, which every user installs with their own credential.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "The static skill marketplace: one clone URL for the whole deployment, which every user installs with their own credential.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -390927,7 +390918,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:update`: Modify agent skill content allowed by your resource grants",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -391209,10 +391200,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "skill:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -391222,7 +391212,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Get all label keys used by skills\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Get all label keys used by skills\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -391480,7 +391470,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Get all label values used by skills\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Get all label values used by skills\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -396196,7 +396186,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List distinct GitHub repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "List distinct GitHub repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -399306,7 +399296,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Search the crawled public-GitHub skill catalog by name, repo, path, or description. Backed by an in-memory token index; returns ranked candidates to import via the GitHub import endpoints.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Search the crawled public-GitHub skill catalog by name, repo, path, or description. Backed by an in-memory token index; returns ranked candidates to import via the GitHub import endpoints.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -399629,7 +399619,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Discover skills in a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Discover skills in a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -399978,7 +399968,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Fetch a single skill's manifest and files from GitHub without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View agent skills allowed by your resource grants",
+        "description": "Fetch a single skill's manifest and files from GitHub without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -401058,7 +401048,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images and real PDFs, so the browser can preview them; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
+        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images and real PDFs, so the browser can preview them; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "parameters": [
           {
             "schema": {
@@ -401087,7 +401077,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Delete a persistent file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
+        "description": "Delete a persistent file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "parameters": [
           {
             "schema": {
@@ -401365,7 +401355,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Overwrite the full text content of a row-backed Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
+        "description": "Overwrite the full text content of a row-backed Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "requestBody": {
           "required": true,
           "content": {
@@ -401679,7 +401669,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List the artifact files produced in a conversation's sandbox.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents, and use their code sandboxes and files",
+        "description": "List the artifact files produced in a conversation's sandbox.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "parameters": [
           {
             "schema": {
@@ -406795,7 +406785,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get per-MCP-App cost: what each app cost to build (the LLM spend of the session that authored it) and what it costs to run (its own archestra.llm.complete() calls, plus how often it is opened). Includes an estimated chat-equivalent cost per app, derived from the organization's measured average cost per chat session over the same timeframe — the baseline is returned alongside so the estimate is auditable. Paginated. Apps outside the caller's visibility are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View MCP Apps allowed by your resource grants\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nApp details are limited to apps visible to the caller; `app:admin` includes every app in the active organization.",
+        "description": "Get per-MCP-App cost: what each app cost to build (the LLM spend of the session that authored it) and what it costs to run (its own archestra.llm.complete() calls, plus how often it is opened). Includes an estimated chat-equivalent cost per app, derived from the organization's measured average cost per chat session over the same timeframe — the baseline is returned alongside so the estimate is auditable. Paginated. Apps outside the caller's visibility are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nApp details are limited to apps visible to the caller; `app:admin` includes every app in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -407274,7 +407264,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get per-skill cost. `contextTokens` is the skill's own footprint — the tokens its activation blocks added to the model's context, measured when they were injected. The `attributed*` figures are the spend of the turns that then ran with the skill in context, which is shared with everything else in those turns rather than being the skill's bill alone — they are computed for the returned page, so they are not a sortable column. Paginated; skills outside the caller's scope are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n`skill:read`: View agent skills allowed by your resource grants\n\nSkill details are limited to skills visible to the caller; `skill:admin` includes every skill in the active organization.",
+        "description": "Get per-skill cost. `contextTokens` is the skill's own footprint — the tokens its activation blocks added to the model's context, measured when they were injected. The `attributed*` figures are the spend of the turns that then ran with the skill in context, which is shared with everything else in those turns rather than being the skill's bill alone — they are computed for the returned page, so they are not a sortable column. Paginated; skills outside the caller's scope are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n`skill:read`: Open Skills\n\nSkill details are limited to skills visible to the caller; `skill:admin` includes every skill in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -416425,7 +416415,6 @@
                               "update",
                               "delete",
                               "cancel",
-                              "enable",
                               "query",
                               "impersonate",
                               "full-view",
@@ -416706,7 +416695,6 @@
                         "update",
                         "delete",
                         "cancel",
-                        "enable",
                         "query",
                         "impersonate",
                         "full-view",
@@ -418075,7 +418063,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get all label keys used by virtual API keys\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
+        "description": "Get all label keys used by virtual API keys\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: Open LLM virtual keys",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -418333,7 +418321,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get all label values used by virtual API keys\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
+        "description": "Get all label values used by virtual API keys\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: Open LLM virtual keys",
         "parameters": [
           {
             "schema": {

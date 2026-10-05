@@ -84,6 +84,7 @@ test("a fresh instance hides coverage", async () => {
     expect(screen.queryByText("Coverage charts")).not.toBeInTheDocument(),
   );
   expect(screen.queryByText("Entities table")).not.toBeInTheDocument();
+  expect(screen.queryByText("Client coverage")).not.toBeInTheDocument();
 });
 
 test.each([
@@ -95,4 +96,5 @@ test.each([
   show();
   expect(await screen.findByText("Coverage charts")).toBeInTheDocument();
   expect(screen.getByText("Entities table")).toBeInTheDocument();
+  expect(await screen.findByText("Client coverage")).toBeInTheDocument();
 });

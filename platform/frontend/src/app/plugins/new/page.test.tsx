@@ -186,7 +186,9 @@ describe("NewPluginPage", () => {
 
     expect(screen.getByText("Popular marketplaces")).toBeVisible();
     expect(
-      screen.getByRole("button", { name: /archestra-ai\/OpenAPPA/ }),
+      screen.getByRole("button", {
+        name: /anthropics\/claude-plugins-official/,
+      }),
     ).toBeVisible();
     expect(
       screen.getByRole("button", {
@@ -250,18 +252,18 @@ describe("NewPluginPage", () => {
     });
   });
 
-  it("shows an already imported OpenAPPA marketplace entry", async () => {
+  it("shows an already imported marketplace entry", async () => {
     vi.mocked(usePlugins).mockReturnValue({
       data: [
         {
-          sourceMarketplaceRepo: "archestra-ai/OpenAPPA",
-          sourceMarketplacePluginName: "appa-runtime",
+          sourceMarketplaceRepo: "anthropics/claude-plugins-official",
+          sourceMarketplacePluginName: "policy-runtime",
         },
       ],
     } as unknown as ReturnType<typeof usePlugins>);
     discoverMock.mockResolvedValue({
       data: {
-        repoUrl: "archestra-ai/OpenAPPA",
+        repoUrl: "anthropics/claude-plugins-official",
         ref: "main",
         commitSha: "a".repeat(40),
         marketplacePath: ".claude-plugin/marketplace.json",
@@ -269,13 +271,13 @@ describe("NewPluginPage", () => {
         entries: [
           {
             marketplacePath: ".claude-plugin/marketplace.json",
-            name: "appa-runtime",
-            description: "Open Agent Policy Protocol",
+            name: "policy-runtime",
+            description: "Applies policy hooks",
             version: "1.0.0",
             clientType: "claude-code",
-            sourceRepoUrl: "archestra-ai/OpenAPPA",
+            sourceRepoUrl: "anthropics/claude-plugins-official",
             sourceRef: "main",
-            sourceSubdir: "integrations/claude-code/plugin",
+            sourceSubdir: "plugins/policy-runtime",
             sourceCommitSha: "a".repeat(40),
             fileCount: 2,
             supported: true,
@@ -289,7 +291,9 @@ describe("NewPluginPage", () => {
     renderPage();
 
     await user.click(
-      screen.getByRole("button", { name: /archestra-ai\/OpenAPPA/ }),
+      screen.getByRole("button", {
+        name: /anthropics\/claude-plugins-official/,
+      }),
     );
 
     expect(await screen.findByText("Imported")).toBeVisible();
@@ -299,60 +303,6 @@ describe("NewPluginPage", () => {
     expect(
       screen.queryByRole("combobox", { name: "Select platforms" }),
     ).not.toBeInTheDocument();
-  });
-
-  it("only offers macOS and Linux for OpenAPPA", async () => {
-    discoverMock.mockResolvedValue({
-      data: {
-        repoUrl: "archestra-ai/OpenAPPA",
-        ref: "main",
-        commitSha: "a".repeat(40),
-        marketplacePath: ".claude-plugin/marketplace.json",
-        reason: null,
-        entries: [
-          {
-            marketplacePath: ".claude-plugin/marketplace.json",
-            name: "appa-runtime",
-            description: "Open Agent Policy Protocol",
-            version: "1.0.0",
-            clientType: "claude-code",
-            sourceRepoUrl: "archestra-ai/OpenAPPA",
-            sourceRef: "main",
-            sourceSubdir: "integrations/claude-code/plugin",
-            sourceCommitSha: "a".repeat(40),
-            fileCount: 12,
-            supported: true,
-            reason: null,
-          },
-        ],
-      },
-      errorMessage: null,
-    });
-    const user = userEvent.setup();
-    renderPage();
-
-    await user.click(
-      screen.getByRole("button", { name: /archestra-ai\/OpenAPPA/ }),
-    );
-
-    const platforms = await screen.findByRole("combobox", {
-      name: "Select platforms",
-    });
-    expect(platforms).toHaveTextContent("macOS / Linux");
-    await user.click(platforms);
-    expect(
-      screen.getByRole("menuitemcheckbox", { name: "macOS / Linux" }),
-    ).toBeChecked();
-    expect(
-      screen.queryByRole("menuitemcheckbox", { name: "Windows" }),
-    ).not.toBeInTheDocument();
-    await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "Import (1)" }));
-    expect(importMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        selected: [expect.objectContaining({ supportedPlatforms: ["posix"] })],
-      }),
-    );
   });
 
   it("uses the connection-page platform selector for imported plugins", async () => {

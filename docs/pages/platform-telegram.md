@@ -34,6 +34,8 @@ Both paths use a one-shot code, valid for 15 minutes. The signed-in web session 
 
 Group members link the same way before the bot answers them — an unlinked user gets a short reply telling them to send `/start`. Access control matches the other channels: users only reach agents their teams have access to.
 
+To disconnect your Telegram account, unlink it on the Telegram channel page. The bot then treats you as unlinked until you send `/start` again.
+
 ## Usage
 
 ### Direct messages

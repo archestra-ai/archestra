@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { AgentRunModel } from "@/models";
+import { AgentRunModel, AgentWorkspaceModel } from "@/models";
 import { agentRunReconciler } from "./reconciler";
 
 describe("AgentRunReconciler", () => {
   afterEach(() => vi.restoreAllMocks());
 
   test("coalesces overlapping reconciliation ticks", async () => {
+    vi.spyOn(AgentWorkspaceModel, "listForReaping").mockResolvedValue([]);
     let releaseListOpen: ((sessions: never[]) => void) | undefined;
     const listOpen = new Promise<never[]>((resolve) => {
       releaseListOpen = resolve;

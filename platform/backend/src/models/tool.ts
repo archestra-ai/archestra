@@ -87,6 +87,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -2914,8 +2915,18 @@ class ToolModel {
       accessAllTools: boolean;
     }>;
   }> {
+    const principals = visibility
+      ? await ResourcePermissionSubjectModel.resolvePrincipals({
+          userId: visibility.userId,
+          organizationId,
+        })
+      : [];
     const accessibleIds = visibility
-      ? await AgentTeamModel.getUserAccessibleAgentIds(visibility.userId, false)
+      ? await AgentTeamModel.getUserAccessibleAgentIds(
+          visibility.userId,
+          false,
+          principals,
+        )
       : undefined;
     const entityRows = await db
       .select({
@@ -2943,9 +2954,10 @@ class ToolModel {
                 ...((visibility.excludeOtherPersonalTypes?.length ?? 0) > 0
                   ? [
                       or(
-                        AgentModel.notOthersPersonalCondition(
-                          visibility.userId,
-                        ),
+                        AgentModel.notOthersPersonalCondition({
+                          userId: visibility.userId,
+                          principals,
+                        }),
                         notInArray(
                           schema.agentsTable.agentType,
                           visibility.excludeOtherPersonalTypes ?? [],

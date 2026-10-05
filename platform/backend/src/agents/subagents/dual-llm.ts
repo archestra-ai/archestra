@@ -455,6 +455,7 @@ async function resolveBuiltInAgentModel(params: {
       modelName: selection.modelName,
       userId,
       source: "guardrail:dual_llm",
+      internalCall: true,
       baseUrl: selection.baseUrl,
       // The proxy must know which key row supplied the credential: Codex
       // refresh tokens rotate on every redemption, and a loopback call

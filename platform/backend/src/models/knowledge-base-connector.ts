@@ -27,6 +27,9 @@ import type {
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "./resource-permission-subject";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -36,6 +39,7 @@ class KnowledgeBaseConnectorModel {
     canReadAll?: boolean;
     viewerTeamIds?: string[];
     viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
     visibilityScope?: ConnectorVisibilityScope;
     /**
      * When provided (including explicit `null` = Default), restrict to connectors
@@ -54,9 +58,11 @@ class KnowledgeBaseConnectorModel {
             schema.knowledgeBaseConnectorsTable.organizationId,
             params.organizationId,
           ),
-          buildVisibilityFilter({
+          await buildVisibilityFilter({
+            organizationId: params.organizationId,
             canReadAll: params.canReadAll,
             userId: params.viewerUserId,
+            principal: params.viewerPrincipal,
             teamIds: params.viewerTeamIds,
             scope: params.visibilityScope,
           }),
@@ -112,6 +118,7 @@ class KnowledgeBaseConnectorModel {
     canReadAll?: boolean;
     viewerTeamIds?: string[];
     viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
     visibilityScope?: ConnectorVisibilityScope;
     status?: "active" | "deleted";
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
@@ -138,9 +145,11 @@ class KnowledgeBaseConnectorModel {
         ? isNotNull(schema.knowledgeBaseConnectorsTable.deletedAt)
         : notDeleted(schema.knowledgeBaseConnectorsTable),
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
-      buildVisibilityFilter({
+      await buildVisibilityFilter({
+        organizationId,
         canReadAll,
         userId: params.viewerUserId,
+        principal: params.viewerPrincipal,
         teamIds: viewerTeamIds,
         scope: visibilityScope,
       }),
@@ -211,6 +220,7 @@ class KnowledgeBaseConnectorModel {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
       viewerUserId?: string;
+      viewerPrincipal?: GrantPrincipal;
       visibilityScope?: ConnectorVisibilityScope;
       /** When provided (incl. `null` = Default), restrict to this environment. */
       environmentId?: string | null;
@@ -268,9 +278,10 @@ class KnowledgeBaseConnectorModel {
             schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
             knowledgeBaseId,
           ),
-          buildVisibilityFilter({
+          await buildVisibilityFilter({
             canReadAll: params?.canReadAll,
             userId: params?.viewerUserId,
+            principal: params?.viewerPrincipal,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -288,6 +299,7 @@ class KnowledgeBaseConnectorModel {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
       viewerUserId?: string;
+      viewerPrincipal?: GrantPrincipal;
       visibilityScope?: ConnectorVisibilityScope;
     },
   ): Promise<(KnowledgeBaseConnector & { knowledgeBaseId: string })[]> {
@@ -346,9 +358,10 @@ class KnowledgeBaseConnectorModel {
             schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
             knowledgeBaseIds,
           ),
-          buildVisibilityFilter({
+          await buildVisibilityFilter({
             canReadAll: params?.canReadAll,
             userId: params?.viewerUserId,
+            principal: params?.viewerPrincipal,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -1087,9 +1100,13 @@ type ConnectorVisibilityScope = "management" | "query";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-function buildVisibilityFilter(params: {
+async function buildVisibilityFilter(params: {
+  /** Omitted by lookups keyed by knowledge base, which are not fenced to one. */
+  organizationId?: string;
   canReadAll?: boolean;
   userId?: string;
+  /** The caller's already-resolved subjects, when the request has them. */
+  principal?: GrantPrincipal;
   teamIds?: string[];
   scope?: ConnectorVisibilityScope;
 }) {
@@ -1104,9 +1121,15 @@ function buildVisibilityFilter(params: {
   };
   const reach = or(
     params.userId
-      ? ResourcePermissionPolicyModel.grantCondition({
+      ? ResourcePermissionPolicyModel.grantConditionForAny({
           ...context,
-          userId: params.userId,
+          organizationColumn: table.organizationId,
+          principals: params.principal
+            ? [params.principal]
+            : await ResourcePermissionSubjectModel.resolvePrincipals({
+                userId: params.userId,
+                organizationId: params.organizationId,
+              }),
         })
       : // A caller with no user of its own reaches what is published to the
         // organization at large, plus what its teams were granted.

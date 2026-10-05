@@ -31,6 +31,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import SecretModel from "@/models/secret";
 import {
   getSecretValueForLlmProviderApiKey,
@@ -537,6 +538,9 @@ export function createOpenAiCodexFetch(params: {
       return normalizeCodexErrorResponse(retried);
     }
 
+    if (providerApiKeyId && response.status === 400) {
+      await forgetModelRejectedByPlan({ response, providerApiKeyId });
+    }
     return normalizeCodexErrorResponse(response);
   };
 }
@@ -769,6 +773,44 @@ function redemptionErrorResponse(error: unknown): Response {
     );
   }
   throw error;
+}
+
+/** The Codex backend's 400 for a model the account's ChatGPT plan does not include. */
+const MODEL_REJECTED_BY_PLAN =
+  /The '([^']+)' model is not supported when using Codex with a ChatGPT account/;
+
+/**
+ * A model the plan rejects should leave the picker now, not after the key's next
+ * catalog sync: drop it from the key's synced list. Best effort — the request's
+ * own error response is returned either way.
+ */
+async function forgetModelRejectedByPlan(params: {
+  response: Response;
+  providerApiKeyId: string;
+}): Promise<void> {
+  const { response, providerApiKeyId } = params;
+  try {
+    const modelId = (await response.clone().text()).match(
+      MODEL_REJECTED_BY_PLAN,
+    )?.[1];
+    if (!modelId) {
+      return;
+    }
+    const removed = await LlmProviderApiKeyModelLinkModel.unlinkModelFromApiKey(
+      { apiKeyId: providerApiKeyId, provider: "openai", modelId },
+    );
+    if (removed) {
+      logger.info(
+        { providerApiKeyId, modelId },
+        "[OpenAiCodex] removed a model the ChatGPT plan rejected from the key's model list",
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      { providerApiKeyId, err: error },
+      "[OpenAiCodex] failed to drop a model the ChatGPT plan rejected",
+    );
+  }
 }
 
 /**

@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 class PluginTeamModel {
   /**
@@ -22,6 +23,12 @@ class PluginTeamModel {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const principal = params.userId
+      ? await ResourcePermissionSubjectModel.resolvePrincipal({
+          organizationId: params.organizationId,
+          userId: params.userId,
+        })
+      : null;
     const rows = await db
       .select({ id: schema.pluginsTable.id })
       .from(schema.pluginsTable)
@@ -29,10 +36,10 @@ class PluginTeamModel {
         and(
           eq(schema.pluginsTable.organizationId, params.organizationId),
           notDeleted(schema.pluginsTable),
-          params.userId
+          principal
             ? ResourcePermissionPolicyModel.grantCondition({
                 ...context,
-                userId: params.userId,
+                ...principal,
               })
             : ResourcePermissionPolicyModel.organizationAccessCondition(
                 context,

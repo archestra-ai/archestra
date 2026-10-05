@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 interface ModelTeamDetail {
   id: string;
@@ -116,6 +117,10 @@ class ModelTeamModel {
     const { modelIds, organizationId, userId, action } = params;
     if (modelIds.length === 0) return new Set();
     if (userId) {
+      const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+        organizationId,
+        userId,
+      });
       const rows = await db
         .select({ id: schema.modelsTable.id })
         .from(schema.modelsTable)
@@ -123,8 +128,7 @@ class ModelTeamModel {
           and(
             inArray(schema.modelsTable.id, modelIds),
             ResourcePermissionPolicyModel.grantCondition({
-              organizationId,
-              userId,
+              ...principal,
               action,
               resource: "llmModel",
               scopeColumn: schema.modelsTable.id,

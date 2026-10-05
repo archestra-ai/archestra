@@ -64,6 +64,7 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
+import { resolveCallerScope } from "./caller-scope";
 import { EmptyToolArgsSchema } from "./empty-tool-args-schema";
 import {
   catchError,
@@ -493,7 +494,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
     title: "List MCP Server Deployments",
     description:
-      "List all deployed (installed) MCP server instances accessible to the current user. Shows deployment status, server type, catalog info, team, and owner.",
+      "List deployed (installed) MCP server instances the current user can read. The built-in OpenAPPA configuration agent lists them across environments (scope: organization); other agents list only their own environment (scope: agent). Shows deployment status, server type, catalog info, team, and owner.",
     schema: EmptyToolArgsSchema,
     handler: ({ context }) => handleListMcpServerDeployments(context),
   }),
@@ -1479,9 +1480,13 @@ async function handleListMcpServerDeployments(
       }),
       isPredefinedAdmin({ userId: context.userId, organizationId }),
     ]);
-    // Environment isolation: a deployment inherits its environment from its
-    // catalog item, so only the agent's own environment is listed.
-    const environmentId = await AgentModel.findEnvironmentId(contextAgent.id);
+    // A deployment inherits its environment from its catalog item; only the
+    // built-in configuration agent lists past its own environment.
+    const scope = (await resolveCallerScope(context))?.scope ?? "agent";
+    const environmentId =
+      scope === "organization"
+        ? undefined
+        : await AgentModel.findEnvironmentId(contextAgent.id);
     const servers = await McpServerModel.findAll(
       context.userId,
       isAdmin,
@@ -1490,11 +1495,13 @@ async function handleListMcpServerDeployments(
       userIsPredefinedAdmin,
     );
 
-    if (servers.length === 0) {
-      return successResult("No MCP server deployments found.");
-    }
-
-    const lines = [`Found ${servers.length} MCP server deployment(s):`, ""];
+    const lines = [
+      `Scope: ${scope}`,
+      servers.length === 0
+        ? "No MCP server deployments found."
+        : `Found ${servers.length} MCP server deployment(s):`,
+      "",
+    ];
     for (const server of servers) {
       lines.push(`- ${server.name}`);
       lines.push(`  ID: ${server.id}`);
@@ -1511,7 +1518,17 @@ async function handleListMcpServerDeployments(
       lines.push("");
     }
 
-    return successResult(lines.join("\n"));
+    return structuredSuccessResult(
+      {
+        scope,
+        deployments: servers.map(({ id, name, catalogId }) => ({
+          id,
+          name,
+          catalogId,
+        })),
+      },
+      lines.join("\n"),
+    );
   } catch (error) {
     return catchError(error, "listing MCP server deployments");
   }

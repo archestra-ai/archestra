@@ -148,11 +148,6 @@ test.each([
     children: "Ask",
     target: { kind: "mcp_gateway" as const, id: "gateway", name: "Research" },
   },
-  {
-    promptKey: "explainPolicy" as const,
-    children: "Investigate in chat",
-    yellId: "report",
-  },
 ])("$children lists only missing permissions and cannot navigate", async (props) => {
   server.use(
     http.get(`${api}/api/agents/all`, () => HttpResponse.json([agent])),

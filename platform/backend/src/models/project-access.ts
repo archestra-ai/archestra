@@ -5,6 +5,7 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { Project, ProjectLifecycle, ProjectVisibility } from "@/types";
 import ResourcePermissionAccessModel from "./resource-permission-access";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /** Who a project reaches besides its owner, read from its permission policy. */
 type ProjectAudience = {
@@ -56,6 +57,8 @@ class ProjectAccessModel {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const principal =
+      await ResourcePermissionSubjectModel.resolvePrincipal(params);
     const projects = await db
       .select()
       .from(schema.projectsTable)
@@ -64,7 +67,7 @@ class ProjectAccessModel {
           eq(schema.projectsTable.organizationId, params.organizationId),
           notDeleted(schema.projectsTable),
           ResourcePermissionPolicyModel.grantCondition({
-            ...params,
+            ...principal,
             resource: "project",
             scopeColumn: schema.projectsTable.id,
             action: "read",

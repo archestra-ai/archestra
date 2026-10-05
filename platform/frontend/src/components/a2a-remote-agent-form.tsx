@@ -48,6 +48,7 @@ type FormValues = {
   teamIds: string[];
   userIds: string[];
 };
+type CardPrefill = Pick<FormValues, "name" | "description">;
 
 export type A2aRemoteAgentFormSubmission = UpdateA2aRemoteAgentBody;
 
@@ -57,6 +58,8 @@ const AUTH_LABELS: Record<AuthType, string> = {
   api_key: "API key header",
 };
 const ALL_AUTH_TYPES: AuthType[] = ["none", "bearer", "api_key"];
+const MAX_PREVIEW_SKILLS = 5;
+const EMPTY_CARD_PREFILL: CardPrefill = { name: "", description: "" };
 
 export function A2aRemoteAgentForm({
   agent,
@@ -88,6 +91,7 @@ export function A2aRemoteAgentForm({
   const [inspectionPending, setInspectionPending] = useState(false);
   const requestRef = useRef(0);
   const refreshedAgentIdRef = useRef<string | null>(null);
+  const cardPrefillRef = useRef<CardPrefill>({ ...EMPTY_CARD_PREFILL });
   const values = form.watch();
   const keepsLegacySource = !!agent && !storedWellKnownBaseUrl(agent);
   const urlRequiredMessage = keepsLegacySource
@@ -125,6 +129,22 @@ export function A2aRemoteAgentForm({
     setInspectionError(null);
     setInspectionPending(false);
   };
+
+  const prefillDetailsFromCard = useCallback(
+    (result: Inspection) => {
+      const current = form.getValues();
+      const next = nextCardPrefill({
+        current: { name: current.name, description: current.description },
+        previousPrefill: cardPrefillRef.current,
+        card: { name: result.name, description: result.description ?? "" },
+      });
+      cardPrefillRef.current = next.prefill;
+      for (const field of next.updatedFields) {
+        form.setValue(field, next.prefill[field], { shouldDirty: true });
+      }
+    },
+    [form],
+  );
 
   const inspectConnection = useCallback(
     async ({
@@ -190,6 +210,7 @@ export function A2aRemoteAgentForm({
             setCapabilitiesInspected(true);
             setCompatibleStamp(connectionStamp(draft, agent));
             setInspectionPending(false);
+            if (!agent) prefillDetailsFromCard(result);
             onSuccess?.(result, draft);
           },
           onError: (error) => {
@@ -201,7 +222,7 @@ export function A2aRemoteAgentForm({
         },
       );
     },
-    [agent, form, inspectRemoteAgent],
+    [agent, form, inspectRemoteAgent, prefillDetailsFromCard],
   );
 
   useEffect(() => {
@@ -310,6 +331,7 @@ export function A2aRemoteAgentForm({
   const discardChanges = () => {
     const resetValues = valuesFromAgent(agent);
     requestRef.current += 1;
+    cardPrefillRef.current = { ...EMPTY_CARD_PREFILL };
     form.reset(resetValues);
     setInspection(agent ? inspectionFromAgent(agent) : null);
     setCapabilitiesInspected(false);
@@ -551,19 +573,7 @@ export function A2aRemoteAgentForm({
               </p>
             ) : null}
             {inspection && !inspectionError ? (
-              <output
-                aria-label="Agent Card found"
-                className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"
-              >
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
-                <div>
-                  <p className="font-medium">{inspection.name}</p>
-                  <p className="text-muted-foreground">
-                    {inspection.selectedInterface.protocolBinding},{" "}
-                    {inspection.selectedInterface.protocolVersion}
-                  </p>
-                </div>
-              </output>
+              <AgentCardPreview inspection={inspection} />
             ) : null}
             {inspection && !inspectionPending && !connectionNeedsInspection ? (
               <output
@@ -582,7 +592,7 @@ export function A2aRemoteAgentForm({
             description={
               agent
                 ? `Customize how this external agent appears in ${appName}.`
-                : "Optional local details. Empty fields use the Agent Card values."
+                : "Checking the Agent Card fills these in. Edit them to customize; empty fields use the Agent Card values."
             }
           >
             <div className="space-y-2">
@@ -678,6 +688,65 @@ export function A2aRemoteAgentForm({
         </Button>
       </FloatingActionBar>
     </>
+  );
+}
+
+function AgentCardPreview({ inspection }: { inspection: Inspection }) {
+  const card = agentCardPreviewFields(inspection.agentCard);
+  const shownSkills = card.skills.slice(0, MAX_PREVIEW_SKILLS);
+  const hiddenSkillCount = card.skills.length - shownSkills.length;
+  return (
+    <output
+      aria-label="Agent Card found"
+      className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"
+    >
+      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="space-y-0.5">
+          <p className="break-words font-medium">{inspection.name}</p>
+          <p className="text-muted-foreground">
+            {[
+              card.version ? `Version ${card.version}` : null,
+              card.provider ? `by ${card.provider}` : null,
+              `${inspection.selectedInterface.protocolBinding}, ${inspection.selectedInterface.protocolVersion}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+        {inspection.description ? (
+          <p className="line-clamp-3 break-words">{inspection.description}</p>
+        ) : null}
+        {shownSkills.length > 0 ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium uppercase text-muted-foreground">
+              Skills
+            </p>
+            <ul aria-label="Agent Card skills" className="space-y-1">
+              {shownSkills.map((skill, index) => (
+                <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: card skills may repeat names
+                  key={index}
+                  className="min-w-0"
+                >
+                  <span className="font-medium">{skill.name}</span>
+                  {skill.description ? (
+                    <span className="line-clamp-1 break-words text-muted-foreground">
+                      {skill.description}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {hiddenSkillCount > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                +{hiddenSkillCount} more
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </output>
   );
 }
 
@@ -898,4 +967,48 @@ function sameIds(left: string[], right: string[]) {
   if (left.length !== right.length) return false;
   const ids = new Set(right);
   return left.every((id) => ids.has(id));
+}
+function nextCardPrefill({
+  current,
+  previousPrefill,
+  card,
+}: {
+  current: CardPrefill;
+  previousPrefill: CardPrefill;
+  card: CardPrefill;
+}): { prefill: CardPrefill; updatedFields: (keyof CardPrefill)[] } {
+  const prefill = { ...previousPrefill };
+  const updatedFields: (keyof CardPrefill)[] = [];
+  for (const field of ["name", "description"] as const) {
+    // Only replace values the user has not typed or edited: an empty field,
+    // or the exact value a previous Agent Card check filled in.
+    const untouched =
+      !current[field].trim() || current[field] === previousPrefill[field];
+    if (!untouched) continue;
+    prefill[field] = card[field];
+    if (current[field] !== card[field]) updatedFields.push(field);
+  }
+  return { prefill, updatedFields };
+}
+function agentCardPreviewFields(agentCard: Inspection["agentCard"]) {
+  const provider = asRecord(agentCard.provider);
+  const skills = Array.isArray(agentCard.skills) ? agentCard.skills : [];
+  return {
+    version: nonEmptyString(agentCard.version),
+    provider: nonEmptyString(provider?.organization),
+    skills: skills.flatMap((value) => {
+      const skill = asRecord(value);
+      const name = nonEmptyString(skill?.name) ?? nonEmptyString(skill?.id);
+      if (!name) return [];
+      return [{ name, description: nonEmptyString(skill?.description) }];
+    }),
+  };
+}
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+function nonEmptyString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

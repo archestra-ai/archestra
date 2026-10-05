@@ -95,6 +95,7 @@ import {
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
+import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
@@ -674,7 +675,8 @@ function CatalogItemDetails({
                   }
                   description={
                     variant === "local"
-                      ? "Running instances of this server, for one person or shared with a team."
+                      ? getLocalInstallationCopy(item.multitenant === true)
+                          .section
                       : "The credentials this server is used with."
                   }
                 >

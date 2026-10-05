@@ -15,7 +15,7 @@ describe("usage dimension cards", () => {
             cacheReadTokens: 4_000,
             totalTokens: 1_500,
             percentage: 62.5,
-            billedCost: 3.25,
+            billedCost: 2054.4463,
             subscriptionCost: 0,
           },
         ]}
@@ -26,7 +26,7 @@ describe("usage dimension cards", () => {
     expect(screen.getByText("62.5%")).toBeInTheDocument();
     expect(screen.getByText("24")).toBeInTheDocument();
     expect(screen.getByText("1.5K")).toBeInTheDocument();
-    expect(screen.getByText("$3.2500")).toBeInTheDocument();
+    expect(screen.getByText("$2,054.45")).toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: /62\.5% of tokens/i }),
     ).toBeInTheDocument();

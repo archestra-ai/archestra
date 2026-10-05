@@ -10,6 +10,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { type MockInstance, vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
@@ -1026,6 +1027,84 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.json().error.message).toContain(
       "ask an administrator to allow unrecognized clients",
     );
+    expect(providerRequests).toHaveLength(0);
+    expect(events).toHaveLength(0);
+  });
+
+  const guardrailCall = (
+    source: string,
+    proof: Record<string, string> = internalCallHeader(),
+  ) =>
+    app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "x-archestra-source": source,
+        ...proof,
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+
+  test("block mode lets the platform's own guardrail models through ungoverned", async () => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    for (const source of ["guardrail:annotator", "guardrail:dual_llm"]) {
+      const response = await guardrailCall(source);
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    expect(providerRequests).toHaveLength(2);
+    expect(events).toHaveLength(0);
+    const [proofHeader] = Object.keys(internalCallHeader());
+    for (const [, options] of vi.mocked(anthropicAdapterFactory.createClient)
+      .mock.calls) {
+      expect(options.defaultHeaders ?? {}).not.toHaveProperty(proofHeader);
+    }
+  });
+
+  test("block mode blocks a loopback guardrail source without the platform's proof", async () => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    const [proofHeader] = Object.keys(internalCallHeader());
+    for (const proof of [{}, { [proofHeader]: "forged" }]) {
+      const response = await guardrailCall("guardrail:annotator", proof);
+      expect(response.statusCode, response.body).toBe(400);
+    }
+    expect(providerRequests).toHaveLength(0);
+  });
+
+  test("block mode still blocks a credentialed client naming a guardrail source", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      name: "guardrail-source-spoof",
+      providerApiKeys: [
+        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+      ],
+    });
+    for (const remoteAddress of ["127.0.0.1", "203.0.113.20"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress,
+        headers: {
+          authorization: `Bearer ${virtualKey}`,
+          "anthropic-version": "2023-06-01",
+          "x-archestra-source": "guardrail:annotator",
+          ...internalCallHeader(),
+        },
+        payload: payload(false) as Record<string, unknown>,
+      });
+      expect(response.statusCode, response.body).toBe(400);
+    }
     expect(providerRequests).toHaveLength(0);
     expect(events).toHaveLength(0);
   });

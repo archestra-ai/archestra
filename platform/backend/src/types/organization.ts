@@ -345,7 +345,6 @@ const extendedFields = {
   slimChatErrorUi: z.boolean(),
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
-  collapseSidebarByDefault: z.boolean(),
   requireTwoFactor: z.boolean(),
   sessionMaxAgeSeconds: z.number().int().nullable(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
@@ -439,7 +438,6 @@ export const UpdateAppearanceSettingsSchema = z.object({
   slimChatErrorUi: z.boolean().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
-  collapseSidebarByDefault: z.boolean().optional(),
 });
 
 export const UpdateSecuritySettingsSchema = z.object({

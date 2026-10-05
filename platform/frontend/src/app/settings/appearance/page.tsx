@@ -109,9 +109,6 @@ export default function AppearanceSettingsPage() {
   const [animateChatPlaceholders, setAnimateChatPlaceholders] = useState<
     boolean | null
   >(null);
-  const [collapseSidebarByDefault, setCollapseSidebarByDefault] = useState<
-    boolean | null
-  >(null);
 
   // Site-notification draft state is lifted here so the section's changes
   // save through the same floating save bar as the rest of the page.
@@ -157,8 +154,6 @@ export default function AppearanceSettingsPage() {
     chatPlaceholders ?? organization?.chatPlaceholders ?? [];
   const effectiveAnimateChatPlaceholders =
     animateChatPlaceholders ?? organization?.animateChatPlaceholders ?? true;
-  const effectiveCollapseSidebarByDefault =
-    collapseSidebarByDefault ?? organization?.collapseSidebarByDefault ?? false;
   const effectiveNotificationContent =
     notificationContent ?? notification?.content ?? "";
   const effectiveNotificationExpiresAt =
@@ -211,8 +206,7 @@ export default function AppearanceSettingsPage() {
     chatErrorSupportMessage !== null ||
     slimChatErrorUi !== null ||
     chatPlaceholders !== null ||
-    animateChatPlaceholders !== null ||
-    collapseSidebarByDefault !== null;
+    animateChatPlaceholders !== null;
   const hasNotificationChanges =
     notificationContent !== null || notificationExpiresAt !== undefined;
   // A dirty notification without content can't be saved (deleting removes a
@@ -250,9 +244,6 @@ export default function AppearanceSettingsPage() {
     if (animateChatPlaceholders !== null) {
       data.animateChatPlaceholders = animateChatPlaceholders;
     }
-    if (collapseSidebarByDefault !== null) {
-      data.collapseSidebarByDefault = collapseSidebarByDefault;
-    }
     const updatedOrganization = await updateMutation.mutateAsync(data);
     if (!updatedOrganization) {
       return;
@@ -270,7 +261,6 @@ export default function AppearanceSettingsPage() {
     setSlimChatErrorUi(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
-    setCollapseSidebarByDefault(null);
   };
 
   const handleSaveNotification = async () => {
@@ -322,24 +312,6 @@ export default function AppearanceSettingsPage() {
           setHasThemeChanges(themeId !== themeFromBackend);
         }}
       />
-
-      <SettingsBlock
-        title="Layout"
-        description="How the app is laid out for people in your organization."
-      >
-        <AppearanceControlRow
-          id="collapseSidebarByDefault"
-          label="Collapse Sidebar by Default"
-          description="Start with the sidebar collapsed. Each person's own choice to open or collapse it is remembered in their browser and takes precedence."
-        >
-          <Switch
-            id="collapseSidebarByDefault"
-            className="ml-auto"
-            checked={effectiveCollapseSidebarByDefault}
-            onCheckedChange={(checked) => setCollapseSidebarByDefault(checked)}
-          />
-        </AppearanceControlRow>
-      </SettingsBlock>
 
       <SettingsBlock
         title="Branding"
@@ -508,7 +480,6 @@ export default function AppearanceSettingsPage() {
           setSlimChatErrorUi(null);
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
-          setCollapseSidebarByDefault(null);
           resetNotificationDraft();
         }}
         disabledSave={

@@ -4,9 +4,10 @@ import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { expect, test } from "@/test";
 
-const migration = fs
-  .readFileSync(path.join(__dirname, "0510_open_timeslip.sql"), "utf8")
-  .split("--> statement-breakpoint")[1];
+const migration = fs.readFileSync(
+  path.join(__dirname, "0510_remove-simple-view-role-resource.sql"),
+  "utf8",
+);
 
 async function permissions(id: string) {
   const [role] = await db

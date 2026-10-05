@@ -94,12 +94,7 @@ export function AppShell({ children }: AppShellProps) {
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
   const isViewportLocked = isChat || isProjectDetail;
-  const { data: organization, isSuccess: organizationLoaded } =
-    useOrganization();
-  const [sidebarOpen, setSidebarOpen] = useSidebarOpenState({
-    collapsedByDefault: organization?.collapseSidebarByDefault === true,
-    defaultLoaded: organizationLoaded,
-  });
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpenState();
   // Every signed-in user sees the active banner.
   const { data: notification } = useActiveSiteNotification({
     enabled: !isAuthPage && !isBrowserPreview && !isAppRuntime && !isReview,
@@ -265,16 +260,9 @@ function NavAwareSidebarCircleToggle() {
 
 /**
  * Whether the sidebar is open: the person's own last choice, remembered in
- * this browser, or else the organization's Appearance default. Before either
- * is known the sidebar renders open.
+ * this browser, and open until they make one.
  */
-function useSidebarOpenState({
-  collapsedByDefault,
-  defaultLoaded,
-}: {
-  collapsedByDefault: boolean;
-  defaultLoaded: boolean;
-}): [boolean, (open: boolean) => void] {
+function useSidebarOpenState(): [boolean, (open: boolean) => void] {
   const [choice, setChoice] = useState<boolean | null>(null);
   const remembered = useSyncExternalStore(
     subscribeToStorage,
@@ -282,8 +270,7 @@ function useSidebarOpenState({
     () => null,
   );
 
-  const open =
-    choice ?? remembered ?? (defaultLoaded ? !collapsedByDefault : true);
+  const open = choice ?? remembered ?? true;
   const setOpen = useCallback((next: boolean) => {
     setChoice(next);
     try {

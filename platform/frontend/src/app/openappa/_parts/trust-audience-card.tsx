@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,13 +17,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useBatteries } from "@/lib/openappa-batteries.query";
 import {
   type AudienceLevel,
   useTrustAudience,
 } from "@/lib/openappa-trust-audience.query";
+import { cn } from "@/lib/utils/tailwind";
+import { BatteryIcon } from "./battery-icon";
 import { policyLineHref, policyLineLabel } from "./policy-line-href";
 
-/** The Overview's trust chain and audiences, with who belongs to each audience. */
+/** The Overview's trust chain, and its audiences nested by containment. */
 export function TrustAudienceCard() {
   const view = useTrustAudience();
 
@@ -46,27 +50,32 @@ export function TrustAudienceCard() {
         ) : !view.data ? (
           <Skeleton className="h-52 w-full" />
         ) : (
-          <div className="grid items-center gap-8 md:grid-cols-[minmax(0,1fr)_15rem]">
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <h3 className="text-xs font-medium text-muted-foreground">
-                  Trust
-                </h3>
-                <TrustChain levels={view.data.trust} />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-xs font-medium text-muted-foreground">
-                  Audience
-                </h3>
-                <ul className="divide-y divide-border/60">
-                  {view.data.audiences.map((level) => (
-                    <AudienceRow key={level.name} level={level} />
-                  ))}
-                </ul>
-              </div>
-            </div>
-            <AudienceDiagram audiences={view.data.audiences} />
-          </div>
+          <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-4 gap-y-5 text-sm">
+            <dt className="text-xs font-medium text-muted-foreground">Trust</dt>
+            <dd className="flex flex-wrap items-center gap-1.5">
+              {view.data.trust.map((name, index) => (
+                <Fragment key={name}>
+                  {index > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="text-xs text-muted-foreground"
+                    >
+                      →
+                    </span>
+                  )}
+                  <Badge variant="outline" className="font-mono font-normal">
+                    {name}
+                  </Badge>
+                </Fragment>
+              ))}
+            </dd>
+            <dt className="pt-3 text-xs font-medium text-muted-foreground">
+              Audience
+            </dt>
+            <dd>
+              <AudienceNest audiences={view.data.audiences} />
+            </dd>
+          </dl>
         )}
       </CardContent>
     </Card>
@@ -77,13 +86,7 @@ export function TrustAudienceCard() {
 // Internal components
 // =============================================================================
 
-/** Each level's color, shared by its legend dot and its ring. */
-function toneOf(name: string): string {
-  if (name === "public") return "var(--muted-foreground)";
-  if (name === "internal") return "var(--chart-1)";
-  if (name === "self") return "var(--chart-2)";
-  return "var(--chart-3)";
-}
+type SelectorRef = Extract<AudienceLevel, { kind: "mapped" }>["from"][number];
 
 /** Who the runtime counts in a level it has no sources for. */
 const UNMAPPED_MEMBERS: Record<string, string> = {
@@ -92,50 +95,72 @@ const UNMAPPED_MEMBERS: Record<string, string> = {
   self: "The session's user",
 };
 
-function TrustChain({ levels }: { levels: string[] }) {
+/**
+ * `public` ⊇ `internal` ⊇ `self` as boxes inside boxes; each group sits inside
+ * the level it is declared `within`.
+ */
+function AudienceNest({ audiences }: { audiences: AudienceLevel[] }) {
+  const level = (name: string) => audiences.find((each) => each.name === name);
+  const groupsWithin = (name: string) =>
+    audiences
+      .filter(
+        (each) =>
+          each.kind === "mapped" &&
+          each.name.startsWith("@") &&
+          (each.within ?? "public") === name,
+      )
+      .map((group) => <LevelBox key={group.name} level={group} />);
+  const publicLevel = level("public");
+  const internal = level("internal");
+  const self = level("self");
+  if (!publicLevel || !internal || !self) return null;
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {levels.map((name, index) => (
-        <Fragment key={name}>
-          {index > 0 && (
-            <span aria-hidden="true" className="text-xs text-muted-foreground">
-              →
-            </span>
-          )}
-          <Badge variant="outline" className="font-mono font-normal">
-            {name}
-          </Badge>
-        </Fragment>
-      ))}
-    </div>
+    <LevelBox level={publicLevel} className="bg-muted/40">
+      <LevelBox level={internal} className="bg-muted/30">
+        {groupsWithin("internal")}
+        <LevelBox level={self}>{groupsWithin("self")}</LevelBox>
+      </LevelBox>
+      {groupsWithin("public")}
+    </LevelBox>
   );
 }
 
-function AudienceRow({ level }: { level: AudienceLevel }) {
+function LevelBox({
+  level,
+  className,
+  children,
+}: {
+  level: AudienceLevel;
+  className?: string;
+  children?: ReactNode;
+}) {
+  const unsourced = level.kind !== "mapped" && level.name !== "public";
+  const nested = Array.isArray(children)
+    ? children.flat().some(Boolean)
+    : Boolean(children);
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
-      <span className="flex w-28 shrink-0 items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="size-2 shrink-0 rounded-full"
-          style={{ backgroundColor: toneOf(level.name) }}
-        />
-        <span className="font-mono font-medium">{level.name}</span>
-      </span>
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+    <div
+      className={cn(
+        "rounded-lg border bg-card p-3",
+        unsourced && "border-dashed",
+        className,
+      )}
+    >
+      <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="w-20 shrink-0 font-mono font-medium">
+          {level.name}
+        </span>
         {level.kind === "mapped" ? (
           <>
-            {level.from.map((ref) => (
-              <SourceChip key={`${ref.source}:${ref.selector}`} refTo={ref} />
-            ))}
-            {level.within && (
-              <span className="text-xs text-muted-foreground">
-                within {level.within}
-              </span>
-            )}
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              {level.from.map((ref) => (
+                <SourceChip key={`${ref.source}:${ref.selector}`} refTo={ref} />
+              ))}
+            </span>
             <Link
               href={policyLineHref({ entry: null, line: level.mappingLine })}
-              className="ml-auto font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              className="font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             >
               {policyLineLabel({ entry: null, line: level.mappingLine })}
             </Link>
@@ -145,135 +170,61 @@ function AudienceRow({ level }: { level: AudienceLevel }) {
             {UNMAPPED_MEMBERS[level.name]}
           </span>
         )}
-      </span>
-    </li>
+      </div>
+      {nested && <div className="mt-3 space-y-2">{children}</div>}
+    </div>
   );
 }
 
-type SelectorRef = Extract<AudienceLevel, { kind: "mapped" }>["from"][number];
-
+/** A source: its battery's icon, which opens that battery, then its selector. */
 function SourceChip({ refTo }: { refTo: SelectorRef }) {
+  const batteries = useBatteries();
+  const catalog = useInternalMcpCatalog();
+  const battery = refTo.declaredBy?.battery;
+  const summary = batteries.data?.find((each) => each.name === battery);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Link
-          href={policyLineHref(refTo)}
-          className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-xs transition-colors hover:bg-muted"
-        >
-          {refTo.source}:{refTo.selector}
-        </Link>
-      </TooltipTrigger>
-      <TooltipContent>
-        {refTo.declaredBy ? (
-          <span>
-            From the {refTo.declaredBy.battery} battery,{" "}
-            {policyLineLabel(refTo)}
-          </span>
-        ) : (
-          <span>No included battery declares this source</span>
-        )}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-/**
- * The chain as circles that touch at the bottom, so each level visibly holds
- * the next: `public` ⊇ `internal` ⊇ `self`. Up to two groups within `internal`
- * sit beside `self`; each source is a bubble on its level's ring.
- */
-function AudienceDiagram({ audiences }: { audiences: AudienceLevel[] }) {
-  const byName = new Map(audiences.map((level) => [level.name, level]));
-  const groups = audiences
-    .filter(
-      (level) =>
-        level.kind === "mapped" &&
-        level.name.startsWith("@") &&
-        level.within === "internal",
-    )
-    .slice(0, GROUP_SLOTS.length);
-
-  const ring = (circle: {
-    name: string;
-    cx: number;
-    cy: number;
-    r: number;
-  }) => {
-    const level = byName.get(circle.name);
-    if (!level) return null;
-    const tone = toneOf(circle.name);
-    const isGroup = circle.name.startsWith("@");
-    const sources = level.kind === "mapped" && !isGroup ? level.from : [];
-    return (
-      <g key={circle.name}>
-        <circle
-          cx={circle.cx}
-          cy={circle.cy}
-          r={circle.r}
-          fill={tone}
-          fillOpacity={0.07}
-          stroke={tone}
-          strokeOpacity={0.55}
-          strokeWidth={1.25}
-          strokeDasharray={
-            level.kind === "mapped" || circle.name === "public"
-              ? undefined
-              : "3 3"
-          }
-        />
-        {isGroup ? (
-          <title>{circle.name}</title>
-        ) : (
-          <text
-            x={circle.cx}
-            y={circle.cy - circle.r + 16}
-            textAnchor="middle"
-            className="fill-foreground font-mono text-[10px]"
-          >
-            {circle.name}
-          </text>
-        )}
-        {sources.map((ref, index) => {
-          const angle = ((52 + index * 16) * Math.PI) / 180;
-          return (
-            <circle
-              key={`${ref.source}:${ref.selector}`}
-              cx={circle.cx + circle.r * Math.sin(angle)}
-              cy={circle.cy - circle.r * Math.cos(angle)}
-              r={4.5}
-              fill={tone}
-              stroke="var(--card)"
-              strokeWidth={2}
+    <span className="inline-flex items-center gap-1 rounded-md border bg-background py-0.5 pr-1.5 pl-0.5 font-mono text-xs">
+      {battery && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link
+              href={`/openappa/batteries?${new URLSearchParams({ battery })}`}
+              aria-label={`Open the ${battery} battery`}
+              className="rounded-sm p-0.5 hover:bg-muted"
             >
-              <title>
-                {ref.source}:{ref.selector}
-              </title>
-            </circle>
-          );
-        })}
-      </g>
-    );
-  };
-
-  return (
-    <svg
-      viewBox="0 0 240 200"
-      role="img"
-      aria-label="public contains internal, which contains self"
-      className="mx-auto w-full max-w-60"
-    >
-      {ring({ name: "public", cx: 120, cy: 102, r: 96 })}
-      {ring({ name: "internal", cx: 120, cy: 132, r: 66 })}
-      {groups.map((group, index) =>
-        ring({ name: group.name, ...GROUP_SLOTS[index], r: 14 }),
+              <BatteryIcon
+                name={battery}
+                bundled={summary?.source === "bundled"}
+                catalogIds={
+                  summary?.installs.map((install) => install.catalogId) ?? []
+                }
+                catalog={catalog.data ?? []}
+                size={16}
+              />
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent>
+            <span>Open the {battery} battery</span>
+          </TooltipContent>
+        </Tooltip>
       )}
-      {ring({ name: "self", cx: 120, cy: 162, r: 36 })}
-    </svg>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            href={policyLineHref(refTo)}
+            className="underline-offset-4 hover:underline"
+          >
+            {refTo.source}:{refTo.selector}
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent>
+          {battery ? (
+            <span>{policyLineLabel(refTo)}</span>
+          ) : (
+            <span>No included battery declares this source</span>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </span>
   );
 }
-
-/** Where a group within `internal` fits: above `self`, inside `internal`'s ring. */
-const GROUP_SLOTS = [
-  { cx: 100, cy: 106 },
-  { cx: 140, cy: 106 },
-];

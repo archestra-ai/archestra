@@ -77,6 +77,19 @@ describe("openappaFailure", () => {
     expect(failure.message.length).toBeLessThan(420);
   });
 
+  test("fails a retained session closed when replay retention has expired", () => {
+    const failure = openappaFailure(
+      new Error("OpenAPPA replay retention expired"),
+    );
+
+    expect(failure.statusCode).toBe(410);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).toBe(
+      "OpenAPPA could not safely complete this operation: replay retention expired. Start a new session instead of continuing this one.",
+    );
+  });
+
   test("does not wrap a failure twice", () => {
     const first = openappaFailure(new Error("unsupported policy: x"));
 

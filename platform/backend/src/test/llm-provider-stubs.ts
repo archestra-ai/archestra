@@ -64,9 +64,13 @@ export interface AnthropicStubOptions {
   streamingToolUse?: {
     name: string;
     input: Record<string, unknown>;
-    /** The call id; `toolu_test_weather` when absent. */
+    /** The call id; `toolUseId`, then `toolu_test_weather`, when absent. */
     id?: string;
   };
+  /** Provider message id. Defaults to the historical single-turn fixture id. */
+  messageId?: string;
+  /** Provider tool-use id. Defaults to the historical single-turn fixture id. */
+  toolUseId?: string;
 }
 
 export interface GeminiStubOptions {
@@ -162,7 +166,7 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
         }
 
         return {
-          id: "msg-test-anthropic",
+          id: options.messageId ?? "msg-test-anthropic",
           type: "message",
           container: null,
           role: "assistant",
@@ -176,7 +180,10 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
                   },
                   {
                     type: "tool_use",
-                    id: options.nonStreamingToolUse?.id ?? "toolu_test_weather",
+                    id:
+                      options.nonStreamingToolUse?.id ??
+                      options.toolUseId ??
+                      "toolu_test_weather",
                     name: options.nonStreamingToolUse?.name ?? "get_weather",
                     input: options.nonStreamingToolUse?.input ?? {
                       location: "SF",
@@ -451,7 +458,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
     {
       type: "message_start",
       message: {
-        id: "msg-test-anthropic",
+        id: options.messageId ?? "msg-test-anthropic",
         type: "message",
         container: null,
         role: "assistant",
@@ -487,7 +494,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 1,
         content_block: {
           type: "tool_use",
-          id: "toolu_test_weather",
+          id: options.toolUseId ?? "toolu_test_weather",
           caller: { type: "direct" },
           name: "get_weather",
           input: {},
@@ -518,7 +525,10 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 0,
         content_block: {
           type: "tool_use",
-          id: options.streamingToolUse?.id ?? "toolu_test_weather",
+          id:
+            options.streamingToolUse?.id ??
+            options.toolUseId ??
+            "toolu_test_weather",
           caller: { type: "direct" },
           name: options.streamingToolUse?.name ?? "get_weather",
           input: {},

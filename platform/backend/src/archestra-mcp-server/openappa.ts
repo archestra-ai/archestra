@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
   BUILT_IN_AGENT_IDS,
@@ -19,12 +20,17 @@ import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
+  type ControlOutcomeClass,
+  controlStorageDisposition,
+} from "@/openappa/control-outcome";
+import {
   coverageVisibility,
   openappaCoverageService,
 } from "@/openappa/coverage";
 import {
   clearHitlReview,
   consumeHitlRuling,
+  formatHitlReviewMessage,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import {
@@ -45,6 +51,7 @@ import {
   peerProofAuthorizes,
   verifyPeerProof,
 } from "@/openappa/peer-claims";
+import { AppaRewriteReplay } from "@/openappa/rewrite-replay";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -674,6 +681,9 @@ const registry = defineArchestraTools([
       // `plan` remains in the exact original arguments for receipt matching but
       // is not runtime remedy input.
       const { plan: _plan, ...remedy } = submittedSemantic;
+      // The echo's tool_use id is the wrapped provider call, not the offer
+      // or the blocked call the offer names.
+      const toolCallId = execution?.call_id ?? context.currentToolCallId;
       const claims = verifyOfferClaims(
         {
           protected: protectedHeader,
@@ -682,18 +692,41 @@ const registry = defineArchestraTools([
         },
         config.openappa.offerSigningSecret,
       );
+      const callerId = context.userId ? `user:${context.userId}` : undefined;
       if (
         !context.organizationId ||
+        !callerId ||
         !claims ||
         claims.offer_id !== submittedSemantic.offer_id ||
-        claims.organization_id !== context.organizationId
+        claims.organization_id !== context.organizationId ||
+        !offerOwnerCanBeSpentBy(claims.caller_id, callerId)
       ) {
         return unknownOfferResult();
       }
 
-      // Check if this offer requires human review before executing or acquiring locks.
-      // Session routing uses the verified claims, so the review lookup
-      // requires no offer-owner table.
+      if (!toolCallId) {
+        throw new ApiError(409, "OpenAPPA cannot retain this control result");
+      }
+      const outcomeSession = {
+        organization_id: claims.organization_id,
+        session_id: claims.session_id,
+        ...(claims.caller_id ? { caller_id: claims.caller_id } : {}),
+        ...(claims.parent_id ? { parent_id: claims.parent_id } : {}),
+      };
+      const reservation = await AppaRewriteReplay.reserveControlOutcome({
+        session: outcomeSession,
+        toolCallId,
+        spenderId: callerId,
+        requestIdentity: remedyRequestIdentity({
+          claims,
+          arguments: submittedSemantic,
+          controlToolName: execution?.tool_name ?? null,
+          namespace: execution?.namespace ?? null,
+        }),
+        encryptedChat: controlStorageDisposition(context),
+      });
+
+      // Route review lookup through the verified owner after reserving its outcome.
       const review = await loadOfferReview({
         organizationId: context.organizationId,
         sessionId: claims.session_id,
@@ -703,12 +736,7 @@ const registry = defineArchestraTools([
       let ruling: "approve" | "deny" | undefined;
       let precheckRefusal: string | undefined;
       if (review) {
-        const reviewSession = {
-          organization_id: claims.organization_id,
-          session_id: claims.session_id,
-          ...(claims.caller_id ? { caller_id: claims.caller_id } : {}),
-          ...(claims.parent_id ? { parent_id: claims.parent_id } : {}),
-        };
+        const reviewSession = outcomeSession;
         // Check that the reviewed call can run before prompting the user.
         // A refusal is recorded as this remedy's result.
         const precheck = {
@@ -742,15 +770,24 @@ const registry = defineArchestraTools([
                 text: review.text,
                 ...(review.tool ? { tool: review.tool } : {}),
                 ...(review.arguments ? { arguments: review.arguments } : {}),
+                ...(review.restrictions
+                  ? { restrictions: review.restrictions }
+                  : {}),
                 remedyArguments: unstampedRemedyArguments(args),
               },
             });
-            return nativeReviewRequiredResult(remedy.offer_id);
+            const pending = nativeReviewRequiredResult(remedy.offer_id);
+            await completeControlOutcome({
+              reservation,
+              outcome: "pending",
+              result: pending,
+            });
+            return pending;
           } else if (context.elicitation) {
             // Archestra Chat keeps its inline approval card.
             const outcome = await context.elicitation.elicit({
               toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-              message: review.text,
+              message: formatHitlReviewMessage(review.text),
               requestedSchema: HITL_RULING_SCHEMA,
               kind: "openappa_review",
               ...(review.tool ? { reviewedTool: review.tool } : {}),
@@ -767,20 +804,31 @@ const registry = defineArchestraTools([
 
       const byOffer = await executeRemedyByOffer({
         organizationId: context.organizationId,
-        ...(context.userId ? { callerId: `user:${context.userId}` } : {}),
+        callerId,
         sessionId: claims.session_id,
         ...(claims.parent_id ? { parentId: claims.parent_id } : {}),
         ...(claims.caller_id ? { ownerCallerId: claims.caller_id } : {}),
         ...(claims.tool ? { tool: claims.tool } : {}),
         ...(claims.spelling ? { spelling: claims.spelling } : {}),
         ...(claims.dispatch ? { dispatch: claims.dispatch } : {}),
-        toolCallId: execution?.call_id ?? context.currentToolCallId,
+        toolCallId,
         controlToolName: execution?.tool_name,
         originalArguments:
           originalArguments ?? JSON.stringify(submittedSemantic),
         args: remedy,
         ruling,
         ...(precheckRefusal ? { precheckRefusal } : {}),
+      });
+      await completeControlOutcome({
+        reservation,
+        outcome: remedyOutcomeClass({
+          review: review !== null,
+          ruling,
+          precheckRefusal,
+          known: byOffer.known,
+          isError: byOffer.result.isError === true,
+        }),
+        result: byOffer.result,
       });
       if (!ruling || !byOffer.known) return byOffer.result;
       // Display-only: the chat card displays the human ruling.
@@ -838,6 +886,72 @@ function unknownOfferResult() {
       },
     ],
   };
+}
+
+function offerOwnerCanBeSpentBy(
+  owner: string | null,
+  spender: string | undefined,
+): boolean {
+  if (!owner || !spender) return false;
+  if (owner.startsWith("user:")) return owner === spender;
+  if (owner === "app:" || owner === "virtual-key:") return false;
+  // Match native authorization: credential and opaque owners are org-scoped.
+  return true;
+}
+
+function remedyOutcomeClass(params: {
+  review: boolean;
+  ruling?: "approve" | "deny";
+  precheckRefusal?: string;
+  known: boolean;
+  isError: boolean;
+}): ControlOutcomeClass {
+  if (params.precheckRefusal) return "refused";
+  if (params.ruling === "deny") return "denied";
+  if (params.ruling === "approve" && params.known && !params.isError) {
+    return "applied";
+  }
+  if (params.ruling === "approve") return "canceled";
+  if (!params.review && params.known && !params.isError) return "applied";
+  return "canceled";
+}
+
+function remedyRequestIdentity(value: object): string {
+  const serialized = JSON.stringify(value, (_key, nested: unknown) => {
+    if (
+      typeof nested !== "object" ||
+      nested === null ||
+      Array.isArray(nested)
+    ) {
+      return nested;
+    }
+    return Object.fromEntries(
+      Object.entries(nested).sort(([left], [right]) =>
+        left < right ? -1 : left > right ? 1 : 0,
+      ),
+    );
+  });
+  return createHash("sha256").update(serialized).digest("hex");
+}
+
+async function completeControlOutcome(params: {
+  reservation: Awaited<
+    ReturnType<typeof AppaRewriteReplay.reserveControlOutcome>
+  >;
+  outcome: ControlOutcomeClass;
+  result: CallToolResult;
+}): Promise<void> {
+  const bytes = params.result.content
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .filter((text) => text.length > 0)
+    .join("\n");
+  if (bytes.length === 0) {
+    throw new ApiError(409, "OpenAPPA cannot retain this control result");
+  }
+  await params.reservation.complete({
+    outcome: params.outcome,
+    bytes,
+  });
 }
 
 function nativeReviewRequiredResult(offerId: string): CallToolResult {

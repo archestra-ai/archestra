@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import {
   buildElicitationMandateInstruction,
@@ -34,6 +34,7 @@ import {
   getHitlAskUserArguments,
   getHitlReview,
   recordHitlRuling,
+  stageLoadedHitlReview,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import type { OfferJws } from "@/openappa/offer-claims";
@@ -44,11 +45,13 @@ import {
   unsignedOfferClaims,
 } from "@/openappa/offer-claims";
 import {
+  containsPeerProof,
   PEER_PROOF_ARGUMENT,
   signPeerProof,
   stripPeerProofs,
 } from "@/openappa/peer-claims";
 import { underscoreLabeledPlatformToolName } from "@/openappa/request";
+import type { AppaRewriteReplay } from "@/openappa/rewrite-replay";
 import {
   type AppaChildReturnRecord,
   admitPeerMessage,
@@ -61,6 +64,7 @@ import {
   evaluateToolCalls,
   loadChildAddresses,
   loadChildReturns,
+  loadOfferReview,
   notePrompt,
   type OpenAppaSession,
   processProxyResults,
@@ -99,6 +103,7 @@ import type {
 } from "@/proxy/plugins/registry";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
+import type { EncryptedChatAuditDisposition } from "@/routes/proxy/utils/encrypted-chat-session";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
@@ -109,8 +114,13 @@ import {
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
 import {
+  APPA_AUXILIARY_ANALYSIS,
   APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_REPLAY_APPROVED_TEXT,
+  APPA_REPLAY_ENCRYPTION,
+  APPA_REPLAY_ENVELOPE,
+  APPA_REPLAY_SESSION,
   type AppaChildTrajectory,
   type AppaClientAdapter,
   type AppaRelayArrival,
@@ -239,6 +249,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       issueChildTrajectoryReceipt(context, binding.session, trajectory.child);
     }
     this.bindings.set(context.resources, binding);
+    context.resources.set(APPA_REPLAY_SESSION, binding.session);
   }
 
   async onToolResults(
@@ -352,6 +363,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const result = await processProxyResults({
       session: this.governedSession(binding),
       results: nonHandbackResults,
+      encryptedChat: context.resources.get(APPA_REPLAY_ENCRYPTION) as
+        | EncryptedChatAuditDisposition
+        | undefined,
       canonicalize: (name: string, namespace?: string) =>
         this.canonicalize(binding, { name, namespace }),
       isUserQuestion: (answer) =>
@@ -413,97 +427,155 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
     const binding = this.bindings.get(context.resources);
-    if (binding) enterCapturedGuardrailsActivation("active");
-    binding?.adapter?.stripCarrierMetadata(context.request);
-    stripPeerProofs(context.request);
-    // A compaction summarizes the history, so an unchecked message would
-    // survive into the summary: messages are admitted before either turn.
-    if (binding) {
+    if (!binding) {
+      if (containsPeerProof(context.request)) {
+        throw new ApiError(
+          409,
+          "OpenAPPA cannot forward a peer proof while Guardrails enforcement is off",
+        );
+      }
+      return;
+    }
+    if (!context.resources.has(APPA_REPLAY_SESSION)) {
+      // Quoted analysis and other non-trajectory side calls have no ledger.
+      // Stripping ids, parsing relay tags, or appending guidance would be an
+      // unrecorded provider-visible rewrite, and would treat quoted text as a
+      // carrier. Peer proofs never take this path: they keep the fail-closed
+      // branch below.
+      if (context.resources.has(APPA_AUXILIARY_ANALYSIS)) return;
+      const before = JSON.stringify(context.request);
+      enterCapturedGuardrailsActivation("active");
+      binding.adapter?.stripCarrierMetadata(context.request);
+      stripPeerProofs(context.request);
       await admitRelayArrivals({
         binding,
         session: this.governedSession(binding),
         request: context.request,
       });
+      if (JSON.stringify(context.request) !== before) {
+        throw new ApiError(
+          409,
+          "OpenAPPA cannot record a provider-visible rewrite without a replay session",
+        );
+      }
+      return;
     }
-    if (binding?.compaction) return;
-    if (binding?.adapter?.id === "codex") {
-      appendNativeDelegationGuidance(context);
-    }
-    if (binding && binding.adapter?.id !== "archestra-chat") {
-      if (binding.request.tools?.control) {
-        appendQuestionContinuation({
+    const transform = async () => {
+      if (binding) enterCapturedGuardrailsActivation("active");
+      binding?.adapter?.stripCarrierMetadata(context.request);
+      stripPeerProofs(context.request);
+      // A compaction summarizes the history, so an unchecked message would
+      // survive into the summary: messages are admitted before either turn.
+      if (binding) {
+        await admitRelayArrivals({
+          binding,
+          session: this.governedSession(binding),
           request: context.request,
-          interactionType: context.interactionType,
-          guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
         });
       }
-      const askUser = binding.request.tools?.askUser;
-      const nativeQuestion =
-        binding.adapter?.nativeQuestion &&
-        declaresNativeQuestion(binding, binding.adapter.nativeQuestion.toolName)
-          ? binding.adapter.nativeQuestion.toolName
-          : undefined;
-      const askUserTool = askUser?.name;
-      if (askUserTool || nativeQuestion) {
-        appendQuestionContinuation({
+      if (binding?.compaction) return;
+      if (
+        binding?.child?.lineage &&
+        binding.adapter?.id === "opencode" &&
+        isRecord(context.request)
+      ) {
+        anchorConstantGuidance({
           request: context.request,
           interactionType: context.interactionType,
-          guidance: buildElicitationMandateInstruction({
-            askUserToolName: askUserTool,
-            nativeQuestionToolName: nativeQuestion,
-          }),
+          guidance: OPENCODE_DELEGATED_TASK_GUIDANCE,
         });
       }
-    }
-    if (binding && binding.pendingHitlReviewOfferIds.length > 0) {
-      const offerIds = binding.pendingHitlReviewOfferIds;
-      binding.pendingHitlReviewOfferIds = [];
-      appendQuestionContinuation({
-        request: context.request,
-        interactionType: context.interactionType,
-        guidance: hitlQuestionGuidance(offerIds),
-      });
-      requireCodexToolCall({ binding, context });
-    }
-    if (binding?.requiresRemedyContinuation) {
-      binding.requiresRemedyContinuation = false;
-      appendQuestionContinuation({
-        request: context.request,
-        interactionType: context.interactionType,
-        guidance: REMEDY_OFFER_CONTINUATION_GUIDANCE,
-      });
-      requireCodexToolCall({ binding, context });
-    }
-    if (binding && binding.nativeHitlRulings.length > 0) {
-      const rulings = binding.nativeHitlRulings;
-      binding.requiresQuestionContinuation = false;
-      appendQuestionContinuation({
-        request: context.request,
-        interactionType: context.interactionType,
-        guidance: hitlDecisionGuidance(rulings),
-      });
-      if (rulings.some((entry) => entry.ruling === "approve")) {
+      if (
+        binding &&
+        nativeHandbackBoundary(binding) &&
+        isRecord(context.request)
+      ) {
+        const guidance = binding.adapter?.nativeHandbackGuidance?.();
+        if (guidance) {
+          anchorConstantGuidance({
+            request: context.request,
+            interactionType: context.interactionType,
+            guidance,
+          });
+        }
+      }
+      if (binding?.adapter?.id === "codex") {
+        appendNativeDelegationGuidance(context);
+      }
+      if (
+        binding &&
+        binding.adapter?.id !== "archestra-chat" &&
+        isRecord(context.request)
+      ) {
+        if (binding.request.tools?.control) {
+          anchorConstantGuidance({
+            request: context.request,
+            interactionType: context.interactionType,
+            guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+          });
+        }
+        const askUser = binding.request.tools?.askUser;
+        const nativeQuestion =
+          binding.adapter?.nativeQuestion &&
+          declaresNativeQuestion(
+            binding,
+            binding.adapter.nativeQuestion.toolName,
+          )
+            ? binding.adapter.nativeQuestion.toolName
+            : undefined;
+        const askUserTool = askUser?.name;
+        if (askUserTool || nativeQuestion) {
+          anchorConstantGuidance({
+            request: context.request,
+            interactionType: context.interactionType,
+            guidance: buildElicitationMandateInstruction({
+              askUserToolName: askUserTool,
+              nativeQuestionToolName: nativeQuestion,
+            }),
+          });
+          anchorConstantGuidance({
+            request: context.request,
+            interactionType: context.interactionType,
+            guidance: QUESTION_CONTINUATION_GUIDANCE,
+          });
+        }
+      }
+      if (binding && binding.pendingHitlReviewOfferIds.length > 0) {
+        binding.pendingHitlReviewOfferIds = [];
         requireCodexToolCall({ binding, context });
       }
+      if (binding?.requiresRemedyContinuation) {
+        binding.requiresRemedyContinuation = false;
+        requireCodexToolCall({ binding, context });
+      }
+      if (binding && binding.nativeHitlRulings.length > 0) {
+        const rulings = binding.nativeHitlRulings;
+        binding.requiresQuestionContinuation = false;
+        if (rulings.some((entry) => entry.ruling === "approve")) {
+          requireCodexToolCall({ binding, context });
+        }
+      }
+      if (!binding || (!binding.request.tools && !binding.session.parent_id))
+        return;
+      if (!binding.request.promptOperationId) {
+        // Tool-result requests continue the active turn without a new prompt.
+        return;
+      }
+      const session = this.governedSession(binding);
+      await notePrompt(
+        session,
+        binding.request.promptOperationId,
+        binding.child?.lineage,
+      );
+    };
+    const recorder = context.resources.get(APPA_REPLAY_ENVELOPE) as
+      | AppaRewriteReplay
+      | undefined;
+    if (recorder) {
+      await recorder.rewriteEnvelope({ request: context.request, transform });
+    } else {
+      await transform();
     }
-    if (binding?.requiresQuestionContinuation) {
-      appendQuestionContinuation({
-        request: context.request,
-        interactionType: context.interactionType,
-      });
-    }
-    if (!binding || (!binding.request.tools && !binding.session.parent_id))
-      return;
-    if (!binding.request.promptOperationId) {
-      // Tool-result requests continue the active turn without a new prompt.
-      return;
-    }
-    const session = this.governedSession(binding);
-    await notePrompt(
-      session,
-      binding.request.promptOperationId,
-      binding.child?.lineage,
-    );
   }
 
   async onPrepareToolCalls(
@@ -674,7 +746,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const nativeQuestion = this.asNativeQuestion(binding, prepared);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
-      const issued = withNativeQuestionId(binding, prepared);
+      const issued = withNativeQuestionId(binding, prepared, offerIds);
       if (issued) {
         prepared = issued.call;
         issuedNativeQuestions.push({ ...issued.question, offerIds });
@@ -929,6 +1001,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         released.push(handback.call);
         if (calls.length === 1) {
           binding.completedHandbackReturn = handback.returnText;
+          context.resources.set(
+            APPA_REPLAY_APPROVED_TEXT,
+            handback.approvedText,
+          );
         }
         continue;
       }
@@ -1119,6 +1195,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     if (binding?.compaction) return { decision: "release" };
     if (binding?.completedHandbackReturn !== undefined && context.streaming) {
+      if (nativeHandbackBoundary(binding)) {
+        return { decision: "release" };
+      }
       return {
         decision: "replace",
         responseText: binding.completedHandbackReturn,
@@ -1129,6 +1208,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     if (!binding.request.turnEndOperationId) {
       throw new ApiError(503, "OpenAPPA could not safely end the child turn");
+    }
+    if (nativeHandbackBoundary(binding)) {
+      await endTurn(
+        this.governedSession(binding),
+        binding.request.turnEndOperationId,
+      );
+      return { decision: "release" };
     }
     enterCapturedGuardrailsActivation("active");
     // Check correlation data and the signing key before ChildEnd.
@@ -1153,6 +1239,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     });
     const admitted =
       outcome.decision === "release" ? context.responseText : outcome.content;
+    context.resources.set(APPA_REPLAY_APPROVED_TEXT, admitted);
     if (!outcome.crossed) {
       return { decision: "replace", responseText: admitted };
     }
@@ -1164,15 +1251,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ? { decision: "release" }
         : { decision: "replace", responseText: admitted };
     }
-    const marker = mintChildReturnMarker({
-      organizationId: binding.session.organization_id,
-      callerId: binding.session.caller_id,
-      parentId: binding.session.parent_id,
-      childId: binding.session.session_id,
-      ...(childNativeId ? { childNativeId } : {}),
+    const marker = mintBoundChildReturnMarker({
+      binding,
       spawnCallId,
       value: admitted,
-      ...(binding.adapter?.id === "codex" ? { format: "inline" as const } : {}),
     });
     if (!marker) {
       throw new ApiError(503, "OpenAPPA could not protect the child return");
@@ -1509,11 +1591,29 @@ async function approveChildReturnCarriers(params: {
       }
       continue;
     }
+    const conflictingNativeId =
+      expectedSpawn !== undefined &&
+      completion.childNativeId !== undefined &&
+      available.some(
+        (record) =>
+          (record.spawnCallId === expectedSpawn &&
+            record.childNativeId !== undefined &&
+            record.childNativeId !== completion.childNativeId) ||
+          (record.childNativeId === completion.childNativeId &&
+            record.spawnCallId !== undefined &&
+            record.spawnCallId !== expectedSpawn),
+      );
     const exact = candidates.filter(
       ({ record }) =>
         (expectedSpawn === undefined || record.spawnCallId === expectedSpawn) &&
         (completion.childNativeId === undefined ||
-          record.childNativeId === completion.childNativeId),
+          record.childNativeId === completion.childNativeId ||
+          // Some native clients reveal their local task id only to the parent.
+          // The retained spawn binding and exact bytes still identify the child.
+          (record.childNativeId === undefined &&
+            expectedSpawn !== undefined &&
+            record.spawnCallId === expectedSpawn &&
+            !conflictingNativeId)),
     );
     const eligible = exact.length
       ? exact
@@ -2355,6 +2455,20 @@ async function historicRelayRecords(params: {
   );
   if (senders.size === 1) return matched.map((record) => record.value);
   if (senders.size > 1) return [];
+  const launched = params.binding.adapter
+    ?.teammateLaunches?.(params.binding.requestBody)
+    .get(params.arrival.from);
+  if (launched) {
+    const values = returns
+      .filter(
+        (record) =>
+          record.spawnCallId === withoutTrajectoryStamp(launched.spawnCallId) &&
+          (!record.childNativeId ||
+            record.childNativeId === launched.childNativeId),
+      )
+      .map((record) => record.value);
+    if (values.length > 0) return values;
+  }
   const aliases = await OpenAppaSpawnCorrelationModel.allowedSpawnAliases({
     organizationId: params.session.organization_id,
     callerId: params.session.caller_id,
@@ -2713,7 +2827,7 @@ const PEER_INBOX_UNBOUND =
 async function admitChildHandback(params: {
   binding: AppaPluginBinding;
   call: ToolCall;
-}): Promise<{ call: ToolCall; returnText: string }> {
+}): Promise<{ call: ToolCall; returnText: string; approvedText: string }> {
   const { binding, call } = params;
   const adapter = binding.adapter;
   const raw = adapter?.childHandbackValue?.(call.arguments);
@@ -2744,15 +2858,10 @@ async function admitChildHandback(params: {
   if (!outcome.crossed) {
     throw new ApiError(409, admitted || "OpenAPPA withheld the child return");
   }
-  const marker = mintChildReturnMarker({
-    organizationId: binding.session.organization_id,
-    callerId: binding.session.caller_id,
-    parentId: binding.session.parent_id,
-    childId: binding.session.session_id,
-    ...(childNativeId ? { childNativeId } : {}),
+  const marker = mintBoundChildReturnMarker({
+    binding,
     spawnCallId,
     value: admitted,
-    ...(binding.adapter?.id === "codex" ? { format: "inline" as const } : {}),
   });
   if (!marker) {
     throw new ApiError(503, "OpenAPPA could not protect the child return");
@@ -2765,6 +2874,7 @@ async function admitChildHandback(params: {
       arguments: rewritten === undefined ? returnText : rewritten,
     },
     returnText,
+    approvedText: admitted,
   };
 }
 
@@ -2779,6 +2889,44 @@ function uncorrelatedChild(): ApiError {
   );
   error.shouldRetry = false;
   return error;
+}
+
+/**
+ * A declared native handback is the only completion this child can deliver.
+ * The gate is the governed request's tool list plus an attested child binding,
+ * not the client name and not prose in an unbound session.
+ */
+function nativeHandbackBoundary(binding: AppaPluginBinding): boolean {
+  return (
+    binding.child?.lineage !== undefined &&
+    binding.adapter?.requiresNativeChildHandback?.(binding.requestBody) === true
+  );
+}
+
+function mintBoundChildReturnMarker(params: {
+  binding: AppaPluginBinding;
+  spawnCallId: string;
+  value: string;
+}): string | undefined {
+  const child = params.binding.child;
+  const lineage = child?.lineage;
+  const parentId = child?.parentId ?? params.binding.session.parent_id;
+  if (!parentId) return undefined;
+  return mintChildReturnMarker({
+    organizationId: params.binding.session.organization_id,
+    callerId: params.binding.session.caller_id,
+    parentId,
+    childId: child?.sessionId ?? params.binding.session.session_id,
+    ...(lineage?.childNativeId ? { childNativeId: lineage.childNativeId } : {}),
+    ...(lineage?.nativeParentId
+      ? { spawnerNativeId: lineage.nativeParentId }
+      : {}),
+    spawnCallId: params.spawnCallId,
+    value: params.value,
+    ...(params.binding.adapter?.id === "codex"
+      ? { format: "inline" as const }
+      : {}),
+  });
 }
 
 /**
@@ -3459,10 +3607,55 @@ async function canonicalizeHitlAskUserCall(params: {
       invalidOfferCount: pending.some(Boolean),
     };
   }
-  const hitl = await getHitlAskUserArguments({
+  let hitl = await getHitlAskUserArguments({
     session: params.binding.session,
     offerIds: params.offerIds,
   });
+  const native = params.binding.adapter?.nativeQuestion;
+  if (
+    !hitl &&
+    native?.fromAskUser &&
+    native.isAvailable?.(params.binding.requestHeaders) !== false &&
+    declaresNativeQuestion(params.binding, native.toolName)
+  ) {
+    const offerId = params.offerIds[0];
+    const claims = claimsForOffer(
+      offerId,
+      sessionOfferClaims(
+        params.binding.request.askUserOfferClaims,
+        params.binding.session.session_id,
+      ),
+    );
+    if (claims) {
+      const review = await loadOfferReview({
+        organizationId: params.binding.session.organization_id,
+        sessionId: params.binding.session.session_id,
+        offerId,
+      });
+      if (review) {
+        if (
+          review.offer_id !== offerId ||
+          review.session_id !== params.binding.session.session_id
+        ) {
+          throw new ApiError(409, "OpenAPPA review does not match this offer");
+        }
+        const staged = await stageLoadedHitlReview({
+          session: params.binding.session,
+          review: {
+            ...review,
+            remedyArguments: { offer_id: offerId, ...claims },
+          },
+        });
+        hitl = await getHitlAskUserArguments({
+          session: params.binding.session,
+          offerIds: params.offerIds,
+        });
+        if (staged === "unusable" || !hitl) {
+          throw new ApiError(409, "OpenAPPA review cannot be shown safely");
+        }
+      }
+    }
+  }
   if (!hitl) return { call: params.call, invalidOfferCount: false };
   const raw =
     typeof params.call.arguments === "string"
@@ -3521,23 +3714,15 @@ const QUESTION_CONTINUATION_GUIDANCE = [
   "Revisit a rejected decision only after a new user request.",
 ].join(" ");
 
-const REMEDY_OFFER_CONTINUATION_GUIDANCE = [
-  "The ruling above offers a remedy plan for the blocked call.",
-  "If the plan fits the user's request, continue the task and apply the plan with execute_remedy_plan.",
-  "Use the offer_id and plan from the ruling.",
-  "execute_remedy_plan asks the user for approval when the policy requires it.",
-].join(" ");
-
 const NATIVE_DELEGATION_GUIDANCE_MARKER =
   "collaboration.spawn_agent is declared.";
 
-function nativeDelegationGuidance(waitDeclared: boolean): string {
-  const wait = waitDeclared
-    ? " Then call collaboration.wait_agent for its result."
-    : "";
+function nativeDelegationGuidance(): string {
   return [
     NATIVE_DELEGATION_GUIDANCE_MARKER,
-    `A request for a native subagent is a direct function call with namespace collaboration and name spawn_agent.${wait}`,
+    "A request for a native subagent is a direct function call with namespace collaboration and name spawn_agent.",
+    "If collaboration.wait_agent is declared, call it for that subagent's result.",
+    "If waiting is refused, do not probe list_agents, sleep, or shell commands as substitutes. Report the block or await the client's automatic completion notice.",
     "Do not run a nested Codex CLI as that subagent, and do not report a nested CLI result as a subagent result.",
     "An explicit user request to run a shell command stays a shell command. Do not rewrite it into spawn_agent.",
   ].join(" ");
@@ -3548,55 +3733,59 @@ function appendNativeDelegationGuidance(
 ): void {
   if (context.interactionType !== "openai:responses") return;
   if (!isRecord(context.request)) return;
-  if (Array.isArray(context.request.input)) {
-    // Replace our marked guidance, including stale variants for removed tools.
-    context.request.input = context.request.input.flatMap((item) => {
-      if (
-        !isRecord(item) ||
-        item.role !== "developer" ||
-        !Array.isArray(item.content)
-      ) {
-        return [item];
-      }
-      const content = item.content.filter(
-        (block) =>
-          !(
-            isRecord(block) &&
-            block.type === "input_text" &&
-            typeof block.text === "string" &&
-            block.text.startsWith(NATIVE_DELEGATION_GUIDANCE_MARKER)
-          ),
-      );
-      if (content.length === item.content.length) return [item];
-      return content.length > 0 ? [{ ...item, content }] : [];
-    });
-  }
+  if (hasNativeDelegationMarker(context.request)) return;
   const declared = collectDeclaredToolNames(context.request);
   const spawnDeclared = declared.some(
     (tool) => tool.namespace === "collaboration" && tool.name === "spawn_agent",
   );
   if (!spawnDeclared) return;
-  const waitDeclared = declared.some(
-    (tool) => tool.namespace === "collaboration" && tool.name === "wait_agent",
-  );
-  appendQuestionContinuation({
+  anchorConstantGuidance({
     request: context.request,
     interactionType: context.interactionType,
-    guidance: nativeDelegationGuidance(waitDeclared),
+    guidance: nativeDelegationGuidance(),
   });
 }
+
+function hasNativeDelegationMarker(request: Record<string, unknown>): boolean {
+  if (
+    typeof request.instructions === "string" &&
+    request.instructions.includes(NATIVE_DELEGATION_GUIDANCE_MARKER)
+  ) {
+    return true;
+  }
+  if (!Array.isArray(request.input)) return false;
+  return request.input.some((item) => {
+    if (!isRecord(item) || !Array.isArray(item.content)) return false;
+    return item.content.some(
+      (block) =>
+        isRecord(block) &&
+        typeof block.text === "string" &&
+        block.text.startsWith(NATIVE_DELEGATION_GUIDANCE_MARKER),
+    );
+  });
+}
+
+const OPENCODE_DELEGATED_TASK_GUIDANCE = [
+  "This is a delegated task, not a new general coding assignment. Perform only the operations the parent's task requires.",
+  "For a named MCP read, use the declared MCP discovery and execution tools directly. Do not run pwd or probe repository paths, inspect local files, or execute shell commands merely to prepare that read.",
+  "Required policy remedies, permission questions, and native completion transport remain available, but do not authorize extra business operations. Do not find substitutes for a denied unrelated tool.",
+].join(" ");
 
 const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "The organization's guardrails policy can block a tool call and offer remedy plans in its ruling.",
   "A remedy plan is the policy's own way to continue, and execute_remedy_plan applies the plan through the policy.",
-  "When a ruling offers a plan that fits the user's request, apply that plan with execute_remedy_plan.",
+  "If the plan fits the user's request, continue the task and apply the plan with execute_remedy_plan.",
   "Use the offer_id and plan from the ruling.",
+  "If the user requires consent before applying a plan, ask the declared ask_user tool with that offer ID in remedy_offer_ids first. The platform loads the exact review without applying the plan. Never use an unbound question as authorization.",
   "The policy decides when the user must approve a plan.",
   "In that case, execute_remedy_plan returns review_required.",
-  "Then ask the user with the declared ask_user tool.",
-  "Put the offer ID in remedy_offer_ids, and use the header Approval and the options Approve and Deny.",
+  "Then ask the user with the declared ask_user tool, one call for each pending offer, not in plain text.",
+  "Put the offer ID from that persisted result in remedy_offer_ids, and use the header Approval and the options Approve and Deny.",
   "The platform shows the user the exact review.",
+  "When a verified human answer approves a pending OpenAPPA review, your next and only tool calls must be execute_remedy_plan for the approved offer shown in that answer and the earlier plan.",
   "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
+  "When a verified human answer did not approve the pending OpenAPPA review, do not call execute_remedy_plan and do not retry the blocked call.",
+  "Tell the user briefly that the action stays blocked, and stop that action.",
 ].join(" ");
 
 const NATIVE_QUESTION_ID_PATTERN =
@@ -3669,6 +3858,7 @@ function releasesUserQuestion(
 function withNativeQuestionId(
   binding: AppaPluginBinding,
   call: ToolCall,
+  offerIds: readonly string[] = [],
 ): { call: ToolCall; question: { id: string; name: string } } | undefined {
   const name = nativeQuestionName(binding, call.name);
   if (!name || !releasesUserQuestion(binding, call)) return undefined;
@@ -3676,6 +3866,8 @@ function withNativeQuestionId(
     session: binding.session,
     name,
     currentId: call.id,
+    arguments: call.arguments,
+    offerIds,
   });
   return { call: { ...call, wireId: id }, question: { id, name } };
 }
@@ -3900,6 +4092,8 @@ function issueNativeQuestionId(params: {
   session: OpenAppaSession;
   name: string;
   currentId: string;
+  arguments: unknown;
+  offerIds: readonly string[];
 }): string {
   if (!config.openappa.offerSigningSecret) {
     throw new ApiError(
@@ -3907,7 +4101,23 @@ function issueNativeQuestionId(params: {
       "OpenAPPA native question signing is not configured (ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET)",
     );
   }
-  const nonce = randomBytes(12).toString("base64url");
+  const nonce = createHmac("sha256", config.openappa.offerSigningSecret)
+    .update("archestra-native-question-nonce-v1\0")
+    .update(
+      JSON.stringify([
+        params.session.organization_id,
+        params.session.caller_id ?? "",
+        params.session.session_id,
+        params.session.parent_id ?? "",
+        params.name,
+        params.currentId,
+        canonicalQuestionArgs(params.arguments),
+        params.offerIds,
+      ]),
+    )
+    .digest()
+    .subarray(0, 12)
+    .toString("base64url");
   const prefix = params.currentId.startsWith("toolu_")
     ? "toolu"
     : params.currentId.startsWith("call_")
@@ -3949,6 +4159,29 @@ function nativeQuestionCacheKey(params: {
     nonce: params.id,
   }).toString("base64url");
   return `${CacheKey.OpenAppaNativeQuestion}-${scope}`;
+}
+
+function canonicalQuestionArgs(value: unknown): unknown {
+  const parsed = typeof value === "string" ? parsedJson(value) : value;
+  return stableJson(parsed ?? value);
+}
+
+function parsedJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function stableJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableJson);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, stableJson((value as Record<string, unknown>)[key])]),
+  );
 }
 
 function nativeQuestionTag(params: {
@@ -4134,119 +4367,122 @@ function reviewRequiredOfferId(value: unknown, depth: number): string | null {
   return null;
 }
 
-function hitlQuestionGuidance(offerIds: readonly string[]): string {
-  return [
-    "The policy needs the user's approval for the last execute_remedy_plan result.",
-    "Ask the user with the declared ask_user tool, one call for each offer ID below.",
-    "In each call, use the question 'Open the pending HITL review.', the header 'Approval', the options Approve and Deny, and remedy_offer_ids with only that offer ID.",
-    "The platform replaces the question text with the exact review, and shows it in the client's question interface when one is available.",
-    `Offer IDs: ${JSON.stringify(offerIds)}.`,
-  ].join(" ");
-}
-
-function hitlDecisionGuidance(
-  rulings: readonly RecordedNativeHitlRuling[],
-): string {
-  const approved = rulings
-    .filter((entry) => entry.ruling === "approve")
-    .map((entry) => entry.offerId);
-  if (approved.length > 0) {
-    return [
-      `The user approved OpenAPPA offer IDs ${JSON.stringify(approved)} in the question tool.`,
-      "In your next response, call only execute_remedy_plan, once for each approved offer, with the plan shown earlier in the conversation.",
-      "Retry the blocked call in a later response, after execute_remedy_plan reports that the plan is authorized.",
-      "The user already answered, so do not ask about the same plan again.",
-    ].join(" ");
-  }
-  return [
-    "The user did not approve the pending OpenAPPA review.",
-    "Do not call execute_remedy_plan for it, and do not retry the blocked call.",
-    "Tell the user briefly that the action stays blocked, and stop that action.",
-  ].join(" ");
-}
-
-function appendQuestionContinuation(params: {
-  request: unknown;
+function anchorConstantGuidance(params: {
+  request: Record<string, unknown>;
   interactionType: string;
-  guidance?: string;
+  guidance: string;
 }): void {
-  const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
-  if (!isRecord(params.request)) return;
   if (params.interactionType === "openai:responses") {
-    let input: unknown[];
-    if (typeof params.request.input === "string") {
-      input = [
-        {
-          type: "message",
-          role: "user",
-          content: [{ type: "input_text", text: params.request.input }],
-        },
-      ];
-      params.request.input = input;
-    } else if (Array.isArray(params.request.input)) {
-      input = params.request.input;
-    } else {
-      input = [];
-      params.request.input = input;
-    }
-    if (
-      !input.some(
-        (item) =>
-          isRecord(item) &&
-          item.role === "developer" &&
-          Array.isArray(item.content) &&
-          item.content.some(
-            (block) =>
-              isRecord(block) &&
-              block.type === "input_text" &&
-              block.text === guidance,
-          ),
-      )
-    ) {
-      input.push({
-        type: "message",
-        role: "developer",
-        content: [{ type: "input_text", text: guidance }],
-      });
-    }
+    if (responsesGuidancePresent(params.request, params.guidance)) return;
+    appendInstruction(params.request, "instructions", params.guidance);
     return;
   }
   if (params.interactionType === "openai:chatCompletions") {
-    const messages = params.request.messages;
-    if (!Array.isArray(messages)) return;
+    anchorChatGuidance(params.request, params.guidance);
+    return;
+  }
+  if (params.interactionType === "anthropic:messages") {
+    anchorAnthropicGuidance(params.request, params.guidance);
+  }
+}
+
+function anchorAnthropicGuidance(
+  request: Record<string, unknown>,
+  guidance: string,
+): void {
+  if (Array.isArray(request.system)) {
     if (
-      messages.some(
-        (message) =>
-          isRecord(message) &&
-          message.role === "developer" &&
-          message.content === guidance,
+      request.system.some(
+        (block) =>
+          isRecord(block) && block.type === "text" && block.text === guidance,
       )
     ) {
       return;
     }
-    messages.push({
-      role: "developer",
-      content: guidance,
-    });
+    request.system.push({ type: "text", text: guidance });
     return;
   }
-  if (params.interactionType === "anthropic:messages") {
-    if (Array.isArray(params.request.system)) {
-      if (
-        !params.request.system.some(
-          (block) =>
-            isRecord(block) && block.type === "text" && block.text === guidance,
-        )
-      ) {
-        params.request.system.push({
-          type: "text",
-          text: guidance,
-        });
+  appendInstruction(request, "system", guidance);
+}
+
+function anchorChatGuidance(
+  request: Record<string, unknown>,
+  guidance: string,
+): void {
+  const messages = Array.isArray(request.messages)
+    ? request.messages
+    : undefined;
+  if (
+    messages?.some(
+      (message) =>
+        isRecord(message) &&
+        (message.role === "system" || message.role === "developer") &&
+        messageText(message).includes(guidance),
+    )
+  ) {
+    return;
+  }
+  if (typeof request.system === "string") {
+    appendInstruction(request, "system", guidance);
+    return;
+  }
+  if (!messages) return;
+  const first = messages[0];
+  if (
+    isRecord(first) &&
+    (first.role === "system" || first.role === "developer")
+  ) {
+    if (typeof first.content === "string") {
+      if (!first.content.includes(guidance)) {
+        first.content =
+          first.content.length > 0
+            ? `${first.content}\n\n${guidance}`
+            : guidance;
       }
       return;
     }
-    appendInstruction(params.request, "system", guidance);
+    if (Array.isArray(first.content)) {
+      first.content.push({ type: "text", text: guidance });
+      return;
+    }
   }
+  messages.unshift({ role: "developer", content: guidance });
+}
+
+function responsesGuidancePresent(
+  request: Record<string, unknown>,
+  guidance: string,
+): boolean {
+  if (
+    typeof request.instructions === "string" &&
+    request.instructions.includes(guidance)
+  ) {
+    return true;
+  }
+  if (!Array.isArray(request.input)) return false;
+  return request.input.some((item) => {
+    if (!isRecord(item) || item.role !== "developer") return false;
+    if (typeof item.content === "string") {
+      return item.content.includes(guidance);
+    }
+    if (!Array.isArray(item.content)) return false;
+    return item.content.some(
+      (block) =>
+        isRecord(block) &&
+        typeof block.text === "string" &&
+        block.text.includes(guidance),
+    );
+  });
+}
+
+function messageText(message: Record<string, unknown>): string {
+  if (typeof message.content === "string") return message.content;
+  if (!Array.isArray(message.content)) return "";
+  return message.content
+    .map((block) =>
+      isRecord(block) && typeof block.text === "string" ? block.text : "",
+    )
+    .join("\n");
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

@@ -17,6 +17,15 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import config from "@/config";
+import { claudeCodeForkLaunchAcknowledgement } from "./child-return";
+import {
+  copyOwnRecord,
+  hasCapturedOrigin,
+  isOmitted,
+  markOmitted,
+  omissionStubs,
+} from "./provenance";
+import { withoutTrajectoryStamp } from "./trajectory-stamp";
 import { type AppaWireFamily, chatMessages, responsesItems } from "./wire";
 
 /** A marker read from a child's opening message, not yet verified. */
@@ -50,14 +59,25 @@ export function mintDelegationMarker(params: {
 }): string | undefined {
   const key = delegationKey();
   if (!key) return undefined;
-  const nonce = randomBytes(NONCE_BYTES).toString("hex");
+  const promptDigest = digestOf(params.prompt);
+  const nonce = params.spawnCallId
+    ? delegationNonce({
+        key,
+        organizationId: params.organizationId,
+        callerId: params.callerId,
+        parentId: params.parentId,
+        spawnerNativeId: params.spawnerNativeId,
+        promptDigest,
+        spawnCallId: params.spawnCallId,
+      })
+    : randomBytes(NONCE_BYTES).toString("hex");
   const tag = delegationTag({
     key,
     organizationId: params.organizationId,
     callerId: params.callerId,
     parentId: params.parentId,
     spawnerNativeId: params.spawnerNativeId,
-    promptDigest: digestOf(params.prompt),
+    promptDigest,
     nonce,
     spawnCallId: params.spawnCallId,
   });
@@ -153,6 +173,34 @@ export function collectDelegationMarkers(params: {
  * in assistant history. Arguments for other tools remain unchanged.
  * JSON spawn arguments are re-serialized only when their prompt field changes.
  */
+export function restoreVerifiedDelegationEcho(params: {
+  text: string;
+  organizationId: string;
+  callerId: string;
+  spawnerNativeId: string;
+  spawnCallIds: readonly string[];
+  recordedMarkers: readonly string[];
+}): string {
+  const marker = trailingMarker(params.text);
+  if (
+    !marker ||
+    !marker.spawnCallId ||
+    !params.spawnCallIds.includes(marker.spawnCallId) ||
+    !verifyDelegatedPrompt({
+      marker,
+      organizationId: params.organizationId,
+      callerId: params.callerId,
+      spawnerNativeId: params.spawnerNativeId,
+    })
+  ) {
+    return params.text;
+  }
+  const recorded = params.recordedMarkers.find((value) =>
+    params.text.includes(value),
+  );
+  return recorded ? params.text.replace(recorded, "") : params.text;
+}
+
 export function stripDelegationMarkers(params: {
   family: AppaWireFamily;
   body: unknown;
@@ -237,6 +285,32 @@ const MARKER_LINES = new RegExp(
   String.raw`(?:\r?\n\r?\n)?(?<=^|\n)\[appa\] delegated trajectory ${MARKER_TOKEN} — child of [^\n]+\.\r?(?=\n|$)`,
   "g",
 );
+
+function delegationNonce(params: {
+  key: Buffer;
+  organizationId: string;
+  callerId: string | undefined;
+  parentId: string;
+  spawnerNativeId: string;
+  promptDigest: string;
+  spawnCallId: string;
+}): string {
+  return createHmac("sha256", params.key)
+    .update("archestra.appa.delegation.nonce.v1\0")
+    .update(
+      JSON.stringify([
+        params.organizationId,
+        params.callerId ?? "",
+        params.parentId,
+        params.spawnerNativeId,
+        params.promptDigest,
+        params.spawnCallId,
+      ]),
+    )
+    .digest()
+    .subarray(0, NONCE_BYTES)
+    .toString("hex");
+}
 
 function delegationKey(): Buffer | undefined {
   const secret = config.openappa.offerSigningSecret;
@@ -380,8 +454,34 @@ function userTexts(params: {
     if (message.role !== "user") return [];
     const blocks = asArray(message.content);
     if (blocks?.some((block) => asRecord(block)?.type === "tool_result"))
-      return [];
+      return forkDirectiveTexts(blocks);
     return contentTexts(message.content, "text");
+  });
+}
+
+function forkDirectiveTexts(blocks: unknown[]): string[] {
+  const results = blocks.flatMap((block) => {
+    const record = asRecord(block);
+    return record?.type === "tool_result" ? [record] : [];
+  });
+  const result = results.length === 1 ? results[0] : undefined;
+  const callId =
+    result && typeof result.tool_use_id === "string"
+      ? withoutTrajectoryStamp(result.tool_use_id)
+      : undefined;
+  if (
+    !result ||
+    !callId ||
+    claudeCodeForkLaunchAcknowledgement(result.content) === undefined
+  ) {
+    return [];
+  }
+  return blocks.flatMap((block) => {
+    const record = asRecord(block);
+    if (record?.type !== "text" || typeof record.text !== "string") return [];
+    return trailingMarker(record.text)?.spawnCallId === callId
+      ? [record.text]
+      : [];
   });
 }
 
@@ -400,9 +500,10 @@ function stripMarkerLines(text: string): string {
 }
 
 /**
- * Removes empty text parts because providers reject empty blocks.
- * If removal clears required user text, replaces it with placeholder text
- * so the provider receives a valid turn without the marker.
+ * Drops a part the marker filled alone when other content remains.
+ * One placeholder is kept only when a user turn would otherwise be empty.
+ * Instrumented parts are omitted, not emptied, so their origin survives and
+ * their payload is not sent.
  */
 function stripTextContent(
   holder: Record<string, unknown>,
@@ -413,34 +514,95 @@ function stripTextContent(
   const content = holder[key];
   if (typeof content === "string") {
     const stripped = stripMarkerLines(content);
-    if (stripped !== content)
-      holder[key] = preserveEmpty ? requiredTextAfterStrip(stripped) : stripped;
+    if (stripped === content) return;
+    if (stripped.trim().length === 0 && hasCapturedOrigin(holder)) {
+      if (preserveEmpty) {
+        holder[key] = REMOVED_DELEGATION_TEXT;
+        return;
+      }
+      holder[key] = stripped;
+      markOmitted(holder);
+      return;
+    }
+    holder[key] = preserveEmpty ? requiredTextAfterStrip(stripped) : stripped;
     return;
   }
   const parts = asArray(content);
   if (!parts) return;
-  let changed = false;
-  let removedTextPart: Record<string, unknown> | undefined;
   const kept: unknown[] = [];
+  const removals: Array<{
+    record: Record<string, unknown>;
+    instrumented: boolean;
+    index: number;
+  }> = [];
+  let changed = false;
   for (const part of parts) {
     const record = asRecord(part);
     if (record?.type === partType && typeof record.text === "string") {
       const stripped = stripMarkerLines(record.text);
+      if (stripped !== record.text && stripped.trim().length === 0) {
+        changed = true;
+        removals.push({
+          record,
+          instrumented: hasCapturedOrigin(record),
+          index: kept.length,
+        });
+        continue;
+      }
       if (stripped !== record.text) {
         changed = true;
-        if (stripped.trim().length > 0)
-          kept.push({ ...record, text: stripped });
-        else removedTextPart ??= record;
-        continue;
+        record.text = stripped;
       }
     }
     kept.push(part);
   }
   if (!changed) return;
-  if (kept.length === 0 && preserveEmpty && removedTextPart) {
-    kept.push({ ...removedTextPart, text: REMOVED_DELEGATION_TEXT });
+  const visible = kept.filter((part) => !isOmitted(part));
+  const needsPlaceholder = visible.length === 0 && preserveEmpty;
+  // Insert backwards so captured omissions keep their source positions.
+  for (let index = removals.length - 1; index >= 0; index -= 1) {
+    const removal = removals[index];
+    if (needsPlaceholder && index === 0) {
+      const replacement = removal.instrumented
+        ? [removal.record, ...rewriteMarkerPartInPlace(removal.record)]
+        : [{ ...removal.record, text: REMOVED_DELEGATION_TEXT }];
+      kept.splice(removal.index, 0, ...replacement);
+    } else if (removal.instrumented) {
+      kept.splice(removal.index, 0, ...omittedMarkerPart(removal.record));
+    }
+  }
+  if (needsPlaceholder && removals.length === 0) {
+    kept.push({ type: partType, text: REMOVED_DELEGATION_TEXT });
   }
   holder[key] = kept;
+  if (
+    visible.length === 0 &&
+    !preserveEmpty &&
+    kept.length > 0 &&
+    kept.every((part) => isOmitted(part)) &&
+    hasCapturedOrigin(holder)
+  ) {
+    markOmitted(holder);
+  }
+}
+
+function omittedMarkerPart(record: Record<string, unknown>): object[] {
+  return [markOmitted(copyOwnRecord(record, [])), ...omissionStubs(record)];
+}
+
+function rewriteMarkerPartInPlace(record: Record<string, unknown>): object[] {
+  const nested = omissionStubs(record);
+  record.text = REMOVED_DELEGATION_TEXT;
+  for (const key of Object.keys(record)) {
+    if (key === "type" || key === "text") continue;
+    if (key === "cache_control" && isCachePoint(record.cache_control)) continue;
+    delete record[key];
+  }
+  return nested;
+}
+
+function isCachePoint(value: unknown): boolean {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 function spawnFields(name: unknown): readonly string[] {

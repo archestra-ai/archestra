@@ -1,8 +1,17 @@
 import { createHash, createHmac } from "node:crypto";
 import config from "@/config";
-import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
+import {
+  childTrajectoryDisplayCode,
+  stripChildTrajectoryReceipts,
+} from "@/openappa/child-trajectory-receipt";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
+import {
+  copyOwnRecord,
+  hasCapturedOrigin,
+  markOmitted,
+  omissionStubs,
+} from "./provenance";
 
 export type AppaChildReturnCompletion = {
   value: string;
@@ -30,25 +39,27 @@ export function mintChildReturnMarker(params: {
   childId: string;
   childNativeId?: string;
   spawnCallId?: string;
+  /**
+   * The spawner the start receipt used. When present, the visual code is that
+   * retained spawn's display code, not a hash of the returned bytes.
+   */
+  spawnerNativeId?: string;
   value: string;
   format?: "full" | "inline";
 }): string | undefined {
   const key = markerKey();
   if (!key) return undefined;
-  const valueHash = hashValue(params.value);
-  const claims: ChildReturnClaims = [
-    PROOF_VERSION,
-    params.organizationId,
-    params.callerId ?? null,
-    params.parentId,
-    params.childId,
-    params.childNativeId ?? null,
-    params.spawnCallId ?? null,
-    valueHash,
-  ];
-  const payload = encodeClaims(claims);
-  const mac = proofMac({ key, payload });
-  const displayCode = encodeCrockford35(first35Bits(Buffer.from(mac, "hex")));
+  const displayCode = params.spawnerNativeId
+    ? childTrajectoryDisplayCode({
+        organizationId: params.organizationId,
+        callerId: params.callerId,
+        parentId: params.parentId,
+        childId: params.childId,
+        childNativeId: params.childNativeId,
+        spawnerNativeId: params.spawnerNativeId,
+        spawnCallId: params.spawnCallId,
+      })
+    : legacyReturnDisplayCode({ key, ...params });
   return formatMarker({ displayCode, format: params.format });
 }
 
@@ -58,6 +69,15 @@ export function mintChildReturnMarker(params: {
  * verified against the child returns the runtime durably crossed, so one
  * genuine return cannot cover a sibling return.
  */
+export function claudeCodeForkLaunchAcknowledgement(
+  content: unknown,
+): string | undefined {
+  const text = claudeCodeForkLaunchText(content);
+  return text === CLAUDE_CODE_FORK_LAUNCH_STATUS
+    ? CLAUDE_CODE_FORK_LAUNCH_STATUS
+    : undefined;
+}
+
 export function collectAndStripChildReturns(
   body: unknown,
   options: {
@@ -178,8 +198,10 @@ export function collectAndStripChildReturns(
       ? canonicalizeStatus(status, nested, collected)
       : undefined;
     if (canonicalStatus) {
+      const stubs = omissionStubs(record);
       for (const key of Object.keys(record)) delete record[key];
       record.status = canonicalStatus;
+      if (stubs.length > 0) record.content = stubs;
       return record;
     }
 
@@ -682,6 +704,30 @@ type ChildReturnClaims = [
   string,
 ];
 
+function legacyReturnDisplayCode(input: {
+  key: Buffer;
+  organizationId: string;
+  callerId: string | undefined;
+  parentId: string;
+  childId: string;
+  childNativeId?: string;
+  spawnCallId?: string;
+  value: string;
+}): string {
+  const claims: ChildReturnClaims = [
+    PROOF_VERSION,
+    input.organizationId,
+    input.callerId ?? null,
+    input.parentId,
+    input.childId,
+    input.childNativeId ?? null,
+    input.spawnCallId ?? null,
+    hashValue(input.value),
+  ];
+  const mac = proofMac({ key: input.key, payload: encodeClaims(claims) });
+  return encodeCrockford35(first35Bits(Buffer.from(mac, "hex")));
+}
+
 function encodeClaims(claims: ChildReturnClaims): string {
   if (!isChildReturnClaims(claims)) {
     throw new ApiError(400, "OpenAPPA child-return claims are invalid");
@@ -764,6 +810,31 @@ function encodeCrockford35(value: bigint): string {
 }
 
 // === Shape helpers ===
+
+function canonicalMailboxContent(parts: unknown[], text: string): unknown[] {
+  const holders = parts.flatMap((part) => {
+    const record = asRecord(part);
+    return record ? [record] : [];
+  });
+  const primary = holders[0];
+  const replacement = primary
+    ? copyOwnRecord(primary, [
+        ["type", "input_text"],
+        ["text", text],
+      ])
+    : { type: "input_text", text };
+  const content: unknown[] = [replacement];
+  if (primary) {
+    for (const stub of omissionStubs(primary)) content.push(stub);
+  }
+  for (const holder of holders.slice(1)) {
+    if (hasCapturedOrigin(holder)) {
+      content.push(markOmitted(copyOwnRecord(holder, [])));
+    }
+    for (const stub of omissionStubs(holder)) content.push(stub);
+  }
+  return content;
+}
 
 function collectCodexMailboxReturns(
   body: unknown,
@@ -897,9 +968,21 @@ function collectCodexMailboxReturns(
       ...(id ? { id } : {}),
       author,
       recipient,
-      content: [{ type: "input_text", text: header + parsed.value }],
+      content: canonicalMailboxContent(parts, header + parsed.value),
     });
   }
+}
+
+const CLAUDE_CODE_FORK_LAUNCH_STATUS =
+  "Fork started \u2014 processing in background";
+
+function claudeCodeForkLaunchText(content: unknown): string | undefined {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content) || content.length !== 1) return undefined;
+  const block = asRecord(content[0]);
+  return block?.type === "text" && typeof block.text === "string"
+    ? block.text.trim()
+    : undefined;
 }
 
 const NATIVE_COMPLETION_TOOLS = new Set([
@@ -976,6 +1059,7 @@ function isNativeToolNamespace(namespace: string | undefined): boolean {
   return (
     namespace === undefined ||
     namespace === "functions" ||
+    namespace === "collaboration" ||
     namespace === "multi_agent_v1"
   );
 }

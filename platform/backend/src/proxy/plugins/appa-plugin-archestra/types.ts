@@ -13,6 +13,31 @@ export const APPA_CHILD_TRAJECTORY_RECEIPT: unique symbol = Symbol(
   "archestra.appa.child-trajectory-receipt",
 );
 
+export const APPA_REPLAY_SESSION: unique symbol = Symbol(
+  "archestra.appa.replay-session",
+);
+
+/**
+ * A side analysis call: no executable calls, results, peer proofs, relay
+ * arrivals, or structural carriers. It must not join or rewrite a trajectory.
+ */
+export const APPA_AUXILIARY_ANALYSIS: unique symbol = Symbol(
+  "archestra.appa.auxiliary-analysis",
+);
+
+export const APPA_REPLAY_APPROVED_TEXT: unique symbol = Symbol(
+  "archestra.appa.replay-approved-text",
+);
+
+export const APPA_REPLAY_ENVELOPE: unique symbol = Symbol(
+  "archestra.appa.replay-envelope",
+);
+
+/** Server-verified encryption context; never part of the provider request. */
+export const APPA_REPLAY_ENCRYPTION: unique symbol = Symbol(
+  "archestra.appa.replay-encryption",
+);
+
 export type AppaChildTrajectoryReceiptOutput = {
   footer: string;
   inHistory: boolean;
@@ -187,6 +212,17 @@ export type AppaClientAdapter = {
   isTeammate?(childNativeId: string): boolean;
   /** True when this local tool is the child's return to its parent. */
   isChildHandbackTool?(name: string): boolean;
+  /**
+   * True when this governed request declares the client's native child-return
+   * tool. A plain text stop is then not a return, and a streamed handback call
+   * must be released rather than flattened to text.
+   */
+  requiresNativeChildHandback?(request: unknown): boolean;
+  /**
+   * Stable system guidance for a declared native child return. It must not
+   * change tool choice, tools, or earlier prompt bytes.
+   */
+  nativeHandbackGuidance?(): string;
   /** Payload carried by a native child handback call. */
   childHandbackValue?(args: unknown): string | undefined;
   /** Rewrites a native handback so the parent receives admitted bytes and a marker. */

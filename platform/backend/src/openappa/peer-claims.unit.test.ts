@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import {
+  containsPeerProof,
   peerProofAuthorizes,
   signPeerProof,
   stripPeerProofs,
@@ -69,6 +70,15 @@ describe("peer proofs", () => {
     expect(signPeerProof(claims, "")).toBeUndefined();
     const signed = signPeerProof(claims, secret);
     expect(verifyPeerProof(signed, "")).toBeNull();
+  });
+
+  test("a proof check finds a nested proof without removing it", () => {
+    const nested = { arguments: { peer_proof: "secret" } };
+    const cycle: Record<string, unknown> = { nested };
+    cycle.self = cycle;
+    expect(containsPeerProof(cycle)).toBe(true);
+    expect(nested.arguments.peer_proof).toBe("secret");
+    expect(containsPeerProof({ messages: [{ text: "plain" }] })).toBe(false);
   });
 
   test("proof removal walks a deep object and a cycle without keeping a proof", () => {

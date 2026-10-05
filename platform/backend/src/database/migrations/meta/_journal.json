@@ -3564,6 +3564,13 @@
       "when": 1791126427875,
       "tag": "0508_mcp-registry-configure-deployment-spec",
       "breakpoints": true
+    },
+    {
+      "idx": 509,
+      "version": "7",
+      "when": 1791226367246,
+      "tag": "0509_smooth_enchantress",
+      "breakpoints": true
     }
   ]
 }

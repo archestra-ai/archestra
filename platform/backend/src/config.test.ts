@@ -72,6 +72,7 @@ import config, {
   parseMetricsPort,
   parseNonNegativeInt,
   parseOpenAppaConfig,
+  parseOpenAppaRewriteLimits,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -3623,6 +3624,11 @@ describe("OpenAPPA feature configuration", () => {
       yellEnabled: false,
       offerSigningSecret: "",
       postgresMaxConnections: 4,
+      rewrite: {
+        idleTtlMs: 86_400_000,
+        maxEntries: 4096,
+        maxBytes: 16_777_216,
+      },
     });
   });
   test("enables database policies without a container path", () => {
@@ -3631,6 +3637,11 @@ describe("OpenAPPA feature configuration", () => {
       yellEnabled: true,
       offerSigningSecret: "",
       postgresMaxConnections: 4,
+      rewrite: {
+        idleTtlMs: 86_400_000,
+        maxEntries: 4096,
+        maxBytes: 16_777_216,
+      },
     });
     expect(
       parseOpenAppaConfig("true", "true", "offer-signing-secret-at-least-32ch")
@@ -3708,5 +3719,54 @@ describe("OpenAPPA feature configuration", () => {
       parseOpenAppaConfig("true", undefined, undefined, value)
         .postgresMaxConnections,
     ).toBe(expected);
+  });
+
+  test("uses rewrite defaults when the settings object is omitted", () => {
+    expect(parseOpenAppaRewriteLimits()).toEqual({
+      idleTtlMs: 86_400_000,
+      maxEntries: 4096,
+      maxBytes: 16_777_216,
+    });
+    expect(parseOpenAppaConfig("true").rewrite).toEqual(
+      parseOpenAppaRewriteLimits(),
+    );
+  });
+
+  test("accepts rewrite bounds and converts idle hours to milliseconds", () => {
+    expect(
+      parseOpenAppaRewriteLimits({
+        idleTtlHours: " 1 ",
+        maxEntries: "1",
+        maxBytes: "1",
+      }),
+    ).toEqual({ idleTtlMs: 3_600_000, maxEntries: 1, maxBytes: 1 });
+    expect(
+      parseOpenAppaRewriteLimits({
+        idleTtlHours: "168",
+        maxEntries: "65536",
+        maxBytes: "268435456",
+      }),
+    ).toEqual({
+      idleTtlMs: 604_800_000,
+      maxEntries: 65_536,
+      maxBytes: 268_435_456,
+    });
+  });
+
+  test.each([
+    [{ idleTtlHours: "0" }, "ARCHESTRA_OPENAPPA_REWRITE_IDLE_TTL_HOURS"],
+    [{ idleTtlHours: "169" }, "ARCHESTRA_OPENAPPA_REWRITE_IDLE_TTL_HOURS"],
+    [{ idleTtlHours: "24.5" }, "ARCHESTRA_OPENAPPA_REWRITE_IDLE_TTL_HOURS"],
+    [{ idleTtlHours: "1e2" }, "ARCHESTRA_OPENAPPA_REWRITE_IDLE_TTL_HOURS"],
+    [{ idleTtlHours: "024" }, "ARCHESTRA_OPENAPPA_REWRITE_IDLE_TTL_HOURS"],
+    [{ idleTtlHours: "24h" }, "ARCHESTRA_OPENAPPA_REWRITE_IDLE_TTL_HOURS"],
+    [{ maxEntries: "0" }, "ARCHESTRA_OPENAPPA_REWRITE_MAX_ENTRIES"],
+    [{ maxEntries: "65537" }, "ARCHESTRA_OPENAPPA_REWRITE_MAX_ENTRIES"],
+    [{ maxEntries: "4096abc" }, "ARCHESTRA_OPENAPPA_REWRITE_MAX_ENTRIES"],
+    [{ maxBytes: "0" }, "ARCHESTRA_OPENAPPA_REWRITE_MAX_BYTES"],
+    [{ maxBytes: "268435457" }, "ARCHESTRA_OPENAPPA_REWRITE_MAX_BYTES"],
+    [{ maxBytes: "0x100" }, "ARCHESTRA_OPENAPPA_REWRITE_MAX_BYTES"],
+  ])("rejects a malformed rewrite limit (%j)", (settings, envName) => {
+    expect(() => parseOpenAppaRewriteLimits(settings)).toThrow(envName);
   });
 });

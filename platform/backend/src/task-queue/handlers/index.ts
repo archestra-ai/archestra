@@ -18,6 +18,7 @@ import { handleContentEncryptionBackfill } from "./content-encryption-backfill-h
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, gated at boot by the retention license gate
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
+import { handleOpenAppaRewriteCleanup } from "./openappa-rewrite-cleanup-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
 import { handlePermissionSync } from "./permission-sync-handler";
 import { handlePluginGithubSync } from "./plugin-github-sync-handler";
@@ -77,6 +78,10 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   );
   taskQueueService.registerHandler("openappa_unenforced_cleanup", () =>
     deleteExpiredUnenforcedRecords(),
+  );
+  taskQueueService.registerHandler(
+    "openappa_rewrite_cleanup",
+    handleOpenAppaRewriteCleanup,
   );
   taskQueueService.registerHandler("skill_github_sync", handleSkillGithubSync);
   taskQueueService.registerHandler(

@@ -88,6 +88,14 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 86400,
     payload: {},
   },
+  // Drops idle stable-replay payloads in one bounded batch. Runs even when
+  // OpenAPPA is off: migrations create the tables either way, and rows can
+  // outlive the feature flag.
+  {
+    taskType: "openappa_rewrite_cleanup",
+    intervalSeconds: 60,
+    payload: {},
+  },
   // Enterprise content-encryption backfill/rotation sweep. O(1) no-op once
   // complete (and when the feature is disabled); a 10-minute tick keeps a
   // large backlog progressing without a long-lived task.

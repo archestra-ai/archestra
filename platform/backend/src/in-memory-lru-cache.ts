@@ -125,6 +125,30 @@ export class LRUCacheManager<T = unknown> {
   }
 
   /**
+   * Insert a caller-bounded batch, enforcing the byte budget once at the end.
+   * Count eviction and per-entry TTL match set(); deferred byte eviction may
+   * retain different entries than repeated set() calls. Values are not copied,
+   * and eviction callbacks cannot extend the batch by appending to its array.
+   */
+  setMany(entries: readonly (readonly [string, T])[], ttl?: number): void {
+    const count = entries.length;
+    if (count === 0) return;
+    const effectiveTtl = ttl ?? this.defaultTtl;
+    try {
+      for (let index = 0; index < count; index++) {
+        const [key, value] = entries[index];
+        this.lruStore.set(key, {
+          value,
+          expiresAt: effectiveTtl > 0 ? Date.now() + effectiveTtl : 0,
+          bytes: this.maxBytes === undefined ? 0 : (this.sizeOf?.(value) ?? 0),
+        });
+      }
+    } finally {
+      this.enforceByteBudget();
+    }
+  }
+
+  /**
    * Delete a value from the cache.
    * Returns true if the key existed, false otherwise.
    */

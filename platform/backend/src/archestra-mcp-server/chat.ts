@@ -10,9 +10,14 @@ import {
   getHitlAskUserArguments,
   hitlRulingFromLabels,
   recordHitlRuling,
+  stageLoadedHitlReview,
 } from "@/openappa/hitl-review";
 import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
-import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
+import {
+  chatOpenAppaSession,
+  loadOfferReview,
+  type OpenAppaSession,
+} from "@/openappa/service";
 import { archestraMcpBranding } from "./branding";
 import {
   catchError,
@@ -125,6 +130,9 @@ const NO_VIEWER_MESSAGE =
 const HITL_NO_VIEWER_MESSAGE =
   "This client cannot show the HITL review. Keep the tool call blocked. Do not ask for approval in plain text and do not retry it.";
 
+const HITL_REVIEW_UNUSABLE_MESSAGE =
+  "The approval review cannot be shown. Keep the tool call blocked. Do not ask for approval in plain text and do not retry it.";
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_TODO_WRITE_SHORT_NAME,
@@ -172,12 +180,10 @@ const registry = defineArchestraTools([
       );
       const liveOffers = verifiedOffers?.ids ?? [];
       const session = verifiedOffers?.session;
-      const hitlArgs = session
-        ? await getHitlAskUserArguments({
-            session,
-            offerIds: liveOffers,
-          })
-        : undefined;
+      const hitlArgs = await hitlArgumentsForOffers({ session, liveOffers });
+      if (hitlArgs === "unusable") {
+        return errorResult(HITL_REVIEW_UNUSABLE_MESSAGE);
+      }
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
       const effectiveArgs = hitlArgs ?? args;
@@ -322,8 +328,35 @@ function optionKey(index: number) {
   return `option_${index}`;
 }
 
+async function hitlArgumentsForOffers(params: {
+  session: OpenAppaSession | undefined;
+  liveOffers: string[];
+}) {
+  const { session, liveOffers } = params;
+  if (!session) return undefined;
+  const staged = await getHitlAskUserArguments({
+    session,
+    offerIds: liveOffers,
+  });
+  if (staged || liveOffers.length !== 1) return staged;
+  const loaded = await loadOfferReview({
+    organizationId: session.organization_id,
+    sessionId: session.session_id,
+    offerId: liveOffers[0],
+  });
+  if (loaded?.offer_id !== liveOffers[0]) return undefined;
+  const stored = await stageLoadedHitlReview({ session, review: loaded });
+  if (stored === "unusable") return "unusable" as const;
+  return (
+    (await getHitlAskUserArguments({
+      session,
+      offerIds: liveOffers,
+    })) ?? ("unusable" as const)
+  );
+}
+
 /**
- * Uses the offer's signed child scope to locate the staged review. Gateway
+ * Uses the offer's signed scope to locate the staged review. Gateway
  * calls may have only the parent's session header, or no session header at all.
  */
 function verifiedRemedyOffers(
@@ -357,9 +390,7 @@ function verifiedRemedyOffers(
       ) {
         continue;
       }
-    } else if (!claims.parent_id || claims.caller_id !== spender) {
-      // Without a gateway session header, only this user's child offers can
-      // supply the missing session scope.
+    } else if (claims.caller_id !== spender) {
       continue;
     }
     const scope: OpenAppaSession = {

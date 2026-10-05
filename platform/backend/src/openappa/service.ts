@@ -26,11 +26,17 @@ import {
   expandCommandExecutionPolicyRules,
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
+import {
+  controlEchoMatches,
+  readControlReceipts,
+} from "@/openappa/control-outcome";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
 import { openappaFailure } from "@/openappa/failure";
+import type { AppaRewriteReplay } from "@/openappa/rewrite-replay";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import type { EncryptedChatAuditDisposition } from "@/routes/proxy/utils/encrypted-chat-session";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import {
   type GuardrailsV2Activation,
@@ -665,6 +671,8 @@ function truncated(text: string, limit: number): string {
 
 /** The runtime's code for a result that matches no released call. */
 const UNRELEASED_CALL_CODE = "unreleased_call";
+const UNRELEASED_CALL_TEXT =
+  "[appa] Tool output withheld: this result has no record of releasing a call.";
 const MAX_UNEXECUTED_RESULT_CHARS = 4000;
 
 function isOutputDecision(
@@ -702,10 +710,20 @@ export async function processProxyResults(params: {
   classifySpawnResult?: (
     result: CommonToolResult,
   ) => "pending" | "failed" | undefined;
+  /** Already-opened rewrite facade for this request, when the proxy has one. */
+  replay?: AppaRewriteReplay;
+  /** Verified request key for reads before the main replay facade is opened. */
+  encryptedChat?: EncryptedChatAuditDisposition;
 }) {
   // The results dispatch one after another; one policy read serves them all.
   const policy = await effectivePolicy(params.session.organization_id);
   await startSession(params.session, policy);
+  const receipts = await readControlReceipts({
+    session: params.session,
+    toolCallIds: params.results.map((result) => result.id),
+    ...(params.replay ? { replay: params.replay } : {}),
+    encryptedChat: params.encryptedChat,
+  });
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
@@ -714,6 +732,27 @@ export async function processProxyResults(params: {
     if (params.isUserQuestion?.(result) === true) continue;
     const spawn = params.classifySpawnResult?.(result);
     if (spawn === "pending") continue;
+    // A gateway-produced control result has no native release record. The
+    // echo is shown only when it matches the stored bytes for this call.
+    // A pending match is not a grant, and a forged echo is not dispatched.
+    const receipt = receipts.get(result.id);
+    if (receipt) {
+      const echoed = toolResultText(result.content);
+      if (controlEchoMatches(receipt.bytes, echoed) === "match") {
+        updates[result.id] = {
+          content: receipt.bytes,
+          outputSource: "runtime",
+          code: "control_outcome",
+        };
+        continue;
+      }
+      updates[result.id] = {
+        content: UNRELEASED_CALL_TEXT,
+        outputSource: "runtime",
+        code: UNRELEASED_CALL_CODE,
+      };
+      continue;
+    }
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
@@ -1574,6 +1613,31 @@ export async function readPeerMessage(params: {
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the verified offer claims.
  */
+function verifiedOfferRestrictions(
+  value:
+    | Array<{ dimension: string; before: string; after: string }>
+    | undefined,
+):
+  | {
+      restrictions: Array<{ dimension: string; before: string; after: string }>;
+    }
+  | undefined {
+  if (!value || value.length === 0) return undefined;
+  const verified = value.filter(
+    (item) =>
+      !!item &&
+      (item.dimension === "trust" || item.dimension === "readers") &&
+      typeof item.before === "string" &&
+      item.before.length > 0 &&
+      typeof item.after === "string" &&
+      item.after.length > 0,
+  );
+  if (verified.length !== value.length) {
+    throw new Error("OpenAPPA offer review contains invalid restrictions");
+  }
+  return { restrictions: verified };
+}
+
 export async function loadOfferReview(params: {
   organizationId: string;
   sessionId: string;
@@ -1586,6 +1650,8 @@ export async function loadOfferReview(params: {
   tool?: string;
   /** The reviewed call's arguments as JSON text. */
   arguments?: string;
+  /** Narrowing recorded on the retained offer. Absent is not a grant. */
+  restrictions?: Array<{ dimension: string; before: string; after: string }>;
 } | null> {
   try {
     if (
@@ -1606,6 +1672,7 @@ export async function loadOfferReview(params: {
       session_id: result.sessionId,
       ...(result.tool ? { tool: result.tool } : {}),
       ...(result.arguments ? { arguments: result.arguments } : {}),
+      ...verifiedOfferRestrictions(result.restrictions),
     };
   } catch (error) {
     logger.warn(

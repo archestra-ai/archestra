@@ -2,6 +2,7 @@
 //! OpenAPPA; identity, call correlation and durable processing receipts live here.
 
 mod adapter;
+mod admission;
 mod batteries;
 mod consults;
 mod declarations;
@@ -11,7 +12,7 @@ mod peer;
 mod policy;
 
 use appa_eventlog::{
-    Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
+    Backend, Fact, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
     ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, SessionScope,
     postgres::{LeasedPostgres, PostgresError},
 };
@@ -430,7 +431,7 @@ impl SessionKey {
 
 /// A session's actor, and a child session's trajectory id. It hashes the session id
 /// alone; the organization is part of the row key beside it.
-fn session_actor(session_id: &str) -> String {
+pub(crate) fn session_actor(session_id: &str) -> String {
     format!("archestra:{}", sha256_hex(session_id.as_bytes()))
 }
 
@@ -1125,6 +1126,15 @@ pub async fn execute_remedy_by_offer(
 }
 
 #[napi(object)]
+#[derive(Clone, Serialize)]
+pub struct OfferReviewRestriction {
+    /// `trust` or `readers`. Only a dimension the retained plan actually changes.
+    pub dimension: String,
+    pub before: String,
+    pub after: String,
+}
+
+#[napi(object)]
 #[derive(Serialize)]
 pub struct OfferReviewOutput {
     pub offer_id: String,
@@ -1136,6 +1146,10 @@ pub struct OfferReviewOutput {
     /// JSONB, so key order and spacing can differ from the proposal; the
     /// values cannot.
     pub arguments: Option<String>,
+    /// The open plan's recorded narrowing, when this root's log has exactly one
+    /// matching offer and that offer is still open. Absent means no verified
+    /// pending restriction, not a permission grant.
+    pub restrictions: Option<Vec<OfferReviewRestriction>>,
 }
 
 /// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
@@ -1170,7 +1184,8 @@ pub async fn load_offer_review(
             let row = client.query_opt(
                 "SELECT entry->>'text' AS text, \
                  COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
-                 COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
+                 COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments, \
+                 o.root AS root \
                  FROM openappa_operations o \
                  CROSS JOIN LATERAL jsonb_array_elements(o.decision->'review') AS entry \
                  WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
@@ -1185,18 +1200,217 @@ pub async fn load_offer_review(
                     row.get::<_, String>("text"),
                     row.get::<_, Option<String>>("tool"),
                     row.get::<_, Option<String>>("arguments"),
+                    row.get::<_, String>("root"),
                 )
             }))
         })
         .map_err(error)?;
+    let Some((text, tool, arguments, root)) = review else {
+        return Ok(None);
+    };
+    // The restriction is the plan recorded on this operation's root, not the
+    // review prose and not the policy loaded for a later call.
+    let log = leased
+        .state
+        .store
+        .log(&TrajectoryId::new(root))
+        .map_err(error)?;
+    let restrictions = open_offer_restrictions(log.facts(), log.policy_file(), &offer_id);
+    let text = disclosed_review_text(text, restrictions.as_deref());
 
-    Ok(review.map(|(text, tool, arguments)| OfferReviewOutput {
+    Ok(Some(OfferReviewOutput {
         offer_id,
         text,
         session_id: session_id_for_output,
         tool,
         arguments,
+        restrictions,
     }))
+}
+
+const RESTRICTION_HEADING: &str = "Persistent session restriction this approval would accept:";
+const RENDERED_OFFER_CHARS: usize = 16;
+/// The engine's own default when a bound policy file omits `trust_chain`.
+const DEFAULT_TRUST_CHAIN: [&str; 2] = ["suspicious", "trusted"];
+
+/// Restrictions of the one open offer this rendered id names in `facts`.
+/// `None` when the id is not one open offer of this log: another offer, an
+/// ambiguous prefix, or an offer already accepted or denied.
+fn open_offer_restrictions(
+    facts: &[Fact],
+    policy_file: &[u8],
+    rendered_offer_id: &str,
+) -> Option<Vec<OfferReviewRestriction>> {
+    let offer = open_offer(facts, rendered_offer_id)?;
+    let Fact::OfferOpened { plan, .. } = offer else {
+        return None;
+    };
+    let narrowing = plan.narrowing()?;
+    let names = trust_chain_names(policy_file);
+    let mut restrictions = Vec::new();
+    if narrowing.from.trust != narrowing.to.trust {
+        restrictions.push(OfferReviewRestriction {
+            dimension: "trust".to_owned(),
+            before: trust_name(narrowing.from.trust.rank(), &names),
+            after: trust_name(narrowing.to.trust.rank(), &names),
+        });
+    }
+    if narrowing.from.audience != narrowing.to.audience {
+        let [before, after] = [&narrowing.from.audience, &narrowing.to.audience].map(|audience| {
+            if audience.is_public() {
+                return "public".to_owned();
+            }
+            let clauses: Vec<String> = audience
+                .clauses()
+                .map(|clause| {
+                    if clause.is_empty() {
+                        return "nobody".to_owned();
+                    }
+                    let mut parts = Vec::new();
+                    if let Some(chain) = clause.chain() {
+                        parts.push(chain.as_str().to_owned());
+                    }
+                    for group in clause.groups() {
+                        let spelled = group.to_string();
+                        if spelled.starts_with('@') {
+                            parts.push(spelled);
+                        } else {
+                            parts.push(format!("@{spelled}"));
+                        }
+                    }
+                    for reader in clause.readers() {
+                        parts.push(reader.as_str().to_owned());
+                    }
+                    if parts.len() > 1 {
+                        format!("({})", parts.join(" or "))
+                    } else {
+                        parts.join("")
+                    }
+                })
+                .collect();
+            if clauses.is_empty() || clauses.iter().any(|clause| clause == "nobody") {
+                "nobody".to_owned()
+            } else {
+                clauses.join(" and ")
+            }
+        });
+        restrictions.push(OfferReviewRestriction {
+            dimension: "readers".to_owned(),
+            before,
+            after,
+        });
+    }
+    (!restrictions.is_empty()).then_some(restrictions)
+}
+
+fn open_offer<'a>(facts: &'a [Fact], rendered_offer_id: &str) -> Option<&'a Fact> {
+    if rendered_offer_id.len() != RENDERED_OFFER_CHARS
+        || !rendered_offer_id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return None;
+    }
+    let mut found = None;
+    for fact in facts {
+        let Fact::OfferOpened { offer, .. } = fact else {
+            continue;
+        };
+        let hex = offer.to_hex();
+        if !hex.starts_with(rendered_offer_id) {
+            continue;
+        }
+        match found {
+            None => found = Some(hex),
+            Some(ref already) if already == &hex => {}
+            Some(_) => return None,
+        }
+    }
+    let hex = found?;
+    let terminal = facts.iter().any(|fact| match fact {
+        Fact::OfferAccepted { offer, .. }
+        | Fact::OfferDenied { offer, .. }
+        | Fact::OfferInvalidated { offer, .. } => offer.to_hex() == hex,
+        _ => false,
+    });
+    if terminal {
+        return None;
+    }
+    facts.iter().find(|fact| match fact {
+        Fact::OfferOpened { offer, .. } => offer.to_hex() == hex,
+        _ => false,
+    })
+}
+
+fn disclosed_review_text(text: String, restrictions: Option<&[OfferReviewRestriction]>) -> String {
+    let Some(restrictions) = restrictions.filter(|restrictions| !restrictions.is_empty()) else {
+        return text;
+    };
+    let mut disclosed = text;
+    if !disclosed.is_empty() && !disclosed.ends_with('\n') {
+        disclosed.push('\n');
+    }
+    disclosed.push('\n');
+    disclosed.push_str(RESTRICTION_HEADING);
+    disclosed.push('\n');
+    for restriction in restrictions {
+        disclosed.push_str(&format!(
+            "  {dimension}: {before} -> {after}\n",
+            dimension = restriction.dimension,
+            before = restriction.before,
+            after = restriction.after,
+        ));
+    }
+    disclosed.push_str(
+        "Approving authorizes this exact call and accepts each listed restriction for the rest of this session. \
+         These label changes only tighten session restrictions; they do not add permissions. \
+         Denying keeps the call blocked and does not accept the restriction.",
+    );
+    disclosed
+}
+
+fn trust_chain_names(policy_file: &[u8]) -> Vec<String> {
+    let Ok(text) = std::str::from_utf8(policy_file) else {
+        return Vec::new();
+    };
+    let Ok(document) = toml::from_str::<toml::Value>(text) else {
+        return Vec::new();
+    };
+    string_array(document.get("trust_chain"))
+        .or_else(|| document.get("policy").and_then(string_array_at_trust_chain))
+        .unwrap_or_else(|| {
+            DEFAULT_TRUST_CHAIN
+                .iter()
+                .map(|rank| (*rank).to_owned())
+                .collect()
+        })
+}
+
+fn string_array_at_trust_chain(value: &toml::Value) -> Option<Vec<String>> {
+    string_array(value.get("trust_chain"))
+}
+
+fn string_array(value: Option<&toml::Value>) -> Option<Vec<String>> {
+    let array = value?.as_array()?;
+    if array.is_empty() {
+        return None;
+    }
+    array
+        .iter()
+        .map(|item| item.as_str().map(str::to_owned))
+        .collect()
+}
+
+fn trust_name(rank: u8, names: &[String]) -> String {
+    let index = if rank == u8::MAX {
+        names.len().checked_sub(1)
+    } else {
+        Some(usize::from(rank))
+    };
+    index
+        .and_then(|index| names.get(index))
+        .cloned()
+        .unwrap_or_else(|| format!("rank {rank}"))
 }
 
 #[napi(object)]
@@ -1585,6 +1799,7 @@ impl State {
     ) -> napi::Result<Value> {
         let pg = postgres_store(&self.store)?;
         let _lock = SessionLock::acquire(pg, root.clone())?;
+        admission::touch(pg, admission_subject(&input, &root)).map_err(admission_error)?;
         // Check every member of the family: continuing a parent while a child's
         // result is interrupted could otherwise bypass inherited restrictions.
         let interrupted = self
@@ -1689,6 +1904,7 @@ impl State {
         }
 
         if input.event == HookEventKind::SessionStart {
+            admission::touch(pg, admission_subject(&input, &root)).map_err(admission_error)?;
             return pg
                 .with_client(move |client| {
                     Ok(client
@@ -1728,14 +1944,7 @@ impl State {
                 .clone()
                 .map(|tool_call_id| processed_result_key(&input, tool_call_id));
             if let Some(result_key) = &result_key {
-                match self
-                    .store
-                    .claim_processed_result(ProcessedResultRequest {
-                        key: result_key.clone(),
-                        root: TrajectoryId::new(root.as_str()),
-                    })
-                    .map_err(error)?
-                {
+                match claim_processed_result(&self.store, &input, &root, result_key.clone())? {
                     ProcessedResultClaim::Claimed => {}
                     ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
                 }
@@ -1840,7 +2049,7 @@ impl State {
             let call_id = operation
                 .strip_prefix("call:")
                 .ok_or_else(|| error("tool call operation_id must be call:<tool-call-id>"))?;
-            if let Some(decision) = cancelled_call(pg, &input, call_id)? {
+            if let Some(decision) = cached_cancel_decision(pg, &input, &root, call_id)? {
                 return Ok(decision);
             }
         }
@@ -2018,16 +2227,14 @@ impl State {
             return Ok(withheld);
         }
         let key = processed_result_key(input, call_id.clone());
-        match self
-            .store
-            .claim_processed_result(ProcessedResultRequest {
-                key: key.clone(),
-                root: actor.root.clone(),
-            })
-            .map_err(error)?
-        {
+        match claim_processed_result(&self.store, input, &actor.root.0, key.clone())? {
             ProcessedResultClaim::Claimed => {}
-            ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
+            ProcessedResultClaim::Complete { decision, .. } => {
+                // A recorded result already closed this call. A CancelCall that
+                // arrives afterward replays that result and does not write
+                // cancel:<id>. The claim above already admitted the group.
+                return Ok(decision);
+            }
         }
         let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
         let Some(released) = read_completed_operation(pg, &operation)? else {
@@ -2710,6 +2917,19 @@ fn cancelled_call(
     Ok(read_completed_operation(pg, &key)?.map(|record| record.decision))
 }
 
+fn cached_cancel_decision(
+    pg: &LeasedPostgres,
+    input: &Input,
+    root: &str,
+    call_id: &str,
+) -> napi::Result<Option<Value>> {
+    let Some(decision) = cancelled_call(pg, input, call_id)? else {
+        return Ok(None);
+    };
+    admission::touch(pg, admission_subject(input, root)).map_err(admission_error)?;
+    Ok(Some(decision))
+}
+
 fn required_arguments(input: &Input) -> napi::Result<&str> {
     input
         .arguments
@@ -2797,6 +3017,24 @@ fn owner_can_be_spent_by(owner: Option<&str>, spender: Option<&Principal>) -> bo
     }
 }
 
+fn admission_subject<'a>(input: &'a Input, root: &'a str) -> admission::Subject<'a> {
+    admission::Subject {
+        organization_id: &input.organization_id,
+        root,
+        session_id: &input.session_id,
+        fork_of: input.fork_of.as_deref(),
+        parent_id: input.parent_id.as_deref(),
+        caller_id: input.caller_id.as_deref(),
+    }
+}
+
+fn admission_error(failure: admission::Error) -> napi::Error {
+    match failure {
+        admission::Error::Expired => error(admission::EXPIRED),
+        admission::Error::Storage(failure) => error(failure),
+    }
+}
+
 fn claim_operation(
     store: &LogStore,
     input: &Input,
@@ -2806,18 +3044,39 @@ fn claim_operation(
     binding: ReceiptBinding,
     context: Option<Value>,
 ) -> napi::Result<Option<Value>> {
-    match store
-        .claim_operation(OperationRequest {
-            key: operation_key(input, binding, operation.to_owned()),
-            root: TrajectoryId::new(root),
-            input: request.clone(),
-            context,
-        })
-        .map_err(error)?
-    {
+    let pg = postgres_store(store)?;
+    let mut held = admission::hold(pg, admission_subject(input, root)).map_err(admission_error)?;
+    let claimed = store.claim_operation(OperationRequest {
+        key: operation_key(input, binding, operation.to_owned()),
+        root: TrajectoryId::new(root),
+        input: request.clone(),
+        context,
+    });
+    if claimed.is_ok() {
+        held.disarm();
+    }
+    match claimed.map_err(error)? {
         OperationClaim::Claimed => Ok(None),
         OperationClaim::Complete { decision } => Ok(Some(decision)),
     }
+}
+
+fn claim_processed_result(
+    store: &LogStore,
+    input: &Input,
+    root: &str,
+    key: ProcessedResultKey,
+) -> napi::Result<ProcessedResultClaim> {
+    let pg = postgres_store(store)?;
+    let mut held = admission::hold(pg, admission_subject(input, root)).map_err(admission_error)?;
+    let claimed = store.claim_processed_result(ProcessedResultRequest {
+        key,
+        root: TrajectoryId::new(root),
+    });
+    if claimed.is_ok() {
+        held.disarm();
+    }
+    claimed.map_err(error)
 }
 
 /// Completes a remedy's operation receipt and, for a tracked call, its
@@ -3391,5 +3650,502 @@ mod remedy_tests {
     fn a_remedy_requires_a_caller() {
         assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_err());
         assert!(validate(&remedy_input(json!({}))).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod replay_expiry_tests {
+    use super::{
+        HookEventKind, Input, cached_cancel_decision, claim_processed_result, processed_result_key,
+    };
+    use appa_eventlog::{Backend, LogStore, ProcessedResultClaim};
+    use postgres::{Client, NoTls};
+    use std::num::NonZeroUsize;
+
+    #[test]
+    fn expired_replay_refuses_before_a_cached_cancel_or_completed_result_returns() {
+        let Some(url) = std::env::var("OPENAPPA_ADMISSION_PG_URL")
+            .ok()
+            .filter(|url| !url.is_empty())
+        else {
+            eprintln!("OPENAPPA_ADMISSION_PG_URL unset; skipped replay expiry test");
+            return;
+        };
+        let name = format!("replay_expiry_{}", std::process::id());
+        let mut admin = Client::connect(&url, NoTls).expect("disposable postgres");
+        let _ = admin.batch_execute(&format!("DROP DATABASE IF EXISTS {name}"));
+        admin
+            .batch_execute(&format!("CREATE DATABASE {name}"))
+            .expect("replay database");
+        let mut config: postgres::Config = url.parse().expect("admission url");
+        config.dbname(&name);
+        let replay_url = config_url(&config);
+        install(&mut config.connect(NoTls).expect("replay database"));
+        let store = LogStore::open(Backend::Postgres {
+            url: format!("{replay_url}?sslmode=disable"),
+            max_connections: NonZeroUsize::new(4).unwrap(),
+        })
+        .expect("leased store");
+        expired_cancel_cache_is_410(&store);
+        wrong_protocol_cancel_cache_is_410(&store);
+        live_cancel_replay_stays_idempotent(&store);
+        expired_completed_result_is_410_and_writes_no_cancel(&store);
+        live_completed_result_does_not_write_cancel(&store);
+        drop(store);
+        drop(config);
+        admin
+            .batch_execute(&format!("DROP DATABASE {name}"))
+            .expect("drop replay database");
+    }
+
+    fn expired_cancel_cache_is_410(store: &LogStore) {
+        let org = "org-expired-cancel";
+        seed(store, org, "expired", 1);
+        insert_cancel(
+            store,
+            org,
+            r#"{"decision":"deny_call","feedback":"withheld"}"#,
+        );
+        let leased = store.lease().unwrap();
+        let error = cached_cancel_decision(
+            leased.postgres().unwrap(),
+            &input(org),
+            &root(org),
+            "call-1",
+        )
+        .expect_err("expired group must not replay a cached cancel");
+        assert!(
+            error
+                .to_string()
+                .contains("OpenAPPA replay retention expired")
+        );
+        assert_eq!(group_status(store, org), "expired");
+        assert_eq!(pending_count(store, org), 0);
+        assert_eq!(cancel_count(store, org), 1);
+    }
+
+    fn wrong_protocol_cancel_cache_is_410(store: &LogStore) {
+        let org = "org-protocol-cancel";
+        seed(store, org, "live", 2);
+        insert_cancel(
+            store,
+            org,
+            r#"{"decision":"deny_call","feedback":"withheld"}"#,
+        );
+        let leased = store.lease().unwrap();
+        let error = cached_cancel_decision(
+            leased.postgres().unwrap(),
+            &input(org),
+            &root(org),
+            "call-1",
+        )
+        .expect_err("foreign protocol must not replay a cached cancel");
+        assert!(
+            error
+                .to_string()
+                .contains("OpenAPPA replay retention expired")
+        );
+        assert_eq!(protocol_version(store, org), 2);
+        assert_eq!(pending_count(store, org), 0);
+    }
+
+    fn live_cancel_replay_stays_idempotent(store: &LogStore) {
+        let org = "org-live-cancel";
+        seed(store, org, "live", 1);
+        let decision = r#"{"decision":"deny_call","feedback":"withheld"}"#;
+        insert_cancel(store, org, decision);
+        let leased = store.lease().unwrap();
+        let replayed = cached_cancel_decision(
+            leased.postgres().unwrap(),
+            &input(org),
+            &root(org),
+            "call-1",
+        )
+        .unwrap()
+        .expect("live cancel replay");
+        assert_eq!(
+            replayed,
+            serde_json::from_str::<serde_json::Value>(decision).unwrap()
+        );
+        assert_eq!(group_status(store, org), "live");
+        assert_eq!(pending_count(store, org), 0);
+        assert_eq!(cancel_count(store, org), 1);
+    }
+
+    fn expired_completed_result_is_410_and_writes_no_cancel(store: &LogStore) {
+        let org = "org-expired-result";
+        seed(store, org, "expired", 1);
+        insert_completed_result(store, org);
+        let leased = store.lease().unwrap();
+        let error = claim_processed_result(
+            &leased,
+            &input(org),
+            &root(org),
+            processed_result_key(&input(org), "call-1".to_owned()),
+        )
+        .expect_err("expired group must not replay a completed result");
+        assert!(
+            error
+                .to_string()
+                .contains("OpenAPPA replay retention expired")
+        );
+        assert_eq!(group_status(store, org), "expired");
+        assert_eq!(cancel_count(store, org), 0);
+        assert_eq!(pending_count(store, org), 0);
+    }
+
+    fn live_completed_result_does_not_write_cancel(store: &LogStore) {
+        let org = "org-live-result";
+        seed(store, org, "live", 1);
+        insert_completed_result(store, org);
+        let leased = store.lease().unwrap();
+        let claimed = claim_processed_result(
+            &leased,
+            &input(org),
+            &root(org),
+            processed_result_key(&input(org), "call-1".to_owned()),
+        )
+        .unwrap();
+        assert!(matches!(claimed, ProcessedResultClaim::Complete { .. }));
+        assert_eq!(cancel_count(store, org), 0);
+        drop(leased);
+    }
+
+    fn input(org: &str) -> Input {
+        serde_json::from_value(serde_json::json!({
+            "organization_id": org,
+            "session_id": "session",
+            "event": HookEventKind::ToolCall,
+        }))
+        .unwrap()
+    }
+
+    fn root(org: &str) -> String {
+        format!("root-{org}")
+    }
+
+    fn seed(store: &LogStore, org: &str, status: &str, protocol: i32) {
+        let leased = store.lease().unwrap();
+        let org = org.to_owned();
+        let status = status.to_owned();
+        let root = root(&org);
+        let group = format!("group-{org}");
+        leased
+            .postgres()
+            .unwrap()
+            .with_client(move |client| {
+                client.execute(
+                    "INSERT INTO openappa_rewrite_groups \
+                     (organization_id, group_id, status, protocol_version, idle_ttl_ms, expires_at, touched_at) \
+                     VALUES ($1, $2, $3, $4, 86400000, clock_timestamp() + INTERVAL '1 hour', clock_timestamp())",
+                    &[&org, &group, &status, &protocol],
+                )?;
+                client.execute(
+                    "INSERT INTO openappa_rewrite_roots (organization_id, native_root, group_id) \
+                     VALUES ($1, $2, $3)",
+                    &[&org, &root, &group],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    fn insert_cancel(store: &LogStore, org: &str, decision: &str) {
+        let decision: serde_json::Value = serde_json::from_str(decision).unwrap();
+        let org = org.to_owned();
+        let root = root(&org);
+        let leased = store.lease().unwrap();
+        leased
+            .postgres()
+            .unwrap()
+            .with_client(move |client| {
+                client.execute(
+                    "INSERT INTO openappa_operations \
+                     (organization_id, session_id, operation_id, root, status, input, decision) \
+                     VALUES ($1, 'session', 'cancel:call-1', $2, 'complete', '{\"event\":\"cancel_call\"}', $3)",
+                    &[&org, &root, &decision],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    fn insert_completed_result(store: &LogStore, org: &str) {
+        let org = org.to_owned();
+        let root = root(&org);
+        let decision = serde_json::json!({"decision": "allow_call"});
+        let leased = store.lease().unwrap();
+        leased
+            .postgres()
+            .unwrap()
+            .with_client(move |client| {
+                client.execute(
+                    "INSERT INTO openappa_processed_results \
+                     (organization_id, session_id, tool_call_id, root, status, approved_output, decision) \
+                     VALUES ($1, 'session', 'call-1', $2, 'complete', 'ok', $3)",
+                    &[&org, &root, &decision],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    fn group_status(store: &LogStore, org: &str) -> String {
+        scalar(
+            store,
+            org,
+            "SELECT status FROM openappa_rewrite_groups WHERE organization_id = $1",
+        )
+    }
+
+    fn protocol_version(store: &LogStore, org: &str) -> i32 {
+        let org = org.to_owned();
+        let leased = store.lease().unwrap();
+        leased
+            .postgres()
+            .unwrap()
+            .with_client(move |client| {
+                Ok(client
+                    .query_one(
+                        "SELECT protocol_version FROM openappa_rewrite_groups WHERE organization_id = $1",
+                        &[&org],
+                    )?
+                    .get(0))
+            })
+            .unwrap()
+    }
+
+    fn pending_count(store: &LogStore, org: &str) -> i64 {
+        count(
+            store,
+            org,
+            "SELECT count(*) FROM openappa_operations WHERE organization_id = $1 AND status = 'pending'",
+        )
+    }
+
+    fn cancel_count(store: &LogStore, org: &str) -> i64 {
+        count(
+            store,
+            org,
+            "SELECT count(*) FROM openappa_operations WHERE organization_id = $1 AND operation_id LIKE 'cancel:%'",
+        )
+    }
+
+    fn count(store: &LogStore, org: &str, sql: &'static str) -> i64 {
+        let org = org.to_owned();
+        let leased = store.lease().unwrap();
+        leased
+            .postgres()
+            .unwrap()
+            .with_client(move |client| Ok(client.query_one(sql, &[&org])?.get(0)))
+            .unwrap()
+    }
+
+    fn scalar(store: &LogStore, org: &str, sql: &'static str) -> String {
+        let org = org.to_owned();
+        let leased = store.lease().unwrap();
+        leased
+            .postgres()
+            .unwrap()
+            .with_client(move |client| Ok(client.query_one(sql, &[&org])?.get(0)))
+            .unwrap()
+    }
+
+    fn install(client: &mut Client) {
+        client
+            .batch_execute(
+                "CREATE TABLE openappa_events (root text NOT NULL, seq bigint NOT NULL, payload bytea NOT NULL);
+                 CREATE TABLE openappa_policy_files (hash text NOT NULL, bytes bytea NOT NULL);
+                 CREATE TABLE openappa_host_keys (key text NOT NULL, root text NOT NULL);
+                 CREATE TABLE openappa_rewrite_groups (
+                   organization_id text NOT NULL,
+                   group_id text NOT NULL,
+                   status text NOT NULL,
+                   protocol_version integer NOT NULL,
+                   idle_ttl_ms integer NOT NULL,
+                   expires_at timestamptz NOT NULL,
+                   touched_at timestamptz NOT NULL,
+                   PRIMARY KEY (organization_id, group_id)
+                 );
+                 CREATE TABLE openappa_rewrite_roots (
+                   organization_id text NOT NULL,
+                   native_root text NOT NULL,
+                   group_id text NOT NULL,
+                   PRIMARY KEY (organization_id, native_root)
+                 );
+                 CREATE TABLE openappa_sessions (
+                   organization_id text NOT NULL,
+                   actor text NOT NULL,
+                   root text NOT NULL,
+                   session_id text NOT NULL,
+                   forked_from text,
+                   parent_id text,
+                   caller_id text,
+                   PRIMARY KEY (organization_id, actor)
+                 );
+                 CREATE TABLE openappa_operations (
+                   organization_id text NOT NULL,
+                   caller_id text,
+                   session_id text NOT NULL,
+                   operation_id text NOT NULL,
+                   root text NOT NULL,
+                   input jsonb,
+                   status text NOT NULL,
+                   decision jsonb,
+                   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+                   PRIMARY KEY (organization_id, session_id, operation_id)
+                 );
+                  CREATE TABLE openappa_processed_results (
+                    organization_id text NOT NULL,
+                    session_id text NOT NULL,
+                    tool_call_id text NOT NULL,
+                    root text NOT NULL,
+                    status text NOT NULL,
+                    approved_output text,
+                    decision jsonb,
+                    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+                    PRIMARY KEY (organization_id, session_id, tool_call_id)
+                  );
+                  CREATE TABLE openappa_held_peer_messages (
+                    seq bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    id text NOT NULL UNIQUE,
+                    receiver text NOT NULL,
+                    digest text NOT NULL,
+                    label jsonb NOT NULL,
+                    body text NOT NULL,
+                    expires_at bigint NOT NULL,
+                    notified boolean NOT NULL DEFAULT false
+                  );
+                  CREATE TABLE openappa_embedded_peer_messages (
+                    seq bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    id text NOT NULL UNIQUE,
+                    root text NOT NULL,
+                    sender text NOT NULL,
+                    recipient text NOT NULL,
+                    pending_spawn text,
+                    dispatch text NOT NULL,
+                    digest text NOT NULL,
+                    label jsonb NOT NULL,
+                    body text,
+                    status text NOT NULL,
+                    read_call_id text,
+                    read_arguments text,
+                    decision jsonb,
+                    expires_at bigint NOT NULL,
+                    created_at bigint NOT NULL,
+                    UNIQUE (root, sender, dispatch)
+                  );",
+            )
+            .unwrap();
+    }
+
+    fn config_url(config: &postgres::Config) -> String {
+        let user = config.get_user().unwrap_or("admission");
+        let host = config.get_hosts().first().map(|host| match host {
+            postgres::config::Host::Tcp(host) => host.clone(),
+            _ => "127.0.0.1".to_owned(),
+        });
+        let port = config.get_ports().first().copied().unwrap_or(5432);
+        let db = config.get_dbname().unwrap_or("postgres");
+        match config.get_password() {
+            Some(password) => format!(
+                "postgresql://{user}:{}@{}:{port}/{db}",
+                percent(&String::from_utf8_lossy(password)),
+                host.unwrap_or_else(|| "127.0.0.1".to_owned())
+            ),
+            None => format!(
+                "postgresql://{user}@{}:{port}/{db}",
+                host.unwrap_or_else(|| "127.0.0.1".to_owned())
+            ),
+        }
+    }
+
+    fn percent(value: &str) -> String {
+        value.replace('%', "%25").replace('@', "%40")
+    }
+}
+
+#[cfg(test)]
+mod review_restriction_tests {
+    use super::{
+        RESTRICTION_HEADING, disclosed_review_text, open_offer_restrictions, trust_chain_names,
+        trust_name,
+    };
+    use appa_eventlog::Fact;
+
+    const OPEN_HEX: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const OTHER_HEX: &str = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+    const POLICY: &str = "[policy]\nversion = 2\ntrust_chain = [\"suspicious\", \"trusted\"]\n";
+
+    fn opened(hex: &str) -> Fact {
+        serde_json::from_str(&format!(
+            r#"{{"OfferOpened":{{
+                "trajectory":"root",
+                "offer":"{hex}",
+                "block":"{OPEN_HEX}",
+                "act":{{"Proposals":"batch"}},
+                "call":"{OPEN_HEX}",
+                "subject":{{"Call":{{"trajectory":"root","batch":"batch","position":0}}}},
+                "plan":{{
+                    "id":1,
+                    "steps":[{{"Accept":{{
+                        "from":{{"trust":255,"audience":[]}},
+                        "to":{{"trust":0,"audience":[{{"chain":"internal"}}]}}
+                    }}}}],
+                    "required":[]
+                }},
+                "basis":{{"family":0,"flow":0,"subject":0}}
+            }}}}"#
+        ))
+        .expect("the retained offer decodes")
+    }
+
+    #[test]
+    fn an_open_narrowing_is_a_named_restriction_not_a_grant() {
+        let facts = vec![opened(OPEN_HEX)];
+        let restrictions = open_offer_restrictions(&facts, POLICY.as_bytes(), &OPEN_HEX[..16])
+            .expect("the open plan has a narrowing");
+        assert_eq!(restrictions[0].dimension, "trust");
+        assert_eq!(restrictions[0].before, "trusted");
+        assert_eq!(restrictions[0].after, "suspicious");
+        assert_eq!(restrictions[1].dimension, "readers");
+        assert_eq!(restrictions[1].before, "public");
+        assert_eq!(restrictions[1].after, "internal");
+        let text = disclosed_review_text("Approve this call?".to_owned(), Some(&restrictions));
+        assert!(text.contains(RESTRICTION_HEADING));
+        assert!(text.contains("trust: trusted -> suspicious"));
+        assert!(text.contains("readers: public -> internal"));
+        assert!(text.contains("authorizes this exact call"));
+        assert!(text.contains("they do not add permissions"));
+        assert!(text.contains("does not accept the restriction"));
+        assert!(!text.contains("symbolic"));
+        let spoofed = format!("Arguments: {{\"note\":\"{RESTRICTION_HEADING} none\"}}");
+        let disclosed = disclosed_review_text(spoofed, Some(&restrictions));
+        assert!(disclosed.contains("trust: trusted -> suspicious"));
+        assert!(disclosed.contains("readers: public -> internal"));
+    }
+
+    #[test]
+    fn a_denied_or_other_offer_does_not_supply_the_restriction() {
+        let mut denied = vec![opened(OPEN_HEX)];
+        denied.push(
+            serde_json::from_str(&format!(
+                r#"{{"OfferDenied":{{"trajectory":"root","offer":"{OPEN_HEX}","authority":"qa_operator"}}}}"#
+            ))
+            .expect("a denial decodes"),
+        );
+        assert!(open_offer_restrictions(&denied, POLICY.as_bytes(), &OPEN_HEX[..16]).is_none());
+        let other = vec![opened(OTHER_HEX)];
+        assert!(open_offer_restrictions(&other, POLICY.as_bytes(), &OPEN_HEX[..16]).is_none());
+        assert!(open_offer_restrictions(&other, POLICY.as_bytes(), "not-an-offer-id").is_none());
+    }
+
+    #[test]
+    fn an_unreadable_policy_file_does_not_invent_rank_names() {
+        assert_eq!(trust_name(255, &trust_chain_names(b"not toml")), "rank 255");
+        assert_eq!(
+            trust_chain_names(b"version = 2\n"),
+            ["suspicious", "trusted"]
+        );
     }
 }

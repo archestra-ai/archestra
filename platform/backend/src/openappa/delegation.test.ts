@@ -7,9 +7,12 @@ import {
   isDelegationMarkerItem,
   isDelegationMarkerLine,
   mintDelegationMarker,
+  restoreVerifiedDelegationEcho,
   stripDelegationMarkers,
   verifyDelegatedPrompt,
 } from "./delegation";
+import { isOmitted } from "./provenance";
+import { captureRewriteRequest } from "./rewrite-projection";
 
 const SECRET = "delegation-test-secret-0123456789abcdef";
 const SPAWN = {
@@ -38,6 +41,42 @@ describe("delegation markers", () => {
     expect(read.token).toMatch(/^appa-[0-9a-f]{40}$/);
     expect(read.parentId).toBe("s1");
     expect(verify(read)).toBe(true);
+  });
+
+  test("repeats a modern spawn marker and keeps legacy prompts distinct", () => {
+    const modern = {
+      ...SPAWN,
+      prompt: PROMPT,
+      spawnCallId: "toolu_spawn_1",
+    };
+    const first = mintDelegationMarker(modern);
+    const repeated = mintDelegationMarker(modern);
+    expect(repeated).toBe(first);
+    expect(verify(readBack(`${PROMPT}\n\n${first}`))).toBe(true);
+
+    expect(
+      mintDelegationMarker({ ...modern, spawnCallId: "toolu_spawn_2" }),
+    ).not.toBe(first);
+    expect(
+      mintDelegationMarker({ ...modern, organizationId: "org-2" }),
+    ).not.toBe(first);
+    expect(mintDelegationMarker({ ...modern, callerId: "user:u2" })).not.toBe(
+      first,
+    );
+    expect(mintDelegationMarker({ ...modern, parentId: "s2" })).not.toBe(first);
+    expect(mintDelegationMarker({ ...modern, spawnerNativeId: "s2" })).not.toBe(
+      first,
+    );
+    expect(
+      mintDelegationMarker({ ...modern, prompt: "A different prompt." }),
+    ).not.toBe(first);
+
+    const legacy = { ...SPAWN, prompt: PROMPT };
+    const left = mintDelegationMarker(legacy);
+    const right = mintDelegationMarker(legacy);
+    expect(left).not.toBe(right);
+    expect(verify(readBack(`${PROMPT}\n\n${left}`))).toBe(true);
+    expect(verify(readBack(`${PROMPT}\n\n${right}`))).toBe(true);
   });
 
   test("binds a v2 marker to the original spawn call", () => {
@@ -154,6 +193,110 @@ describe("collecting delegation markers", () => {
       },
     });
     expect(markers.map((marker) => marker.parentId)).toEqual(["a", "d"]);
+  });
+
+  test("reads a signed directive beside a fork launch ack and ignores the ack itself", () => {
+    const marker = mintDelegationMarker({
+      ...SPAWN,
+      prompt: PROMPT,
+      spawnCallId: "toolu_fork_1",
+    });
+    const launch = "Fork started \u2014 processing in background";
+    const directive = `${PROMPT}\n\n${marker}`;
+    const body = {
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_fork_1",
+              name: "Agent",
+              input: { prompt: PROMPT, subagent_type: "fork" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_fork_1",
+              content: [{ type: "text", text: launch }],
+            },
+            { type: "text", text: directive },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_other",
+              content: [{ type: "text", text: `${launch}\n${marker}` }],
+            },
+            { type: "text", text: directive },
+          ],
+        },
+      ],
+    };
+
+    const markers = collectDelegationMarkers({
+      family: "anthropic:messages",
+      body,
+    });
+
+    expect(markers).toHaveLength(1);
+    const read = markers[0];
+    if (!read) throw new Error("expected a fork directive marker");
+    expect(read.spawnCallId).toBe("toolu_fork_1");
+    expect(read.parentId).toBe("s1");
+    expect(
+      verifyDelegatedPrompt({
+        marker: read,
+        organizationId: SPAWN.organizationId,
+        callerId: SPAWN.callerId,
+        spawnerNativeId: SPAWN.spawnerNativeId,
+      })?.promptDigest,
+    ).toBeDefined();
+    stripDelegationMarkers({ family: "anthropic:messages", body });
+    const turn = body.messages[1].content;
+    expect(turn[0]).toEqual({
+      type: "tool_result",
+      tool_use_id: "toolu_fork_1",
+      content: [{ type: "text", text: launch }],
+    });
+    expect(turn[1]).toEqual({ type: "text", text: PROMPT });
+    expect(
+      restoreVerifiedDelegationEcho({
+        text: directive,
+        organizationId: SPAWN.organizationId,
+        callerId: SPAWN.callerId,
+        spawnerNativeId: SPAWN.spawnerNativeId,
+        spawnCallIds: ["toolu_fork_1"],
+        recordedMarkers: [`\n\n${marker}`],
+      }),
+    ).toBe(PROMPT);
+    expect(
+      restoreVerifiedDelegationEcho({
+        text: `${PROMPT}\n\n[appa] delegated trajectory appa2-${Buffer.from("toolu_fork_1").toString("base64url")}.${"ab".repeat(20)} — child of s1.`,
+        organizationId: SPAWN.organizationId,
+        callerId: SPAWN.callerId,
+        spawnerNativeId: SPAWN.spawnerNativeId,
+        spawnCallIds: ["toolu_fork_1"],
+        recordedMarkers: [`\n\n${marker}`],
+      }),
+    ).toContain("delegated trajectory");
+    expect(
+      restoreVerifiedDelegationEcho({
+        text: directive,
+        organizationId: SPAWN.organizationId,
+        callerId: SPAWN.callerId,
+        spawnerNativeId: SPAWN.spawnerNativeId,
+        spawnCallIds: ["toolu_fork_1"],
+        recordedMarkers: [],
+      }),
+    ).toBe(directive);
   });
 
   test("Chat Completions: user content and text parts count; system, developer and tool messages do not", () => {
@@ -725,6 +868,155 @@ describe("stripping delegation markers", () => {
     expect(responses.input[0].content).toEqual([
       { type: "input_text", text: PROMPT },
     ]);
+  });
+
+  test("keeps cache metadata on the sole placeholder and not beside other text", () => {
+    const marker = mint();
+    const promptCache = { type: "ephemeral" };
+    const markerCache = { type: "ephemeral", ttl: "1h" };
+    const anthropic = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: PROMPT, cache_control: promptCache },
+            { type: "text", text: marker, cache_control: markerCache },
+          ],
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: marker, cache_control: markerCache }],
+        },
+      ],
+    };
+    stripDelegationMarkers({ family: "anthropic:messages", body: anthropic });
+    expect(anthropic.messages[0].content).toEqual([
+      { type: "text", text: PROMPT, cache_control: promptCache },
+    ]);
+    expect(anthropic.messages[1].content).toEqual([
+      {
+        type: "text",
+        text: "[delegation metadata removed]",
+        cache_control: markerCache,
+      },
+    ]);
+  });
+
+  test.each([
+    ["anthropic:messages", "messages", "text"],
+    ["openai:chatCompletions", "messages", "text"],
+    ["openai:responses", "input", "input_text"],
+  ] as const)("preserves captured omissions before, between and after retained blocks (%s)", (family, historyKey, partType) => {
+    const marker = mint();
+    const prompt = {
+      type: partType,
+      text: PROMPT,
+      cache_control: { type: "ephemeral" },
+    };
+    const followup = { type: partType, text: "Keep this follow-up in order." };
+    const markerParts = ["before", "between", "after"].map((position) => ({
+      type: partType,
+      text: marker,
+      cache_control: { type: "ephemeral", ttl: "1h" },
+      withheld: `${position}-secret-payload`,
+    }));
+    const parts = [
+      markerParts[0],
+      prompt,
+      markerParts[1],
+      followup,
+      markerParts[2],
+    ];
+    const turn =
+      family === "openai:responses"
+        ? { type: "message", role: "user", content: parts }
+        : { role: "user", content: parts };
+    const body = { model: "m", [historyKey]: [turn] };
+    const capture = captureRewriteRequest(body, family);
+    stripDelegationMarkers({ family, body });
+    expect(turn.content.map(isOmitted)).toEqual([
+      true,
+      false,
+      true,
+      false,
+      true,
+    ]);
+    stripDelegationMarkers({ family, body });
+    const content = turn.content.filter((part) => !isOmitted(part));
+    expect(content).toEqual([prompt, followup]);
+    expect(JSON.stringify(turn)).not.toContain(marker);
+    expect(JSON.stringify(turn)).not.toContain("secret-payload");
+    expect(JSON.stringify(turn)).not.toContain("[delegation metadata removed]");
+    const projected = capture.project(body, new Map(), { allowInitial: true });
+    const encoded = JSON.stringify(projected.request);
+    expect(encoded).toContain(PROMPT);
+    expect(encoded).not.toContain(marker);
+    expect(encoded).not.toContain("secret-payload");
+    expect(encoded).not.toContain("[delegation metadata removed]");
+    const projectedTurn = (
+      projected.request as {
+        messages?: Array<{ content?: unknown[] }>;
+        input?: Array<{ content?: unknown[] }>;
+      }
+    )[historyKey]?.[0];
+    expect(projectedTurn?.content).toMatchObject([
+      { type: partType, text: PROMPT },
+      { type: partType, text: followup.text },
+    ]);
+  });
+
+  test("replaces an instrumented marker-only user turn with one placeholder", () => {
+    const marker = mint();
+    const cache = { type: "ephemeral", ttl: "1h" };
+    const body = {
+      model: "m",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: marker,
+              cache_control: cache,
+              withheld: "secret-payload",
+            },
+          ],
+        },
+      ],
+    };
+    const capture = captureRewriteRequest(body, "anthropic:messages");
+    stripDelegationMarkers({ family: "anthropic:messages", body });
+    const visible = body.messages[0].content.filter((part) => !isOmitted(part));
+    expect(visible).toHaveLength(1);
+    expect(visible[0]).toMatchObject({
+      type: "text",
+      text: "[delegation metadata removed]",
+      cache_control: cache,
+    });
+    expect(Object.keys(visible[0])).toEqual(["type", "text", "cache_control"]);
+    expect(
+      Object.getOwnPropertySymbols(visible[0]).some(
+        (symbol) => symbol.description === "openappa.rewriteOrigin",
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(body)).not.toContain(marker);
+    expect(JSON.stringify(body)).not.toContain("secret-payload");
+    const projected = capture.project(body, new Map(), {
+      allowInitial: true,
+    });
+    const message = (
+      projected.request as {
+        messages: Array<{ content: Array<{ type?: string; text?: string }> }>;
+      }
+    ).messages[0];
+    expect(message.content).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: "[delegation metadata removed]",
+      }),
+    ]);
+    expect(JSON.stringify(projected.request)).not.toContain(marker);
+    expect(JSON.stringify(projected.request)).not.toContain("secret-payload");
   });
 
   test("strips CRLF-formatted marker lines before provider dispatch", () => {

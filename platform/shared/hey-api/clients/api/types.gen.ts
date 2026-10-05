@@ -334,6 +334,8 @@ export type OpenAiChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type OpenAiChatCompletionResponseInput = {
@@ -1442,6 +1444,7 @@ export type AnthropicMessagesRequestInput = {
         role: 'user' | 'assistant' | 'system';
     }>;
     max_tokens: number;
+    cache_control?: unknown;
     container?: string | null;
     context_management?: {
         [key: string]: unknown;
@@ -1911,6 +1914,8 @@ export type CerebrasChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type CerebrasChatCompletionResponseInput = {
@@ -2425,6 +2430,8 @@ export type MistralChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type MistralChatCompletionResponseInput = {
@@ -2819,6 +2826,8 @@ export type PerplexityChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
     stream_mode?: 'full' | 'concise';
 };
 
@@ -3214,6 +3223,8 @@ export type GroqChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type GroqChatCompletionResponseInput = {
@@ -3608,6 +3619,8 @@ export type OpenrouterChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
     response_format?: {
         type: 'text' | 'json_object' | 'json_schema';
         [key: string]: unknown;
@@ -4994,6 +5007,8 @@ export type DeepSeekChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
     [key: string]: unknown;
 };
 
@@ -5389,6 +5404,8 @@ export type ArchestraChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
     [key: string]: unknown;
 };
 
@@ -6221,6 +6238,8 @@ export type XaiChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type XaiChatCompletionResponseInput = {
@@ -6655,6 +6674,8 @@ export type OpenAiChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type OpenAiChatCompletionResponse = {
@@ -7763,6 +7784,7 @@ export type AnthropicMessagesRequest = {
         role: 'user' | 'assistant' | 'system';
     }>;
     max_tokens: number;
+    cache_control?: unknown;
     container?: string | null;
     context_management?: {
         [key: string]: never;
@@ -8232,6 +8254,8 @@ export type CerebrasChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type CerebrasChatCompletionResponse = {
@@ -8746,6 +8770,8 @@ export type MistralChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type MistralChatCompletionResponse = {
@@ -9140,6 +9166,8 @@ export type PerplexityChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
     stream_mode?: 'full' | 'concise';
 };
 
@@ -9535,6 +9563,8 @@ export type GroqChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type GroqChatCompletionResponse = {
@@ -9929,6 +9959,8 @@ export type OpenrouterChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
     response_format?: {
         type: 'text' | 'json_object' | 'json_schema';
         [key: string]: unknown;
@@ -11315,6 +11347,8 @@ export type DeepSeekChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
     [key: string]: unknown;
 };
 
@@ -11710,6 +11744,8 @@ export type ArchestraChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
     [key: string]: unknown;
 };
 
@@ -12542,6 +12578,8 @@ export type XaiChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in_memory' | '24h';
 };
 
 export type XaiChatCompletionResponse = {
@@ -30872,6 +30910,8 @@ export type AzureResponsesWithDefaultAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers?: {
@@ -31041,6 +31081,8 @@ export type AzureResponsesWithAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers?: {
@@ -33419,6 +33461,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
             role: 'user' | 'assistant' | 'system';
         }>;
         max_tokens: number;
+        cache_control?: unknown;
         container?: string | null;
         context_management?: {
             [key: string]: unknown;
@@ -33773,6 +33816,7 @@ export type BedrockInvokeWithAgentAndModelData = {
             role: 'user' | 'assistant' | 'system';
         }>;
         max_tokens: number;
+        cache_control?: unknown;
         container?: string | null;
         context_management?: {
             [key: string]: unknown;
@@ -34128,6 +34172,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
             role: 'user' | 'assistant' | 'system';
         }>;
         max_tokens: number;
+        cache_control?: unknown;
         container?: string | null;
         context_management?: {
             [key: string]: unknown;
@@ -34415,6 +34460,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
             role: 'user' | 'assistant' | 'system';
         }>;
         max_tokens: number;
+        cache_control?: unknown;
         container?: string | null;
         context_management?: {
             [key: string]: unknown;
@@ -44098,6 +44144,8 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             include_usage?: boolean;
         } | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -44580,6 +44628,8 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             include_usage?: boolean;
         } | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -44773,6 +44823,8 @@ export type GithubCopilotResponsesWithDefaultAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -44939,6 +44991,8 @@ export type GithubCopilotResponsesWithAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -47515,6 +47569,8 @@ export type GetInteractionsResponses = {
                 }>;
                 top_p?: number | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -47550,6 +47606,8 @@ export type GetInteractionsResponses = {
                 }>;
                 top_p?: number | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -49075,6 +49133,7 @@ export type GetInteractionsResponses = {
                     role: 'user' | 'assistant' | 'system';
                 }>;
                 max_tokens: number;
+                cache_control?: unknown;
                 container?: string | null;
                 context_management?: {
                     [key: string]: never;
@@ -49339,6 +49398,7 @@ export type GetInteractionsResponses = {
                     role: 'user' | 'assistant' | 'system';
                 }>;
                 max_tokens: number;
+                cache_control?: unknown;
                 container?: string | null;
                 context_management?: {
                     [key: string]: never;
@@ -51038,6 +51098,8 @@ export type GetInteractionsResponses = {
                     include_usage?: boolean;
                 } | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -51364,6 +51426,8 @@ export type GetInteractionsResponses = {
                     include_usage?: boolean;
                 } | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -51849,6 +51913,8 @@ export type GetInteractionsResponses = {
                     include_usage?: boolean;
                 } | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -52175,6 +52241,8 @@ export type GetInteractionsResponses = {
                     include_usage?: boolean;
                 } | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -52660,6 +52728,8 @@ export type GetInteractionsResponses = {
                     include_usage?: boolean;
                 } | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -52986,6 +53056,8 @@ export type GetInteractionsResponses = {
                     include_usage?: boolean;
                 } | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -53442,6 +53514,8 @@ export type GetInteractionsResponses = {
                 }>;
                 top_p?: number | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -53477,6 +53551,8 @@ export type GetInteractionsResponses = {
                 }>;
                 top_p?: number | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -53646,6 +53722,8 @@ export type GetInteractionsResponses = {
                 }>;
                 top_p?: number | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -53681,6 +53759,8 @@ export type GetInteractionsResponses = {
                 }>;
                 top_p?: number | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -53850,6 +53930,8 @@ export type GetInteractionsResponses = {
                 }>;
                 top_p?: number | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -53885,6 +53967,8 @@ export type GetInteractionsResponses = {
                 }>;
                 top_p?: number | null;
                 user?: string;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in_memory' | '24h';
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -54778,6 +54862,8 @@ export type GetInteractionResponses = {
             }>;
             top_p?: number | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -54813,6 +54899,8 @@ export type GetInteractionResponses = {
             }>;
             top_p?: number | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -56338,6 +56426,7 @@ export type GetInteractionResponses = {
                 role: 'user' | 'assistant' | 'system';
             }>;
             max_tokens: number;
+            cache_control?: unknown;
             container?: string | null;
             context_management?: {
                 [key: string]: never;
@@ -56602,6 +56691,7 @@ export type GetInteractionResponses = {
                 role: 'user' | 'assistant' | 'system';
             }>;
             max_tokens: number;
+            cache_control?: unknown;
             container?: string | null;
             context_management?: {
                 [key: string]: never;
@@ -58301,6 +58391,8 @@ export type GetInteractionResponses = {
                 include_usage?: boolean;
             } | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -58627,6 +58719,8 @@ export type GetInteractionResponses = {
                 include_usage?: boolean;
             } | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -59112,6 +59206,8 @@ export type GetInteractionResponses = {
                 include_usage?: boolean;
             } | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -59438,6 +59534,8 @@ export type GetInteractionResponses = {
                 include_usage?: boolean;
             } | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -59923,6 +60021,8 @@ export type GetInteractionResponses = {
                 include_usage?: boolean;
             } | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -60249,6 +60349,8 @@ export type GetInteractionResponses = {
                 include_usage?: boolean;
             } | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -60705,6 +60807,8 @@ export type GetInteractionResponses = {
             }>;
             top_p?: number | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -60740,6 +60844,8 @@ export type GetInteractionResponses = {
             }>;
             top_p?: number | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -60909,6 +61015,8 @@ export type GetInteractionResponses = {
             }>;
             top_p?: number | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -60944,6 +61052,8 @@ export type GetInteractionResponses = {
             }>;
             top_p?: number | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -61113,6 +61223,8 @@ export type GetInteractionResponses = {
             }>;
             top_p?: number | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -61148,6 +61260,8 @@ export type GetInteractionResponses = {
             }>;
             top_p?: number | null;
             user?: string;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in_memory' | '24h';
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -64808,6 +64922,8 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             include_usage?: boolean;
         } | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -65290,6 +65406,8 @@ export type KimiChatCompletionsWithAgentData = {
             include_usage?: boolean;
         } | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -79828,6 +79946,8 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             include_usage?: boolean;
         } | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -80310,6 +80430,8 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             include_usage?: boolean;
         } | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -81444,6 +81566,8 @@ export type ModelRouterResponsesWithDefaultAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -81613,6 +81737,8 @@ export type ModelRouterResponsesWithAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -83643,6 +83769,8 @@ export type OpenAiResponsesWithDefaultAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -83812,6 +83940,8 @@ export type OpenAiResponsesWithAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers: {
@@ -83958,6 +84088,7 @@ export type OpenAiResponsesCompactWithDefaultAgentData = {
         instructions?: string | null;
         previous_response_id?: string | null;
         prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
     };
     headers: {
         /**
@@ -84099,6 +84230,7 @@ export type OpenAiResponsesCompactWithAgentData = {
         instructions?: string | null;
         previous_response_id?: string | null;
         prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
     };
     headers: {
         /**
@@ -91907,6 +92039,8 @@ export type PerplexityResponsesWithDefaultAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers?: {
@@ -92076,6 +92210,8 @@ export type PerplexityResponsesWithAgentData = {
         }>;
         top_p?: number | null;
         user?: string;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in_memory' | '24h';
         [key: string]: unknown;
     };
     headers?: {

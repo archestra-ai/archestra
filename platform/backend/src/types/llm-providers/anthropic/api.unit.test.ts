@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { MessagesRequestSchema, MessagesResponseSchema } from "./api";
 
+function roundTrip(value: unknown) {
+  return JSON.parse(JSON.stringify(MessagesRequestSchema.parse(value)));
+}
+
 describe("MessagesRequestSchema", () => {
   // Fastify replaces request.body with the Zod parse result, so any thinking
   // field this schema drops never reaches the upstream provider, and any value
@@ -48,6 +52,30 @@ describe("MessagesRequestSchema", () => {
     });
 
     expect(parsed.tools?.[0]).toMatchObject({ name: "Read" });
+  });
+
+  test("keeps top-level and block cache markers and strips unsupported fields", () => {
+    const topLevel = { type: "ephemeral", ttl: "1h" };
+    const systemMarker = { type: "ephemeral", ttl: "5m" };
+    const messageMarker = { type: "ephemeral", ttl: "1h" };
+    const parsed = roundTrip({
+      model: "claude-opus-4-6",
+      max_tokens: 1024,
+      cache_control: topLevel,
+      not_a_supported_field: "drop-me",
+      system: [{ type: "text", text: "sys", cache_control: systemMarker }],
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "hi", cache_control: messageMarker }],
+        },
+      ],
+    });
+
+    expect(parsed.cache_control).toEqual(topLevel);
+    expect(parsed.system[0].cache_control).toEqual(systemMarker);
+    expect(parsed.messages[0].content[0].cache_control).toEqual(messageMarker);
+    expect(parsed).not.toHaveProperty("not_a_supported_field");
   });
 
   test("forwards Anthropic tool types the schema does not enumerate", () => {

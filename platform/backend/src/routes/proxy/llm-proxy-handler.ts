@@ -100,13 +100,21 @@ import {
 import {
   type AppaDelegationMarker,
   collectDelegationMarkers,
+  isDelegationMarkerLine,
   stripDelegationMarkers,
 } from "@/openappa/delegation";
 import { forkedSession } from "@/openappa/lineage";
+import { PEER_PROOF_ARGUMENT } from "@/openappa/peer-claims";
 import {
   prepareAppaRequest,
   sanitizeProviderBoundRequest,
 } from "@/openappa/request";
+import { hasRewriteCarrier, isQuotedHistory } from "@/openappa/rewrite-echo";
+import {
+  AppaRewriteReplay,
+  captureAppaReplayRequest,
+} from "@/openappa/rewrite-replay";
+import { RewriteStreamCapture } from "@/openappa/rewrite-stream";
 import {
   APPA_PARENT_HEADER,
   isAppaChatSource,
@@ -124,13 +132,12 @@ import {
 import { startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
+  type AppaWireFamily,
   appaWireFamily,
   appendChildTrajectoryReceiptToResponse,
   appendSessionReceiptToResponse,
   declaredToolEntries,
-  providerWire,
   restoreTrajectoryStamps,
-  restoreTrajectoryStampsInText,
   sessionReceiptEvidence,
   stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
@@ -146,8 +153,13 @@ import {
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import {
+  APPA_AUXILIARY_ANALYSIS,
   APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_REPLAY_APPROVED_TEXT,
+  APPA_REPLAY_ENCRYPTION,
+  APPA_REPLAY_ENVELOPE,
+  APPA_REPLAY_SESSION,
   type AppaChildTrajectoryReceiptOutput,
   type AppaTrustedContext,
 } from "@/proxy/plugins/appa-plugin-archestra/types";
@@ -239,6 +251,8 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   connectionVerification?: boolean;
+  rewriteReplay?: AppaRewriteReplay;
+  stableReplayRequired?: boolean;
   openappaSession?: OpenAppaSession;
   connectionSetupBypass: boolean;
   sessionReceipt?: SessionReceiptOutput;
@@ -671,58 +685,39 @@ export async function handleLLMProxy<
     url: request.url,
   });
 
-  // Removes receipts and delegation markers before forwarding requests.
-  // Markers must not reach providers or logs, even when OpenAPPA is off.
-  // When active, OpenAPPA resolves extracted markers into lineage evidence.
+  // Capture before any receipt, namespace, argument, or declaration is stripped.
+  // Activation is pinned for the whole turn, including this initial boundary.
+  // Strips run only while enforcement is on. While it is off the body stays
+  // as received and no journal opens; a post-auth check refuses if those
+  // decoders would change provider-content bytes.
   const requestWireFamily = appaWireFamily(provider.interactionType);
-  let strippedReceiptCodes: string[] = [];
-  let delegationMarkers: AppaDelegationMarker[] | undefined;
-  let childReturns: CollectedChildReturns | undefined;
-  let childTrajectoryReceipts: AppaChildTrajectoryReceipt[] | undefined;
-  if (requestWireFamily) {
-    strippedReceiptCodes = stripSessionReceiptsFromRequest({
-      family: requestWireFamily,
-      body,
-    });
-    const opaqueProofs =
-      requestWireFamily === "openai:responses"
-        ? unwrapCompactionCarriersFromRequest(body)
-        : [];
-    childTrajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
-      family: requestWireFamily,
-      body,
-    });
-    childTrajectoryReceipts.push(
-      ...opaqueProofs.flatMap(
-        (proof) => stripChildTrajectoryReceipts(proof).receipts,
-      ),
-    );
-    delegationMarkers = collectDelegationMarkers({
-      family: requestWireFamily,
-      body,
-    });
-    stripDelegationMarkers({ family: requestWireFamily, body });
-    const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
-      adapter.matches({
-        headers: headers as Record<string, string | string[] | undefined>,
-        requestBody: body,
-      }),
-    )?.id;
-    childReturns = collectAndStripChildReturns(body, {
-      openCodeBackgroundReturns: nativeClient === "opencode",
-      codexMailboxReturns: nativeClient === "codex",
-    });
-  }
-  // Restores original provider call IDs before request processing, logging,
-  // or policy evaluation: the trajectory stamps first, then any stamp a
-  // client copied into text. Neither needs an OpenAPPA session, so no id the
-  // proxy gave a client reaches a provider with Guardrails off either.
-  const trajectoryStamps = restoreTrajectoryStamps({
-    interactionType: provider.interactionType,
+  const guardrailsDeployment = await getGuardrailsDeployment();
+  const carrierHeaders = headers as Record<
+    string,
+    string | string[] | undefined
+  >;
+  const replayCapture =
+    guardrailsDeployment.active && requestWireFamily
+      ? captureAppaReplayRequest({ family: requestWireFamily, body })
+      : undefined;
+  const auxiliaryAnalysis = isAuxiliaryAnalysis({
     body,
+    capture: replayCapture,
+    headers: carrierHeaders,
   });
-  const wire = providerWire(provider.interactionType);
-  if (wire) restoreTrajectoryStampsInText({ wire, body });
+  const stripped = guardrailsDeployment.active
+    ? applyEarlyCarrierStrips({
+        body,
+        family: requestWireFamily,
+        interactionType: provider.interactionType,
+        headers: carrierHeaders,
+      })
+    : undefined;
+  const strippedReceiptCodes = stripped?.strippedReceiptCodes ?? [];
+  const delegationMarkers = stripped?.delegationMarkers;
+  const childReturns = stripped?.childReturns;
+  const childTrajectoryReceipts = stripped?.childTrajectoryReceipts;
+  const trajectoryStamps = stripped?.trajectoryStamps ?? [];
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -1265,11 +1260,22 @@ export async function handleLLMProxy<
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
     unsupportedClientAction,
-  } = await getGuardrailsDeployment();
+  } = guardrailsDeployment;
   // Enforcement is off, but OpenAPPA records what it must know when enforcement
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
   const appaObserving = appaFeatureEnabled && !appaActive;
+  if (
+    !appaActive &&
+    inactiveCarrierStripWouldChange({
+      body,
+      family: requestWireFamily,
+      interactionType: provider.interactionType,
+      headers: headersForExtraction,
+    })
+  ) {
+    refuseInactiveCarrierInversion();
+  }
   // An encrypted chat that started while enforcement was off stays out of
   // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
   if (
@@ -1364,7 +1370,6 @@ export async function handleLLMProxy<
         declarations: gatewayToolDeclarations,
         internalChat: isInternalChat,
       });
-
     // Resolve the agent's organization once, to apply its configured default
     // discovered-tool guardrails to any tools persisted below.
     const organization = await OrganizationModel.getById(
@@ -1849,10 +1854,6 @@ export async function handleLLMProxy<
                       incomingAppaSessionHeader !== undefined
                         ? undefined
                         : callerId,
-                    // Bind fallback root if no session was provided.
-                    fallbackSessionId: callerId
-                      ? `${callerId}@${resolvedAgent.id}`
-                      : undefined,
                   }),
             });
         if (!openappaSession && !connectionSetupBypass)
@@ -1865,17 +1866,6 @@ export async function handleLLMProxy<
             ...openappaSession,
             fork_of: scopedSessionId(callerId, forkOf),
           };
-        if (
-          callerId &&
-          openappaSession?.session_id === `${callerId}@${resolvedAgent.id}`
-        ) {
-          // Every conversation of this credential on this agent now shares one
-          // root: a turn ending in one releases the offers of the others.
-          logger.warn(
-            { agentId: resolvedAgent.id, callerId },
-            "OpenAPPA bound a fallback root because the client reported no session",
-          );
-        }
       } else if (
         appaObserving &&
         !delegatedRun &&
@@ -1907,6 +1897,7 @@ export async function handleLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
+      pluginContext.resources.set(APPA_REPLAY_ENCRYPTION, encryptedChat);
       // The facts that bind a child trajectory. Read without preparing the
       // request for enforcement, which changes the body and refuses tool
       // shapes that OpenAPPA cannot govern. Built only for an OpenAPPA session.
@@ -2076,19 +2067,26 @@ export async function handleLLMProxy<
         };
       }
     }
-    // Nothing OpenAPPA wrote for the client and the gateway goes on to the
-    // provider, whether or not this request has a session (deployment switch
-    // off, a connection-setup or unsupported-client bypass, a delegated run)
-    // and whatever restoration above could not put back. Runs after
-    // prepareAppaRequest collected the notices' signed offers and the plugin
-    // read this request's results. A request without a session evaluates
-    // trusted data on the result, as a session does on its restored history.
-    // It changes no call id, so the tool-result updates below still land.
-    const providerBoundRewrites = sanitizeProviderBoundRequest({
-      body,
-      interactionType: provider.interactionType,
-      identity: toolIdentity,
-    });
+    // While enforcement is on, drop transport members the exact replay
+    // projection does not own. While it is off, do not reconstruct those
+    // members from stamps or offers: a change is refused above or here.
+    if (
+      !appaActive &&
+      inactiveProviderBoundRewriteWouldChange({
+        body,
+        interactionType: provider.interactionType,
+        identity: toolIdentity,
+      })
+    ) {
+      refuseInactiveCarrierInversion();
+    }
+    const providerBoundRewrites = appaActive
+      ? sanitizeProviderBoundRequest({
+          body,
+          interactionType: provider.interactionType,
+          identity: toolIdentity,
+        })
+      : 0;
     if (providerBoundRewrites > 0) {
       logger.debug(
         {
@@ -2126,6 +2124,63 @@ export async function handleLLMProxy<
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
+
+    let rewriteReplay: AppaRewriteReplay | undefined;
+    if (openappaSession && pluginContext) {
+      const replaySession = pluginContext.resources.get(APPA_REPLAY_SESSION) as
+        | OpenAppaSession
+        | undefined;
+      if (!replaySession) {
+        throw new ApiError(
+          409,
+          "OpenAPPA replay session binding is unavailable",
+        );
+      }
+      const needsReplay =
+        !auxiliaryAnalysis &&
+        (requestAdapter.getTools().length > 0 ||
+          declaredToolEntries(body).length > 0 ||
+          replayCapture?.hasDeclarations === true ||
+          replaySession.parent_id !== undefined ||
+          sessionReceipt !== undefined ||
+          childTrajectoryReceipt !== undefined ||
+          replayCapture?.echo.hasCalls === true ||
+          (replayCapture !== undefined &&
+            textRequiresReplay(replayCapture.echo.texts)) ||
+          requestCarriesPeerOrRelay({
+            body,
+            headers: headersForExtraction,
+          }));
+      if (auxiliaryAnalysis) {
+        pluginContext.resources.set(APPA_AUXILIARY_ANALYSIS, true);
+        pluginContext.resources.delete(APPA_REPLAY_SESSION);
+      } else if (needsReplay) {
+        if (!replayCapture) {
+          throw new ApiError(
+            400,
+            "OpenAPPA cannot guarantee exact replay for this provider wire format",
+          );
+        }
+        rewriteReplay = await AppaRewriteReplay.open({
+          session: replaySession,
+          capture: replayCapture,
+          encryptedChat,
+          compaction: clientCompaction,
+        });
+        pluginContext.resources.set(APPA_REPLAY_ENVELOPE, rewriteReplay);
+        rewriteReplay.addPolicyOutputs(
+          new Map(Object.entries(toolResultUpdates)),
+        );
+        await rewriteReplay.restoreTextEchoes({
+          delegationCallIds: delegationMarkers?.flatMap((marker) =>
+            marker.spawnCallId ? [marker.spawnCallId] : [],
+          ),
+        });
+      } else {
+        // No APPA mutation is needed for a fresh tool-less request.
+        pluginContext.resources.delete(APPA_REPLAY_SESSION);
+      }
+    }
 
     logger.info(
       {
@@ -2331,6 +2386,8 @@ export async function handleLLMProxy<
 
     const ctx: LLMProxyContext<TRequest> = {
       connectionVerification,
+      rewriteReplay,
+      stableReplayRequired: openappaSession !== undefined,
       openappaSession,
       connectionSetupBypass,
       ...(sessionReceipt ? { sessionReceipt } : {}),
@@ -2578,9 +2635,29 @@ async function handleStreaming<
   } = ctx;
 
   const providerName = provider.provider;
+  if (
+    (sessionReceipt || childTrajectoryReceipt || childCompactionContext) &&
+    !ctx.rewriteReplay
+  ) {
+    throw new ApiError(
+      409,
+      "A response rewrite requires a durable replay session",
+    );
+  }
   const bufferModelResponse =
     pluginContext !== undefined &&
     pluginRegistry?.buffersModelResponse(pluginContext) === true;
+  // Receipt/compaction text needs a complete provider-content inverse, not a
+  // per-delta approximation. Ordinary unchanged text remains unbuffered.
+  const bufferResponseEvents =
+    bufferModelResponse ||
+    (ctx.rewriteReplay !== undefined &&
+      Boolean(
+        sessionReceipt || childTrajectoryReceipt || childCompactionContext,
+      ));
+  const rewriteStream = ctx.rewriteReplay
+    ? new RewriteStreamCapture(ctx.rewriteReplay.family)
+    : undefined;
   if (pluginContext && pluginRegistry?.governsHostedToolCalls(pluginContext)) {
     streamAdapter.withholdHostedToolCalls?.();
   }
@@ -2597,7 +2674,7 @@ async function handleStreaming<
       }
       if (sessionReceipt && text.length > 0) {
         sessionReceiptPrepared = true;
-        if (!bufferModelResponse) markSessionReceiptIssued(sessionReceipt);
+        if (!bufferResponseEvents) markSessionReceiptIssued(sessionReceipt);
         parts.push(sessionReceipt.footer);
       }
       return parts.join("\n");
@@ -2607,6 +2684,7 @@ async function handleStreaming<
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
+  let upstreamCompleted = false;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
@@ -2622,7 +2700,10 @@ async function handleStreaming<
       ["Content-Type"]?.startsWith("text/event-stream") ?? false,
   );
   keepAlive.start();
-  const writeToClient = (data: string | Uint8Array) => {
+  const writeToClient = (
+    data: string | Uint8Array,
+    alreadyObserved = false,
+  ) => {
     if (ctx.connectionVerification) {
       // Includes policy-generated frames as well as provider frames. Do not
       // let an executable call reach the native client's dispatcher.
@@ -2646,46 +2727,72 @@ async function handleStreaming<
         }
       }
     }
+    if (!alreadyObserved) rewriteStream?.observeClientEvent(data);
     ensureStreamHeaders();
     reply.raw.write(data);
     keepAlive.touch();
   };
-  const MAX_BUFFERED_CHILD_STREAM_BYTES = 10 * 1024 * 1024;
-  let bufferedChildBytes = 0;
+  const MAX_BUFFERED_STREAM_BYTES = 10 * 1024 * 1024;
+  let bufferedStreamBytes = 0;
   const bufferedModelEvents: (string | Uint8Array)[] = [];
   const bufferedPolicyEvents: (string | Uint8Array)[] = [];
-  const emitModelEvent = (
+  const bufferEvent = (
     data: string | Uint8Array,
-    isResponsePreamble = false,
+    events: (string | Uint8Array)[],
   ) => {
+    bufferedStreamBytes +=
+      typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
+    if (bufferedStreamBytes > MAX_BUFFERED_STREAM_BYTES) {
+      throw new ApiError(413, "OpenAPPA stream exceeded response buffer limit");
+    }
+    events.push(data);
+  };
+  const commitToolEvents = async (params: {
+    events: readonly (string | Uint8Array)[];
+    emitted: readonly { id: string; wireId?: string }[];
+    policyCallIds?: readonly string[];
+  }) => {
+    if (ctx.stableReplayRequired && !ctx.rewriteReplay) {
+      throw new ApiError(
+        409,
+        "An executable rewrite requires a durable replay session",
+      );
+    }
+    if (!ctx.rewriteReplay || !rewriteStream) return;
+    const proposed = new RewriteStreamCapture(ctx.rewriteReplay.family);
+    for (const event of params.events) proposed.observeClientEvent(event);
+    await ctx.rewriteReplay.recordResponse({
+      source: ctx.rewriteReplay.captureResponse(
+        rewriteStream.originalResponse(),
+      ),
+      response: proposed.clientResponse(),
+      emitted: params.emitted,
+      policyCallIds: params.policyCallIds,
+      callsOnly: true,
+    });
+  };
+  const emitModelEvent = (params: {
+    data: string | Uint8Array;
+    isResponsePreamble?: boolean;
+    isFinal?: boolean;
+  }) => {
+    const { data, isResponsePreamble = false, isFinal = false } = params;
     if (
-      bufferModelResponse &&
-      !(isResponsePreamble && !preambleSseCarriesContent(data))
+      (bufferResponseEvents &&
+        !(isResponsePreamble && !preambleSseCarriesContent(data))) ||
+      // OpenAI's finish_reason precedes its usage-bearing final chunk.
+      (ctx.rewriteReplay &&
+        (isFinal || streamAdapter.state.stopReason !== null))
     ) {
-      bufferedChildBytes +=
-        typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
-      if (bufferedChildBytes > MAX_BUFFERED_CHILD_STREAM_BYTES) {
-        throw new ApiError(
-          413,
-          "OpenAPPA child stream exceeded response buffer limit",
-        );
-      }
-      bufferedModelEvents.push(data);
+      bufferEvent(data, bufferedModelEvents);
       return;
     }
     writeToClient(data);
   };
   const emitPolicyEvent = (data: string | Uint8Array) => {
-    if (bufferModelResponse) {
-      bufferedChildBytes +=
-        typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
-      if (bufferedChildBytes > MAX_BUFFERED_CHILD_STREAM_BYTES) {
-        throw new ApiError(
-          413,
-          "OpenAPPA child stream exceeded response buffer limit",
-        );
-      }
-      bufferedPolicyEvents.push(data);
+    // A calls-only commit does not cover policy text or a completed envelope.
+    if (bufferResponseEvents || ctx.rewriteReplay) {
+      bufferEvent(data, bufferedPolicyEvents);
       return;
     }
     writeToClient(data);
@@ -2782,6 +2889,9 @@ async function handleStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
+        if (ctx.rewriteReplay) {
+          request = await ctx.rewriteReplay.prepareRequest(request);
+        }
         const stream = await provider.executeStream(client, request);
         billingMode = getBillingMode();
 
@@ -2818,6 +2928,7 @@ async function handleStreaming<
             );
           }
 
+          rewriteStream?.observeProviderChunk(chunk);
           const result = streamAdapter.processChunk(chunk);
 
           // An adapter reports a tool-call chunk by withholding `sseData`, so
@@ -2836,10 +2947,15 @@ async function handleStreaming<
           // branch still do; zhipuai.ts guards it), as does one whose terminal
           // frame echoes the turn's calls (the Responses adapters).
           if (result.sseData) {
-            emitModelEvent(result.sseData, result.isResponsePreamble);
+            emitModelEvent({
+              data: result.sseData,
+              isResponsePreamble: result.isResponsePreamble,
+              isFinal: result.isFinal,
+            });
           }
 
           if (result.isFinal) {
+            upstreamCompleted = true;
             break;
           }
         }
@@ -2939,6 +3055,10 @@ async function handleStreaming<
       },
     });
 
+    if (ctx.rewriteReplay && !upstreamCompleted) {
+      throw new ApiError(502, "Provider stream ended before completion");
+    }
+
     logger.info("Stream loop completed, processing final events");
 
     const hostedToolCalls = streamAdapter.getHostedToolCalls?.() ?? [];
@@ -2969,6 +3089,11 @@ async function handleStreaming<
         hostedHold.notices,
       );
       if (!reply.raw.destroyed) {
+        await commitToolEvents({
+          events: heldEvents,
+          emitted: hostedHold.notices,
+          policyCallIds: hostedHold.notices.map((call) => call.id),
+        });
         for (const event of heldEvents) {
           emitPolicyEvent(event);
         }
@@ -3067,6 +3192,7 @@ async function handleStreaming<
         streamAdapter.prepareResponseReplacement?.();
         bufferedModelEvents.length = 0;
         bufferedPolicyEvents.length = 0;
+        bufferedStreamBytes = 0;
       }
       // Drop the held tool-call events and use the existing refusal format.
       // Its text comes from APPA when enabled.
@@ -3119,6 +3245,10 @@ async function handleStreaming<
             ...rewrittenToolCalls,
           );
         }
+        await commitToolEvents({
+          events: allEvents,
+          emitted: streamAdapter.state.toolCalls,
+        });
         for (const event of allEvents) {
           emitPolicyEvent(event);
         }
@@ -3143,16 +3273,17 @@ async function handleStreaming<
         streamAdapter.prepareResponseReplacement?.();
         bufferedModelEvents.length = 0;
         bufferedPolicyEvents.length = 0;
-        bufferedPolicyEvents.push(
-          ...streamAdapter.formatCompleteTextSSE(
-            childTrajectoryReceipt
-              ? appendChildTrajectoryReceipt(
-                  bufferedOutcome.responseText,
-                  childTrajectoryReceipt.footer,
-                )
-              : bufferedOutcome.responseText,
-          ),
-        );
+        bufferedStreamBytes = 0;
+        for (const event of streamAdapter.formatCompleteTextSSE(
+          childTrajectoryReceipt
+            ? appendChildTrajectoryReceipt(
+                bufferedOutcome.responseText,
+                childTrajectoryReceipt.footer,
+              )
+            : bufferedOutcome.responseText,
+        )) {
+          emitPolicyEvent(event);
+        }
         response = streamAdapter.toProviderResponse();
       }
     }
@@ -3170,9 +3301,34 @@ async function handleStreaming<
       });
     }
 
-    if (bufferModelResponse && !reply.raw.destroyed) {
-      for (const event of bufferedModelEvents) writeToClient(event);
-      for (const event of bufferedPolicyEvents) writeToClient(event);
+    // Stream end events. Buffered rewritten frames stay unsent until the
+    // inverse commits, so an expired or unverified failure emits no approximation.
+    const endEvent = streamAdapter.formatEndSSE();
+    if (ctx.rewriteReplay && rewriteStream) {
+      for (const event of bufferedModelEvents)
+        rewriteStream.observeClientEvent(event);
+      for (const event of bufferedPolicyEvents)
+        rewriteStream.observeClientEvent(event);
+      rewriteStream.observeClientEvent(endEvent);
+      const approvedText =
+        pluginContext?.resources.get(APPA_REPLAY_APPROVED_TEXT) ??
+        toolInvocationRefusal?.contentMessage;
+      await ctx.rewriteReplay.recordResponse({
+        source: ctx.rewriteReplay.captureResponse(
+          rewriteStream.originalResponse(),
+        ),
+        response: rewriteStream.clientResponse(),
+        emitted: hostedHold?.notices ?? streamAdapter.state.toolCalls,
+        policyCallIds: hostedHold?.notices.map((call) => call.id),
+        ...(typeof approvedText === "string" ? { approvedText } : {}),
+      });
+    }
+    if (!reply.raw.destroyed) {
+      const alreadyObserved = ctx.rewriteReplay !== undefined;
+      for (const event of bufferedModelEvents)
+        writeToClient(event, alreadyObserved);
+      for (const event of bufferedPolicyEvents)
+        writeToClient(event, alreadyObserved);
       if (
         sessionReceipt &&
         sessionReceiptPrepared &&
@@ -3181,9 +3337,7 @@ async function handleStreaming<
         markSessionReceiptIssued(sessionReceipt);
       }
     }
-
-    // Stream end events
-    writeToClient(streamAdapter.formatEndSSE());
+    writeToClient(endEvent, true);
     reply.raw.end();
 
     streamCompleted = true;
@@ -3427,8 +3581,35 @@ async function handleNonStreaming<
   } = ctx;
 
   const providerName = provider.provider;
-  const sendResponse = (response: unknown) => {
+  let replayResponseSource:
+    | ReturnType<AppaRewriteReplay["captureResponse"]>
+    | undefined;
+  let replayEmittedCalls: readonly { id: string; wireId?: string }[] = [];
+  let replayPolicyCallIds: string[] = [];
+  const sendResponse = async (response: unknown) => {
     if (ctx.connectionVerification) assertVerificationResponse(response);
+    if (
+      ctx.stableReplayRequired &&
+      !ctx.rewriteReplay &&
+      replayEmittedCalls.length > 0
+    ) {
+      throw new ApiError(
+        409,
+        "An executable rewrite requires a durable replay session",
+      );
+    }
+    if (ctx.rewriteReplay && replayResponseSource) {
+      const approvedText = pluginContext?.resources.get(
+        APPA_REPLAY_APPROVED_TEXT,
+      );
+      await ctx.rewriteReplay.recordResponse({
+        source: replayResponseSource,
+        response,
+        emitted: replayEmittedCalls,
+        policyCallIds: replayPolicyCallIds,
+        ...(typeof approvedText === "string" ? { approvedText } : {}),
+      });
+    }
     return reply.send(response);
   };
   let billingMode = initialBillingMode;
@@ -3472,6 +3653,9 @@ async function handleNonStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
+        if (ctx.rewriteReplay) {
+          request = await ctx.rewriteReplay.prepareRequest(request);
+        }
         result = await provider.execute(client, request);
         if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
@@ -3499,6 +3683,9 @@ async function handleNonStreaming<
         );
       }
       const adapter = provider.createResponseAdapter(result, request);
+      replayResponseSource = ctx.rewriteReplay?.captureResponse(
+        adapter.getOriginalResponse(),
+      );
 
       // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
       // usage here so the span cost and the downstream cost/persistence (which
@@ -3802,6 +3989,12 @@ async function handleNonStreaming<
           response: refusalResponse,
         });
       }
+      if (ctx.rewriteReplay && replayResponseSource) {
+        replayResponseSource = {
+          ...replayResponseSource,
+          texts: ctx.rewriteReplay.captureResponse(refusalResponse).texts,
+        };
+      }
       return sendResponse(refusalResponse);
     }
   }
@@ -3818,6 +4011,8 @@ async function handleNonStreaming<
       : rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
         ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
         : responseAdapter.getOriginalResponse();
+  replayEmittedCalls = hostedHold?.notices ?? rewrittenToolCalls ?? toolCalls;
+  replayPolicyCallIds = hostedHold?.notices.map((call) => call.id) ?? [];
   let clientResponse = unobservedClientResponse;
   if (
     pluginRegistry &&
@@ -4581,4 +4776,267 @@ function readEncryptedChatDek(request: FastifyRequest): Buffer | null {
   } catch {
     return null;
   }
+}
+
+function applyEarlyCarrierStrips(params: {
+  body: unknown;
+  family: AppaWireFamily | undefined;
+  interactionType: string;
+  headers: Record<string, string | string[] | undefined>;
+}): {
+  strippedReceiptCodes: string[];
+  delegationMarkers: AppaDelegationMarker[] | undefined;
+  childReturns: CollectedChildReturns | undefined;
+  childTrajectoryReceipts: AppaChildTrajectoryReceipt[] | undefined;
+  trajectoryStamps: ReturnType<typeof restoreTrajectoryStamps>;
+} {
+  let strippedReceiptCodes: string[] = [];
+  let delegationMarkers: AppaDelegationMarker[] | undefined;
+  let childReturns: CollectedChildReturns | undefined;
+  let childTrajectoryReceipts: AppaChildTrajectoryReceipt[] | undefined;
+  if (params.family) {
+    strippedReceiptCodes = stripSessionReceiptsFromRequest({
+      family: params.family,
+      body: params.body,
+    });
+    const opaqueProofs =
+      params.family === "openai:responses"
+        ? unwrapCompactionCarriersFromRequest(params.body)
+        : [];
+    childTrajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
+      family: params.family,
+      body: params.body,
+    });
+    childTrajectoryReceipts.push(
+      ...opaqueProofs.flatMap(
+        (proof) => stripChildTrajectoryReceipts(proof).receipts,
+      ),
+    );
+    delegationMarkers = collectDelegationMarkers({
+      family: params.family,
+      body: params.body,
+    });
+    stripDelegationMarkers({ family: params.family, body: params.body });
+    const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
+      adapter.matches({
+        headers: params.headers,
+        requestBody: params.body,
+      }),
+    )?.id;
+    childReturns = collectAndStripChildReturns(params.body, {
+      openCodeBackgroundReturns: nativeClient === "opencode",
+      codexMailboxReturns: nativeClient === "codex",
+    });
+  }
+  return {
+    strippedReceiptCodes,
+    delegationMarkers,
+    childReturns,
+    childTrajectoryReceipts,
+    trajectoryStamps: restoreTrajectoryStamps({
+      interactionType: params.interactionType,
+      body: params.body,
+    }),
+  };
+}
+
+function inactiveProviderBoundRewriteWouldChange(params: {
+  body: unknown;
+  interactionType: string;
+  identity: Parameters<typeof sanitizeProviderBoundRequest>[0]["identity"];
+}): boolean {
+  let copy: unknown;
+  try {
+    copy = structuredClone(params.body);
+  } catch {
+    return true;
+  }
+  try {
+    return (
+      sanitizeProviderBoundRequest({
+        body: copy,
+        interactionType: params.interactionType,
+        identity: params.identity,
+      }) > 0
+    );
+  } catch {
+    return true;
+  }
+}
+
+function isAuxiliaryAnalysis(params: {
+  body: unknown;
+  capture:
+    | {
+        echo: {
+          hasCalls: boolean;
+          texts: readonly { value: string; toolResult: boolean }[];
+        };
+      }
+    | undefined;
+  headers: Record<string, string | string[] | undefined>;
+}): boolean {
+  if (!params.capture || params.capture.echo.hasCalls) return false;
+  if (requestCarriesPeerOrRelay(params)) return false;
+  if (textRequiresReplay(params.capture.echo.texts)) return false;
+  // additional_tools is an executable declaration, including on a JSON side
+  // call. Only a request with no declared tools is analysis.
+  if (declaredToolEntries(params.body).length > 0) return false;
+  return true;
+}
+
+function textRequiresReplay(
+  texts: readonly { value: string; toolResult: boolean }[],
+): boolean {
+  return texts.some((site) =>
+    site.toolResult
+      ? hasRewriteCarrier(site.value)
+      : structuralTextCarrier(site.value),
+  );
+}
+
+function structuralTextCarrier(text: string): boolean {
+  if (isQuotedHistory(text)) return false;
+  return text.split(/\r?\n/).some((line) => isDelegationMarkerLine(line));
+}
+
+function requestCarriesPeerOrRelay(params: {
+  body: unknown;
+  headers: Record<string, string | string[] | undefined>;
+}): boolean {
+  if (containsPeerProof(params.body)) return true;
+  const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
+    candidate.matches({
+      headers: params.headers,
+      requestBody: params.body,
+    }),
+  );
+  return (adapter?.relayArrivals?.(params.body).length ?? 0) > 0;
+}
+
+function containsPeerProof(value: unknown, depth = 0): boolean {
+  if (depth > 64 || !value || typeof value !== "object") return false;
+  if (Array.isArray(value)) {
+    return value.some((entry) => containsPeerProof(entry, depth + 1));
+  }
+  const record = value as Record<string, unknown>;
+  if (Object.hasOwn(record, PEER_PROOF_ARGUMENT)) return true;
+  return Object.values(record).some((entry) =>
+    containsPeerProof(entry, depth + 1),
+  );
+}
+
+function refuseInactiveCarrierInversion(): never {
+  const refused = new ApiError(
+    409,
+    "OpenAPPA cannot forward this history while enforcement is off because removing a carrier would change the request.",
+  );
+  refused.shouldRetry = false;
+  throw refused;
+}
+
+function inactiveCarrierStripWouldChange(params: {
+  body: unknown;
+  family: AppaWireFamily | undefined;
+  interactionType: string;
+  headers: Record<string, string | string[] | undefined>;
+}): boolean {
+  if (!hasCarrierCandidate(params.body)) return false;
+  const before = snapshotProviderNodes(params.body);
+  if (before === undefined) return true;
+  let copy: unknown;
+  try {
+    copy = structuredClone(params.body);
+  } catch {
+    return true;
+  }
+  try {
+    applyEarlyCarrierStrips({ ...params, body: copy });
+  } catch {
+    // A decoder throw that does not change bytes is not a rewrite.
+  }
+  const after = snapshotProviderNodes(copy);
+  return after === undefined || after !== before;
+}
+
+const CARRIER_NEEDLES = [
+  "▄█▄▄▄█▄",
+  "██▄█▄██",
+  "[appa] delegated trajectory ",
+  "[appa] child trajectory ",
+  "appac1-",
+  "appat1",
+  "<task-notification>",
+  "<subagent_notification>",
+  "<task_result>",
+  "finished subagent",
+  "protected subagent ",
+  "protected delegated return",
+  "started subagent",
+  "protected delegated session",
+  "Message Type: FINAL_ANSWER",
+  "Message Type: NEW_TASK",
+];
+
+function hasCarrierCandidate(value: unknown, depth = 0): boolean {
+  if (depth > 64 || value == null) return false;
+  if (typeof value === "string") return containsCarrierNeedle(value);
+  if (typeof value !== "object") return false;
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasCarrierCandidate(entry, depth + 1));
+  }
+  const record = value as Record<string, unknown>;
+  const status = record.status;
+  if (isChildStatus(status)) return true;
+  return Object.keys(record).some((key) =>
+    hasCarrierCandidate(record[key], depth + 1),
+  );
+}
+
+function isChildStatus(status: unknown): boolean {
+  if (!status || typeof status !== "object" || Array.isArray(status)) {
+    return false;
+  }
+  const record = status as Record<string, unknown>;
+  if (typeof record.completed === "string") return true;
+  return Object.values(record).some((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return false;
+    }
+    return typeof (entry as Record<string, unknown>).completed === "string";
+  });
+}
+
+function containsCarrierNeedle(value: string): boolean {
+  if (CARRIER_NEEDLES.some((needle) => value.includes(needle))) return true;
+  return (
+    value.includes("<task") && /\bstate\s*=\s*["']completed["']/.test(value)
+  );
+}
+
+function snapshotProviderNodes(value: unknown): string | undefined {
+  const parts: string[] = [];
+  const visit = (node: unknown, depth: number): boolean => {
+    if (depth > 64) return false;
+    if (typeof node === "string") {
+      parts.push(`s:${node.length}:${node}`);
+      return true;
+    }
+    if (Array.isArray(node)) {
+      parts.push(`a:${node.length}`);
+      for (const entry of node) {
+        if (!visit(entry, depth + 1)) return false;
+      }
+      return true;
+    }
+    if (!node || typeof node !== "object") return true;
+    const record = node as Record<string, unknown>;
+    const keys = Object.keys(record);
+    parts.push(`o:${keys.join(",")}`);
+    for (const key of keys) {
+      if (!visit(record[key], depth + 1)) return false;
+    }
+    return true;
+  };
+  return visit(value, 0) ? parts.join("\n") : undefined;
 }

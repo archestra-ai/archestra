@@ -390,15 +390,16 @@ class OpenAiResponsesRequestAdapter
   }
 
   toProviderRequest(): OpenAiResponsesRequest {
+    const isolated = isolateCarrierMetadata(this.request);
     if (!Array.isArray(this.request.input)) {
       return {
-        ...this.request,
+        ...isolated,
         model: this.getModel(),
       };
     }
 
     return {
-      ...this.request,
+      ...isolated,
       model: this.getModel(),
       input: this.request.input.map((item) => {
         if (!isFunctionCallOutputItem(item)) {
@@ -1690,6 +1691,24 @@ function stampDeclaredNamespace<T>(
           : {}),
       }
     : item;
+}
+
+function isolateCarrierMetadata(
+  request: OpenAiResponsesRequest,
+): OpenAiResponsesRequest {
+  const record = request as OpenAiResponsesRequest & {
+    client_metadata?: unknown;
+    metadata?: unknown;
+  };
+  return {
+    ...request,
+    ...(record.client_metadata !== undefined
+      ? { client_metadata: structuredClone(record.client_metadata) }
+      : {}),
+    ...(record.metadata !== undefined
+      ? { metadata: structuredClone(record.metadata) }
+      : {}),
+  } as OpenAiResponsesRequest;
 }
 
 /**

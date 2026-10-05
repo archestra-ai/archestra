@@ -184,6 +184,19 @@ export interface OfferReviewOutput {
    * values cannot.
    */
   arguments?: string
+  /**
+   * The open plan's recorded narrowing, when this root's log has exactly one
+   * matching offer and that offer is still open. Absent means no verified
+   * pending restriction, not a permission grant.
+   */
+  restrictions?: Array<OfferReviewRestriction>
+}
+
+export interface OfferReviewRestriction {
+  /** `trust` or `readers`. Only a dimension the retained plan actually changes. */
+  dimension: string
+  before: string
+  after: string
 }
 
 export interface OpenappaStatus {

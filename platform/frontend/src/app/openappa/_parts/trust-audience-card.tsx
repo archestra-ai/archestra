@@ -61,7 +61,9 @@ export function TrustAudienceCard() {
         {unmapped > 0 && (
           <InlineNotice>
             <AlertTriangle className="size-4 shrink-0" />
-            <InlineNoticeText>{unmapped} audience not mapped</InlineNoticeText>
+            <InlineNoticeText>
+              {unmapped} {unmapped === 1 ? "audience" : "audiences"} not mapped
+            </InlineNoticeText>
           </InlineNotice>
         )}
       </CardFooter>

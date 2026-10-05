@@ -60,9 +60,9 @@ export function MessageActions({
             All messages below will be regenerated
           </span>
           <Button
-            size="sm"
+            size="xs"
             variant="ghost"
-            className="h-7 px-2 text-xs text-amber-500 hover:text-amber-600 hover:bg-muted"
+            className="text-amber-500 hover:text-amber-600 hover:bg-muted"
             onClick={onRegenerateClick}
           >
             Confirm
@@ -73,9 +73,9 @@ export function MessageActions({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                size="icon"
+                size="icon-xs"
                 variant="ghost"
-                className="h-7 w-7 hover:bg-muted"
+                className="hover:bg-muted"
                 onClick={handleCopy}
               >
                 {copied ? (
@@ -94,9 +94,9 @@ export function MessageActions({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  size="icon"
+                  size="icon-xs"
                   variant="ghost"
-                  className="h-7 w-7 hover:bg-muted"
+                  className="hover:bg-muted"
                   onClick={onEditClick}
                   disabled={editDisabled}
                 >
@@ -111,9 +111,9 @@ export function MessageActions({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  size="icon"
+                  size="icon-xs"
                   variant="ghost"
-                  className="h-7 w-7 hover:bg-muted"
+                  className="hover:bg-muted"
                   onClick={onRegenerateClick}
                   disabled={editDisabled}
                 >
@@ -129,9 +129,9 @@ export function MessageActions({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    size="icon"
+                    size="icon-xs"
                     variant="ghost"
-                    className="h-7 w-7 hover:bg-muted"
+                    className="hover:bg-muted"
                     aria-pressed={feedback === "up"}
                     disabled={feedbackDisabled}
                     onClick={() =>
@@ -154,9 +154,9 @@ export function MessageActions({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    size="icon"
+                    size="icon-xs"
                     variant="ghost"
-                    className="h-7 w-7 hover:bg-muted"
+                    className="hover:bg-muted"
                     aria-pressed={feedback === "down"}
                     disabled={feedbackDisabled}
                     onClick={() =>

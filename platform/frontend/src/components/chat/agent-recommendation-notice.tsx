@@ -5,6 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 
 /**
  * Compact chip shown in the composer toolbar next to the model selector when
@@ -23,10 +24,10 @@ export function NotRecommendedForAgentsNoticeBadge() {
     <Popover>
       <PopoverTrigger asChild>
         <ComposerBadge asChild className="cursor-pointer">
-          <button type="button">
+          <UnstyledButton type="button">
             <InfoIcon className="size-3" />
             Limited for complex tasks
-          </button>
+          </UnstyledButton>
         </ComposerBadge>
       </PopoverTrigger>
       <PopoverContent

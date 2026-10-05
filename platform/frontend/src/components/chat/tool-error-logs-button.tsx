@@ -53,8 +53,7 @@ export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
     <>
       <Button
         variant="outline"
-        size="sm"
-        className="h-6 text-xs gap-1"
+        size="xs"
         onClick={() => setIsLogsDialogOpen(true)}
       >
         <FileText className="h-3 w-3" />

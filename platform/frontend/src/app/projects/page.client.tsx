@@ -229,7 +229,7 @@ function ProjectsList() {
       actionButton={
         <div className="flex items-center gap-2">
           {hasAnyApiKey && (
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
               New project
             </Button>

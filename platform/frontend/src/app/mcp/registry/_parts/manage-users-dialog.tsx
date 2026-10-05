@@ -49,6 +49,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -687,7 +688,7 @@ function ConnectionsTable({
                     );
                   }
                   return (
-                    <button
+                    <UnstyledButton
                       type="button"
                       onClick={() => onOpenPodLogs?.(server.id)}
                       className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
@@ -696,7 +697,7 @@ function ConnectionsTable({
                       <span className="truncate min-w-0 flex-1 text-left">
                         {podName}
                       </span>
-                    </button>
+                    </UnstyledButton>
                   );
                 })()}
               </TableCell>
@@ -720,9 +721,8 @@ function ConnectionsTable({
                           <Button
                             onClick={() => handleReauthenticate(server)}
                             disabled={!canReauthenticate(server)}
-                            size="sm"
+                            size="xs"
                             variant="outline"
-                            className="h-7 text-xs"
                           >
                             <RefreshCw className="mr-1 h-3 w-3" />
                             Re-authenticate
@@ -744,9 +744,9 @@ function ConnectionsTable({
                         <Button
                           onClick={() => handleRevoke(server)}
                           disabled={isDeleting || !canRevoke(server)}
-                          size="sm"
+                          size="xs"
                           variant="ghost"
-                          className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                          className="text-muted-foreground hover:text-foreground"
                           data-testid={
                             isYou
                               ? `${E2eTestId.RevokeCredentialButton}-personal`

@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils/tailwind";
 
 /** Ghost icon + text button shared by the app top bar's labeled actions. */
 export const LABELED_BUTTON_CLASS =
-  "h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground";
+  "text-muted-foreground hover:text-foreground";
 
 /**
  * Pure-layout top bar for an {@link McpAppCard}: a fixed-height row with a
@@ -49,13 +49,10 @@ export function McpAppTopBar({
   );
 }
 
-// Two sizes: "sm" (h-6 w-6) for the frameless-inline hover overlay's compact
-// icons, "bar" (h-8 w-8) for the side-panel header where buttons line up with the
-// panel's collapse button.
+// Two sizes: "sm" (`icon-xs`) for the frameless-inline hover overlay's compact
+// icons, "bar" (`icon-sm`) for the side-panel header where buttons line up with
+// the panel's collapse button.
 type McpAppButtonSize = "sm" | "bar";
-
-const sizeClasses = (size: McpAppButtonSize) =>
-  size === "bar" ? "h-8 w-8" : "h-6 w-6";
 const iconClasses = (size: McpAppButtonSize) =>
   size === "bar" ? "h-4 w-4" : "h-3.5 w-3.5";
 
@@ -77,8 +74,8 @@ function McpAppIconButton({
       aria-label={label}
       title={label}
       variant="ghost"
-      size="icon"
-      className={cn("text-muted-foreground", sizeClasses(size))}
+      size={size === "bar" ? "icon-sm" : "icon-xs"}
+      className="text-muted-foreground"
     >
       <Icon className={iconClasses(size)} />
     </Button>
@@ -117,7 +114,7 @@ export function McpAppSettingsButton({
       disabled={!!disabledReason}
       tooltip={disabledReason}
       variant="ghost"
-      size="sm"
+      size="xs"
       className={LABELED_BUTTON_CLASS}
     >
       <Settings className="h-3.5 w-3.5" />
@@ -178,7 +175,7 @@ export function McpAppStandaloneButton({
                 type="button"
                 aria-label="Open in new tab"
                 variant="ghost"
-                size="sm"
+                size="xs"
                 className={LABELED_BUTTON_CLASS}
                 disabled
               >
@@ -199,7 +196,7 @@ export function McpAppStandaloneButton({
       asChild
       aria-label="Open in new tab"
       variant="ghost"
-      size="sm"
+      size="xs"
       className={LABELED_BUTTON_CLASS}
     >
       <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
@@ -245,16 +242,17 @@ export function McpAppPill({
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={onClick}
             aria-label={label}
             aria-pressed={pressed}
             className={cn(
-              "relative inline-flex h-8 items-center gap-1.5 rounded-full border px-3 transition-all hover:border-accent-foreground/20 hover:bg-accent hover:text-foreground",
-              pressed
-                ? "border-accent-foreground/20 bg-accent text-foreground ring-2 ring-primary/20"
-                : "bg-background",
+              "relative rounded-full hover:border-accent-foreground/20 hover:text-foreground",
+              pressed &&
+                "border-accent-foreground/20 bg-accent dark:bg-accent text-foreground ring-2 ring-primary/20",
             )}
           >
             {icon ?? <AppWindow className="h-4 w-4 text-muted-foreground" />}
@@ -272,7 +270,7 @@ export function McpAppPill({
                 )}
               />
             ) : null}
-          </button>
+          </Button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {label}

@@ -20,6 +20,7 @@ import type {
   UpdateKbDocument,
 } from "@/types";
 import KbDocumentAccessModel from "./kb-document-access";
+import type { GrantPrincipal } from "./resource-permission-subject";
 
 type KbDocumentListItem = KbDocument & {
   connectorType: ConnectorType;
@@ -87,6 +88,7 @@ class KbDocumentModel {
     documentId: string;
     organizationId: string;
     userAcl: string[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl: boolean;
   }): Promise<KbDocument | null> {
     if (!params.bypassAcl && params.userAcl.length === 0) {
@@ -95,8 +97,9 @@ class KbDocumentModel {
     const d = schema.kbDocumentsTable;
     const aclFilter = params.bypassAcl
       ? undefined
-      : await KbDocumentAccessModel.condition({
+      : KbDocumentAccessModel.condition({
           userAcl: params.userAcl,
+          grantPrincipals: await KbDocumentAccessModel.principalsFor(params),
           documentId: d.id,
           connectorId: d.connectorId,
           organizationId: d.organizationId,
@@ -1041,6 +1044,7 @@ class KbDocumentModel {
     connectorIds: string[];
     keys: string[];
     userAcl: AclEntry[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl?: boolean;
     environmentId?: string | null;
     /** Cap per key, so a high-cardinality key cannot flood a model's context. */
@@ -1075,7 +1079,7 @@ class KbDocumentModel {
       : sql`EXISTS (
             SELECT 1 FROM kb_chunks c
             WHERE c.document_id = d.id
-              AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}
+              AND ${KbDocumentAccessModel.condition({ userAcl, grantPrincipals: await KbDocumentAccessModel.principalsFor(params), documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}
           )`;
 
     const rows = await db.execute(sql`

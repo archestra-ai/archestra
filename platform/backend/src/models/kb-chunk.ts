@@ -13,6 +13,7 @@ import type {
   KbDocumentMetadataFilter,
 } from "@/types";
 import KbDocumentAccessModel from "./kb-document-access";
+import type { GrantPrincipal } from "./resource-permission-subject";
 
 /**
  * BM25 tuning constants for one query. Resolved per organization by the query
@@ -125,6 +126,7 @@ class KbChunkModel {
     queryEmbedding: number[];
     dimensions: number;
     userAcl: AclEntry[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl?: boolean;
     /** Defense-in-depth env isolation: require the connector to be in this env. */
     environmentId?: string | null;
@@ -181,7 +183,7 @@ class KbChunkModel {
         AND c.${col} IS NOT NULL
         ${envFilter}
         ${metadataPredicate}
-        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, grantPrincipals: await KbDocumentAccessModel.principalsFor(params), documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
       ORDER BY c.${col} <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
     `,
@@ -208,6 +210,7 @@ class KbChunkModel {
     candidates: VectorSearchResult[];
     connectorIds: string[];
     userAcl: AclEntry[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl?: boolean;
     environmentId?: string | null;
     /** Narrows to documents whose metadata satisfies the predicate. */
@@ -257,7 +260,7 @@ class KbChunkModel {
         AND kbc.deleted_at IS NULL
         ${environmentFilter}
         ${metadataPredicate}
-        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, grantPrincipals: await KbDocumentAccessModel.principalsFor(params), documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
     `);
 
     const verifiedById = new Map(
@@ -355,6 +358,7 @@ class KbChunkModel {
      */
     bm25?: Bm25Tuning;
     userAcl: AclEntry[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl?: boolean;
     /** Defense-in-depth env isolation: require the connector to be in this env. */
     environmentId?: string | null;
@@ -380,14 +384,20 @@ class KbChunkModel {
     // survives only as a recall fallback when the AND query matches nothing
     // (no chunk holds every term), where RRF and the reranker downstream
     // absorb its loose precision.
+    // Both statements below check the same caller's grants.
+    const grantPrincipals = bypassAcl
+      ? null
+      : await KbDocumentAccessModel.principalsFor(params);
     const andRows = await KbChunkModel.runFullTextStatement({
       ...params,
+      grantPrincipals,
       tsQueryText: queryText,
     });
     if (andRows.length > 0 || terms.length <= 1) return andRows;
 
     return KbChunkModel.runFullTextStatement({
       ...params,
+      grantPrincipals,
       tsQueryText: terms.join(" OR "),
       // The OR form is tsquery syntax, not text to score against: BM25 parses
       // its scored terms with to_tsvector, where "OR" is a stopword only in
@@ -416,6 +426,7 @@ class KbChunkModel {
     anchors: Array<{ documentId: string; chunkIndex: number }>;
     radius: number;
     userAcl: AclEntry[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl?: boolean;
     environmentId?: string | null;
   }): Promise<
@@ -484,7 +495,7 @@ class KbChunkModel {
         AND kbc.deleted_at IS NULL
         AND c.content NOT LIKE 'data:image/%'
         ${envFilter}
-        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, grantPrincipals: await KbDocumentAccessModel.principalsFor(params), documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
     `);
 
     return rows.rows as unknown as Array<{
@@ -510,6 +521,7 @@ class KbChunkModel {
   static async findParentSiblings(params: {
     parents: Array<{ documentId: string; parentIndex: number }>;
     userAcl: AclEntry[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl?: boolean;
     environmentId?: string | null;
   }): Promise<
@@ -567,7 +579,7 @@ class KbChunkModel {
         AND kbc.deleted_at IS NULL
         AND c.content NOT LIKE 'data:image/%'
         ${envFilter}
-        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, grantPrincipals: await KbDocumentAccessModel.principalsFor(params), documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
       ORDER BY c.document_id, c.parent_index, c.chunk_index
     `);
 
@@ -617,6 +629,7 @@ class KbChunkModel {
     languages?: TextSearchLanguage[];
     bm25?: Bm25Tuning;
     userAcl: AclEntry[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl?: boolean;
     environmentId?: string | null;
     /** Narrows to documents whose metadata satisfies the predicate. */
@@ -714,7 +727,7 @@ class KbChunkModel {
         AND (${matchPredicate})
         ${envFilter}
         ${metadataPredicate}
-        ${bypassAcl ? sql`` : sql`AND ${await KbDocumentAccessModel.condition({ userAcl, documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
+        ${bypassAcl ? sql`` : sql`AND ${KbDocumentAccessModel.condition({ userAcl, grantPrincipals: await KbDocumentAccessModel.principalsFor(params), documentId: sql`d.id`, connectorId: sql`d.connector_id`, organizationId: sql`d.organization_id`, acl: sql`c.acl` })}`}
     `;
 
     const statement = bm25

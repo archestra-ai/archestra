@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-10-02
+lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -2142,9 +2142,20 @@ To learn more about enterprise licensing, see the [pricing model](/docs/platform
 - `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` and `execute_remedy_plan`. It also signs native-question receipts, session receipts, tool-call ID stamps, and subagent delegation markers. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, and `signature`. This format provides integrity (JWS), not encryption (JWE). The `protected` header specifies `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and execution receipts stay outside the JWS. The proxy can prepend a two-line protected-session mark to the first reply and compaction summaries. It removes the mark before provider dispatch and logging. Most replies have no mark. Optional. Helm deployments generate and preserve an `offer-signing-secret` key across upgrades. Other deployments derive a key from the session authentication secret. Set this variable (minimum 32 characters) to configure an explicit key or rotate keys independently. Every backend replica must use the same value. Without this secret, a subagent binds to the parent session reported by its client.
 - `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports and their compressed diagnostic archives are stored locally. When `ARCHESTRA_ANALYTICS` is enabled, reports are also forwarded to the shared OpenAPPA reporting service.
 - `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. A guardrail check holds one connection until it finishes, including its calls to external authorities. Checks beyond the limit wait up to 30 seconds, then fail. Raise the value if your policies consult slow authorities.
+- `ARCHESTRA_OPENAPPA_REWRITE_IDLE_TTL_HOURS`: hours an idle session tree keeps stable replay records. Default `24`. Allowed range `1` to `168`. A bad value stops startup. Active enforcement always uses stable replay.
+- `ARCHESTRA_OPENAPPA_REWRITE_MAX_ENTRIES`: maximum replay records for one session tree. Default `4096`. Maximum `65536`.
+- `ARCHESTRA_OPENAPPA_REWRITE_MAX_BYTES`: maximum replay payload bytes for one session tree. Default `16777216` (16 MiB). Maximum `268435456` (256 MiB).
+
+Replay records are encrypted at rest with `ARCHESTRA_SECRETS_ENCRYPTION_SECRET`. If that variable is unset, encryption uses the existing `ARCHESTRA_AUTH_SECRET` fallback for database secrets. Replay does not use the offer-signing secret. Rewritten history without retained originals is rejected. Unknown replay versions also fail explicitly. The proxy does not reconstruct missing bytes.
+
+The proxy stores changed provider-content fragments, not a new transcript copy on every turn. Records belong to a session and operation. Child and fork activity refreshes the shared retention group. Requests that exceed its storage limits fail rather than bypass replay. These records do not preserve HTTP or SSE packet framing. Provider cache eviction remains outside the proxy's control.
+
+A sweep deletes idle replay payloads about once a minute, including after OpenAPPA is turned off. Each run deletes at most 500 payload rows. A small expired-tree record remains after payload deletion. Late traffic cannot recreate that tree or overwrite its earlier byte history.
+
+Disabling enforcement does not permit approximate decoding of earlier APPA rewrites. A request that needs such decoding is rejected before the provider call. Unmarked requests still pass through. Start a new session instead of reusing protected history without replay.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
-Child lineage and return proofs are self-contained signed tokens. Proxy replicas verify them with the same signing key. They need no extra database tables. The proxy preserves signed context across compaction and client handoffs and removes transport proofs before provider dispatch. Short started and finished codes are display markers, not authentication tokens.
+Child lineage and return proofs are self-contained signed tokens. Proxy replicas verify them with the same signing key. Exact byte restoration also requires retained replay records. The proxy preserves signed context across compaction and client handoffs and removes transport proofs before provider dispatch. Short started and finished codes are display markers, not authentication tokens.
 
 Policies are stored in PostgreSQL and changed through the configuration agent on the OpenAPPA Overview tab. Container policy paths are no longer used. On upgrade, bring the existing policy into a configuration session or configure GitHub sync with the current policy file. Local revisions apply to new conversations; existing conversations keep their original policy. With GitHub sync, changes take effect after a pull request is merged and synced.
 

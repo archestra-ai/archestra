@@ -3,7 +3,7 @@ title: Guardrails
 category: LLM Proxy
 order: 5
 description: Enable and operate OpenAPPA tool guardrails in Archestra
-lastUpdated: 2026-10-04
+lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,7 +38,15 @@ From then on, administrators can turn enforcement off and on with a switch. The 
 
 OpenAPPA checks only what it sees while enforcement is on. A session that started while enforcement was off stays unchecked after you turn it on, and so do its subagents and teammates. Start a new session to work under the policy.
 
-A session that was checked before keeps its check when you turn enforcement off and on again. OpenAPPA ignores what the session did while enforcement was off — tool results, subagent answers, and messages from that time reach the model as they are.
+A session that was checked before keeps its check when you turn enforcement off and on again. OpenAPPA ignores unchanged tool results, subagent answers, and messages from the off period. Earlier protected history can still require restoration. If the recorded bytes are unavailable, the request fails rather than reconstructing them. Start a new session to avoid carrying that history.
+
+## Human Review
+
+The review shows the exact call and any persistent trust or reader restrictions. Approve authorizes that call and accepts the listed restrictions. Deny leaves the call blocked and applies no change.
+
+Lower trust or fewer readers restrict what a session can do. They do not grant access. A policy can require human approval before accepting those restrictions.
+
+Your client's own permissions still apply. Archestra approval does not override a client or provider refusal.
 
 ## Subagents and Teammates
 

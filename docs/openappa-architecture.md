@@ -2,7 +2,7 @@
 
 OpenAPPA evaluates tool calls and tool results at the LLM proxy guardrails. The proxy detects session identity from client headers or an explicit `X-Appa-Session-ID`. External client sessions are scoped to the authenticated credential (`user:<id>`, `app:<id>`, or `virtual-key:<id>`). This prevents callers from accessing another user's session by guessing its ID. Two MCP tools manage remedies: `archestra__get_remedy_plans` and `archestra__execute_remedy_plan`.
 
-Session state is keyed by session ID. Internal requests over loopback use shared session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback is the platform trust boundary. Requests without a session header share a fallback session per credential and agent.
+Session state is keyed by session ID. Internal requests over loopback use shared session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback is the platform trust boundary. Requests without a resumable client identity use a request-local session, not a shared fallback.
 
 ## Startup configuration
 
@@ -312,11 +312,11 @@ The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice 
 
 A `run_tool` dispatch is ruled on as the tool it targets. The runtime receives the target's name and its own `tool_args`, so named rules, annotator bindings, and the wildcard catch-all apply to the tool that executes, not the wrapper. A denial presents the same identity: the notice names the target and carries its arguments, and history restores the target call with the ruling. A released call stays the wrapper the client declared.
 
-On later requests, the proxy restores notice calls back to original tool calls and injects the ruling as their result. Restoration is a stateless pure function of the request body. It requires no database lookup, surviving restarts and replica changes. The runtime withholds results for call IDs it never released.
+On later requests, the proxy restores notices from immutable, encrypted replay fragments in PostgreSQL. Restoration returns the recorded provider-content bytes or fails closed. Missing, expired, or contradictory records are not reconstructed. The runtime withholds results for call IDs it never released.
 
 ### What Reaches the Provider
 
-The provider never receives what the proxy writes for the client and the gateway. On every forwarded request, with or without an OpenAPPA session (deployment switch off, a bypassed client, a delegated run), the proxy:
+With enforcement enabled, the restoring protocol families use retained records before forwarding provider content. The proxy:
 
 - restores notices, control calls, and ask_user calls on the three restoring families;
 - removes what restoration left on every wire: the notice record and signed offers, the execution frame and JWS members, and ask_user offers;
@@ -325,7 +325,7 @@ The provider never receives what the proxy writes for the client and the gateway
 
 A call is rewritten only when the request's gateway identity resolves it to a platform tool, or when it carries proof that only the proxy writes: a notice record that names its own call, or JWS signed with this deployment's key. A lookalike name alone is not enough. The catch-all routes (`/v1/messages/count_tokens` and similar) apply the same cleanup with proof-only matching. They also drop what the pipeline strips at entry: session receipts, child-trajectory receipts, delegation markers, child-return markers, and compaction carriers. A counted request thus matches the forwarded one.
 
-Every rewrite gives an earlier turn the same bytes on every request. Claude Opus 5.5 and Fable 5.1 bind each thinking block to the bytes before it. On accounts that the API enforces, it refuses a request whose earlier turns changed. One exception remains: the plugin appends one-turn guidance to `system`, so `system` changes between requests. This guidance is the question and remedy continuations, and the HITL question and decision guidance.
+Append-only requests retain earlier provider-content bytes and stable guidance anchors. Policy-required replacements use recorded splices; they do not relocate earlier content. This contract does not cover HTTP/SSE framing or provider cache eviction. When enforcement is off, a request needing protected-history inversion is rejected rather than approximately sanitized.
 
 The A2A step-context guard summarizes older turns as plain text for a provider. It omits the members that only the proxy writes, because no sanitizer can remove them from that text.
 
@@ -349,7 +349,21 @@ Remedy routing is a flattened JWS (RFC 7515 §7.2.2, RFC 7797 unencoded payload)
 
 Session receipts belong to authorized users within an organization. A personal offer requires its original user. An offer id alone cannot be spent; the caller must present a valid signature for that offer. Spent, unknown, or unauthorized offers return terminal feedback without executing.
 
-Interactive approval uses the client's native question tool or gateway `ask_user` elicitation. The ruling is recorded under the offer's signed session, including a child session when the gateway call has no session header. Approval in a parent session does not authorize a separate child offer.
+Interactive approval uses the client's native question tool or gateway `ask_user` elicitation. An offer-bound question can load and stage its authoritative review before executing a plan. The review discloses persistent trust and reader restrictions. Headerless gateways route verified offers under the authenticated owner's signed session. Approval in a parent session does not authorize a separate child offer.
+
+Pending review results have bounded, encrypted receipts; they grant no permission. Codex's numeric `Wall time`/`Output` frame is recognized only around exact retained receipt bytes. Changed bodies or extra text are refused. Client permission checks remain independent.
+
+### Client Completion and Compaction
+
+Claude children declaring `SubagentHandback` complete only through that tool, not a plain-text stop. Streaming preserves the admitted tool call. Current `agent-message` handbacks match the retained spawn and exact report, including unnamed async agents. Start and finish badges use the same spawn identity. Guidance does not force tool choice or disable thinking.
+
+Codex `collaboration.wait_agent` results cross only through the retained child-return record. Waiting still requires a declared policy rule. Quoted JSONL and numbered review transcripts are data, not live transport metadata; executable calls remain governed.
+
+Verified OpenCode children receive constant guidance against unrelated shell or file probes before MCP reads. Native **Hide tool details** changes only terminal presentation; stored arguments and results remain intact. Pending/error rows and assistant-text receipts remain subject to the stock renderer.
+
+Compaction preserves populated system messages and cache markers. Claude's empty mid-conversation `{role: "system", content: []}` holder is omitted through recorded projection. Required empty Responses fields, such as `additional_tools.tools: []`, remain present. Subsequent appended turns replay the same normalized prefix.
+
+Chat history reload uses each tool's live `toModelOutput` converter. UI-only metadata and `rawContent` do not replace previously admitted model content. Approval presentation removes the decorative question-mark column without changing the reviewed call or stored review.
 
 ## Persistence and current limits
 

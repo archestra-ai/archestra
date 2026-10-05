@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-10-02
+lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -251,7 +251,7 @@ See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for r
 OpenCode 1.17 or newer supports the reviewed setup script.
 
 - **MCP gateway** — adds the server to `~/.config/opencode/opencode.json`. If `opencode mcp list` reports that authentication is needed, run `opencode mcp auth <name>`. If credentials are valid but the connection fails, check the connection error instead of signing in again.
-- **LLM proxy** — keeps OpenCode provider IDs, model IDs, and local credentials. It enables compatible providers with valid credentials and routes them to proxy endpoints. Unsupported or uncredentialed providers stay hidden. If an active model becomes unavailable, OpenCode clears it without choosing a replacement.
+- **LLM proxy** — keeps OpenCode provider IDs, model IDs, and local credentials. It routes compatible providers with valid credentials to proxy endpoints. Supported providers remain available in the sign-in picker before credentials exist. Inference stays blocked until that provider is connected. Restart OpenCode after provider sign-in to load the credentials. If an active model becomes unavailable, OpenCode clears it without choosing a replacement.
 - **OAuth connections** — OpenCode refreshes local Google and ChatGPT access tokens. The routing guard forwards request bearer tokens and required account headers to the proxy adapter. Archestra does not store or refresh the OAuth tokens.
 - **Routing guard** — installs a global OpenCode plugin. The plugin updates the provider allowlist after project configuration loads. It blocks requests if a project overrides the Archestra base URL or chooses an unsupported provider, preventing direct provider requests.
 - **Skills** — clones the marketplace into `~/.config/opencode/skills/`. OpenCode loads the skills on its next start.

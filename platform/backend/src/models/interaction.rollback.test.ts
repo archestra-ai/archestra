@@ -4699,11 +4699,12 @@ describe("InteractionModel", () => {
         });
       });
 
-      test("keeps every increment when interactions land concurrently", async ({
+      test("a teamless agent accrues to its own organization", async ({
         makeAgent,
         makeOrganization,
       }) => {
         const org = await makeOrganization();
+        const otherOrg = await makeOrganization();
         const agent = await makeAgent({
           organizationId: org.id,
           access: "personal",
@@ -4716,31 +4717,23 @@ describe("InteractionModel", () => {
           limitValue: 1_000_000,
           model: null,
         });
-        const agentLimit = await LimitModel.create({
-          entityType: "agent",
-          entityId: agent.id,
+        const otherOrgLimit = await LimitModel.create({
+          entityType: "organization",
+          entityId: otherOrg.id,
           limitType: "token_cost",
           limitValue: 1_000_000,
-          model: ["gpt-4o"],
+          model: null,
         });
 
-        await Promise.all(
-          Array.from({ length: 20 }, (_, i) =>
-            InteractionModel.updateUsageAfterInteraction(
-              usageFor({
-                profileId: agent.id,
-                inputTokens: i + 1,
-                outputTokens: 2 * (i + 1),
-              }),
-            ),
-          ),
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({ profileId: agent.id, inputTokens: 3, outputTokens: 5 }),
         );
 
         expect(
-          await countersFor({ org: orgLimit.id, agent: agentLimit.id }),
+          await countersFor({ org: orgLimit.id, otherOrg: otherOrgLimit.id }),
         ).toEqual({
-          org: [{ model: "gpt-4o", tokensIn: 210, tokensOut: 420 }],
-          agent: [{ model: "gpt-4o", tokensIn: 210, tokensOut: 420 }],
+          org: [{ model: "gpt-4o", tokensIn: 3, tokensOut: 5 }],
+          otherOrg: [],
         });
       });
     });

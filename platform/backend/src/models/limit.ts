@@ -14,7 +14,7 @@ import type {
   UpdateLimit,
 } from "@/types";
 import AgentModel from "./agent";
-import AgentTeamModel from "./agent-team";
+import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
 import { LimitLabelModel } from "./entity-labels";
 import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import ModelModel from "./model";
@@ -903,6 +903,9 @@ export class LimitValidationService {
      * environment because the advisor's row is org-wide and env-less.
      */
     environmentIdOverride?: string;
+    /** The agent row this request already read. */
+    agent?: { environmentId: string | null };
+    teamSource?: AgentTeamSource;
   }): Promise<null | LimitViolationResponse> {
     const { agentId, userId, virtualKeyId, passthroughVirtualKeyId } = params;
 
@@ -912,7 +915,9 @@ export class LimitValidationService {
       );
 
       // Get agent's teams to cleanup and check team and organization limits
-      const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
+      const agentTeamIds = params.teamSource
+        ? await params.teamSource.agentTeamIds(agentId)
+        : await AgentTeamModel.getTeamsForAgent(agentId);
       logger.debug(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
@@ -936,7 +941,9 @@ export class LimitValidationService {
       // limits and per-environment default-user limits.
       const environmentId =
         params.environmentIdOverride ??
-        (await AgentModel.findEnvironmentId(agentId));
+        (params.agent
+          ? params.agent.environmentId
+          : await AgentModel.findEnvironmentId(agentId));
 
       const entities: LimitsCleanupOptionsEntities = {
         agent: agentId,

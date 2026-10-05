@@ -66,6 +66,7 @@ import {
   getDeploymentLabel,
   STATE_PRIORITY,
 } from "./deployment-status";
+import { getLocalInstallationCopy } from "./local-installation-copy";
 
 type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
 
@@ -354,6 +355,9 @@ export function ManageUsersContent({
     !split.hasOrgConnection &&
     !!hasMcpServerAdminPermission;
   const isLocalServer = catalogItem?.serverType === "local";
+  const installationCopy = getLocalInstallationCopy(
+    catalogItem?.multitenant === true,
+  );
   const isPersonalOnly =
     catalogItem != null && isPlaywrightCatalogItem(catalogItem.id);
   const canAddServiceAccount = !isPersonalOnly && (canAddTeam || canAddOrg);
@@ -405,7 +409,7 @@ export function ManageUsersContent({
             }
             description={
               isLocalServer
-                ? "A private hosted instance available only to its owner."
+                ? installationCopy.personal
                 : "Private to its owner — only that person can use it."
             }
             emptyText={
@@ -444,7 +448,7 @@ export function ManageUsersContent({
             title={isLocalServer ? "Shared installations" : "Service accounts"}
             description={
               isLocalServer
-                ? "Hosted instances shared with a team or organization."
+                ? installationCopy.shared
                 : "Static credentials intentionally shared with a team or organization."
             }
             emptyText={

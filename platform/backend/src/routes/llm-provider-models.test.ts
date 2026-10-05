@@ -1186,6 +1186,68 @@ describe("chat model routes", () => {
     ).toBe(true);
   });
 
+  test("getStaleModelSyncApiKeys ages a key by its own sync, not by another key syncing the same models", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const connectedAt = new Date("2026-09-15T12:00:00.000Z");
+    const now = new Date(connectedAt.getTime() + 2 * TimeInMs.Day);
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const subscriptionKey = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      { provider: "openai", userId: user.id },
+    );
+    const meteredKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      userId: user.id,
+    });
+    const models = await Promise.all(
+      ["gpt-5.4", "gpt-5.6-sol"].map((modelId) =>
+        ModelModel.create({
+          externalId: `openai/${modelId}`,
+          provider: "openai",
+          modelId,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: now,
+        }),
+      ),
+    );
+    const links = models.map((model) => ({
+      id: model.id,
+      modelId: model.modelId,
+    }));
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // The subscription key synced once, when it was connected...
+      vi.setSystemTime(connectedAt);
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        subscriptionKey.id,
+        links,
+        "openai",
+      );
+      // ...while a metered key keeps syncing the very same models.
+      vi.setSystemTime(now);
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        meteredKey.id,
+        links,
+        "openai",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const staleKeys = await getStaleModelSyncApiKeys({
+      apiKeys: [subscriptionKey, meteredKey],
+      now,
+    });
+
+    expect(staleKeys.map((key) => key.id)).toEqual([subscriptionKey.id]);
+  });
+
   test("getStaleModelSyncApiKeys treats old OpenRouter keys as stale", async ({
     makeSecret,
     makeLlmProviderApiKey,

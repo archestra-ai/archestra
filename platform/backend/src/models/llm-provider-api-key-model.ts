@@ -8,7 +8,10 @@ import db, { schema, withDbTransaction } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
 import ModelModel from "./model";
 
-/** Aggregate of an API key's linked-model count and oldest sync timestamp. */
+/**
+ * Aggregate of an API key's linked-model count and when the key's own sync
+ * last confirmed its links (a link never confirmed counts as the epoch).
+ */
 export interface ModelSyncState {
   apiKeyId: string;
   linkedModelCount: number;
@@ -39,9 +42,11 @@ class LlmProviderApiKeyModelLinkModel {
 
     for (let i = 0; i < uniqueModelIds.length; i += BATCH_SIZE) {
       const batch = uniqueModelIds.slice(i, i + BATCH_SIZE);
+      const syncedAt = new Date();
       const values = batch.map((modelId) => ({
         apiKeyId,
         modelId,
+        syncedAt,
       }));
 
       await db
@@ -183,11 +188,13 @@ class LlmProviderApiKeyModelLinkModel {
         const bestModel = findFirstMatchByPatternPriority(sorted, patterns);
 
         // Build values with markers
+        const syncedAt = new Date();
         const values = uniqueModels.map((model) => ({
           apiKeyId,
           modelId: model.id,
           isBest: model.id === bestModel?.id,
           recommendedForAgents: model.recommendedForAgents ?? null,
+          syncedAt,
         }));
 
         // Batch insert
@@ -204,6 +211,7 @@ class LlmProviderApiKeyModelLinkModel {
               ],
               set: {
                 isBest: sql`excluded.is_best`,
+                syncedAt: sql`excluded.synced_at`,
                 recommendedForAgents: options.overwriteRecommendedForAgents
                   ? sql`excluded.recommended_for_agents`
                   : sql`COALESCE(excluded.recommended_for_agents, ${schema.llmProviderApiKeyModelsTable.recommendedForAgents})`,
@@ -347,6 +355,34 @@ class LlmProviderApiKeyModelLinkModel {
   }
 
   /**
+   * Remove one model from an API key's synced list, e.g. after the provider
+   * rejected it for this credential. Returns whether a link was removed.
+   */
+  static async unlinkModelFromApiKey(params: {
+    apiKeyId: string;
+    provider: SupportedProvider;
+    modelId: string;
+  }): Promise<boolean> {
+    const model = await ModelModel.findByProviderAndModelId(
+      params.provider,
+      params.modelId,
+    );
+    if (!model) {
+      return false;
+    }
+    const removed = await db
+      .delete(schema.llmProviderApiKeyModelsTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeyModelsTable.apiKeyId, params.apiKeyId),
+          eq(schema.llmProviderApiKeyModelsTable.modelId, model.id),
+        ),
+      )
+      .returning({ id: schema.llmProviderApiKeyModelsTable.id });
+    return removed.length > 0;
+  }
+
+  /**
    * Get count of linked models for an API key.
    */
   static async getModelCountForApiKey(apiKeyId: string): Promise<number> {
@@ -370,15 +406,11 @@ class LlmProviderApiKeyModelLinkModel {
         apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
         linkedModelCount: sql<number>`count(*)::int`.as("linked_model_count"),
         oldestLastSyncedAt:
-          sql<Date | null>`min(${schema.modelsTable.lastSyncedAt})`.as(
+          sql<Date | null>`min(coalesce(${schema.llmProviderApiKeyModelsTable.syncedAt}, to_timestamp(0)))`.as(
             "oldest_last_synced_at",
           ),
       })
       .from(schema.llmProviderApiKeyModelsTable)
-      .innerJoin(
-        schema.modelsTable,
-        eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
-      )
       .where(inArray(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyIds))
       .groupBy(schema.llmProviderApiKeyModelsTable.apiKeyId);
 

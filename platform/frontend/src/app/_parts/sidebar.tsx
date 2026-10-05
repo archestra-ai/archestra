@@ -54,6 +54,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
@@ -143,7 +144,7 @@ function SidebarModeToggle({
   modeDots: Record<SidebarMode, boolean>;
 }) {
   const segment = (value: SidebarMode, label: string, Icon: LucideIcon) => (
-    <button
+    <UnstyledButton
       type="button"
       key={value}
       onClick={() => onPick(value)}
@@ -161,7 +162,7 @@ function SidebarModeToggle({
         visible={modeDots[value]}
         className="absolute right-1 top-1"
       />
-    </button>
+    </UnstyledButton>
   );
 
   return (

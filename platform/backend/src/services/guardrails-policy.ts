@@ -245,6 +245,7 @@ name = "noop"
 [[policy.annotator]]
 name = "archestra.run-command"
 builtin = "archestra"
+hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. A command that only lists, reads or changes ordinary files in the sandbox, with no network access, keeps the neutral annotation unless a file it reads visibly holds credentials or secrets."
 ranks = ["suspicious", "trusted"]
 marks = []
 effects = []

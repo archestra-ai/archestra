@@ -1840,6 +1840,51 @@ describe("mapProviderError - Fallback behavior", () => {
     expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 
+  it("should unwrap a nested Responses stream error chunk and map an overload to a retryable server error", () => {
+    // The AI SDK's Responses parser relays the whole `error` chunk, so the
+    // provider's fields sit one level down under `error`.
+    const error = {
+      type: "error",
+      sequence_number: 0,
+      error: {
+        type: "api_error",
+        code: ArchestraInternalErrorCode.ProviderOverloaded,
+        message:
+          "Our servers are currently overloaded. Please try again later.",
+        param: null,
+      },
+    };
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.ServerError]);
+    expect(result.originalError?.message).toBe(
+      "Our servers are currently overloaded. Please try again later.",
+    );
+    expect(result.originalError?.type).toBe("api_error");
+    expect(
+      JSON.parse(
+        (result.originalError?.raw as { responseBody: string }).responseBody,
+      ).error,
+    ).toMatchObject({
+      type: "api_error",
+      code: ArchestraInternalErrorCode.ProviderOverloaded,
+    });
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an empty envelope", { type: "error", error: {} }],
+    ["a null error", { type: "error", error: null }],
+    ["a non-string message", { type: "error", error: { message: 42 } }],
+  ])("should fall back to the unknown card for %s", (_label, error) => {
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.Unknown);
+    expect(result.originalError?.message).toBe("Unknown error");
+  });
+
   it("should map a pre-stream upstream empty response 503 to a retryable empty-response card", () => {
     // The other delivery shape: detection before headers commit arrives as an
     // HTTP 503 whose body carries the normalized internal code.

@@ -12,7 +12,10 @@ import config from "@/config";
 import logger from "@/logging";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import { OpenappaCredentialError } from "@/openappa/failure";
-import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
+import {
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+  OPENAPPA_HELPERS_PREFIX,
+} from "@/routes/route-paths";
 import { resolveCredentialValue } from "@/services/credentials";
 import { ApiError } from "@/types";
 import type {
@@ -123,7 +126,9 @@ class OpenAppaDeclarations {
 
   /**
    * Publishes the bridge bearer where the runtime reads it, and answers the
-   * variable a composition must name for it.
+   * variable a composition must name for it. The `builtin = "archestra"`
+   * annotator's endpoint is published beside it: the addon posts there with
+   * the same bearer.
    *
    * The addon resolves the host's own `APPA_ARCHESTRA_*` variables from this
    * process's environment and refuses a document whose variable is unset, so
@@ -132,6 +137,8 @@ class OpenAppaDeclarations {
    */
   publishBridgeToken(): string {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
+    process.env[OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV] =
+      `http://127.0.0.1:${config.api.port}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`;
     return OPENAPPA_BRIDGE_TOKEN_ENV;
   }
 
@@ -488,6 +495,9 @@ const STUB_POLICY = "[policy]\nversion = 2\n";
 
 /** The variable a composed policy names for the bridge bearer; its value is per process. */
 const OPENAPPA_BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
+
+/** Where the addon's `builtin = "archestra"` annotator posts; read by `openappa-rs`. */
+const OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV = "APPA_ARCHESTRA_ANNOTATOR_URL";
 
 /**
  * The owner a document being checked names for its helpers. No install row has

@@ -8,7 +8,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
-import { openappaArchestraAnnotator } from "@/openappa/archestra-annotator";
+import { openappaDeclarations } from "@/openappa/declarations";
 import { OPENAPPA_ARCHESTRA_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -56,7 +56,7 @@ describe("archestra annotator", () => {
       remoteAddress: "127.0.0.1",
       payload: request,
     });
-  const bearer = () => `Bearer ${openappaArchestraAnnotator.endpoint().token}`;
+  const bearer = () => `Bearer ${openappaDeclarations.bridgeToken}`;
 
   test("refuses a caller without the bridge bearer", async () => {
     expect((await annotate()).statusCode).toBe(401);

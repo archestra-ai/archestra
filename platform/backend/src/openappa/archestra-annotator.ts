@@ -1,14 +1,11 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { APICallError, generateObject, type JSONSchema7, jsonSchema } from "ai";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
-import config from "@/config";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import OrganizationModel from "@/models/organization";
-import { OPENAPPA_ARCHESTRA_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import { repairStructuredOutputText } from "@/utils/structured-output-repair";
-import { openappaDeclarations } from "./declarations";
 
 /** The prompt the runtime's `builtin = "archestra"` annotator renders. */
 type ArchestraAnnotationRequest = {
@@ -31,14 +28,6 @@ type ArchestraAnnotationOutcome =
  * built-in OpenAPPA configuration agent, so limits, logs and cost apply.
  */
 class OpenAppaArchestraAnnotator {
-  /** Where the runtime posts, and the bearer it presents; the host passes both into the addon. */
-  endpoint(): { url: string; token: string } {
-    return {
-      url: `http://127.0.0.1:${config.api.port}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`,
-      token: openappaDeclarations.bridgeToken,
-    };
-  }
-
   async annotate(
     request: ArchestraAnnotationRequest,
   ): Promise<ArchestraAnnotationOutcome> {

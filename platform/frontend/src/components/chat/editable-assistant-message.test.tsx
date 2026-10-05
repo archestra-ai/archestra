@@ -95,3 +95,20 @@ describe("EditableAssistantMessage edit mode", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 });
+
+describe("EditableAssistantMessage actions", () => {
+  it("hides edit on a read-only transcript", () => {
+    const { onStartEdit: _onStartEdit, ...readOnlyProps } = baseProps;
+    render(
+      <EditableAssistantMessage
+        {...readOnlyProps}
+        showActions
+        isEditing={false}
+        onSave={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  });
+});

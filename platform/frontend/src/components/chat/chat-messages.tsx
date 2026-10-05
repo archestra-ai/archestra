@@ -155,6 +155,11 @@ import { ToolStatusRow } from "./tool-status-row";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
+  /**
+   * The viewer does not own the conversation (e.g. another member's scheduled
+   * run): render the transcript the same way, without edit or regenerate.
+   */
+  readOnly?: boolean;
   agentId?: string;
   messages: UIMessage[];
   status: ChatStatus;
@@ -247,6 +252,7 @@ function isToolPart(part: any): part is {
 
 export function ChatMessages({
   conversationId,
+  readOnly = false,
   agentId,
   messages,
   status,
@@ -1140,7 +1146,9 @@ export function ChatMessages({
                                           isLastParsedTextPart
                                         }
                                         editDisabled={isResponseInProgress}
-                                        onStartEdit={handleStartEdit}
+                                        onStartEdit={
+                                          readOnly ? undefined : handleStartEdit
+                                        }
                                         onCancelEdit={handleCancelEdit}
                                         onSave={handleSaveAssistantMessage}
                                         feedback={getMessageFeedback(message)}
@@ -1177,7 +1185,9 @@ export function ChatMessages({
                                   citationParts={citationParts}
                                   isStreaming={isStreamingThisPart}
                                   editDisabled={isResponseInProgress}
-                                  onStartEdit={handleStartEdit}
+                                  onStartEdit={
+                                    readOnly ? undefined : handleStartEdit
+                                  }
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveAssistantMessage}
                                   feedback={getMessageFeedback(message)}
@@ -1209,7 +1219,9 @@ export function ChatMessages({
                                   conversationId={conversationId}
                                   canSaveToKnowledge={canSaveToKnowledge}
                                   skill={getSkillAttribution(message.metadata)}
-                                  onStartEdit={handleStartEdit}
+                                  onStartEdit={
+                                    readOnly ? undefined : handleStartEdit
+                                  }
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveUserMessage}
                                 />
@@ -1321,7 +1333,9 @@ export function ChatMessages({
                                   conversationId={conversationId}
                                   canSaveToKnowledge={canSaveToKnowledge}
                                   skill={getSkillAttribution(message.metadata)}
-                                  onStartEdit={handleStartEdit}
+                                  onStartEdit={
+                                    readOnly ? undefined : handleStartEdit
+                                  }
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveUserMessage}
                                 />

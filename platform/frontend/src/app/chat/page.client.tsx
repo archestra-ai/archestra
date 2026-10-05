@@ -74,9 +74,6 @@ import { useChatApps } from "@/components/chat/use-chat-apps";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
 import { LoadingState } from "@/components/loading";
-import MessageThread, {
-  type PartialUIMessage,
-} from "@/components/message-thread";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
@@ -894,10 +891,6 @@ export function ChatPageContent({
     enabled: shouldEnableChatSession,
   });
   const connectivity = useConnectivity();
-  const sharedConversationMessages = useMemo(
-    () => (conversation?.messages ?? []) as PartialUIMessage[],
-    [conversation?.messages],
-  );
   const sharedConversationAgentId =
     conversation?.agentId ?? conversation?.agent?.id ?? null;
   const {
@@ -1795,8 +1788,7 @@ export function ChatPageContent({
   // resend is genuinely issued (so the card disappears without wiping the
   // error when the resend never starts) — same as the regenerate action on a
   // message. If the resend itself fails, the card stays so the user still sees
-  // the error. Owner-editable chats only (read-only viewers render
-  // MessageThread instead of this).
+  // the error. Owner-editable chats only (read-only viewers get no retry).
   const handleChatErrorRetry = useCallback(async () => {
     try {
       await resendLastUserMessage();
@@ -3351,20 +3343,10 @@ export function ChatPageContent({
                     >
                       {isReadOnlyConversation && isScheduledRunInProgress ? (
                         <ScheduledRunInProgress />
-                      ) : isReadOnlyConversation ? (
-                        <MessageThread
-                          messages={sharedConversationMessages}
-                          chatErrors={conversation?.chatErrors ?? []}
-                          conversationId={conversationId}
-                          containerClassName="h-full"
-                          hideDivider
-                          profileId={conversation?.agent?.id}
-                          agentName={conversation?.agent?.name}
-                          selectedModel={conversation?.modelId ?? undefined}
-                        />
                       ) : (
                         <ChatMessages
                           conversationId={conversationId}
+                          readOnly={isReadOnlyConversation}
                           agentId={
                             currentProfileId || initialAgentId || undefined
                           }
@@ -3390,7 +3372,7 @@ export function ChatPageContent({
                               : internalAgents.find(
                                   (a) => a.id === initialAgentId,
                                 )
-                            )?.name
+                            )?.name ?? conversation?.agent?.name
                           }
                           selectedModel={conversationModelId ?? initialModel}
                           modelSource={
@@ -3399,8 +3381,18 @@ export function ChatPageContent({
                           chatErrors={conversation?.chatErrors ?? []}
                           compactions={conversation?.compactions ?? []}
                           onRegenerateUserMessage={regenerateUserMessage}
-                          onProviderConnected={handleProviderConnected}
-                          onChatErrorRetry={handleChatErrorRetry}
+                          // Both re-send the owner's last prompt, which a
+                          // read-only viewer cannot do.
+                          onProviderConnected={
+                            isReadOnlyConversation
+                              ? undefined
+                              : handleProviderConnected
+                          }
+                          onChatErrorRetry={
+                            isReadOnlyConversation
+                              ? undefined
+                              : handleChatErrorRetry
+                          }
                           error={error}
                           onToolApprovalResponse={
                             addToolApprovalResponse

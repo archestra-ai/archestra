@@ -21,17 +21,36 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   });
   const appName = useAppName();
   const { isFresh } = useOpenAppaSetupState();
-  const page = SUB_PAGES[pathname] ?? {
-    title: "Guardrails",
-    description: (
-      <>
-        {`${appName} uses OpenAPPA to check tool calls against your policy and keep data visible only to people allowed to see it.`}{" "}
-        <ExternalDocsLink href={openAppaUrl("/how-it-works")}>
-          How it works
-        </ExternalDocsLink>
-      </>
-    ),
-  };
+  const page =
+    pathname === "/openappa/batteries"
+      ? {
+          title: "Batteries",
+          description:
+            "Add and manage reusable policy rules for your tools. See which batteries are active and what they need to work.",
+        }
+      : pathname === "/openappa/policy"
+        ? {
+            title: "Policy",
+            description:
+              "Review your guardrail policy and the effective rules applied to tool calls, including rules from batteries.",
+          }
+        : pathname === "/openappa/yells"
+          ? {
+              title: "Yells",
+              description:
+                "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed.",
+            }
+          : {
+              title: "Guardrails",
+              description: (
+                <>
+                  {`${appName} uses OpenAPPA to check tool calls against your policy and keep data visible only to people allowed to see it.`}{" "}
+                  <ExternalDocsLink href={openAppaUrl("/how-it-works")}>
+                    How it works
+                  </ExternalDocsLink>
+                </>
+              ),
+            };
   // Until a policy is saved, the Overview shows only that first step.
   const firstStepOnly = isFresh === true && pathname === "/openappa";
 
@@ -60,10 +79,6 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
                     { label: "Overview", href: "/openappa" },
                     { label: "Batteries", href: "/openappa/batteries" },
                     { label: "Policy", href: "/openappa/policy" },
-                    {
-                      label: "Trust & audience",
-                      href: "/openappa/trust-audience",
-                    },
                   ]
                 : []),
               ...(canReadYells
@@ -74,7 +89,6 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
       actionButton={
         firstStepOnly ||
         pathname === "/openappa/yells" ||
-        pathname === "/openappa/trust-audience" ||
         pathname === "/openappa/policy" ? null : (
           <BatteriesUploadAction />
         )
@@ -84,26 +98,3 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
     </PageLayout>
   );
 }
-
-const SUB_PAGES: Record<string, { title: string; description: string }> = {
-  "/openappa/batteries": {
-    title: "Batteries",
-    description:
-      "Add and manage reusable policy rules for your tools. See which batteries are active and what they need to work.",
-  },
-  "/openappa/policy": {
-    title: "Policy",
-    description:
-      "Review your guardrail policy and the effective rules applied to tool calls, including rules from batteries.",
-  },
-  "/openappa/trust-audience": {
-    title: "Trust & audience",
-    description:
-      "See the trust and audience levels your policy uses, and where the people in each audience are looked up.",
-  },
-  "/openappa/yells": {
-    title: "Yells",
-    description:
-      "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed.",
-  },
-};

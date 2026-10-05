@@ -919,6 +919,11 @@ export interface AgentFormFooterState {
    * shows nothing at all.
    */
   readOnly: boolean;
+  /**
+   * The agent runs in its own container: opening it in Chat starts a run
+   * rather than a foreground conversation.
+   */
+  hasRuntime: boolean;
 }
 
 /** Editable values a create flow may seed from a catalog template. */
@@ -1053,7 +1058,7 @@ export function AgentForm({
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   });
   const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: supportsSubagents && !!canReadAgents,
@@ -1177,7 +1182,7 @@ export function AgentForm({
     knowledgeSource: ["read"],
   });
   const { data: canAccessKnowledgeSettings } = useHasPermissions({
-    knowledgeSettings: ["read"],
+    organizationSettings: ["read"],
   });
   const isKnowledgeConfigured = useIsKnowledgeBaseConfigured();
   const { data: canReadLlmProviderApiKeys } = useHasPermissions({
@@ -1332,8 +1337,9 @@ export function AgentForm({
     },
     [],
   );
-  const [toolExposureMode, setToolExposureMode] =
-    useState<ToolExposureMode>("full");
+  const [toolExposureMode, setToolExposureMode] = useState<ToolExposureMode>(
+    "search_and_run_only",
+  );
   // What the record will actually do. `isEnforcing` in
   // agent-credential-readiness refuses to enforce on an `accessAllTools`
   // record, so an Auto agent asks when a tool needs one whatever is stored —
@@ -1719,7 +1725,7 @@ export function AgentForm({
             runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
-            toolExposureMode: "full",
+            toolExposureMode: "search_and_run_only",
             missingCredentialBehavior: "allow",
             accessAllTools: initialValues?.accessAllTools ?? true,
             accessAllSubagents: true,
@@ -2918,6 +2924,7 @@ export function AgentForm({
     isDirty,
     canSubmit,
     readOnly,
+    hasRuntime: runtime !== null,
   };
   // Keep the popover portaled: choosing a credential changes the model control
   // while Radix closes its focus scope, and reconciling both in the form tree
@@ -3225,15 +3232,15 @@ export function AgentForm({
                     </IdentityFields>
                   )}
 
-                  {showsModelControl &&
-                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
-                    modelBlock}
-
                   {/* Description (hidden for built-in agents) */}
                   {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
                     <div className="space-y-2">
                       <Label htmlFor="agentDescription">Description</Label>
+                      <FieldDescription id="agent-description-hint">
+                        An internal description of what this agent does.
+                      </FieldDescription>
                       <Textarea
+                        aria-describedby="agent-description-hint"
                         id="agentDescription"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
@@ -3242,6 +3249,10 @@ export function AgentForm({
                       />
                     </div>
                   )}
+
+                  {showsModelControl &&
+                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
+                    modelBlock}
 
                   {/* Instructions: what the agent is told to do. Saved with the
                       rest of this panel, so one Save covers the whole tab. */}
@@ -3274,16 +3285,6 @@ export function AgentForm({
                         }
                       />
                     </div>
-                  )}
-
-                  {!agent && agentType !== "llm_proxy" && (
-                    <InitialResourcePermissions
-                      resource={
-                        agentType === "mcp_gateway" ? "mcpGateway" : "agent"
-                      }
-                      grants={initialGrants}
-                      onChange={setInitialGrants}
-                    />
                   )}
 
                   {!agent && isInternalAgent && agentRuntimeEnabled && (
@@ -3870,16 +3871,12 @@ export function AgentForm({
             agentType === "agent" &&
             agentRuntimeEnabled &&
             !isBuiltIn && (
-              <SettingsSectionGroup
-                className={cn(!isActiveSection("runtime") && "hidden")}
-              >
-                <SettingsSection aria-label="Agent runtime">
-                  <AgentRuntimeFields
-                    value={runtime}
-                    onChange={setAgentRuntime}
-                  />
-                </SettingsSection>
-              </SettingsSectionGroup>
+              <div className={cn(!isActiveSection("runtime") && "hidden")}>
+                <AgentRuntimeFields
+                  value={runtime}
+                  onChange={setAgentRuntime}
+                />
+              </div>
             )}
 
           {/* The Advanced step: security, passthrough
@@ -3889,6 +3886,16 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("advanced") && "hidden")}
             >
+              {!agent && agentType !== "llm_proxy" && (
+                <InitialResourcePermissions
+                  layout="settings"
+                  resource={
+                    agentType === "mcp_gateway" ? "mcpGateway" : "agent"
+                  }
+                  grants={initialGrants}
+                  onChange={setInitialGrants}
+                />
+              )}
               {/* Skills served over MCP (SEP-2640). Gateways only, behind the
                   draft-extension feature flag. It sits in Advanced rather than
                   beside Tools & Knowledge: these are resources the gateway

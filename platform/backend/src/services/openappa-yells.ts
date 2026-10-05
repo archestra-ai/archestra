@@ -1,21 +1,30 @@
+import type { CreatedBy } from "@archestra/shared";
+import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
+import CreatedByModel from "@/models/created-by";
 import OpenAppaYellModel from "@/models/openappa-yell";
-import { ResourcePermissions } from "@/services/resource-permissions";
+import ServiceAccountModel from "@/models/service-account";
 import { ApiError } from "@/types";
+import type { OpenAppaYellQuery } from "@/types/openappa-yell";
 
-export async function yellVisibility(params: {
+export async function listOpenAppaYells(
+  params: OpenAppaYellQuery & { organizationId: string },
+) {
+  const result = await OpenAppaYellModel.list(params);
+  return {
+    ...result,
+    data: await withCallers(result.data, params.organizationId),
+  };
+}
+
+export async function resolveOpenAppaYell(params: {
   organizationId: string;
   userId: string;
+  id: string;
+  resolved: boolean;
 }) {
-  const all = await ResourcePermissions.allows({
-    ...params,
-    resource: "log",
-    scope: "*",
-    action: "read",
-  });
-  return {
-    organizationId: params.organizationId,
-    callerId: all ? undefined : `user:${params.userId}`,
-  };
+  const row = await OpenAppaYellModel.setResolved(params);
+  if (!row) throw new ApiError(404, "Yell not found");
+  return (await withCallers([row], params.organizationId))[0];
 }
 
 export async function getOpenAppaYell(params: {
@@ -24,11 +33,11 @@ export async function getOpenAppaYell(params: {
   id: string;
 }) {
   const row = await OpenAppaYellModel.find({
-    ...(await yellVisibility(params)),
+    organizationId: params.organizationId,
     id: params.id,
   });
   if (!row) throw new ApiError(404, "Yell not found");
-  return row;
+  return (await withCallers([row], params.organizationId))[0];
 }
 
 export async function downloadOpenAppaYell(params: {
@@ -37,10 +46,49 @@ export async function downloadOpenAppaYell(params: {
   id: string;
 }) {
   const archive = await OpenAppaYellModel.findArchive({
-    ...(await yellVisibility(params)),
+    organizationId: params.organizationId,
     id: params.id,
   });
   if (!archive)
     throw new ApiError(404, "Diagnostic archive not available for this yell");
   return archive;
+}
+
+async function withCallers<T extends { callerId: string }>(
+  rows: T[],
+  organizationId: string,
+) {
+  const principalId = (row: T) =>
+    row.callerId.startsWith("user:") ? row.callerId.slice(5) : null;
+  const ids = [
+    ...new Set(rows.map(principalId).filter((id): id is string => id !== null)),
+  ];
+  const [users, accounts] = await Promise.all([
+    CreatedByModel.resolve(
+      ids.filter((id) => !id.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)),
+    ),
+    ServiceAccountModel.getNamesByIds(
+      ids
+        .filter((id) => id.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX))
+        .map((id) => id.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length)),
+      organizationId,
+    ),
+  ]);
+  return rows.map((row): T & { caller: CreatedBy | null } => {
+    const id = principalId(row);
+    if (!id) return { ...row, caller: null };
+    if (id.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)) {
+      const name = accounts.get(
+        id.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length),
+      );
+      return {
+        ...row,
+        caller:
+          name === undefined
+            ? null
+            : { id, name, email: null, type: "service_account" },
+      };
+    }
+    return { ...row, caller: users.get(id) ?? null };
+  });
 }

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { DispatchPolicy } from "@archestra/openappa-rs";
 import {
   APPA_PARENT_HEADER,
@@ -6,6 +7,8 @@ import {
   isSeededAppRenderToolResult,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 } from "@archestra/shared";
 import {
   type CallToolResult,
@@ -29,7 +32,10 @@ import { openappaFailure } from "@/openappa/failure";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  type GuardrailsV2Activation,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type { DeclaredToolSpelling } from "./wire";
 
@@ -60,6 +66,8 @@ const ResultDecisionFields = {
   approved_output: z.string().optional(),
   output_source: z.enum(["tool", "runtime"]).optional(),
   reason: z.string().optional(),
+  /** Machine-readable, never shown: why the runtime answered as it did. */
+  code: z.string().optional(),
 };
 
 /** Structured remedy offers from the native runtime. */
@@ -167,6 +175,7 @@ type ProcessedToolResult = {
   content: string;
   outputSource: OutputSource;
   reason?: RuntimeReason;
+  code?: string;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -177,6 +186,22 @@ type ChildEndOutcome =
     };
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
+const capturedActivation = new AsyncLocalStorage<GuardrailsV2Activation>();
+
+/** Keep one request's activation decision through later runtime calls. */
+export function withCapturedGuardrailsActivation<T>(
+  activation: GuardrailsV2Activation,
+  run: () => Promise<T>,
+): Promise<T> {
+  return capturedActivation.run(activation, run);
+}
+
+/** The rest of this request phase keeps the activation captured at its start. */
+export function enterCapturedGuardrailsActivation(
+  activation: GuardrailsV2Activation,
+): void {
+  capturedActivation.enterWith(activation);
+}
 export function openappaYellEnabled(): boolean {
   return config.openappa.enabled && config.openappa.yellEnabled;
 }
@@ -305,6 +330,9 @@ export function isAppaChatSource(
 
 async function binding() {
   if (!openappaEnabled()) {
+    throw new Error("OpenAPPA is disabled");
+  }
+  if (capturedActivation.getStore() === "inactive") {
     throw new Error("OpenAPPA is disabled");
   }
   // A composed document names the helper bridge bearer as a `token_env` the
@@ -574,12 +602,70 @@ async function approveToolResult(params: {
     ("reason" in decision && decision.reason ? "runtime" : "tool");
   const reason =
     "reason" in decision && decision.reason ? decision.reason : undefined;
+  const code = "code" in decision && decision.code ? decision.code : undefined;
   return {
     content,
     outputSource,
     ...(reason ? { reason } : {}),
+    ...(code ? { code } : {}),
   };
 }
+
+/**
+ * A remedy call whose remedy never ran: the client declined it (a permission
+ * prompt the user rejected, an auto-mode classifier block), or the gateway
+ * refused it before the remedy (no live offer). Only a remedy that runs leaves
+ * a record, so the runtime would withhold this result, and the model would
+ * lose what it says, such as the client's instruction to stop and let the
+ * user decide. A client or the gateway wrote it, not a tool, so it goes
+ * through after a line that says the plan is not applied.
+ *
+ * The closing line says how to ask when the user must decide. Claude Code's
+ * auto-mode classifier accepts the plan only after the user, shown what was
+ * blocked, approves it: a question that quotes the ruling gives the user
+ * that, where a bare "approve" typed in chat did not.
+ */
+function unexecutedControlResult(content: unknown): ProcessedToolResult {
+  const text = toolResultText(content);
+  return {
+    content: `[appa] The remedy did not run, so the plan is not applied. The result the client returned:\n\n${truncated(text, MAX_UNEXECUTED_RESULT_CHARS)}\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}`,
+    outputSource: "runtime",
+  };
+}
+
+const UNEXECUTED_REMEDY_QUESTION_HINT =
+  "[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
+
+function toolResultText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (content === null || content === undefined) return "";
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part && typeof part === "object" && "text" in part) {
+          const text = (part as { text: unknown }).text;
+          return typeof text === "string" ? text : JSON.stringify(text);
+        }
+        return "";
+      })
+      .filter((text) => text.length > 0)
+      .join("\n");
+  }
+  return JSON.stringify(content);
+}
+
+/** Cuts at `limit` code units, never between the halves of a surrogate pair. */
+function truncated(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const code = text.charCodeAt(limit - 1);
+  const end = code >= 0xd800 && code <= 0xdbff ? limit - 1 : limit;
+  return `${text.slice(0, end)}…`;
+}
+
+/** The runtime's code for a result that matches no released call. */
+const UNRELEASED_CALL_CODE = "unreleased_call";
+const MAX_UNEXECUTED_RESULT_CHARS = 4000;
 
 function isOutputDecision(
   decision: NativeDecision,
@@ -605,6 +691,12 @@ export async function processProxyResults(params: {
   /** The proxy verifies that this exact result belongs to an issued question. */
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
+  /**
+   * Whether a result answers this request's own remedy call, and is not a
+   * pending review. When the runtime has no record of such a result, its
+   * remedy never ran, and the model reads what the client returned.
+   */
+  isControlResult?: (result: CommonToolResult) => boolean;
   trustedChat?: boolean;
   /** How a client-side spawn launch ended. */
   classifySpawnResult?: (
@@ -641,7 +733,11 @@ export async function processProxyResults(params: {
       controlToolName: params.controlToolName,
       policy,
     });
-    updates[result.id] = approved;
+    updates[result.id] =
+      approved.code === UNRELEASED_CALL_CODE &&
+      params.isControlResult?.(result) === true
+        ? unexecutedControlResult(result.content)
+        : approved;
   }
   return {
     toolResultUpdates: updates,
@@ -1223,13 +1319,16 @@ export type AppaChildReturnRecord = {
  * Loads the child returns a parent's family durably crossed, from the retained
  * ChildEnd operations in PostgreSQL. This is the authority the parent side
  * verifies arriving completions against.
+ *
+ * The deployment switch is not read here. The request that verifies the
+ * returns read it at its boundary; a switch turned off mid-request must not
+ * empty the records and refuse returns the runtime did retain.
  */
 export async function loadChildReturns(params: {
   organizationId: string;
   parentSessionId: string;
 }): Promise<AppaChildReturnRecord[]> {
   try {
-    if (!(await isGuardrailsV2Active())) return [];
     const module = await binding();
     const records = await module.loadChildReturns(
       params.organizationId,
@@ -1251,6 +1350,227 @@ export async function loadChildReturns(params: {
 }
 
 /**
+ * Loads the messages a child's parent addressed to it, from the retained
+ * ChildAddress operations in PostgreSQL. This is the authority the child side
+ * verifies arriving messages against.
+ *
+ * The deployment switch is not read here, for the reason `loadChildReturns`
+ * gives.
+ */
+export async function loadChildAddresses(params: {
+  organizationId: string;
+  childSessionId: string;
+}): Promise<Array<{ parentSessionId: string; value: string }>> {
+  try {
+    const module = await binding();
+    return await module.loadChildAddresses(
+      params.organizationId,
+      params.childSessionId,
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, childSessionId: params.childSessionId },
+      "Failed to load OpenAPPA child addresses",
+    );
+    throw openappaFailure(error);
+  }
+}
+
+/**
+ * Sends one peer message. The runtime mints the id and captures the sender
+ * label. `released` means the send was stored, not that the recipient may
+ * read the body.
+ */
+export async function sendPeerMessage(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  recipientSessionId: string;
+  recipientParentId?: string;
+  recipientNativeId?: string;
+  recipientSpawnCallId?: string;
+  value: string;
+}): Promise<
+  { kind: "released"; messageId: string } | { kind: "denied"; feedback: string }
+> {
+  const parsed = await peerResponse(
+    params.session,
+    (module, policy) =>
+      module.sendPeerMessage(
+        JSON.stringify({
+          ...peerActor(params.session),
+          operation_id: params.operationId,
+          recipient_session_id: params.recipientSessionId,
+          ...(params.recipientParentId
+            ? { recipient_parent_id: params.recipientParentId }
+            : {}),
+          ...(params.recipientNativeId
+            ? { recipient_native_id: params.recipientNativeId }
+            : {}),
+          ...(params.recipientSpawnCallId
+            ? { recipient_spawn_call_id: params.recipientSpawnCallId }
+            : {}),
+          value: params.value,
+        }),
+        policy,
+      ),
+    z.discriminatedUnion("kind", [
+      z
+        .object({ kind: z.literal("released"), message_id: z.string().min(1) })
+        .strict(),
+      z
+        .object({ kind: z.literal("denied"), feedback: z.string().min(1) })
+        .strict(),
+    ]),
+  );
+  return parsed.kind === "released"
+    ? { kind: "released", messageId: parsed.message_id }
+    : { kind: "denied", feedback: parsed.feedback };
+}
+
+/**
+ * Checks one arrival against the authenticated recipient. A direct body is the
+ * runtime's retained bytes after a live label recheck. Missing or ambiguous
+ * identity is unverified, never the earliest digest match.
+ */
+export async function admitPeerMessage(params: {
+  session: OpenAppaSession;
+  messageId?: string;
+  senderSessionId?: string;
+  value?: string;
+  digest?: string;
+  structured?: boolean;
+}): Promise<
+  | { kind: "admitted"; messageId: string; value: string }
+  | { kind: "held"; notices: PeerNotice[] }
+  | { kind: "unverified" }
+> {
+  const parsed = await peerResponse(
+    params.session,
+    (module, policy) =>
+      module.admitPeerMessage(
+        JSON.stringify({
+          ...peerActor(params.session),
+          ...(params.messageId ? { message_id: params.messageId } : {}),
+          ...(params.senderSessionId
+            ? { sender_session_id: params.senderSessionId }
+            : {}),
+          ...(params.value !== undefined ? { value: params.value } : {}),
+          ...(params.digest ? { digest: params.digest } : {}),
+          ...(params.structured !== undefined
+            ? { structured: params.structured }
+            : {}),
+        }),
+        policy,
+      ),
+    z.discriminatedUnion("kind", [
+      z
+        .object({
+          kind: z.literal("admitted"),
+          message_id: z.string().min(1),
+          value: z.string().min(1),
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal("held"),
+          notices: z.array(PeerNoticeWireSchema),
+        })
+        .strict(),
+      z.object({ kind: z.literal("unverified") }).strict(),
+    ]),
+  );
+  if (parsed.kind === "admitted") {
+    return {
+      kind: "admitted",
+      messageId: parsed.message_id,
+      value: parsed.value,
+    };
+  }
+  if (parsed.kind === "held") {
+    return { kind: "held", notices: parsed.notices.map(peerNotice) };
+  }
+  return { kind: "unverified" };
+}
+
+/**
+ * Lists held notices for the authenticated session. Digest and session ids are
+ * binding material for the caller; a model-facing surface must not print them.
+ * `toolCallId`, when the gateway has one, retains that call's metadata so a
+ * later client tool result cannot replace it.
+ */
+export async function listPeerMessages(params: {
+  session: OpenAppaSession;
+  toolCallId?: string;
+}): Promise<PeerNotice[]> {
+  const parsed = await peerResponse(
+    params.session,
+    (module, policy) =>
+      module.listPeerMessages(
+        JSON.stringify({
+          ...peerActor(params.session),
+          ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
+          tool: archestraMcpBranding.getToolName(
+            TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+          ),
+        }),
+        policy,
+      ),
+    z.object({ notices: z.array(PeerNoticeWireSchema) }),
+  );
+  return parsed.notices.map(peerNotice);
+}
+
+/**
+ * Reads one message through the runtime's stored label. The returned tool
+ * result is the retained native result for this tool call.
+ */
+export async function readPeerMessage(params: {
+  session: OpenAppaSession;
+  toolCallId: string;
+  args: { message_id: string };
+}): Promise<CallToolResult> {
+  const decision = await withRuntime(
+    params.session.organization_id,
+    (module, policy) =>
+      module.readPeerMessage(
+        JSON.stringify({
+          ...peerActor(params.session),
+          tool_call_id: params.toolCallId,
+          message_id: params.args.message_id,
+          tool: archestraMcpBranding.getToolName(
+            TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+          ),
+        }),
+        policy,
+      ),
+  );
+  if (decision.decision === "mcp_result" && decision.result) {
+    return decision.result;
+  }
+  if (decision.decision === "ack") {
+    throw openappaFailure(
+      new Error("OpenAPPA acknowledged a peer read without a body"),
+    );
+  }
+  if (decision.decision === "deny_call") {
+    return {
+      isError: true,
+      content: [{ type: "text", text: decision.feedback }],
+      structuredContent: {
+        decision: "deny_call",
+        peer_read_denied: true,
+        offers: decision.offers ?? [],
+        review: decision.review ?? [],
+      },
+    };
+  }
+  return {
+    isError: true,
+    content: [{ type: "text", text: decisionMessage(decision) }],
+  };
+}
+
+/**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the verified offer claims.
  */
@@ -1268,7 +1588,11 @@ export async function loadOfferReview(params: {
   arguments?: string;
 } | null> {
   try {
-    if (!(await isGuardrailsV2Active())) return null;
+    if (
+      capturedActivation.getStore() !== "active" &&
+      !(await isGuardrailsV2Active())
+    )
+      return null;
     const module = await binding();
     const result = await module.loadOfferReview(
       params.organizationId,
@@ -1351,4 +1675,73 @@ function isPlatformUserQuestion(
     archestraMcpBranding.getToolShortName(canonical) ===
     TOOL_ASK_USER_SHORT_NAME
   );
+}
+
+type PeerNotice = {
+  messageId: string;
+  senderSessionId: string;
+  recipientSessionId: string;
+  /** SHA-256 of the body, 64 lowercase hex. Internal binding material. */
+  digest: string;
+  expiresAt: string;
+};
+
+const PeerNoticeWireSchema = z
+  .object({
+    message_id: z.string().min(1),
+    sender_session_id: z.string().min(1),
+    recipient_session_id: z.string().min(1),
+    digest: z.string().regex(/^[0-9a-f]{64}$/),
+    expires_at: z.string().min(1),
+  })
+  .strict();
+
+function peerNotice(value: z.infer<typeof PeerNoticeWireSchema>): PeerNotice {
+  return {
+    messageId: value.message_id,
+    senderSessionId: value.sender_session_id,
+    recipientSessionId: value.recipient_session_id,
+    digest: value.digest,
+    expiresAt: value.expires_at,
+  };
+}
+
+function peerActor(session: OpenAppaSession) {
+  return {
+    organization_id: session.organization_id,
+    session_id: session.session_id,
+    ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+    ...(session.parent_id ? { parent_id: session.parent_id } : {}),
+  };
+}
+
+async function peerResponse<T>(
+  session: OpenAppaSession,
+  call: (
+    module: Awaited<ReturnType<typeof binding>>,
+    policy: DispatchPolicy,
+  ) => Promise<string>,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  try {
+    return schema.parse(await peerJson(session, call));
+  } catch (error) {
+    throw openappaFailure(error);
+  }
+}
+
+async function peerJson(
+  session: OpenAppaSession,
+  call: (
+    module: Awaited<ReturnType<typeof binding>>,
+    policy: DispatchPolicy,
+  ) => Promise<string>,
+): Promise<unknown> {
+  try {
+    const policy = await effectivePolicy(session.organization_id);
+    const module = await binding();
+    return JSON.parse(await call(module, policy));
+  } catch (error) {
+    throw openappaFailure(error);
+  }
 }

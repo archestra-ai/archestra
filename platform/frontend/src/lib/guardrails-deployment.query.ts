@@ -1,11 +1,16 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const queryKey = ["guardrails-deployment"];
 export function useGuardrailsDeployment() {
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   return useQuery({
+    enabled: canRead === true,
     queryKey,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getGuardrailsDeployment();

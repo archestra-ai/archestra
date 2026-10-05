@@ -62,6 +62,10 @@ vi.mock("@/components/agent-form", () => ({
 vi.mock("./agent-connect-content", () => ({
   AgentConnectContent: () => <div>connect content</div>,
 }));
+// One recorded run, so the Runs section is offered wherever runs are enabled.
+vi.mock("@/lib/agent-runtime.query", () => ({
+  useAgentRuns: () => ({ data: [{ id: "run-1" }], isError: false }),
+}));
 vi.mock("./agent-runs", () => ({
   AgentRuns: () => <div>run history</div>,
 }));
@@ -160,6 +164,29 @@ describe("AgentDetailPage", () => {
       isPending: false,
     } as unknown as ReturnType<typeof useExportAgent>);
     mockAgent(baseAgent);
+  });
+
+  it.each([
+    "personal",
+    "team",
+    "org",
+  ])("omits legacy %s visibility from agent and gateway headers", (scope) => {
+    mockAgent({ ...baseAgent, scope });
+    const { unmount } = render(<AgentDetailPage kind="agent" id="a1" />);
+    for (const label of ["Personal", "Team", "Organization"]) {
+      expect(
+        screen.queryByText(label, { exact: true }),
+      ).not.toBeInTheDocument();
+    }
+    unmount();
+    mockAgent({ ...baseAgent, scope, agentType: "mcp_gateway" });
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
+    expect(screen.getByText(baseAgent.name)).toBeVisible();
+    for (const label of ["Personal", "Team", "Organization"]) {
+      expect(
+        screen.queryByText(label, { exact: true }),
+      ).not.toBeInTheDocument();
+    }
   });
 
   it("shows the not-found state for a trashed id, which the API no longer returns", () => {
@@ -344,6 +371,7 @@ describe("AgentDetailPage", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.getByText("form section: configuration")).toBeVisible();
+    expect(screen.getByText("Built-in")).toBeVisible();
     expect(
       screen.queryByRole("link", { name: "Tools, Skills & Knowledge" }),
     ).toBeNull();

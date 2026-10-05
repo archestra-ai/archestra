@@ -1,11 +1,11 @@
-import { CursorQuerySchema } from "@archestra/shared";
+import { CreatedByNullableSchema, CursorQuerySchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { openappaYellsTable } from "@/database/schemas/openappa-yell";
 
 export const OpenAppaYellSchema = createSelectSchema(openappaYellsTable)
   .omit({ archive: true })
-  .extend({ hasArchive: z.boolean() });
+  .extend({ hasArchive: z.boolean(), caller: CreatedByNullableSchema });
 export const InsertOpenAppaYellSchema = createInsertSchema(
   openappaYellsTable,
 ).pick({

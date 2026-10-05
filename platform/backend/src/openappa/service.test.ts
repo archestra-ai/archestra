@@ -14,6 +14,7 @@ import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
 import {
+  admitPeerMessage,
   approveSpawnReturn,
   cancelCalls,
   endChild,
@@ -21,9 +22,12 @@ import {
   evaluateToolCalls,
   executeRemedyByOffer,
   executeYell,
+  listPeerMessages,
   loadChildReturns,
   loadOfferReview,
   processProxyResults,
+  readPeerMessage,
+  sendPeerMessage,
   sessionFromHeaders,
 } from "./service";
 import { rememberYellSession } from "./yell-session";
@@ -47,6 +51,10 @@ const native = vi.hoisted(() => ({
   executeRemedyByOffer: vi.fn(),
   loadChildReturns: vi.fn(),
   loadOfferReview: vi.fn(),
+  sendPeerMessage: vi.fn(),
+  admitPeerMessage: vi.fn(),
+  listPeerMessages: vi.fn(),
+  readPeerMessage: vi.fn(),
   // No batteries declared: the composed policy is the root alone.
   listBundledOpenappaBatteries: vi.fn(async () => []),
   parseOpenappaDeclarations: vi.fn(async () => ({
@@ -92,6 +100,10 @@ beforeEach(async ({ makeOrganization }) => {
   );
   native.loadOfferReview.mockReset();
   native.loadChildReturns.mockReset();
+  native.sendPeerMessage.mockReset();
+  native.admitPeerMessage.mockReset();
+  native.listPeerMessages.mockReset();
+  native.readPeerMessage.mockReset();
   native.executeRemedyByOffer.mockReset();
   native.executeRemedyByOffer.mockResolvedValue(
     JSON.stringify({
@@ -934,6 +946,159 @@ describe("APPA feature boundary", () => {
     expect(result.toolResultUpdates["ask-call"]?.content).toBe(
       reported ? "APPA: withheld; remedy offer-123" : undefined,
     );
+  });
+
+  describe("a remedy call the gateway never ran", () => {
+    const CONTROL = "mcp__gw__archestra__execute_remedy_plan";
+    const WITHHELD =
+      "[appa] Tool output withheld: this result has no record of releasing a call.";
+    const REFUSAL =
+      "Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Auto-Mode Bypass]. STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed.";
+    const NOT_APPLIED =
+      "[appa] The remedy did not run, so the plan is not applied. The result the client returned:\n\n";
+    const ASK =
+      "\n\n[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
+    const isControlResult = (result: { name: string }) =>
+      result.name === CONTROL;
+
+    beforeEach(() => {
+      // The runtime released no call under these ids.
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        return JSON.stringify(
+          event.event === "tool_result"
+            ? {
+                decision: "block",
+                feedback: WITHHELD,
+                approved_output: WITHHELD,
+                output_source: "runtime",
+                code: "unreleased_call",
+              }
+            : { decision: "ack" },
+        );
+      });
+    });
+
+    const process = (result: {
+      name: string;
+      content: unknown;
+      isError: boolean;
+    }) =>
+      processProxyResults({
+        session,
+        canonicalize: (name) => name,
+        controlToolName: CONTROL,
+        isControlResult,
+        results: [{ id: "remedy", ...result }],
+      });
+
+    test("shows the model the client's refusal and says the plan is not applied", async () => {
+      const result = await process({
+        name: CONTROL,
+        content: [{ type: "text", text: REFUSAL }],
+        isError: true,
+      });
+
+      expect(result.toolResultUpdates.remedy).toEqual({
+        content: `${NOT_APPLIED}${REFUSAL}${ASK}`,
+        outputSource: "runtime",
+      });
+    });
+
+    test("shows the gateway's own refusal the same way", async () => {
+      const result = await process({
+        name: CONTROL,
+        content: "[appa] No live offer with this id is available.",
+        isError: true,
+      });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(
+        `${NOT_APPLIED}[appa] No live offer with this id is available.${ASK}`,
+      );
+    });
+
+    test("needs no error flag, which OpenAI wires never set", async () => {
+      const result = await process({
+        name: CONTROL,
+        content: "The user rejected this tool call.",
+        isError: false,
+      });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(
+        `${NOT_APPLIED}The user rejected this tool call.${ASK}`,
+      );
+    });
+
+    test("still withholds a result that is not this request's remedy call", async () => {
+      const result = await process({
+        name: "mcp__other__archestra__execute_remedy_plan",
+        content: REFUSAL,
+        isError: true,
+      });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(WITHHELD);
+    });
+
+    test.each([
+      {
+        label: "a list of strings",
+        content: ["denied by hook"],
+        shown: "denied by hook",
+      },
+      { label: "no content", content: null, shown: "" },
+      {
+        label: "a text part that is not a string",
+        content: [{ type: "text", text: { reason: "denied" } }],
+        shown: '{"reason":"denied"}',
+      },
+    ])("keeps the text of $label", async ({ content, shown }) => {
+      const result = await process({ name: CONTROL, content, isError: true });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(
+        `${NOT_APPLIED}${shown}${ASK}`,
+      );
+    });
+
+    test("cuts a long result without splitting a character", async () => {
+      const result = await process({
+        name: CONTROL,
+        content: `${"a".repeat(3999)}\u{1F600}tail`,
+        isError: true,
+      });
+
+      const shown = (result.toolResultUpdates.remedy?.content ?? "").slice(
+        NOT_APPLIED.length,
+      );
+      expect(shown).toBe(`${"a".repeat(3999)}…${ASK}`);
+    });
+
+    test("keeps the runtime's answer for a remedy the gateway ran", async () => {
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        return JSON.stringify(
+          event.event === "tool_result"
+            ? {
+                decision: "mcp_result",
+                result: {
+                  content: [{ type: "text", text: "[appa] Authorized." }],
+                },
+                approved_output: "[appa] Authorized.",
+                output_source: "runtime",
+              }
+            : { decision: "ack" },
+        );
+      });
+
+      const result = await process({
+        name: CONTROL,
+        content: "[appa] Authorized.",
+        isError: false,
+      });
+
+      expect(result.toolResultUpdates.remedy?.content).toBe(
+        "[appa] Authorized.",
+      );
+    });
   });
 
   test("does not exempt an unrelated MCP question from tool-call evaluation", async () => {
@@ -1782,7 +1947,7 @@ describe("APPA feature boundary", () => {
               feedback:
                 "tool archestra__download_file is not declared in this policy; the call is refused",
               approved_output:
-                "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool was not executed.",
+                "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool did not run.",
               output_source: "runtime",
             }
           : { decision: "ack" },
@@ -1802,7 +1967,7 @@ describe("APPA feature boundary", () => {
     });
     expect(result.toolResultUpdates.denied_call).toEqual({
       content:
-        "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool was not executed.",
+        "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool did not run.",
       outputSource: "runtime",
     });
   });
@@ -2432,6 +2597,30 @@ describe("remedy by offer", () => {
     ]);
   });
 
+  test("loads retained child returns after the deployment switch turns off mid-request", async () => {
+    // The request read the switch as on at its boundary. Returning nothing
+    // here would refuse every return the runtime retained.
+    await GuardrailsDeploymentModel.setEnabled(false);
+    native.loadChildReturns.mockResolvedValueOnce([
+      {
+        childSessionId: "user:alice|conversation:a1",
+        value: "SUMMARY(24 characters): safe",
+      },
+    ]);
+
+    const records = await loadChildReturns({
+      organizationId,
+      parentSessionId: "user:alice|conversation",
+    });
+
+    expect(records).toEqual([
+      {
+        childSessionId: "user:alice|conversation:a1",
+        value: "SUMMARY(24 characters): safe",
+      },
+    ]);
+  });
+
   test("fails closed with 503 when the child returns cannot be loaded", async () => {
     native.loadChildReturns.mockRejectedValueOnce(
       new Error("host SQL requires a leased connection"),
@@ -2606,5 +2795,238 @@ describe("remedy by offer", () => {
         supports_delegation: false,
       },
     });
+  });
+
+  test("a peer send passes opaque ids and returns the runtime message id", async () => {
+    native.sendPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({ kind: "released", message_id: "msg-1" }),
+    );
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:call-1",
+        recipientSessionId: "conversation:worker",
+        recipientSpawnCallId: "spawn-1",
+        value: "hello",
+      }),
+    ).resolves.toEqual({ kind: "released", messageId: "msg-1" });
+    const wire = JSON.parse(native.sendPeerMessage.mock.calls[0][0]);
+    expect(wire).toEqual({
+      organization_id: organizationId,
+      caller_id: "user:alice",
+      session_id: "conversation",
+      operation_id: "peer_send:call-1",
+      recipient_session_id: "conversation:worker",
+      recipient_spawn_call_id: "spawn-1",
+      value: "hello",
+    });
+    expect(wire.label).toBeUndefined();
+  });
+
+  test("a peer send does not invent a release when the runtime fails", async () => {
+    native.sendPeerMessage.mockRejectedValueOnce(new Error("storage down"));
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:call-2",
+        recipientSessionId: "conversation:worker",
+        value: "hello",
+      }),
+    ).rejects.toThrow("OpenAPPA");
+  });
+
+  test("a denied peer read keeps its offers for the remedy path", async () => {
+    native.readPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "[appa] Blocked: the label narrows.",
+        offers: [{ offer_id: "offer-1" }],
+      }),
+    );
+    await expect(
+      readPeerMessage({
+        session,
+        toolCallId: "read-deny",
+        args: { message_id: "msg-1" },
+      }),
+    ).resolves.toEqual({
+      isError: true,
+      content: [{ type: "text", text: "[appa] Blocked: the label narrows." }],
+      structuredContent: {
+        decision: "deny_call",
+        peer_read_denied: true,
+        offers: [{ offer_id: "offer-1" }],
+        review: [],
+      },
+    });
+  });
+
+  test("a peer read returns the retained native result and not a caller label", async () => {
+    native.readPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "retained body" }] },
+      }),
+    );
+    await expect(
+      readPeerMessage({
+        session,
+        toolCallId: "read-1",
+        args: { message_id: "msg-1" },
+      }),
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "retained body" }],
+    });
+    const wire = JSON.parse(native.readPeerMessage.mock.calls[0][0]);
+    expect(wire.tool_call_id).toBe("read-1");
+    expect(wire.message_id).toBe("msg-1");
+    expect(wire.session_id).toBe("conversation");
+    expect(wire.label).toBeUndefined();
+    expect(wire.tool).toBe("archestra__read_peer_message");
+  });
+
+  test("a peer list keeps binding metadata for the caller and the authenticated session", async () => {
+    native.listPeerMessages.mockResolvedValueOnce(
+      JSON.stringify({
+        notices: [
+          {
+            message_id: "msg-1",
+            sender_session_id: "conversation:lead",
+            recipient_session_id: "conversation",
+            digest: "ab".repeat(32),
+            expires_at: "2026-10-03T00:00:00Z",
+          },
+        ],
+      }),
+    );
+    await expect(listPeerMessages({ session })).resolves.toEqual([
+      {
+        messageId: "msg-1",
+        senderSessionId: "conversation:lead",
+        recipientSessionId: "conversation",
+        digest: "ab".repeat(32),
+        expiresAt: "2026-10-03T00:00:00Z",
+      },
+    ]);
+    expect(
+      JSON.parse(native.listPeerMessages.mock.calls[0][0]).session_id,
+    ).toBe("conversation");
+  });
+
+  test("a peer admission returns the runtime's admitted, held, or unverified result", async () => {
+    native.admitPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        kind: "admitted",
+        message_id: "msg-1",
+        value: "retained body",
+      }),
+    );
+    await expect(
+      admitPeerMessage({ session, messageId: "msg-1", value: "retained body" }),
+    ).resolves.toEqual({
+      kind: "admitted",
+      messageId: "msg-1",
+      value: "retained body",
+    });
+
+    native.admitPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        kind: "held",
+        notices: [
+          {
+            message_id: "msg-2",
+            sender_session_id: "conversation:lead",
+            recipient_session_id: "conversation",
+            digest: "cd".repeat(32),
+            expires_at: "2026-10-03T00:00:00Z",
+          },
+        ],
+      }),
+    );
+    await expect(
+      admitPeerMessage({ session, value: "held body" }),
+    ).resolves.toEqual({
+      kind: "held",
+      notices: [
+        {
+          messageId: "msg-2",
+          senderSessionId: "conversation:lead",
+          recipientSessionId: "conversation",
+          digest: "cd".repeat(32),
+          expiresAt: "2026-10-03T00:00:00Z",
+        },
+      ],
+    });
+
+    native.admitPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({ kind: "unverified" }),
+    );
+    await expect(admitPeerMessage({ session })).resolves.toEqual({
+      kind: "unverified",
+    });
+  });
+
+  test("a malformed peer response is an unavailable runtime, not a raw parse error", async () => {
+    const unavailable = {
+      statusCode: 503,
+      message: expect.stringContaining("OpenAPPA could not safely complete"),
+    };
+    native.sendPeerMessage.mockResolvedValueOnce("{not json");
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:bad",
+        recipientSessionId: "conversation:worker",
+        value: "hello",
+      }),
+    ).rejects.toMatchObject(unavailable);
+
+    native.admitPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({ kind: "admitted" }),
+    );
+    await expect(admitPeerMessage({ session })).rejects.toMatchObject(
+      unavailable,
+    );
+
+    native.listPeerMessages.mockResolvedValueOnce(
+      JSON.stringify({ notices: [{}] }),
+    );
+    await expect(listPeerMessages({ session })).rejects.toMatchObject(
+      unavailable,
+    );
+
+    native.readPeerMessage.mockResolvedValueOnce("not-json");
+    await expect(
+      readPeerMessage({
+        session,
+        toolCallId: "read-bad",
+        args: { message_id: "msg-1" },
+      }),
+    ).rejects.toMatchObject(unavailable);
+  });
+
+  test("a runtime refusal is not rewritten as an unavailable peer response", async () => {
+    native.sendPeerMessage.mockRejectedValueOnce(
+      new Error("no prepared fork to open this child"),
+    );
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:unforked",
+        recipientSessionId: "conversation:worker",
+        value: "hello",
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    native.sendPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({ kind: "denied", feedback: "the label narrows" }),
+    );
+    await expect(
+      sendPeerMessage({
+        session,
+        operationId: "peer_send:denied",
+        recipientSessionId: "conversation:worker",
+        value: "hello",
+      }),
+    ).resolves.toEqual({ kind: "denied", feedback: "the label narrows" });
   });
 });

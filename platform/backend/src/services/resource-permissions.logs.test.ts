@@ -1,106 +1,61 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { userHasPermission } from "@/auth";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { expect, test } from "@/test";
 
 for (const legacyPermissions of [false, true]) {
-  test(`${legacyPermissions ? "migrated" : "new"} organizations let admins delegate log access without granting platform admins global logs`, async ({
+  test(`${legacyPermissions ? "migrated" : "new"} organizations use role actions for log visibility`, async ({
     makeOrganization,
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const org = await makeOrganization({ legacyPermissions });
-    const admin = await makeUser();
-    const platformAdmin = await makeUser();
-    const reader = await makeUser();
-    const readerRole = await makeCustomRole(org.id, {
-      permission: legacyPermissions
-        ? { log: ["read", "admin"], auditLog: ["read", "admin"] }
-        : {},
+    for (const [role, expected] of [
+      ["admin", true],
+      ["platform_admin", false],
+      ["editor", false],
+      ["member", false],
+    ] as const) {
+      const actor = await makeUser();
+      await makeMember(actor.id, org.id, { role });
+      for (const resource of [
+        "log",
+        "auditLog",
+        "openappaDiagnostics",
+      ] as const) {
+        expect(
+          await userHasPermission(actor.id, org.id, resource, "admin"),
+        ).toBe(expected);
+      }
+    }
+    const actor = await makeUser();
+    const custom = await makeCustomRole(org.id, {
+      permission: { log: ["read", "admin"], auditLog: ["read", "admin"] },
     });
-    await makeMember(admin.id, org.id, { role: "admin" });
-    await makeMember(platformAdmin.id, org.id, { role: "platform_admin" });
-    await makeMember(reader.id, org.id, { role: readerRole.role });
-    if (legacyPermissions) await runScopedResourcePermissionCutover();
-
+    await makeMember(actor.id, org.id, { role: custom.role });
+    await runScopedResourcePermissionCutover();
     for (const resource of ["log", "auditLog"] as const) {
-      const context = { organizationId: org.id, resource, scope: "*" };
-      for (const action of ["read", "manage-permissions"] as const) {
-        expect(
-          await ResourcePermissions.allows({
-            ...context,
-            userId: admin.id,
-            action,
-          }),
-        ).toBe(true);
-        expect(
-          await ResourcePermissions.allows({
-            ...context,
-            userId: platformAdmin.id,
-            action,
-          }),
-        ).toBe(false);
-      }
+      expect(await userHasPermission(actor.id, org.id, resource, "admin")).toBe(
+        true,
+      );
       expect(
-        await ResourcePermissions.allows({
-          ...context,
-          userId: reader.id,
-          action: "manage-permissions",
+        await ResourcePermissionPolicyModel.find({
+          organizationId: org.id,
+          resource,
+          scope: "*",
         }),
-      ).toBe(false);
-      if (legacyPermissions) {
-        expect(
-          await ResourcePermissions.allows({
-            ...context,
-            userId: reader.id,
-            action: "read",
-          }),
-        ).toBe(true);
-      }
-      const policy = await ResourcePermissionPolicyModel.find(context);
-      await ResourcePermissions.updatePolicy({
-        ...context,
-        userId: admin.id,
-        revision: policy?.revision ?? 0,
-        grants: [
-          {
-            subject: { type: "role", id: "admin" },
-            actions: ["read", "manage-permissions"],
-          },
-          { subject: { type: "user", id: reader.id }, actions: ["read"] },
-        ],
-      });
-      expect(
-        await ResourcePermissions.allows({
-          ...context,
-          userId: reader.id,
-          action: "read",
+      ).toBeNull();
+      await expect(
+        ResourcePermissions.getPolicy({
+          userId: actor.id,
+          organizationId: org.id,
+          resource,
+          scope: "*",
         }),
-      ).toBe(true);
-      const delegated = await ResourcePermissionPolicyModel.find(context);
-      await ResourcePermissions.updatePolicy({
-        ...context,
-        userId: admin.id,
-        revision: delegated?.revision ?? 0,
-        grants: [{ subject: { type: "role", id: "admin" }, actions: ["read"] }],
-      });
-      await runScopedResourcePermissionCutover();
-      expect(
-        await ResourcePermissions.allows({
-          ...context,
-          userId: admin.id,
-          action: "manage-permissions",
-        }),
-      ).toBe(false);
-      expect(
-        await ResourcePermissions.allows({
-          ...context,
-          userId: reader.id,
-          action: "read",
-        }),
-      ).toBe(false);
+      ).rejects.toMatchObject({ statusCode: 400 });
     }
   });
 }

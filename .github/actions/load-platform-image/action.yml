@@ -17,9 +17,10 @@ inputs:
     default: platform-docker-image
   wait-timeout-seconds:
     description: |
-      When source=artifact, wait up to this many seconds for the artifact to be uploaded
-      (e.g. by a build job running in parallel with the caller). Requires the calling job
-      to have the actions:read permission. 0 = artifact must already exist.
+      Wait up to this many seconds for the image to be published by a build job running in
+      parallel with the caller. source=registry retries the pull until the tag exists;
+      source=artifact polls for the artifact upload and requires the calling job to have the
+      actions:read permission. 0 = a single pull attempt / the artifact must already exist.
     required: false
     default: "0"
 
@@ -36,7 +37,17 @@ runs:
       shell: bash
       env:
         PLATFORM_IMAGE_TAG: ${{ inputs.image-tag }}
-      run: docker pull "${PLATFORM_IMAGE_TAG}"
+        WAIT_TIMEOUT_SECONDS: ${{ inputs.wait-timeout-seconds }}
+      run: |
+        deadline=$(( $(date +%s) + WAIT_TIMEOUT_SECONDS ))
+        until docker pull "${PLATFORM_IMAGE_TAG}"; do
+          if [ "$(date +%s)" -ge "${deadline}" ]; then
+            echo "Timed out waiting for ${PLATFORM_IMAGE_TAG} to become pullable"
+            exit 1
+          fi
+          echo "Image ${PLATFORM_IMAGE_TAG} not available yet, retrying in 10s..."
+          sleep 10
+        done
 
     - name: Wait for platform image artifact
       if: ${{ inputs.source == 'artifact' && inputs.wait-timeout-seconds != '0' }}

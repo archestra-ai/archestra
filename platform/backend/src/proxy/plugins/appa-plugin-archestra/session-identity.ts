@@ -1,3 +1,4 @@
+import type { OpenAppaSession } from "@/openappa/service";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
@@ -7,7 +8,13 @@ import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
-import type { AppaClientAdapter } from "./types";
+import type {
+  AppaChildTrajectory,
+  AppaClientAdapter,
+  AppaMatchContext,
+  AppaTrustedContext,
+} from "./types";
+import { withCallerScope } from "./utils";
 
 /**
  * Client adapters in match order: external client protocols first,
@@ -75,4 +82,49 @@ export function nativeSpawnParentId(params: {
     candidate.matches(context),
   );
   return adapter?.nativeSpawnParentId?.(context, params.sessionId);
+}
+
+/**
+ * The runtime session of a request: the session the proxy derived, or the
+ * child trajectory that the client's adapter binds the request to. A child is
+ * not a client fork, so it drops a fork source the proxy derived first.
+ * Throws when the child's correlation is missing, reused, or contradictory.
+ */
+export function appaTrajectory(params: {
+  adapters: readonly AppaClientAdapter[];
+  headers: AppaMatchContext["headers"];
+  requestBody: unknown;
+  trustedContext: AppaTrustedContext;
+}): {
+  session: OpenAppaSession;
+  adapter: AppaClientAdapter | undefined;
+  child: AppaChildTrajectory | undefined;
+  matchContext: AppaMatchContext;
+} {
+  const trusted = params.trustedContext;
+  // A copy, so no adapter can change the proxy's own context.
+  const matchContext: AppaMatchContext = {
+    headers: params.headers,
+    requestBody: params.requestBody,
+    trustedContext: { ...trusted, session: { ...trusted.session } },
+  };
+  const adapter = params.adapters.find((candidate) =>
+    candidate.matches(matchContext),
+  );
+  const child = adapter?.bindChildTrajectory(matchContext);
+  if (!child) {
+    return { session: trusted.session, adapter, child, matchContext };
+  }
+  // `parent_id` and `fork_of` name runtime openings that exclude each other.
+  const { fork_of: _forkOf, ...session } = trusted.session;
+  return {
+    session: {
+      ...session,
+      session_id: withCallerScope(trusted.session, child.sessionId),
+      parent_id: withCallerScope(trusted.session, child.parentId),
+    },
+    adapter,
+    child,
+    matchContext,
+  };
 }

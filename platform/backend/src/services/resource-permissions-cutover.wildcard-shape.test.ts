@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 import { runScopedResourcePermissionCutover } from "./resource-permissions-cutover";
@@ -31,16 +33,18 @@ describe("wildcard policy shape", () => {
       subject: { type: "role", id },
       actions: [...MANAGE],
     }));
-    for (const resource of [
-      "agent",
-      "mcpGateway",
-      "mcpRegistry",
-      "skill",
-      "app",
-    ] as const)
+    for (const resource of ["agent", "mcpGateway", "skill", "app"] as const)
       expect(
         await read(resource as "agent" | "mcpGateway" | "mcpRegistry"),
       ).toEqual(adminTiers);
+    // The registry's widest level adds deployment-spec configuration, so the
+    // admin tiers can configure every entry, as on a newly provisioned org.
+    expect(await read("mcpRegistry")).toEqual(
+      ["admin", "platform_admin"].map((id) => ({
+        subject: { type: "role", id },
+        actions: ["configure-deployment-spec", ...MANAGE],
+      })),
+    );
     // The model catalog is the one resource where Editor held wildcard
     // authority of its own. It never included delete, but no preset holds
     // manage-permissions without delete, so the grant widens to Full access.
@@ -108,7 +112,7 @@ describe("wildcard policy shape", () => {
     });
   }
 
-  test("log authority converts asymmetrically: only the built-in admin may delegate it", async ({
+  test("log role actions survive startup without recreating scoped policies", async ({
     makeOrganization,
     makeCustomRole,
   }) => {
@@ -116,33 +120,23 @@ describe("wildcard policy shape", () => {
     const role = await makeCustomRole(org.id, {
       permission: { log: ["read", "admin"], auditLog: ["read", "admin"] },
     });
-
     await runScopedResourcePermissionCutover();
-
     for (const resource of ["log", "auditLog"] as const) {
-      const grants =
-        (
-          await ResourcePermissionPolicyModel.find({
-            organizationId: org.id,
-            resource,
-            scope: "*",
-          })
-        )?.grants ?? [];
-      // Logs are read-only for everyone, and `platform_admin` never held the
-      // two log actions at all, so it gets no grant here.
-      expect(grants).toHaveLength(2);
-      expect(grants).toEqual(
-        expect.arrayContaining([
-          {
-            subject: { type: "role", id: "admin" },
-            actions: ["manage-permissions", "read"],
-          },
-          { subject: { type: "role", id: role.id }, actions: ["read"] },
-        ]),
-      );
       expect(
-        grants.some((grant) => grant.subject.id === "platform_admin"),
-      ).toBe(false);
+        await ResourcePermissionPolicyModel.find({
+          organizationId: org.id,
+          resource,
+          scope: "*",
+        }),
+      ).toBeNull();
     }
+    const [stored] = await db
+      .select()
+      .from(schema.organizationRolesTable)
+      .where(eq(schema.organizationRolesTable.id, role.id));
+    expect(JSON.parse(stored.permission)).toEqual({
+      log: ["read", "admin"],
+      auditLog: ["read", "admin"],
+    });
   });
 });

@@ -100,7 +100,7 @@ import type { ArchestraContext } from "./types";
  * name returns that skill's SKILL.md body and bundled-file list, and `load_skill`
  * with a name + path returns one bundled resource file. Touching a skill through
  * either `load_skill` mode also mounts it into the conversation's code sandbox
- * (when the sandbox feature + `sandbox:execute` are present), so its scripts
+ * (when the sandbox feature + `agent:read` are present), so its scripts
  * become runnable under `/skills` via `run_command`.
  *
  * `create_skill` and `update_skill` let an agent author skills during a
@@ -403,7 +403,7 @@ const registry = defineArchestraTools([
       // sandbox is usable, mount it under /skills. Mounting on a file read too is
       // intentional — touching a skill loads it, so the model can never read a
       // resource without the skill becoming runnable. Idempotent per skill per
-      // sandbox; gated by sandbox:execute and fails closed without a user.
+      // sandbox; gated by agent:read and fails closed without a user.
       const activation = await resolveActivationVersion({
         skill,
         organizationId: ctx.organizationId,

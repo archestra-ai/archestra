@@ -117,9 +117,15 @@ test("confirms disconnect, stops automatic updates and preserves the accepted po
 });
 
 test("read-only users see status without mutation controls", async () => {
-  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data:
+          permissions.organizationSettings?.every(
+            (action) => action === "read",
+          ) ?? false,
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   show();
   expect(await screen.findByText("Connected")).toBeVisible();
   expect(

@@ -1,14 +1,8 @@
-import { vi } from "vitest";
+import { adminPermissions } from "@archestra/shared/access-control";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { userHasPermission } from "@/auth";
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
 
 describe("POST /api/connection-setups/virtual-key", () => {
   let app: FastifyInstanceWithZod;
@@ -19,9 +13,7 @@ describe("POST /api/connection-setups/virtual-key", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
-    await makeMember(user.id, organizationId);
-    mockUserHasPermission.mockReset();
-    mockUserHasPermission.mockResolvedValue(true);
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -64,11 +56,22 @@ describe("POST /api/connection-setups/virtual-key", () => {
   test("403s without llmVirtualKey:create permission", async ({
     makeSecret,
     makeLlmProviderApiKey,
+    makeCustomRole,
+    makeMember,
+    makeUser,
   }) => {
-    mockUserHasPermission.mockImplementation(
-      async (_userId, _orgId, resource, action) =>
-        !(resource === "llmVirtualKey" && action === "create"),
-    );
+    const role = await makeCustomRole(organizationId, {
+      permission: Object.fromEntries(
+        Object.entries(adminPermissions).map(([resource, actions]) => [
+          resource,
+          resource === "llmVirtualKey"
+            ? actions.filter((action) => action !== "create")
+            : actions,
+        ]),
+      ),
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: role.role });
     await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
       provider: "anthropic",
     });

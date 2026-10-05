@@ -76,6 +76,63 @@ describe("checkToolPermission", () => {
     expect(result).toBeNull();
   });
 
+  test("runtime reporting and remediation remain available without management access", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const role = await makeCustomRole(org.id, {
+      permission: {},
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, {
+      role: role.role,
+    });
+    const context = {
+      ...memberContext,
+      organizationId: org.id,
+      userId: user.id,
+    };
+    for (const tool of ["yell", "execute_remedy_plan", "get_remedy_plans"]) {
+      expect(await checkToolPermission(t(tool), context)).toBeNull();
+    }
+    expect(
+      await checkToolPermission(t("get_guardrails_policy"), context),
+    ).not.toBeNull();
+    expect(
+      await checkToolPermission(t("get_openappa_yell"), context),
+    ).not.toBeNull();
+  });
+
+  test("diagnostics readers can retrieve yells independently of policy and LLM logs", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const role = await makeCustomRole(org.id, {
+      permission: { openappaDiagnostics: ["read"] },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, {
+      role: role.role,
+    });
+    const context = {
+      ...memberContext,
+      organizationId: org.id,
+      userId: user.id,
+    };
+    expect(
+      await checkToolPermission(t("get_openappa_yell"), context),
+    ).toBeNull();
+    expect(
+      await checkToolPermission(t("get_guardrails_policy"), context),
+    ).not.toBeNull();
+  });
+
   test("allows admin to use any tool", async () => {
     const result = await checkToolPermission(
       t("create_knowledge_base"),
@@ -143,12 +200,12 @@ describe("checkToolPermission", () => {
     expect((result?.content[0] as any).text).toContain("personal token");
   });
 
-  test("sandbox:execute gates the sandbox tools — admin allowed", async () => {
+  test("agent:read gates the sandbox tools — admin allowed", async () => {
     const result = await checkToolPermission(t("run_command"), adminContext);
     expect(result).toBeNull();
   });
 
-  test("sandbox:execute gates the sandbox tools — skill:read alone does not grant run_command", async ({
+  test("agent:read gates the sandbox tools — skill:read alone does not grant run_command", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -171,7 +228,7 @@ describe("checkToolPermission", () => {
 
     // skill:read allows load_skill...
     expect(await checkToolPermission(t("load_skill"), ctx)).toBeNull();
-    // ...but does NOT allow run_command (needs sandbox:execute)
+    // ...but does NOT allow run_command (needs agent:read)
     const denied = await checkToolPermission(t("run_command"), ctx);
     expect(denied).not.toBeNull();
     expect((denied?.content[0] as any).text).toContain(
@@ -179,7 +236,7 @@ describe("checkToolPermission", () => {
     );
   });
 
-  test("sandbox:execute allows the sandbox tools", async ({
+  test("agent:read allows the sandbox tools", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -189,7 +246,7 @@ describe("checkToolPermission", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
+      permission: { agent: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({ name: "Sandbox Agent" });
@@ -205,7 +262,7 @@ describe("checkToolPermission", () => {
     expect(await checkToolPermission(t("download_file"), ctx)).toBeNull();
   });
 
-  test("sandbox:execute alone does not grant the file-store tools", async ({
+  test("the file-store tools follow agent:read", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -213,54 +270,19 @@ describe("checkToolPermission", () => {
     makeAgent,
   }) => {
     const org = await makeOrganization();
-    const user = await makeUser();
-    const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
-    });
-    await makeMember(user.id, org.id, { role: role.role });
-    const agent = await makeAgent({ name: "Sandbox Agent" });
-
-    const ctx: ArchestraContext = {
-      agent: { id: agent.id, name: agent.name },
-      organizationId: org.id,
-      userId: user.id,
-    };
-
-    for (const tool of [
-      "search_files",
-      "read_file",
-      "save_file",
-      "edit_file",
-      "delete_file",
-    ]) {
-      const denied = await checkToolPermission(t(tool), ctx);
-      expect(denied, tool).not.toBeNull();
-      expect((denied?.content[0] as any).text).toContain(
-        "do not have permission",
-      );
-    }
-  });
-
-  test("file:manage allows the file-store tools but not run_command", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeCustomRole,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const role = await makeCustomRole(org.id, {
-      permission: { file: ["manage"] },
-    });
-    await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({ name: "Files Agent" });
-
-    const ctx: ArchestraContext = {
-      agent: { id: agent.id, name: agent.name },
-      organizationId: org.id,
-      userId: user.id,
+    const contextFor = async (permission: Record<string, string[]>) => {
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, { permission });
+      await makeMember(user.id, org.id, { role: role.role });
+      return {
+        agent: { id: agent.id, name: agent.name },
+        organizationId: org.id,
+        userId: user.id,
+      } satisfies ArchestraContext;
     };
+    const agentUser = await contextFor({ agent: ["read"] });
+    const chatOnly = await contextFor({ chat: ["read"] });
 
     for (const tool of [
       "search_files",
@@ -269,9 +291,9 @@ describe("checkToolPermission", () => {
       "edit_file",
       "delete_file",
     ]) {
-      expect(await checkToolPermission(t(tool), ctx), tool).toBeNull();
+      expect(await checkToolPermission(t(tool), agentUser), tool).toBeNull();
+      expect(await checkToolPermission(t(tool), chatOnly), tool).not.toBeNull();
     }
-    expect(await checkToolPermission(t("run_command"), ctx)).not.toBeNull();
   });
 
   test("returns null for non-Archestra tool names", async () => {

@@ -3,7 +3,7 @@ title: Guardrails
 category: LLM Proxy
 order: 5
 description: Enable and operate OpenAPPA tool guardrails in Archestra
-lastUpdated: 2026-10-01
+lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,6 +37,28 @@ On a fresh install, the page asks you to create a policy. A chat drafts one from
 From then on, administrators can turn enforcement off and on with a switch. The policy stays as it is. Ask about the policy explains what it does.
 
 Enforcement applies to [recognized clients](#clients).
+
+OpenAPPA checks only what it sees while enforcement is on. A session that started while enforcement was off stays unchecked after you turn it on, and so do its subagents and teammates. Start a new session to work under the policy.
+
+A session that was checked before keeps its check when you turn enforcement off and on again. OpenAPPA ignores what the session did while enforcement was off — tool results, subagent answers, and messages from that time reach the model as they are.
+
+## Subagents and Teammates
+
+A subagent's answer reaches its session only through a return check. Before the subagent starts, the session declares what the answer may carry.
+
+Claude Code teammates can send messages without finishing their tasks. Sending between siblings does not change the lead's restrictions. Their final answers still pass the return check.
+
+A free-text message reaches its receiver directly when it adds no restrictions. Otherwise, Guardrails hold the body and show a notice. The receiver lists pending messages and chooses which to read. Reading applies that message's restrictions to the receiver. After reading a private report, for example, it cannot post the report publicly.
+
+A structured team message is shown directly only when that same send adds no restrictions. If it adds restrictions, Guardrails hold the body and show that message id. Guardrails do not attach it to a different held message. If the text is not that send, and not an older recorded receipt, Guardrails withhold it. Use the inbox tools to read a held message.
+
+A teammate's or lead's message sent while enforcement was off passes as it is, unless a message from the same sender passed the check before. Claude Code's own team notices, such as a teammate going idle, carry no agent text. They stay as Claude Code wrote them, even when other messages are held.
+
+The inbox tools require a connection to the [Archestra MCP Gateway](./platform-claude-code-example). Pending messages remain discoverable after conversation compaction. Expired messages cannot be read.
+
+Messages without a recorded release stay withheld. This includes messages from unrelated sessions. Sending the same text again does not authorize it.
+
+A teammate that started while enforcement was off stays unchecked. A checked lead does not send it messages. Start a new teammate, under a new name, to continue its work under the policy. OpenAPPA checks each teammate from its own spawn, so it refuses a second teammate under a name the session already used.
 
 ## Yells
 

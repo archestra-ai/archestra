@@ -37,7 +37,9 @@ import {
   AddResourceAccessDialog,
   ResourceAccessPicker,
 } from "@/components/add-resource-access-dialog";
+import { PermissionsSettingsSection } from "@/components/permissions-settings-section";
 import { QueryLoadError } from "@/components/query-load-error";
+import { getPermissionSafetyPreview } from "@/components/resource-permission-safety-preview";
 import { StandardDialog } from "@/components/standard-dialog";
 import { TabbedDialogFooterSlot } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -57,6 +59,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   type ResourcePermissions as Policy,
   useResourcePermissions,
@@ -93,6 +97,7 @@ export function ResourcePermissions({
   showInherited = true,
   registerSave,
   standalone = false,
+  layout = "default",
 }: {
   resource: ScopedResource;
   scope: string;
@@ -109,6 +114,7 @@ export function ResourcePermissions({
   registerSave?: (save: (() => Promise<void>) | null) => void;
   /** The section is a pane of its own, so it draws no separating rule. */
   standalone?: boolean;
+  layout?: "default" | "settings";
 }) {
   const policy = useResourcePermissions(resource, scope);
   if (policy.isPending)
@@ -151,6 +157,7 @@ export function ResourcePermissions({
       showInherited={showInherited}
       registerSave={registerSave}
       standalone={standalone}
+      layout={layout}
     />
   );
 }
@@ -179,6 +186,8 @@ export function ResourcePermissionsDialog({
   const [headerContainer, setHeaderContainer] = useState<HTMLDivElement | null>(
     null,
   );
+  const isMobile = useIsMobile();
+  const [canManage, setCanManage] = useState(false);
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessDirty, setAccessDirty] = useState(false);
   const noun = scopedResourceNouns[resource];
@@ -203,17 +212,26 @@ export function ResourcePermissionsDialog({
           : (description ??
             (scope !== "*"
               ? `Choose who can access this ${noun} and what they can do.`
-              : `Give access to every ${noun} in the organization, including ones created later.` +
+              : `Applies to every ${noun}, including new ones.` +
                 (ORGANIZATION_WIDE_RESOURCES.has(resource)
                   ? ""
-                  : " Permissions on individual resources can add access, but cannot reduce access given here.")))
+                  : " Individual permissions can add access, but can’t take away access granted here.")))
       }
       isDirty={isDirty || accessDirty}
-      className="sm:max-w-3xl"
+      className="w-[calc(100%-2rem)] max-h-[90dvh] sm:max-w-3xl"
+      headerClassName={
+        isMobile || !canManage
+          ? "text-left [&_[data-slot=dialog-title]]:pr-6 [&_[data-slot=dialog-title]]:leading-snug"
+          : "text-left [&_[data-slot=dialog-title]]:leading-snug"
+      }
+      headerAction={
+        !accessOpen &&
+        !isMobile &&
+        canManage && <div ref={setHeaderContainer} />
+      }
       // The list starts with its own column header, which reads as a heading
       // already. A full body inset above it just pushes the table down.
       bodyClassName={accessOpen ? undefined : "pt-2"}
-      headerAction={!accessOpen && <div ref={setHeaderContainer} />}
       footer={
         <fieldset
           ref={setFooterContainer}
@@ -229,9 +247,10 @@ export function ResourcePermissionsDialog({
       <ResourcePermissionsDialogContext.Provider
         value={{
           footerContainer,
-          headerContainer,
+          headerContainer: isMobile ? null : headerContainer,
           setAccessOpen,
           setAccessDirty,
+          setCanManage,
         }}
       >
         {open && (
@@ -263,6 +282,7 @@ function PermissionsEditor({
   showInherited,
   registerSave,
   standalone = false,
+  layout = "default",
 }: {
   policy: Policy;
   refreshFailed: boolean;
@@ -274,6 +294,7 @@ function PermissionsEditor({
   showInherited: boolean;
   registerSave?: (save: (() => Promise<void>) | null) => void;
   standalone?: boolean;
+  layout?: "default" | "settings";
 }) {
   const form = useForm<{ revision: number; grants: Policy["grants"] }>({
     defaultValues: { revision: policy.revision, grants: policy.grants },
@@ -302,35 +323,51 @@ function PermissionsEditor({
   const addButton = useRef<HTMLButtonElement>(null);
   const wasAdding = useRef(false);
   useEffect(() => {
-    if (dialog && wasAdding.current && !addOpen) addButton.current?.focus();
-    wasAdding.current = addOpen;
+    if (addOpen) {
+      wasAdding.current = true;
+      return;
+    }
+    if (!dialog || !wasAdding.current) return;
+    // Returning from the picker remounts the desktop header slot. Wait for
+    // its portal to settle so focus lands on the visible button.
+    const frame = requestAnimationFrame(() => {
+      addButton.current?.focus();
+      wasAdding.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [addOpen, dialog]);
   const setAccessOpen = (open: boolean) => {
     setAddOpen(open);
     dialog?.setAccessOpen(open);
   };
   const [allPermissionsOpen, setAllPermissionsOpen] = useState(false);
-  // "Edit in permissions for all X" writes the organization-wide policy, so
-  // the viewer's authority there decides whether the way in is offered. The
-  // query is the same one that dialog uses, so it is already cached.
-  const organizationPolicy = useResourcePermissions(
-    policy.resource,
-    "*",
-    policy.scope !== "*",
-  );
-  const canEditAll =
+  const { data: canUpdateGlobal } = useHasPermissions({
+    accessPolicies: ["update"],
+  });
+  const canEditAll = !!canUpdateGlobal;
+  const canManage =
     policy.scope === "*"
-      ? policy.effectiveActions.includes("manage-permissions")
-      : (organizationPolicy.data?.effectiveActions.includes(
-          "manage-permissions",
-        ) ?? false);
-  const canManage = policy.effectiveActions.includes("manage-permissions");
+      ? !!canUpdateGlobal
+      : policy.effectiveActions.includes("manage-permissions");
+  // Only the open editor loads permissions. Keep the dialog shell query-free
+  // while letting it reserve space for the editor's Add access action.
+  const setDialogCanManage = dialog?.setCanManage;
+  useEffect(() => {
+    setDialogCanManage?.(canManage);
+    return () => setDialogCanManage?.(false);
+  }, [canManage, setDialogCanManage]);
   const presets = resourcePermissionPresetsFor(policy.resource);
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
+  const safety = getPermissionSafetyPreview({
+    policy,
+    grants: form.watch("grants"),
+  });
+  const blocked = dirty && safety?.blocked === true;
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const reset = () =>
     form.reset({ revision: policy.revision, grants: policy.grants });
-  const submit = form.handleSubmit((values) => {
+  const persist = (values: { revision: number; grants: Policy["grants"] }) => {
     mutation.mutate(
       {
         revision: values.revision,
@@ -344,6 +381,11 @@ function PermissionsEditor({
           form.reset({ revision: saved.revision, grants: saved.grants }),
       },
     );
+  };
+  const submit = form.handleSubmit((values) => {
+    if (blocked || changedElsewhere || refreshFailed) return;
+    if (dirty && safety?.losesManagement) setConfirmOpen(true);
+    else persist(values);
   });
   // A host form that submits this section along with its own fields needs to
   // flush the policy in its submit handler. Without it the section's edits
@@ -390,7 +432,7 @@ function PermissionsEditor({
       type="button"
       variant="outline"
       size="sm"
-      className="shrink-0"
+      className="h-11 shrink-0 sm:h-8"
       disabled={mutation.isPending || !policy.effectiveActions.includes("read")}
       ref={addButton}
       onClick={() => setAccessOpen(true)}
@@ -407,10 +449,12 @@ function PermissionsEditor({
         // A tabbed dialog hides its own buttons while this row owns its
         // footer, the way the all-permissions dialog swaps Done for it.
         data-section-actions=""
-        className="flex w-full items-center justify-between gap-3"
+        className="flex w-full items-center justify-between gap-3 [&_button]:h-11 sm:[&_button]:h-8"
       >
-        <span className="text-xs text-muted-foreground">Unsaved changes</span>
-        <div className="flex items-center gap-2">
+        <span className="hidden text-xs text-muted-foreground sm:inline">
+          Unsaved changes
+        </span>
+        <div className="ml-auto flex items-center gap-2">
           <Button
             type="button"
             size="sm"
@@ -427,7 +471,9 @@ function PermissionsEditor({
             size="sm"
             aria-label="Save permissions"
             onClick={() => void submit()}
-            disabled={mutation.isPending || changedElsewhere || refreshFailed}
+            disabled={
+              mutation.isPending || changedElsewhere || refreshFailed || blocked
+            }
           >
             <span>{mutation.isPending ? "Saving…" : "Save"}</span>
           </Button>
@@ -440,24 +486,177 @@ function PermissionsEditor({
   // enabled once something changed.
   const pageFooter =
     !embedded && footerContainer === undefined && !dialog && !registerSave;
+  const accessRows = (
+    <div className={layout === "settings" ? "divide-y border-t" : "divide-y"}>
+      {layout !== "settings" && (fields.length > 0 || indirect.length > 0) && (
+        <div className="hidden items-center gap-3 pb-2 text-xs font-medium text-muted-foreground sm:flex">
+          <span className="flex-1">Recipient</span>
+          <span className="w-48 border border-transparent px-3">
+            Permission
+          </span>
+          <span className="size-8" />
+        </div>
+      )}
+      {fields.length === 0 && indirect.length === 0 && (
+        <p className="py-3 text-sm text-muted-foreground">
+          Nobody has access yet.
+        </p>
+      )}
+      {fields.map((grant, index) => (
+        <div
+          key={grant.id}
+          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-3 sm:flex sm:gap-3 sm:py-2"
+        >
+          <SubjectIcon type={grant.subject.type} />
+          <div className="col-span-2 flex min-w-0 flex-1 flex-col items-start gap-x-2 sm:flex-row sm:flex-wrap sm:items-baseline">
+            <p className="break-words text-sm font-medium">{grant.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {subjectLabels[grant.subject.type]}
+            </p>
+          </div>
+          <Select
+            disabled={!canManage || mutation.isPending}
+            value={presetFor(grant.actions, policy.resource)}
+            onValueChange={(preset) => {
+              const choice = Object.entries(presets).find(
+                ([key]) => key === preset,
+              )?.[1];
+              if (choice)
+                update(index, { ...grant, actions: [...choice.actions] });
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              className="h-11 min-h-11 w-full min-w-0 text-left shadow-none hover:bg-muted sm:h-8 sm:min-h-8 sm:w-48 sm:shrink-0 sm:border-transparent dark:bg-transparent dark:hover:bg-muted"
+              aria-label={`Permission for ${grant.name}`}
+              title={actionDetail(grant.actions, policy.resource)}
+            >
+              <SelectValue>
+                {actionSummary(grant.actions, policy.resource)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(presets).map(([key, preset]) => (
+                <SelectItem
+                  key={key}
+                  value={key}
+                  disabled={preset.actions.some(
+                    (action) => !policy.effectiveActions.includes(action),
+                  )}
+                >
+                  <span className="block font-medium">{preset.label}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {presetDescription(key, policy.resource)}
+                  </span>
+                </SelectItem>
+              ))}
+              {presetFor(grant.actions, policy.resource) === "custom" && (
+                <SelectItem value="custom" disabled>
+                  {actionSummary(grant.actions, policy.resource)}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-11 shrink-0 text-muted-foreground sm:size-8"
+            disabled={!canManage || mutation.isPending}
+            aria-label={`Remove direct access for ${grant.name}`}
+            onClick={() => remove(index)}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      ))}
+      {indirect.map((grant) => (
+        <div
+          key={grant.key}
+          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-3 text-muted-foreground sm:flex sm:gap-3 sm:py-2"
+        >
+          <SubjectIcon type={grant.type} />
+          <div className="col-span-2 flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+            <p className="break-words text-sm font-medium">{grant.name}</p>
+            <span className="text-xs">{subjectLabels[grant.type]}</span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
+                  aria-label={`Why ${grant.name} has access: ${grant.via}`}
+                >
+                  <span>{grant.via}</span>
+                  <Info className="size-3" aria-hidden="true" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-72 max-w-[calc(100vw-2rem)] px-3 py-2 text-xs leading-relaxed"
+                aria-label={`Access source for ${grant.name}`}
+              >
+                <p>
+                  <span>{grant.explanation}</span>
+                  {canEditAll && (
+                    <span>
+                      {" Edit in "}
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0 text-xs underline underline-offset-2"
+                        onClick={() => setAllPermissionsOpen(true)}
+                      >
+                        permissions for all{" "}
+                        {resourcePluralNames[policy.resource]}
+                      </Button>
+                      .
+                    </span>
+                  )}
+                </p>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <p
+            className="min-w-0 text-sm sm:w-48 sm:shrink-0 sm:truncate sm:border sm:border-transparent sm:px-3"
+            title={actionDetail(grant.actions, policy.resource)}
+          >
+            {actionSummary(grant.actions, policy.resource)}
+          </p>
+          <span className="hidden size-8 shrink-0 sm:block" />
+        </div>
+      ))}
+    </div>
+  );
   return (
     <>
       <Container
         hidden={!!dialog && addOpen}
         onSubmit={embedded ? undefined : submit}
-        className={embedded ? undefined : "space-y-3"}
+        className={embedded && !dialog ? undefined : "space-y-3"}
       >
         <PermissionsPanel
           embedded={embedded && !dialog}
           standalone={standalone || inShell}
         >
-          {/* In a dialog the action takes the close button's corner, so it
-            costs no vertical space above the table. */}
-          {title === null &&
+          {!canManage && (
+            <InlineNotice variant="info">
+              <Info />
+              <span className="font-medium">You can’t change permissions.</span>
+              <InlineNoticeText>
+                Ask someone with full access to let you change permissions.
+              </InlineNoticeText>
+            </InlineNotice>
+          )}
+          {layout !== "settings" &&
+            title === null &&
             addAccessButton &&
-            headerContainer &&
-            createPortal(addAccessButton, headerContainer)}
-          {title !== null && (
+            (headerContainer ? (
+              createPortal(addAccessButton, headerContainer)
+            ) : (
+              <div className="flex justify-end">{addAccessButton}</div>
+            ))}
+          {layout !== "settings" && title !== null && (
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 space-y-1">
                 <h2 className="text-sm font-semibold">
@@ -512,150 +711,53 @@ function PermissionsEditor({
             </InlineNotice>
           )}
 
-          <div className="divide-y">
-            {(fields.length > 0 || indirect.length > 0) && (
-              <div className="flex items-center gap-3 pb-2 text-xs font-medium text-muted-foreground">
-                <span className="flex-1">Recipient</span>
-                <span className="w-36 border border-transparent px-3">
-                  Permission
-                </span>
-                <span className="size-8" />
-              </div>
-            )}
-            {fields.length === 0 && indirect.length === 0 && (
-              <p className="py-3 text-sm text-muted-foreground">
-                Nobody has access yet.
-              </p>
-            )}
-            {fields.map((grant, index) => (
-              <div key={grant.id} className="flex items-center gap-3 py-1.5">
-                <SubjectIcon type={grant.subject.type} />
-                <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-                  <p className="break-words text-sm font-medium">
-                    {grant.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {subjectLabels[grant.subject.type]}
-                  </p>
-                </div>
-                <Select
-                  disabled={!canManage || mutation.isPending}
-                  value={presetFor(grant.actions, policy.resource)}
-                  onValueChange={(preset) => {
-                    const choice = Object.entries(presets).find(
-                      ([key]) => key === preset,
-                    )?.[1];
-                    if (choice)
-                      update(index, { ...grant, actions: [...choice.actions] });
-                  }}
-                >
-                  <SelectTrigger
-                    size="sm"
-                    className="h-8 w-36 shrink-0 border-transparent text-left shadow-none hover:bg-muted dark:bg-transparent dark:hover:bg-muted"
-                    aria-label={`Permission for ${grant.name}`}
-                    title={actionDetail(grant.actions, policy.resource)}
-                  >
-                    <SelectValue>
-                      {actionSummary(grant.actions, policy.resource)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(presets).map(([key, preset]) => (
-                      <SelectItem
-                        key={key}
-                        value={key}
-                        disabled={preset.actions.some(
-                          (action) => !policy.effectiveActions.includes(action),
-                        )}
-                      >
-                        <span className="block font-medium">
-                          {preset.label}
-                        </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {presetDescription(key, policy.resource)}
-                        </span>
-                      </SelectItem>
-                    ))}
-                    {presetFor(grant.actions, policy.resource) === "custom" && (
-                      <SelectItem value="custom" disabled>
-                        {actionSummary(grant.actions, policy.resource)}
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="size-8 shrink-0 text-muted-foreground"
-                  disabled={!canManage || mutation.isPending}
-                  aria-label={`Remove direct access for ${grant.name}`}
-                  onClick={() => remove(index)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-            {indirect.map((grant) => (
-              <div
-                key={grant.key}
-                className="flex items-center gap-3 py-1.5 text-muted-foreground"
-              >
-                <SubjectIcon type={grant.type} />
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
-                  <p className="break-words text-sm font-medium">
-                    {grant.name}
-                  </p>
-                  <span className="text-xs">{subjectLabels[grant.type]}</span>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
-                        aria-label={`Why ${grant.name} has access: ${grant.via}`}
-                      >
-                        <span>{grant.via}</span>
-                        <Info className="size-3" aria-hidden="true" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      align="start"
-                      className="w-72 max-w-[calc(100vw-2rem)] px-3 py-2 text-xs leading-relaxed"
-                      aria-label={`Access source for ${grant.name}`}
-                    >
-                      <p>
-                        <span>{grant.explanation}</span>
-                        {canEditAll && (
-                          <span>
-                            {" Edit in "}
-                            <Button
-                              type="button"
-                              variant="link"
-                              className="h-auto p-0 text-xs underline underline-offset-2"
-                              onClick={() => setAllPermissionsOpen(true)}
-                            >
-                              permissions for all{" "}
-                              {resourcePluralNames[policy.resource]}
-                            </Button>
-                            .
-                          </span>
-                        )}
-                      </p>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <p
-                  className="w-36 shrink-0 truncate border border-transparent px-3 text-sm"
-                  title={actionDetail(grant.actions, policy.resource)}
-                >
-                  {actionSummary(grant.actions, policy.resource)}
-                </p>
-                <span className="size-8 shrink-0" />
-              </div>
-            ))}
-          </div>
+          {layout === "settings" ? (
+            <PermissionsSettingsSection
+              resourceName={noun}
+              directCount={fields.length}
+              inheritedCount={indirect.length}
+              action={addAccessButton}
+            >
+              {accessRows}
+            </PermissionsSettingsSection>
+          ) : (
+            accessRows
+          )}
 
+          {canManage &&
+            dirty &&
+            safety &&
+            (blocked ? (
+              <InlineNotice variant="error">
+                <AlertTriangle />
+                <span className="font-medium">
+                  Someone must be able to change permissions.
+                </span>
+                <InlineNoticeText>
+                  These changes would leave no one able to change permissions.
+                  Give another recipient full access before removing your own.
+                </InlineNoticeText>
+              </InlineNotice>
+            ) : safety.losesManagement ? (
+              <InlineNotice>
+                <AlertTriangle />
+                <span className="font-medium">
+                  {safety.losesAccess
+                    ? "You’ll lose access."
+                    : "You won’t be able to change permissions."}
+                </span>
+                <InlineNoticeText>
+                  <span>
+                    {safety.losesAccess
+                      ? "You won’t be able to view or use these resources. "
+                      : "You can still view these resources, but you won’t be able to change who has access. "}
+                    {safety.losesAccess
+                      ? `Ask ${safety.recovery} to give you access again.`
+                      : `To change permissions again, ask ${safety.recovery}.`}
+                  </span>
+                </InlineNoticeText>
+              </InlineNotice>
+            ) : null)}
           {pageFooter
             ? canManage && (
                 <WizardFooter className="sm:justify-end">
@@ -665,7 +767,8 @@ function PermissionsEditor({
                       !dirty ||
                       mutation.isPending ||
                       changedElsewhere ||
-                      refreshFailed
+                      refreshFailed ||
+                      blocked
                     }
                   >
                     {mutation.isPending ? (
@@ -691,6 +794,56 @@ function PermissionsEditor({
           )}
         </PermissionsPanel>
       </Container>
+      <StandardDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        size="small"
+        className="w-[calc(100%-2rem)] max-h-[90dvh]"
+        headerClassName="text-left [&_[data-slot=dialog-title]]:pr-6 [&_[data-slot=dialog-title]]:leading-snug"
+        footerClassName="[&_button]:min-h-11 sm:[&_button]:min-h-9"
+        title={
+          safety?.losesAccess
+            ? "Give up your access?"
+            : "Give up the ability to change permissions?"
+        }
+        description={
+          safety?.losesAccess
+            ? `You’re about to give up access for ${policy.scope === "*" ? `all ${resourcePluralNames[policy.resource]}` : `this ${noun}`}.`
+            : `You can still view ${policy.scope === "*" ? `all ${resourcePluralNames[policy.resource]}` : `this ${noun}`}, but you won’t be able to change who has access.`
+        }
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Keep editing
+            </Button>
+            <Button
+              disabled={
+                mutation.isPending ||
+                changedElsewhere ||
+                refreshFailed ||
+                blocked
+              }
+              onClick={() => {
+                setConfirmOpen(false);
+                void form.handleSubmit(persist)();
+              }}
+            >
+              {safety?.losesAccess
+                ? "Save and give up access"
+                : "Save changes anyway"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          You won’t be able to undo this yourself.
+          <span>
+            {safety?.losesAccess
+              ? ` Ask ${safety?.recovery} to give you access again.`
+              : ` To change permissions again, ask ${safety?.recovery}.`}
+          </span>
+        </p>
+      </StandardDialog>
       {canManage && addOpen && (
         <AccessPicker
           open={addOpen}
@@ -716,7 +869,9 @@ function PermissionsEditor({
               (action) => !policy.effectiveActions.includes(action),
             ),
           }))}
-          onAdd={(grants) => append(grants)}
+          onAdd={(grants) => {
+            append(grants);
+          }}
         />
       )}
     </>
@@ -790,6 +945,8 @@ export function presetDescription(preset: string, resource: ScopedResource) {
     if (preset === "manage")
       return "Also delete the client and manage permissions";
   }
+  if (preset === "deploy" && resource === "mcpRegistry")
+    return "Also view and change how the server is deployed";
   if (
     preset === "manage" &&
     (resource === "conversation" || resource === "agentRun")
@@ -847,6 +1004,7 @@ const actionLabels: Record<ResourcePermissionAction, string> = {
   update: "Edit",
   delete: "Delete",
   "manage-permissions": "Manage permissions",
+  "configure-deployment-spec": "Configure deployment spec",
 };
 
 export const resourcePluralNames: Record<ScopedResource, string> = {
@@ -879,4 +1037,5 @@ const ResourcePermissionsDialogContext = createContext<{
   headerContainer: HTMLElement | null;
   setAccessOpen: (open: boolean) => void;
   setAccessDirty: (dirty: boolean) => void;
+  setCanManage: (canManage: boolean) => void;
 } | null>(null);

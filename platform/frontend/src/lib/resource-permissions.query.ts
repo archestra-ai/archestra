@@ -2,6 +2,8 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  ManagedResourceSchema,
+  type PermissionSubject,
   type ResourcePermissionGrant,
   type ScopedResource,
 } from "@archestra/shared";
@@ -11,7 +13,10 @@ import { reportBulkOutcome, runBulkAction } from "./bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type ResourcePermissions =
-  archestraApiTypes.GetResourcePermissionsResponses["200"];
+  archestraApiTypes.GetResourcePermissionsResponses["200"] & {
+    /** MSW-only actor identity for the proposed safeguards; not an API contract. */
+    previewActorSubjects?: PermissionSubject[];
+  };
 export type PermissionRecipient =
   archestraApiTypes.SearchResourcePermissionSubjectsResponses["200"][number];
 
@@ -25,11 +30,18 @@ export function useResourcePermissions(
     queryKey: ["resource-permissions", resource, scope],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getResourcePermissions({
-        path: { resource, scope },
+        path: { resource: ManagedResourceSchema.parse(resource), scope },
       });
       throwOnApiError(error, { toastOnError: false });
       if (!data) throw new Error("Permissions response is missing");
-      return data;
+      return {
+        ...data,
+        previewActorSubjects:
+          process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
+          process.env.NODE_ENV !== "production"
+            ? (data as ResourcePermissions).previewActorSubjects
+            : undefined,
+      };
     },
   });
 }
@@ -53,11 +65,14 @@ export function usePermissionRecipients(params: {
       const { data, error } =
         params.scope === undefined
           ? await archestraApiSdk.searchInitialPermissionSubjects({
-              path: { resource: params.resource },
+              path: { resource: ManagedResourceSchema.parse(params.resource) },
               query: { query: params.query },
             })
           : await archestraApiSdk.searchResourcePermissionSubjects({
-              path: { resource: params.resource, scope: params.scope },
+              path: {
+                resource: ManagedResourceSchema.parse(params.resource),
+                scope: params.scope,
+              },
               query: { query: params.query },
             });
       throwOnApiError(error, { toastOnError: false });
@@ -76,7 +91,7 @@ export function useUpdateResourcePermissions(
       body: archestraApiTypes.UpdateResourcePermissionsData["body"],
     ) => {
       const { data, error } = await archestraApiSdk.updateResourcePermissions({
-        path: { resource, scope },
+        path: { resource: ManagedResourceSchema.parse(resource), scope },
         body,
       });
       if (error) {
@@ -128,7 +143,10 @@ export function useAddBulkResourceAccess(resource: ScopedResource) {
         run: async (item) => {
           const { data: policy, error } =
             await archestraApiSdk.getResourcePermissions({
-              path: { resource, scope: item.id },
+              path: {
+                resource: ManagedResourceSchema.parse(resource),
+                scope: item.id,
+              },
             });
           throwOnApiError(error, { toastOnError: false });
           if (!policy) throw new Error("Permissions response is missing");
@@ -153,7 +171,10 @@ export function useAddBulkResourceAccess(resource: ScopedResource) {
               });
           }
           const result = await archestraApiSdk.updateResourcePermissions({
-            path: { resource, scope: item.id },
+            path: {
+              resource: ManagedResourceSchema.parse(resource),
+              scope: item.id,
+            },
             body: { revision: policy.revision, grants: merged },
           });
           throwOnApiError(result.error, { toastOnError: false });

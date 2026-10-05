@@ -328,7 +328,7 @@ export type OpenAiChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -1478,12 +1478,27 @@ export type AnthropicMessagesRequestInput = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
     } | {
         type: 'disabled';
+        [key: string]: unknown;
+    } | {
+        type: 'between_tools';
+        [key: string]: unknown;
     } | {
         type: 'adaptive';
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     };
     tool_choice?: {
         type: 'auto';
@@ -1890,7 +1905,7 @@ export type CerebrasChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -2404,7 +2419,7 @@ export type MistralChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -2798,7 +2813,7 @@ export type PerplexityChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -3193,7 +3208,7 @@ export type GroqChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -3587,7 +3602,7 @@ export type OpenrouterChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -4973,7 +4988,7 @@ export type DeepSeekChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -5368,7 +5383,7 @@ export type ArchestraChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -6200,7 +6215,7 @@ export type XaiChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -6634,7 +6649,7 @@ export type OpenAiChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -7784,12 +7799,27 @@ export type AnthropicMessagesRequest = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
     } | {
         type: 'disabled';
+        [key: string]: unknown;
+    } | {
+        type: 'between_tools';
+        [key: string]: unknown;
     } | {
         type: 'adaptive';
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     };
     tool_choice?: {
         type: 'auto';
@@ -8196,7 +8226,7 @@ export type CerebrasChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -8710,7 +8740,7 @@ export type MistralChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9104,7 +9134,7 @@ export type PerplexityChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9499,7 +9529,7 @@ export type GroqChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9893,7 +9923,7 @@ export type OpenrouterChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -11279,7 +11309,7 @@ export type DeepSeekChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -11674,7 +11704,7 @@ export type ArchestraChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -12506,7 +12536,7 @@ export type XaiChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -14853,7 +14883,7 @@ export type CreateAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -17240,7 +17270,7 @@ export type CloneAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -22249,6 +22279,7 @@ export type StartAgentWorkspaceTransferData = {
         path: string;
         size: number;
         sha256: string;
+        location?: 'workspace' | 'attachments';
     };
     path: {
         taskId: string;
@@ -25408,7 +25439,7 @@ export type CreateAppData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         name: string;
         slug?: string;
@@ -33424,12 +33455,27 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -33763,12 +33809,27 @@ export type BedrockInvokeWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -34103,12 +34164,27 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -34375,12 +34451,27 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -35185,7 +35276,7 @@ export type GetChatConversationsResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -35264,7 +35355,7 @@ export type CreateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         projectId?: string | null;
-        lockedChat?: boolean;
+        encryptedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path?: never;
@@ -35361,7 +35452,7 @@ export type CreateChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -35522,7 +35613,7 @@ export type GetDeletedChatConversationsResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -35770,7 +35861,7 @@ export type GetChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -35942,7 +36033,7 @@ export type UpdateChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -36631,7 +36722,7 @@ export type ForkChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -36883,7 +36974,7 @@ export type RestoreChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -37146,7 +37237,7 @@ export type CompactChatConversationResponses = {
             projectId: string | null;
             origin: 'user' | 'schedule_trigger' | 'app_open';
             titleIsPlaceholder: boolean;
-            lockedChat: boolean;
+            encryptedChat: boolean;
             pinnedAt: string | null;
             lastMessageAt: string;
             createdAt: string;
@@ -37315,7 +37406,7 @@ export type GenerateChatConversationTitleResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -37483,7 +37574,7 @@ export type UpdateChatMessageResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -40239,7 +40330,7 @@ export type GetConfigResponses = {
             mcpSandboxDomain: string | null;
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
-            lockedChatEnabled: boolean;
+            encryptedChatEnabled: boolean;
             openappaEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
@@ -44001,7 +44092,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -44483,7 +44574,7 @@ export type GithubCopilotChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -47305,9 +47396,9 @@ export type GetInteractionsResponses = {
             response: OpenAiChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -47550,9 +47641,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -47670,9 +47761,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -47788,9 +47879,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -47906,9 +47997,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48024,9 +48115,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48119,9 +48210,9 @@ export type GetInteractionsResponses = {
             response: GeminiGenerateContentResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48216,9 +48307,9 @@ export type GetInteractionsResponses = {
             response: AnthropicMessagesResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48754,9 +48845,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49020,12 +49111,27 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'disabled';
+                    [key: string]: unknown;
+                } | {
+                    type: 'between_tools';
+                    [key: string]: unknown;
                 } | {
                     type: 'adaptive';
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -49269,12 +49375,27 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'disabled';
+                    [key: string]: unknown;
+                } | {
+                    type: 'between_tools';
+                    [key: string]: unknown;
                 } | {
                     type: 'adaptive';
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -49343,9 +49464,9 @@ export type GetInteractionsResponses = {
             response: AnthropicMessagesResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49440,9 +49561,9 @@ export type GetInteractionsResponses = {
             response: CerebrasChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49537,9 +49658,9 @@ export type GetInteractionsResponses = {
             response: MistralChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49634,9 +49755,9 @@ export type GetInteractionsResponses = {
             response: PerplexityChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49731,9 +49852,9 @@ export type GetInteractionsResponses = {
             response: GroqChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49828,9 +49949,9 @@ export type GetInteractionsResponses = {
             response: XaiChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49925,9 +50046,9 @@ export type GetInteractionsResponses = {
             response: OpenrouterChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50022,9 +50143,9 @@ export type GetInteractionsResponses = {
             response: VllmChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50119,9 +50240,9 @@ export type GetInteractionsResponses = {
             response: OllamaChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50216,9 +50337,9 @@ export type GetInteractionsResponses = {
             response: OllamaNativeChatResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50313,9 +50434,9 @@ export type GetInteractionsResponses = {
             response: CohereChatResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50410,9 +50531,9 @@ export type GetInteractionsResponses = {
             response: ZhipuaiChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50507,9 +50628,9 @@ export type GetInteractionsResponses = {
             response: DeepSeekChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50911,7 +51032,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -51237,7 +51358,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -51318,9 +51439,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51722,7 +51843,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52048,7 +52169,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52129,9 +52250,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -52533,7 +52654,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52859,7 +52980,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52940,9 +53061,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53037,9 +53158,9 @@ export type GetInteractionsResponses = {
             response: MinimaxChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53202,9 +53323,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53406,9 +53527,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53610,9 +53731,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53814,9 +53935,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -54538,9 +54659,9 @@ export type GetInteractionResponses = {
         response: OpenAiChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -54783,9 +54904,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -54903,9 +55024,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55021,9 +55142,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55139,9 +55260,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55257,9 +55378,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55352,9 +55473,9 @@ export type GetInteractionResponses = {
         response: GeminiGenerateContentResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55449,9 +55570,9 @@ export type GetInteractionResponses = {
         response: AnthropicMessagesResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55987,9 +56108,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56253,12 +56374,27 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
             } | {
                 type: 'disabled';
+                [key: string]: unknown;
+            } | {
+                type: 'between_tools';
+                [key: string]: unknown;
             } | {
                 type: 'adaptive';
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             };
             tool_choice?: {
                 type: 'auto';
@@ -56502,12 +56638,27 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
             } | {
                 type: 'disabled';
+                [key: string]: unknown;
+            } | {
+                type: 'between_tools';
+                [key: string]: unknown;
             } | {
                 type: 'adaptive';
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             };
             tool_choice?: {
                 type: 'auto';
@@ -56576,9 +56727,9 @@ export type GetInteractionResponses = {
         response: AnthropicMessagesResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56673,9 +56824,9 @@ export type GetInteractionResponses = {
         response: CerebrasChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56770,9 +56921,9 @@ export type GetInteractionResponses = {
         response: MistralChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56867,9 +57018,9 @@ export type GetInteractionResponses = {
         response: PerplexityChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56964,9 +57115,9 @@ export type GetInteractionResponses = {
         response: GroqChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57061,9 +57212,9 @@ export type GetInteractionResponses = {
         response: XaiChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57158,9 +57309,9 @@ export type GetInteractionResponses = {
         response: OpenrouterChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57255,9 +57406,9 @@ export type GetInteractionResponses = {
         response: VllmChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57352,9 +57503,9 @@ export type GetInteractionResponses = {
         response: OllamaChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57449,9 +57600,9 @@ export type GetInteractionResponses = {
         response: OllamaNativeChatResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57546,9 +57697,9 @@ export type GetInteractionResponses = {
         response: CohereChatResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57643,9 +57794,9 @@ export type GetInteractionResponses = {
         response: ZhipuaiChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57740,9 +57891,9 @@ export type GetInteractionResponses = {
         response: DeepSeekChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58144,7 +58295,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -58470,7 +58621,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -58551,9 +58702,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58955,7 +59106,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -59281,7 +59432,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -59362,9 +59513,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -59766,7 +59917,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -60092,7 +60243,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -60173,9 +60324,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60270,9 +60421,9 @@ export type GetInteractionResponses = {
         response: MinimaxChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60435,9 +60586,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60639,9 +60790,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60843,9 +60994,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -61047,9 +61198,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -61215,7 +61366,7 @@ export type GetInternalMcpCatalogData = {
     query?: {
         includeApps?: boolean;
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default).
+         * Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.
          */
         status?: 'active' | 'deleted';
     };
@@ -61449,7 +61600,7 @@ export type GetInternalMcpCatalogResponses = {
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
-        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
     }>;
 };
 
@@ -61594,7 +61745,7 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
@@ -63724,6 +63875,7 @@ export type GetDeploymentYamlPreviewResponse = GetDeploymentYamlPreviewResponses
 
 export type ValidateDeploymentYamlData = {
     body: {
+        catalogId?: string;
         yaml: string;
     };
     path?: never;
@@ -64650,7 +64802,7 @@ export type KimiChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -65132,7 +65284,7 @@ export type KimiChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -65803,7 +65955,7 @@ export type CreateKnowledgeBaseData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -67100,7 +67252,7 @@ export type CreateConnectorData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -70828,7 +70980,7 @@ export type UploadKnowledgeFileData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -71075,7 +71227,7 @@ export type PromoteAttachmentToKnowledgeFileData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         filename?: string;
         directoryId?: string | null;
@@ -73976,7 +74128,7 @@ export type CreateLlmOauthClientData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -74853,7 +75005,7 @@ export type CreateLlmProviderApiKeyData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -76355,7 +76507,7 @@ export type CreateMcpOauthClientData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -76911,7 +77063,7 @@ export type GetMcpServersData = {
         assignmentScope?: 'personal' | 'team' | 'org';
         assignmentTeamIds?: Array<string>;
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default).
+         * Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires delete permission and is limited to connections you can uninstall.
          */
         status?: 'active' | 'deleted';
     };
@@ -77075,7 +77227,6 @@ export type InstallMcpServerData = {
         agentIds?: Array<string>;
         accessToken?: string;
         isByosVault?: boolean;
-        serviceAccount?: string;
     };
     path?: never;
     query?: never;
@@ -78258,7 +78409,6 @@ export type ReinstallMcpServerData = {
             [key: string]: string;
         };
         isByosVault?: boolean;
-        serviceAccount?: string;
         hibernationMode?: 'inherit' | 'enabled' | 'disabled';
     };
     path: {
@@ -78715,9 +78865,9 @@ export type GetMcpToolCallsResponses = {
                 };
                 kind?: 'function' | 'custom';
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             } | null;
             toolResult: unknown;
             userId: string | null;
@@ -78831,9 +78981,9 @@ export type GetMcpToolCallResponses = {
             };
             kind?: 'function' | 'custom';
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         } | null;
         toolResult: unknown;
         userId: string | null;
@@ -79672,7 +79822,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -80154,7 +80304,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -85808,7 +85958,7 @@ export type GetOpenappaCoverageEntitiesResponses = {
                 battery: number;
                 notEnforced: number;
                 catchAll: number;
-                builtInFallback: number;
+                notCovered: number;
             };
             autoMode: boolean;
         }>;
@@ -85834,7 +85984,7 @@ export type GetOpenappaCoverageToolsData = {
         search?: string;
         catalogId?: string;
         entityId?: string;
-        governedBy?: 'battery' | 'root' | 'catchall' | 'built_in';
+        governedBy?: 'battery' | 'root' | 'catchall' | 'not_covered';
         battery?: string;
         kind?: 'read' | 'write' | 'approval';
     };
@@ -85921,9 +86071,9 @@ export type GetOpenappaCoverageToolsResponses = {
             fullName: string;
             readOnly: boolean | null;
             kind: 'read' | 'write' | 'approval' | 'neutral' | 'unlisted';
-            policySource: 'built_in' | 'fallback' | 'root' | 'battery';
+            policySource: 'root' | 'battery' | 'catchall' | 'not_covered';
             rule: {
-                source: 'root' | 'battery';
+                source: 'root' | 'battery' | 'catchall';
                 battery: string | null;
                 batteryEntry: string | null;
                 batteryStatus: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
@@ -86051,7 +86201,7 @@ export type GetOpenappaCoverageSummaryResponses = {
             battery: number;
             notEnforced: number;
             catchAll: number;
-            builtInFallback: number;
+            notCovered: number;
             tools: number;
         };
         batteries: {
@@ -86080,7 +86230,7 @@ export type GetOpenappaExternalConsultsData = {
     path?: never;
     query?: {
         externalName?: string;
-        role?: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+        role?: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
         outcome?: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
         /**
          * Recorded on or after this time (ISO 8601)
@@ -86180,7 +86330,7 @@ export type GetOpenappaExternalConsultsResponses = {
             createdAt: string;
             startedAt: string;
             durationMs: number;
-            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
             externalName: string;
             backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl';
             request: unknown;
@@ -86921,6 +87071,12 @@ export type GetOpenAppaYellsResponses = {
             resolvedAt: string | null;
             resolvedBy: string | null;
             hasArchive: boolean;
+            caller: {
+                id: string;
+                type?: 'user' | 'service_account';
+                name: string | null;
+                email: string | null;
+            } | null;
         }>;
         pagination: {
             limit: number;
@@ -87107,6 +87263,12 @@ export type GetOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -87206,6 +87368,12 @@ export type UpdateOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -87499,7 +87667,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -87523,7 +87691,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path?: never;
@@ -87607,7 +87775,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87793,7 +87961,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87808,7 +87976,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path: {
@@ -87897,7 +88065,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -92476,7 +92644,7 @@ export type CreatePluginData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -92775,7 +92943,7 @@ export type ImportGithubPluginMarketplaceData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         syncInterval?: '15m' | '1h' | '1d' | null;
     };
@@ -93064,7 +93232,7 @@ export type ImportGithubPluginData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         approvedCommitSha: string;
         trackingRef?: string | null;
@@ -94850,7 +95018,7 @@ export type CreateProjectData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -98866,7 +99034,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -99497,7 +99665,7 @@ export type CreateServiceAccountData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -101541,7 +101709,7 @@ export type CreateSkillData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -103566,7 +103734,7 @@ export type ImportGithubSkillsData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         /**
          * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
@@ -108084,7 +108252,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     }>;
 };
@@ -108168,7 +108336,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
     };
 };
 
@@ -108855,7 +109023,7 @@ export type CreateVirtualApiKeyData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -112386,7 +112554,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
     };
     query?: {
         query?: string;
@@ -112565,9 +112733,9 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
-        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions';
+        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
     }>;
 };
 
@@ -112576,7 +112744,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: {
@@ -112681,7 +112849,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -112758,7 +112926,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;
@@ -112779,7 +112947,7 @@ export type GetResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -112799,11 +112967,11 @@ export type GetResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
     };
 };
 
@@ -112829,11 +112997,11 @@ export type UpdateResourcePermissionsData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -112910,7 +113078,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;
@@ -112931,7 +113099,7 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -112951,11 +113119,11 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
     };
 };
 

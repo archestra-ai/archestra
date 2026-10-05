@@ -10,7 +10,9 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
@@ -278,9 +280,10 @@ export function getAllArchestraMcpTools() {
 /**
  * JSON input schema of a built-in Archestra tool, resolved by its published
  * (branding-aware) full name or canonical `archestra__` name — derived from the
- * same zod schema `tools/list` advertises. Returns undefined for names that are
- * not built-ins (agent delegations, third-party names). Consumed by run_tool's
- * schema-aware envelope repair.
+ * handler's full zod schema, which `tools/list` advertises unless the tool has
+ * a `publicSchema`. Returns undefined for names that are not built-ins (agent
+ * delegations, third-party names). Consumed by run_tool's schema-aware
+ * envelope repair.
  */
 export function getArchestraToolInputSchema(
   toolName: string,
@@ -315,7 +318,9 @@ export async function executeArchestraTool(
   const remedyShortName = archestraMcpBranding.getToolShortName(toolName);
   if (
     (remedyShortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
-      remedyShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME) &&
+      remedyShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
+      remedyShortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+      remedyShortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME) &&
     !(await isGuardrailsV2Active())
   ) {
     throw { code: -32601, message: "Guardrails v2 is disabled" };
@@ -333,11 +338,11 @@ export async function executeArchestraTool(
   // Agent delegation tools are dynamic (one per agent) and not in TOOL_PERMISSIONS,
   // so they bypass centralized RBAC. They enforce team-based access checks internally.
   if (isAgentTool(toolName)) {
-    const parsedArgs = validateToolArgs(
-      delegationToolArgsSchema,
+    const parsedArgs = validateToolArgs({
+      schema: delegationToolArgsSchema,
       args,
       toolName,
-    );
+    });
     if ("error" in parsedArgs) {
       return parsedArgs.error;
     }
@@ -348,11 +353,11 @@ export async function executeArchestraTool(
   // agent-designated skill. Like agent delegation, they bypass centralized
   // RBAC and enforce skill + agent access checks internally.
   if (isSkillTool(toolName)) {
-    const parsedArgs = validateToolArgs(
-      delegationToolArgsSchema,
+    const parsedArgs = validateToolArgs({
+      schema: delegationToolArgsSchema,
       args,
       toolName,
-    );
+    });
     if ("error" in parsedArgs) {
       return parsedArgs.error;
     }
@@ -508,7 +513,7 @@ const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
 // isDynamicallyAvailableArchestraTool passes (feature gates, per-agent
 // exclusions, and the query_knowledge_sources connector check) — nothing is
 // assigned. RBAC already ran before this gate, so e.g. the sandbox tools
-// still require sandbox:execute.
+// still require agent:read.
 async function resolveToolAssignment(
   toolName: string,
   context: ArchestraContext,
@@ -524,6 +529,8 @@ async function resolveToolAssignment(
   if (
     (shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
       shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
+      shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+      shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME ||
       (shortName === "yell" && openappaYellEnabled())) &&
     (await isGuardrailsV2Active())
   )
@@ -597,7 +604,12 @@ async function admitArchestraToolCall(params: {
     };
   }
 
-  const parsedArgs = validateToolArgs(toolEntry.schema, args, toolName);
+  const parsedArgs = validateToolArgs({
+    schema: toolEntry.schema,
+    publicSchema: toolEntry.publicSchema,
+    args,
+    toolName,
+  });
   if ("error" in parsedArgs) return parsedArgs;
   return { toolEntry, resolvedToolName, args: parsedArgs.value };
 }
@@ -644,11 +656,18 @@ export const __test = {
   zodValidationErrorResult,
 };
 
-function validateToolArgs(
-  schema: ZodType,
-  args: Record<string, unknown> | undefined,
-  toolName: string,
-): { value: Record<string, unknown> } | { error: CallToolResult } {
+function validateToolArgs(params: {
+  schema: ZodType;
+  /**
+   * The advertised schema. Errors describe it rather than `schema`, so a
+   * malformed call never shows the model members only the proxy writes.
+   */
+  publicSchema?: ZodType;
+  args: Record<string, unknown> | undefined;
+  toolName: string;
+}): { value: Record<string, unknown> } | { error: CallToolResult } {
+  const { schema, args, toolName } = params;
+  const describedSchema = params.publicSchema ?? schema;
   const parsed = schema.safeParse(args ?? {});
 
   if (parsed.success) {
@@ -674,13 +693,17 @@ function validateToolArgs(
       error: zodValidationErrorResult({
         toolName,
         error: reparsed.error,
-        schema,
+        schema: describedSchema,
       }),
     };
   }
 
   return {
-    error: zodValidationErrorResult({ toolName, error: parsed.error, schema }),
+    error: zodValidationErrorResult({
+      toolName,
+      error: parsed.error,
+      schema: describedSchema,
+    }),
   };
 }
 

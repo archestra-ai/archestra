@@ -3,10 +3,8 @@ import {
   type Resource,
   type ScopedResource,
 } from "@archestra/shared";
-import {
-  getPermissionsForUserContext,
-  isServiceAccountUserId,
-} from "@/auth/utils";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
+import { getPermissionsForUserContext } from "@/auth/utils";
 import {
   A2aRemoteAgentModel,
   AppAccessModel,
@@ -179,7 +177,7 @@ const LEGACY_RESOURCE_FOR_KIND: Record<
   catalog: "mcpRegistry",
   plugin: "plugin",
   project: "project",
-  remoteAgent: "agentSettings",
+  remoteAgent: "organizationSettings",
 };
 
 /**

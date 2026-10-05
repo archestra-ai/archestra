@@ -7,7 +7,6 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { vi } from "vitest";
 import { TeamTokenModel } from "@/models";
 import {
   CONNECTION_SETUP_CONTEXT_PARAM,
@@ -15,14 +14,12 @@ import {
 } from "@/services/connection-setup-context";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import oauthServerRoutes from "../oauth-server";
 import mcpGatewayRoutes from "./index";
 
-// The standalone GET stream records its session in the shared cache, which is
-// Keyv over a real PostgreSQL connection — the unit suite runs on PGlite and
-// never starts it, so the real manager would throw on the first write. The
-// canonical fake has real cache semantics.
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("MCP Gateway GET transport", () => {
   let app: FastifyInstance;
@@ -227,6 +224,7 @@ describe("MCP Gateway GET transport", () => {
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
+      toolExposureMode: "full",
       organizationId: org.id,
       agentType: "mcp_gateway",
     });

@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import { isGlobalAdmin } from "@/auth";
-import { isServiceAccountUserId } from "@/auth/utils";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -157,8 +157,11 @@ class ProjectService {
     // would end up in a shared space listing a conversation nobody there can
     // open. The UI already hides the action; this is the authoritative check a
     // custom client also meets.
-    if (meta.lockedChat) {
-      throw new ApiError(400, "Locked chats cannot be turned into a project");
+    if (meta.encryptedChat) {
+      throw new ApiError(
+        400,
+        "Encrypted chats cannot be turned into a project",
+      );
     }
 
     const name =

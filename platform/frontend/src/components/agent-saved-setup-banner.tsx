@@ -65,19 +65,18 @@ export function AgentSavedSetupBanner({
     );
   }
   const missing = [...preflight.data.missing, ...preflight.data.misconfigured];
+  const needsClaudeAccount = missing.some(
+    ({ key }) => key === "CLAUDE_CODE_ACCOUNT",
+  );
   const items: AgentSetupItem[] = Array.from(
     new Map(missing.map((credential) => [credential.key, credential])).values(),
-  ).map(({ key, label }) => ({
-    id: key,
-    label:
-      key === "CLAUDE_CODE_ACCOUNT"
-        ? "Connect your Claude account"
-        : `Provide a value for ${label}, or connect ${label}`,
-    status: "now",
-    action:
-      key === "CLAUDE_CODE_ACCOUNT" ? (
-        <ClaudeCodeAccount agentId={agentId} variant="compact" />
-      ) : (
+  )
+    .filter(({ key }) => key !== "CLAUDE_CODE_ACCOUNT")
+    .map(({ key, label }) => ({
+      id: key,
+      label: `Provide a value for ${label}, or connect ${label}`,
+      status: "now",
+      action: (
         <Button
           type="button"
           size="sm"
@@ -87,7 +86,7 @@ export function AgentSavedSetupBanner({
           Set up
         </Button>
       ),
-  }));
+    }));
   if (preflight.data.incompatible) {
     items.push({
       id: "model-incompatible",
@@ -165,12 +164,17 @@ export function AgentSavedSetupBanner({
   }
   return (
     <>
-      <AgentSetupBanner
-        key={agentId}
-        items={items}
-        showReady={showReady}
-        resetKey={`${agentId}:${runtime.command?.join(" ")}:${runtime.claudeCode?.authentication}:${JSON.stringify(runtime.credentials ?? [])}`}
-      />
+      {needsClaudeAccount && (
+        <ClaudeCodeAccount agentId={agentId} variant="compact" />
+      )}
+      {(items.length > 0 || (showReady && !needsClaudeAccount)) && (
+        <AgentSetupBanner
+          key={agentId}
+          items={items}
+          showReady={showReady}
+          resetKey={`${agentId}:${runtime.command?.join(" ")}:${runtime.claudeCode?.authentication}:${JSON.stringify(runtime.credentials ?? [])}`}
+        />
+      )}
       {credentialsOpen && (
         <AgentRuntimeCredentialsDialog
           agentId={agentId}

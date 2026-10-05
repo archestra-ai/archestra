@@ -255,7 +255,7 @@ export default function AgentSettingsPage() {
         }
         control={
           <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) =>
@@ -339,7 +339,7 @@ export default function AgentSettingsPage() {
         description="Preselected for new chats, for every member who has not set a personal default agent of their own."
         control={
           <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -367,7 +367,7 @@ export default function AgentSettingsPage() {
         description={`Allow users to upload files in the ${appName} chat UI.`}
         control={
           <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -418,7 +418,7 @@ export default function AgentSettingsPage() {
           }
           control={
             <WithPermissions
-              permissions={{ agentSettings: ["update"] }}
+              permissions={{ organizationSettings: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
@@ -446,7 +446,7 @@ export default function AgentSettingsPage() {
         hasChanges={changes.hasChanges || securityHasChanges}
         disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
         isSaving={isSaving}
-        permissions={{ agentSettings: ["update"] }}
+        permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
         onCancel={handleCancel}
       />

@@ -11,12 +11,23 @@
  * (memoized across steps, updated incrementally as the run grows). When
  * summarization is unavailable or fails, it falls back to deterministic
  * trimming so the step still fits.
+ *
+ * When `promptCache` is set, the guard also moves the cache breakpoint to the
+ * newest message of each step that it does not trim, so later steps read the
+ * earlier tool calls and results from the cache.
  */
-import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
+import {
+  CONTEXT_COMPACTION_AUTO_THRESHOLD,
+  PROXY_STAMPED_TOOL_ARGUMENTS,
+  TOOL_ASK_USER_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+} from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import { trimMessagesToTokenLimit } from "@/routes/chat/context-trimming";
+import { applyStepPromptCacheBreakpoint } from "@/routes/chat/normalization/apply-prompt-cache";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
 import {
   CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
@@ -45,10 +56,17 @@ export function createStepContextGuard(params: {
   abortSignal?: AbortSignal;
   logContext?: Record<string, unknown>;
   summarizeTranscript?: (params: SummarizeParams) => Promise<string | null>;
+  /** The provider and model whose cache breakpoint moves with each step. */
+  promptCache?: {
+    provider: string;
+    model: string;
+    anthropicNativeEndpoint: boolean;
+  };
 }): (options: { messages: ModelMessage[] }) => Promise<{
   messages: ModelMessage[];
 }> {
-  const { model, contextLength, systemPrompt, abortSignal } = params;
+  const { model, contextLength, systemPrompt, abortSignal, promptCache } =
+    params;
   const logContext = params.logContext ?? {};
   const summarize =
     params.summarizeTranscript ??
@@ -62,9 +80,17 @@ export function createStepContextGuard(params: {
   let state: { summary: string; throughIndex: number } | null = null;
   let summarizationDisabled = summarize === null;
 
+  // For a view that the next step extends: mark its newest message, so the
+  // next step reads this whole view from the cache.
+  const withStepBreakpoint = (messages: ModelMessage[]) => ({
+    messages: promptCache
+      ? applyStepPromptCacheBreakpoint({ ...promptCache, messages })
+      : messages,
+  });
+
   return async ({ messages }) => {
     const capped = capOversizedToolResults(messages);
-    if (!contextLength) return { messages: capped };
+    if (!contextLength) return withStepBreakpoint(capped);
 
     const budgetTokens = Math.floor(
       contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
@@ -79,7 +105,7 @@ export function createStepContextGuard(params: {
     );
 
     let view = applySummary(capped, state);
-    if (charSize(view) <= budgetChars) return { messages: view };
+    if (charSize(view) <= budgetChars) return withStepBreakpoint(view);
 
     if (!summarizationDisabled && summarize) {
       const minIndex = state?.throughIndex ?? 0;
@@ -107,7 +133,7 @@ export function createStepContextGuard(params: {
               "[StepContextGuard] compacted step context with summary",
             );
             view = applySummary(capped, state);
-            if (charSize(view) <= budgetChars) return { messages: view };
+            if (charSize(view) <= budgetChars) return withStepBreakpoint(view);
           } else {
             summarizationDisabled = true;
             logger.warn(
@@ -125,6 +151,9 @@ export function createStepContextGuard(params: {
       }
     }
 
+    // No cache breakpoint: as the run grows, trimming usually drops more of the
+    // oldest messages, which changes the start of the view. A cache write for
+    // this view would rarely be read and would cost more than no marker.
     return {
       messages: trimMessagesToTokenLimit({
         messages: view,
@@ -226,7 +255,7 @@ function serializeForTranscript(messages: ModelMessage[]): string {
         case "tool-call":
           lines.push(
             `[assistant → tool ${part.toolName as string}]: ${truncate(
-              safeJson(part.input),
+              safeJson(modelWrittenInput(part.toolName as string, part.input)),
               TRANSCRIPT_TOOL_INPUT_MAX_CHARS,
             )}`,
           );
@@ -297,6 +326,30 @@ function charSize(messages: Array<ModelMessage | undefined>): number {
   );
 }
 
+/**
+ * A tool call's input without what only the OpenAPPA proxy writes: a notice's
+ * record and signed offers, a remedy call's receipt and JWS, ask_user's
+ * offers. The summary goes to a provider as plain text, where the proxy can no
+ * longer take them out. A tool matches by its short name under any label.
+ */
+function modelWrittenInput(toolName: string, input: unknown): unknown {
+  const hidden = PROXY_WRITTEN_MEMBERS.find(
+    ([shortName]) =>
+      toolName === shortName || toolName.endsWith(`__${shortName}`),
+  )?.[1];
+  if (
+    !hidden ||
+    typeof input !== "object" ||
+    input === null ||
+    Array.isArray(input)
+  ) {
+    return input;
+  }
+  return Object.fromEntries(
+    Object.entries(input).filter(([key]) => !hidden.includes(key)),
+  );
+}
+
 function truncate(text: string, maxChars: number): string {
   return text.length <= maxChars ? text : `${text.slice(0, maxChars)}…`;
 }
@@ -322,3 +375,17 @@ const RECENT_KEEP_RATIO = 0.3;
 // whole-transcript ceiling is the shared CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS).
 const TRANSCRIPT_TOOL_INPUT_MAX_CHARS = 2_000;
 const TRANSCRIPT_TOOL_RESULT_MAX_CHARS = 8_000;
+
+const PROXY_WRITTEN_MEMBERS: ReadonlyArray<
+  readonly [shortName: string, members: readonly string[]]
+> = [
+  [TOOL_GET_REMEDY_PLANS_SHORT_NAME, ["notice", "offers"]],
+  [
+    TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+    PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME],
+  ],
+  [
+    TOOL_ASK_USER_SHORT_NAME,
+    PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_ASK_USER_SHORT_NAME],
+  ],
+];

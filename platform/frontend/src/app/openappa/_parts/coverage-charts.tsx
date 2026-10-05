@@ -23,6 +23,7 @@ import {
 } from "@/lib/openappa-coverage.query";
 import { cn } from "@/lib/utils/tailwind";
 import { BatteriesCard, hasBatteries } from "./batteries-card";
+import { CoverageWarnings } from "./coverage-warnings";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import { RULE_BUCKETS } from "./rule-coverage-bar";
 
@@ -61,9 +62,7 @@ function ToolCoverageCard({
       <CardHeader className="gap-1 px-5">
         <CardTitle>Tool coverage</CardTitle>
         <CardDescription className="text-xs">
-          {totals
-            ? `What judges each of your ${totals.tools.toLocaleString()} MCP server tools`
-            : "What judges each of your MCP server tools"}
+          How your policy covers your tools.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-center px-5">
@@ -85,6 +84,13 @@ function ToolCoverageCard({
           <CoverageDonut totals={totals} />
         )}
       </CardContent>
+      {totals &&
+        !summary.isLoadingError &&
+        (totals.notCovered > 0 || totals.catchAll > 0) && (
+          <CardContent className="space-y-3 px-5 [contain:inline-size]">
+            <CoverageWarnings totals={totals} />
+          </CardContent>
+        )}
       {totals && totals.tools > 0 && (
         <CardFooter className="px-5">
           <OpenAppaChatButton
@@ -119,7 +125,7 @@ type Slice = (typeof RULE_BUCKETS)[number] & { value: number };
  */
 function CoverageDonut({ totals }: { totals: Totals }) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const covered = totals.root + totals.battery;
+  const covered = totals.root + totals.battery + totals.catchAll;
   const slices: Slice[] = RULE_BUCKETS.map((bucket) => ({
     ...bucket,
     value: bucket.count(totals),
@@ -197,7 +203,7 @@ function CoverageDonut({ totals }: { totals: Totals }) {
             {`${share(focus ? focus.value : covered, totals.tools)}%`}
           </span>
           <span className="text-muted-foreground text-sm">
-            {focus ? focus.label.toLowerCase() : "have a rule"}
+            {focus ? focus.label.toLowerCase() : "covered"}
           </span>
         </div>
       </div>

@@ -39,6 +39,14 @@ inputs:
       cannot delete between legs.
     required: false
     default: "blob-report"
+  blob_report_name:
+    description: |
+      Optional blob-report file name (must end in .zip). Playwright only
+      suffixes the default name for --shard runs, so legs that split one
+      project another way must name their reports apart, or the report job's
+      merged download overwrites one with the other.
+    required: false
+    default: ""
 
 outputs:
   has_flaky_tests:
@@ -79,6 +87,7 @@ runs:
         ENV_FILE: ${{ inputs.env_file }}
         TIMEOUT_MINUTES: ${{ inputs.timeout }}
         BLOB_REPORT_DIR: ${{ inputs.blob_report_dir }}
+        BLOB_REPORT_NAME: ${{ inputs.blob_report_name }}
       run: |
         set -o pipefail
 
@@ -110,6 +119,10 @@ runs:
             ENV_ARGS+=("-e" "${key}=${value}")
           done < "${ENV_FILE}"
           echo "Loaded ${#ENV_ARGS[@]} environment variable flags"
+        fi
+
+        if [ -n "${BLOB_REPORT_NAME}" ]; then
+          ENV_ARGS+=("-e" "PLAYWRIGHT_BLOB_OUTPUT_NAME=${BLOB_REPORT_NAME}")
         fi
 
         # Mount kubeconfig if available (for K8s e2e tests)

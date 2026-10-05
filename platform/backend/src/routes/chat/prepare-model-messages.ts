@@ -99,7 +99,7 @@ export async function buildModelMessages(params: {
   emit: (event: CompactionStreamEvent) => void;
   /**
    * Skip auto-compaction entirely (no summary generated or persisted). Set for
-   * locked chats: a compaction summary is derived conversation
+   * encrypted chats: a compaction summary is derived conversation
    * content and would be stored in plaintext.
    */
   disableCompaction?: boolean;
@@ -110,7 +110,7 @@ export async function buildModelMessages(params: {
    */
   anthropicNativeEndpoint?: boolean;
   /**
-   * The locked chat's browser-held key, so its attachment rows can be opened
+   * The encrypted chat's browser-held key, so its attachment rows can be opened
    * for the provider call. Null for an ordinary chat.
    */
   conversationKey?: ConversationContentKey | null;
@@ -137,7 +137,7 @@ export async function buildModelMessages(params: {
   } = params;
 
   let compactionStarted = false;
-  // Locked chats skip auto-compaction outright: a summary is
+  // Encrypted chats skip auto-compaction outright: a summary is
   // derived conversation content, and generating one would both send the
   // history to the summarizer and persist the result in plaintext.
   const compactionResult: ContextCompactionResult = disableCompaction
@@ -187,7 +187,7 @@ export async function buildModelMessages(params: {
   // One availability lookup per LLM call (the system-prompt path pays the same),
   // so attachment sandbox pointers are only emitted when the agent can run them.
   //
-  // Forced off for a locked chat: its uploads are deliberately never staged
+  // Forced off for an encrypted chat: its uploads are deliberately never staged
   // into the sandbox (see the staging guard in routes.ts), so a pointer telling
   // the model to `ls` for them would name a directory they are not in. This
   // governs attachment pointers only — it is not a sandbox feature switch.

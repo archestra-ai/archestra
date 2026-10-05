@@ -60,7 +60,9 @@ const intervals = {
 export function AppaGithubSyncPanel() {
   const query = useAppaGithubSync();
   const update = useUpdateAppaGithubSync();
-  const { data: canManage } = useHasPermissions({ organization: ["update"] });
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);

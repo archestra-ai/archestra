@@ -104,9 +104,10 @@ dependencies = [
 
 [[package]]
 name = "appa"
-version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=05c04872b8441dc45cdfcb6a79aa7aba667128bd#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
 dependencies = [
+ "appa-adapter-amp",
  "appa-adapter-claude-code",
  "appa-adapter-kagent",
  "appa-builtin",
@@ -134,6 +135,7 @@ dependencies = [
  "rig-agent",
  "rig-core",
  "rmcp",
+ "rusqlite",
  "rustls 0.23.45",
  "schemars",
  "serde",
@@ -145,6 +147,7 @@ dependencies = [
  "tokio",
  "toml",
  "toml_edit",
+ "tower",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
@@ -155,9 +158,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "appa-adapter-amp"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
+dependencies = [
+ "appa-runtime-api",
+]
+
+[[package]]
 name = "appa-adapter-claude-code"
-version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=05c04872b8441dc45cdfcb6a79aa7aba667128bd#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -167,16 +178,16 @@ dependencies = [
 
 [[package]]
 name = "appa-adapter-kagent"
-version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=05c04872b8441dc45cdfcb6a79aa7aba667128bd#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
 dependencies = [
  "appa-runtime-api",
 ]
 
 [[package]]
 name = "appa-builtin"
-version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=05c04872b8441dc45cdfcb6a79aa7aba667128bd#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
 dependencies = [
  "serde",
  "serde_json",
@@ -185,8 +196,8 @@ dependencies = [
 
 [[package]]
 name = "appa-engine"
-version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=05c04872b8441dc45cdfcb6a79aa7aba667128bd#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -199,8 +210,8 @@ dependencies = [
 
 [[package]]
 name = "appa-eventlog"
-version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=05c04872b8441dc45cdfcb6a79aa7aba667128bd#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -213,12 +224,13 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
 name = "appa-package"
-version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=05c04872b8441dc45cdfcb6a79aa7aba667128bd#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -230,8 +242,8 @@ dependencies = [
 
 [[package]]
 name = "appa-policy"
-version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=05c04872b8441dc45cdfcb6a79aa7aba667128bd#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -243,20 +255,12 @@ dependencies = [
 
 [[package]]
 name = "appa-runtime-api"
-version = "0.28.0"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=05c04872b8441dc45cdfcb6a79aa7aba667128bd#05c04872b8441dc45cdfcb6a79aa7aba667128bd"
+version = "0.31.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=c7c1e1ef36aa07604b421c48be266d7397557656#c7c1e1ef36aa07604b421c48be266d7397557656"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
-dependencies = [
- "derive_arbitrary",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -805,17 +809,6 @@ dependencies = [
  "darling_core 0.24.1",
  "quote",
  "syn 3.0.3",
-]
-
-[[package]]
-name = "derive_arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
 ]
 
 [[package]]
@@ -2000,9 +1993,9 @@ dependencies = [
 
 [[package]]
 name = "napi"
-version = "3.12.7"
+version = "3.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7d3c1107f2fda46a7bd2676d65221b7b8160054494b38554b0e055c731714db"
+checksum = "3b12638855cec016784a7e17cc4ecbdee7ca8b0a3456aa50640d0ee5ed1a42f8"
 dependencies = [
  "bitflags 2.13.0",
  "ctor",
@@ -2023,9 +2016,9 @@ checksum = "0941983559cd62bfa7f04646a16428967a847365adeef27711e4e3927046bbed"
 
 [[package]]
 name = "napi-derive"
-version = "3.6.8"
+version = "3.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e332e701386d8101b093203e296059ad8aeef58ddd4c75594f3c84ce637405e"
+checksum = "6b1d232c24dc6754979b27efdf2047a5849efc7c92c1245de87e6bedbb9f5c3c"
 dependencies = [
  "convert_case",
  "ctor",
@@ -2218,9 +2211,9 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0142c63252a9e054e68a4c61a5778f7b14f576274d593f8ce883d191a099682"
+checksum = "6cdb0b1b267eb9db3331b434ed9ddab10d50e280a9adf9d13e5233e2002b61b5"
 dependencies = [
  "futures-core",
  "futures-sink",
@@ -2232,9 +2225,9 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry-appender-tracing"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c0080f0dc1d7c786f467cd85a4e395fcab11ee852004f39a29a18ab7c25d837"
+checksum = "e2b304e8d8f11326ba366a99ca5c7aaf7cd397b67268a332437175aeb42a40db"
 dependencies = [
  "opentelemetry",
  "tracing",
@@ -2244,9 +2237,9 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry-http"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5683015d09e2df236ef005b17f6f196f0d5f6313c4fa43a7b6a53b52776e4331"
+checksum = "ee2c3625b8aa04209f7e01e513bc8044da9687fa38a9eacf59628ca5f3b87300"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2257,11 +2250,12 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry-otlp"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9966929966d17620d7c316c643ba62631826e10021409357772d5eea84f62c35"
+checksum = "699a67345e21962a231955b9059a157e428b219fa5df8efe11f08346fb23a344"
 dependencies = [
  "http 1.4.2",
+ "httpdate",
  "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-proto",
@@ -2273,9 +2267,9 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry-proto"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56d658ba1faf63f7b9c492cfbe6e0ec365440a16132d3270c1065f7b33f1b638"
+checksum = "25da1ac11a0aeccf38d7f77ee0348715adaf8340f65ad46c94a02c6b20e2f65d"
 dependencies = [
  "opentelemetry",
  "opentelemetry_sdk",
@@ -2284,9 +2278,9 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry_sdk"
-version = "0.32.1"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b59f80e1ac4d5ff7a2db8fb6c80badb7f0f3f858211fba08dd9aaec750894f9"
+checksum = "cb39533d9d1c912123efd7d41d7e0c29d16917b60ce15b4c8d87cb1af7f67520"
 dependencies = [
  "futures-channel",
  "futures-executor",
@@ -2814,7 +2808,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
- "webpki-roots 0.25.4",
+ "webpki-roots",
  "winreg",
 ]
 
@@ -2861,7 +2855,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
- "webpki-roots 1.0.8",
 ]
 
 [[package]]
@@ -3993,9 +3986,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-opentelemetry"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adbc64cba7137545b8044cb1fe9814f7aacf3c6b5f9b45be8bb5db538befdb26"
+checksum = "0a904802a1b902f43638b677ff2a650847e3b4404101b6c586d648e8c1e3e8fe"
 dependencies = [
  "js-sys",
  "opentelemetry",
@@ -4030,6 +4023,12 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
 
 [[package]]
 name = "typenum"
@@ -4305,15 +4304,6 @@ name = "webpki-roots"
 version = "0.25.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
-
-[[package]]
-name = "webpki-roots"
-version = "1.0.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf85cb06032201fa7c6f829d7db5a7e5aa45bcc0655327713065f6f0576731bf"
-dependencies = [
- "rustls-pki-types",
-]
 
 [[package]]
 name = "weezl"
@@ -4782,15 +4772,15 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "6.0.0"
+version = "8.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb2a05c7c36fde6c09b08576c9f7fb4cda705990f73b58fe011abf7dfb24168b"
+checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
 dependencies = [
- "arbitrary",
  "crc32fast",
  "flate2",
  "indexmap",
  "memchr",
+ "typed-path",
 ]
 
 [[package]]

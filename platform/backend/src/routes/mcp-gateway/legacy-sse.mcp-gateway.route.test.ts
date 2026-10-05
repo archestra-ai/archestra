@@ -7,16 +7,13 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { vi } from "vitest";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
 
-// A stream's session record lives in the shared cache, which is Keyv over a
-// real PostgreSQL connection — the unit suite runs on PGlite and never starts
-// it, so the real manager would throw on the first write. The canonical fake
-// has real cache semantics.
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 /**
  * The legacy HTTP+SSE transport is driven end to end with the SDK's own
@@ -42,6 +39,7 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
+      toolExposureMode: "full",
       organizationId: org.id,
       agentType: "mcp_gateway",
     });
@@ -101,6 +99,7 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
+      toolExposureMode: "full",
       organizationId: org.id,
       agentType: "mcp_gateway",
     });

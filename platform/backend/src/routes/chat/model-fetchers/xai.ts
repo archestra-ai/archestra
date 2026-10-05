@@ -151,7 +151,7 @@ export async function fetchXaiModels(
   if (subscriptionKind === "x-premium" && !subscriptionCredential) {
     throw new ApiError(
       401,
-      "Your xAI SuperSuperGrok sign-in is unreadable. Reconnect your Grok account to continue.",
+      "Your xAI SuperGrok sign-in is unreadable. Reconnect your Grok account to continue.",
       ArchestraInternalErrorCode.ProviderAuthRequired,
     );
   }

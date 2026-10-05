@@ -187,6 +187,127 @@ class OpenAppaSessionModel {
   }
 
   /**
+   * The persisted session, including its parent. Callers must not rebuild a
+   * parent object that drops `parentId`: the runtime treats that as a
+   * different session.
+   */
+  static async familySession(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+  }): Promise<{
+    sessionId: string;
+    parentId: string | null;
+    callerId: string | null;
+  } | null> {
+    const [row] = await db
+      .select({
+        sessionId: table.sessionId,
+        parentId: table.parentId,
+        callerId: table.callerId,
+      })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.sessionId, params.sessionId),
+          params.callerId
+            ? eq(table.callerId, params.callerId)
+            : isNull(table.callerId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * The journaled output of a tool result the runtime already recorded.
+   * A client echo is delivered only when it matches this text.
+   */
+  static async retainedToolResult(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    toolCallId: string;
+  }): Promise<string | null> {
+    const results = schema.openappaProcessedResultsTable;
+    const [row] = await db
+      .select({ approvedOutput: results.approvedOutput })
+      .from(results)
+      .where(
+        and(
+          eq(results.organizationId, params.organizationId),
+          eq(results.sessionId, params.sessionId),
+          eq(results.toolCallId, params.toolCallId),
+          eq(results.status, "complete"),
+          params.callerId
+            ? eq(results.callerId, params.callerId)
+            : isNull(results.callerId),
+        ),
+      )
+      .limit(1);
+    return row?.approvedOutput ?? null;
+  }
+
+  /**
+   * The trusted peer-read receipt for one tool call. A denial carries the
+   * runtime feedback and offer ids and no message body. An admission carries
+   * the retained body. Client JSON is not a receipt.
+   */
+  static async retainedPeerReadReceipt(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    toolCallId: string;
+  }): Promise<RetainedPeerReadReceipt | null> {
+    const results = schema.openappaProcessedResultsTable;
+    const [row] = await db
+      .select({
+        decision: results.decision,
+        approvedOutput: results.approvedOutput,
+      })
+      .from(results)
+      .where(
+        and(
+          eq(results.organizationId, params.organizationId),
+          eq(results.sessionId, params.sessionId),
+          eq(results.toolCallId, params.toolCallId),
+          eq(results.status, "complete"),
+          params.callerId
+            ? eq(results.callerId, params.callerId)
+            : isNull(results.callerId),
+        ),
+      )
+      .limit(1);
+    return peerReadReceipt(row?.decision, row?.approvedOutput ?? null);
+  }
+
+  /**
+   * The client-native ids of the children a session started, such as a lead's
+   * teammates. A child session id is its parent's id, a colon, and the id the
+   * client gave the child.
+   */
+  static async childNativeIds(params: {
+    organizationId: string;
+    parentSessionId: string;
+  }): Promise<string[]> {
+    const prefix = `${params.parentSessionId}:`;
+    const rows = await db
+      .select({ sessionId: table.sessionId })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.parentId, params.parentSessionId),
+        ),
+      );
+    return rows
+      .map((row) => row.sessionId)
+      .filter((sessionId) => sessionId.startsWith(prefix))
+      .map((sessionId) => sessionId.slice(prefix.length));
+  }
+
+  /**
    * Finds fork ancestors for each supplied session, nearest first.
    * A recursive CTE keeps tool-stamp and session-receipt evidence coherent.
    */
@@ -283,6 +404,47 @@ class OpenAppaSessionModel {
       forksTruncated: forks.length > MAX_LISTED_FORKS,
     };
   }
+}
+
+type RetainedPeerReadReceipt =
+  | {
+      kind: "denied";
+      feedback: string;
+      offers: Array<{ offer_id: string }>;
+    }
+  | { kind: "admitted"; approvedOutput: string };
+
+function peerReadReceipt(
+  decision: unknown,
+  approvedOutput: string | null,
+): RetainedPeerReadReceipt | null {
+  if (!decision || typeof decision !== "object") return null;
+  const record = decision as Record<string, unknown>;
+  if (record.peer_read_denied === true) {
+    const feedback =
+      typeof record.feedback === "string"
+        ? record.feedback
+        : (approvedOutput ?? "");
+    if (record.value !== undefined || record.result !== undefined) return null;
+    const offers = Array.isArray(record.offers)
+      ? record.offers.flatMap((offer) => {
+          if (!offer || typeof offer !== "object") return [];
+          const id = (offer as { offer_id?: unknown }).offer_id;
+          return typeof id === "string" && id.length > 0
+            ? [{ offer_id: id }]
+            : [];
+        })
+      : [];
+    return { kind: "denied", feedback, offers };
+  }
+  if (
+    record.peer_read === true &&
+    typeof approvedOutput === "string" &&
+    approvedOutput.length > 0
+  ) {
+    return { kind: "admitted", approvedOutput };
+  }
+  return null;
 }
 
 /** Extracts the client ID from a caller-scoped session ID (`<caller>|<id>`). */

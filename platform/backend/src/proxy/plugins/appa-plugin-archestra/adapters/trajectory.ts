@@ -1,7 +1,8 @@
 import { posix } from "node:path";
 import { APPA_PARENT_HEADER, APPA_SESSION_HEADER } from "@archestra/shared";
+import { childSessionId } from "@/openappa/actor";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
-import { verifyDelegationMarker } from "@/openappa/delegation";
+import { verifyDelegatedPrompt } from "@/openappa/delegation";
 import { isWellFormedAppaId } from "@/openappa/service";
 import { ApiError } from "@/types";
 import type { AppaChildTrajectory, AppaMatchContext } from "../types";
@@ -70,9 +71,7 @@ export function namesChildrenFromArguments(params: {
     (agent) => agent !== params.rootId && !ancestors.has(agent),
   );
   unique.sort();
-  return unique.map((agent) =>
-    mintChildTrajectoryId({ parentId: params.rootId, childNativeId: agent }),
-  );
+  return unique.map((agent) => childSessionId(params.rootId, agent));
 }
 
 /**
@@ -118,12 +117,9 @@ export function bindMintedChildTrajectory(params: {
   const sessionId =
     recorded?.childId ??
     (childNativeId
-      ? mintChildTrajectoryId({ parentId, childNativeId })
+      ? childSessionId(parentId, childNativeId)
       : delegated?.spawnCallId
-        ? mintChildTrajectoryId({
-            parentId,
-            childNativeId: delegated.spawnCallId,
-          })
+        ? childSessionId(parentId, delegated.spawnCallId)
         : undefined);
   if (!sessionId) {
     if (claims.parentId) {
@@ -147,6 +143,9 @@ export function bindMintedChildTrajectory(params: {
         : recorded?.spawnCallId
           ? { spawnCallId: recorded.spawnCallId }
           : {}),
+      ...(delegated?.promptDigest
+        ? { spawnPromptDigest: delegated.promptDigest }
+        : {}),
     },
   };
 }
@@ -314,25 +313,26 @@ function delegatedParent(params: {
   context: AppaMatchContext;
   parentNativeId: string;
   childNativeId: string | undefined;
-}): { parentId: string; spawnCallId?: string } | undefined {
+}):
+  | { parentId: string; spawnCallId?: string; promptDigest?: string }
+  | undefined {
   const trusted = params.context.trustedContext;
   if (!trusted) return undefined;
   for (const marker of trusted.request.delegation?.markers ?? []) {
-    if (
-      !verifyDelegationMarker({
-        marker,
-        organizationId: trusted.session.organization_id,
-        callerId: trusted.session.caller_id,
-        spawnerNativeId: params.parentNativeId,
-      })
-    )
-      continue;
+    const verified = verifyDelegatedPrompt({
+      marker,
+      organizationId: trusted.session.organization_id,
+      callerId: trusted.session.caller_id,
+      spawnerNativeId: params.parentNativeId,
+    });
+    if (!verified) continue;
     const childIdentity = params.childNativeId ?? marker.spawnCallId;
     if (childIdentity && `:${marker.parentId}:`.includes(`:${childIdentity}:`))
       continue;
     return {
       parentId: marker.parentId,
       ...(marker.spawnCallId ? { spawnCallId: marker.spawnCallId } : {}),
+      ...verified,
     };
   }
   return undefined;
@@ -374,13 +374,6 @@ function nativeId(value: string | undefined): string | undefined {
 
 function correlationError(message: string): ApiError {
   return new ApiError(400, message);
-}
-
-function mintChildTrajectoryId(params: {
-  parentId: string;
-  childNativeId: string;
-}): string {
-  return `${params.parentId}:${params.childNativeId}`;
 }
 
 function collectNamedChildren(

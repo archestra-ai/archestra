@@ -23,10 +23,6 @@ const server = setupServer();
 let enabled: boolean;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
-  Element.prototype.scrollIntoView = vi.fn();
-  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
-  Element.prototype.setPointerCapture = vi.fn();
-  Element.prototype.releasePointerCapture = vi.fn();
   vi.stubGlobal(
     "matchMedia",
     vi.fn((query: string) => ({

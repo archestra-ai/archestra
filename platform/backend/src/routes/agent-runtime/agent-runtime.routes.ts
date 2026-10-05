@@ -42,6 +42,7 @@ import {
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
 import {
+  ticketPath,
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
@@ -1041,10 +1042,11 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
               path: request.body.path,
               size: request.body.size,
               sha256: request.body.sha256,
+              location: request.body.location,
             });
       request.auditAfter = {
         workspaceTransfer: {
-          path: minted.ticket.path,
+          path: ticketPath(minted.ticket),
           direction: minted.ticket.direction,
         },
       };
@@ -1052,7 +1054,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         transferId: minted.ticket.id,
         token: minted.token,
         contentUrl: `${AGENT_WORKSPACE_TRANSFER_PREFIX}/${minted.ticket.id}/content`,
-        path: minted.ticket.path,
+        path: ticketPath(minted.ticket),
         size: minted.ticket.size,
         sha256: minted.ticket.sha256,
         expiresInSeconds: WORKSPACE_TRANSFER_TICKET_SECONDS,
@@ -1302,7 +1304,7 @@ async function requireRuntimeCredentialAdmin(
   const permitted = await userHasPermission(
     request.user.id,
     request.organizationId,
-    "agentSettings",
+    "organizationSettings",
     "update",
   );
   if (!permitted) {

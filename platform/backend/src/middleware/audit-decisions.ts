@@ -995,9 +995,26 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "approved tool outputs and processing receipts",
   },
+  openappaEmbeddedPeerMessagesTable: {
+    audited: false,
+    reason: "runtime-owned peer inbox; admissions belong to OpenAPPA history",
+  },
+  openappaHeldPeerMessagesTable: {
+    audited: false,
+    reason:
+      "runtime-owned held values; bodies are excluded from platform audits",
+  },
   openappaSessionsTable: {
     audited: false,
     reason: "authenticated adapter identity mapping",
+  },
+  openappaUnenforcedSessionsTable: {
+    audited: false,
+    reason: "proxy record of sessions that started while enforcement was off",
+  },
+  openappaUnenforcedCallsTable: {
+    audited: false,
+    reason: "proxy record of tool calls made while enforcement was off",
   },
   openappaYellsTable: { audited: true, model: OpenAppaYellModel },
   openappaExternalConsultsTable: {

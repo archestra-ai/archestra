@@ -3,8 +3,8 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { AgentBadge } from "@/components/agent-badge";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
+import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
 import { LabelTags } from "@/components/label-tags";
 import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 
@@ -73,7 +73,7 @@ export function AgentNameCell({
             // `contents` keeps the badges in the row's flex flow while giving
             // their tooltips and label chips a node to swallow clicks on.
             <RowClickShield className="contents">
-              {builtIn && <AgentBadge type="builtIn" />}
+              {builtIn && <BuiltInAgentBadge />}
               {extraBadges}
               {labels && labels.length > 0 && <LabelTags labels={labels} />}
             </RowClickShield>

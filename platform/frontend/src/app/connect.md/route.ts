@@ -3,6 +3,18 @@ import { requestOrigin } from "@/lib/request-origin";
 const opencodeRestartInstruction =
   "Do not stop or restart OpenCode from inside this conversation. Finish your reply and ask the user to save work, close OpenCode normally, then launch `opencode` in a new terminal.";
 
+const approvalLinkFallback = [
+  "As soon as the installer creates an approval request, show its full browser approval URL as a clickable markdown link in your reply, plus the matching code.",
+  "Always show this manual fallback while approval is pending, even if a browser opens automatically or tool output already printed the URL. Never suppress it because of deduplication.",
+  'Use the complete URL from the installer line starting with "Open ". Its path is /connection and it has a connectRequest query parameter. Query parameter order does not matter.',
+  "Do not link the installer download, a wrapped or truncated /api/client-connections path, or any other URL.",
+  "A tool card is not a clickable link.",
+  "If the user asks for the link again while approval is pending, show the same request URL and code again, without starting another installer.",
+  "Do not start a second installer or a second approval request while the first process is alive. Keep the first request and its code.",
+  "If that process has already exited with an error, report the error. Do not offer an earlier approval URL as ready.",
+  "After approval completes, omit the URL and code.",
+].join(" ");
+
 export function GET(request: Request) {
   const origin = requestOrigin(request);
   const client = new URL(request.url).searchParams.get("client");
@@ -59,11 +71,11 @@ under Settings > Plugins. Send a message to make sure that inference works.
    It reports approval, download size, and setup progress. If it fails, report
    the exact error and stop instead of replacing the flow with manual API calls.
    OpenCode: run the installer here with a timeout of 600000 ms. Keep that exact
-   process running. Relay its approval URL and code if no browser opens. Do
-   not start a second installer while the first request is pending.
+   process running. Do not start a second installer while the first request is pending.
+   Codex: ${CODEX_APPROVAL_WAIT}
    For Desktop, the separate terminal owns this process; finish the agent task after handoff.
    The browser code must match the code printed in the terminal.
-   If no browser opens, show the printed approval URL to the user.
+   ${approvalLinkFallback}
 4. The installer applies the approved configuration automatically.
    If the organization has runtime handoff instructions enabled, the setup also
    installs a system-prompt file injected into every future session launch —
@@ -176,8 +188,8 @@ Windows PowerShell:
 $p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client ${client} } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
 
 Keep the command running while the user signs in and reviews the setup in their browser.
-The browser code must match the code printed in the terminal. If no browser opens, show the printed approval URL.
-The public bootstrap downloads and applies only the approved setup. If it fails, report the exact error; do not replace this flow with manual API calls.
+The browser code must match the code printed in the terminal. ${approvalLinkFallback}
+${client === "codex" ? `${CODEX_APPROVAL_WAIT}\n` : ""}The public bootstrap downloads and applies only the approved setup. If it fails, report the exact error; do not replace this flow with manual API calls.
 Do not print the polling secret, installer source, or approved setup payload.
 If runtime handoff instructions are enabled, tell the user that future sessions inject a system-prompt file.
 
@@ -228,6 +240,15 @@ function focusedClientDetails(client: string): {
       return null;
   }
 }
+
+const CODEX_APPROVAL_WAIT = [
+  'Use sandbox_permissions="require_escalated" for network-blocked setup commands.',
+  "Codex's exec_command yields a still-running terminal and returns a session id before browser approval finishes.",
+  'keep reading that same session with write_stdin, or the client\'s equivalent read of that same process, until the installer prints "Browser approval confirmed." or a terminal error.',
+  "Do not end the turn and ask the user to say when approval is finished.",
+  "A temporarily unavailable status is not expiry. Retry that same session; do not start again.",
+  "Gateway OAuth is a later native sign-in after this installer applies the setup. It is not a new connection approval. Do not automate that sign-in, and do not change the configured approval mode or sandbox.",
+].join(" ");
 
 const CODEX_FINISH_INSTRUCTIONS = [
   "If the installer printed 'Successfully logged in.', gateway OAuth is already cached. Do not run codex mcp login again. Otherwise run codex mcp list --json and inspect auth_status for the configured server. If auth_status is oauth, skip login.",

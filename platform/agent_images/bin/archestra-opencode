@@ -31,12 +31,14 @@ export XDG_STATE_HOME="${runtime_dir}/state"
 export OPENCODE_CONFIG="${config_file}"
 export OPENCODE_CONFIG_DIR="${runtime_dir}/config"
 export OPENCODE_DISABLE_AUTOUPDATE=1
+# The model and its limits are provided by the runtime; no remote catalog is needed.
+export OPENCODE_DISABLE_MODELS_FETCH=1
 export OPENCODE_DISABLE_PROJECT_CONFIG=1
 # OpenCode's event firehose exposes explicit question, permission, and turn
 # lifecycle events. Load only this generated plugin: project config discovery
 # remains disabled, so a checked-out repository cannot contribute plugins.
 cat > "${attention_plugin}" <<'PLUGIN'
-export const ArchestraAttention = async () => {
+export const ArchestraAttention = async ({ client }) => {
   let primarySessionID;
 
   const update = async (...args) => {
@@ -50,6 +52,16 @@ export const ArchestraAttention = async () => {
   };
 
   return {
+    "experimental.chat.system.transform": async () => {
+      // Discovery errors otherwise leave the agent running with local tools.
+      // Read the same native MCP state that supplied this turn's tool catalog.
+      const result = await client.mcp.status({ throwOnError: true });
+      if (result.data?.archestra?.status !== "connected") {
+        const report = Bun.spawn(["archestra-mcp-startup-failure"], { stdout: "ignore", stderr: "ignore" });
+        await report.exited;
+        throw new Error("Archestra MCP gateway discovery failed. Check gateway availability and access, then retry.");
+      }
+    },
     event: async ({ event }) => {
       if (event.type === "question.asked") {
         await update("set", "Input requested");
@@ -186,7 +198,7 @@ export const ArchestraTranscript = async ({ client, directory }) => ({
       if (process.env.ARCHESTRA_AGENT_RUNTIME_MODE !== "one_shot") return;
       const message = "OpenCode could not complete the model request. Check the configured provider credential and model availability, then retry.";
       const prefix = process.env.ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX;
-      if (prefix) {
+      if (prefix && !existsSync(`${prefix}.failure`)) {
         try {
           writeFileSync(`${prefix}.failure.tmp`, JSON.stringify({ version: 1, code: "opencode_session_error", message }));
           renameSync(`${prefix}.failure.tmp`, `${prefix}.failure`);
@@ -294,6 +306,12 @@ jq -n \
     }}
   }' > "${config_file}"
 chmod 0600 "${config_file}" "${instructions_file}" "${task_file}"
+# These image-owned plugins use only built-ins and the native SDK instance.
+# A writable config directory makes OpenCode install an unused plugin package
+# before loading them. Keep managed config read-only so discovery does not wait
+# on a package index; the client data/cache/state directories remain writable.
+mkdir -p "${runtime_dir}/config/opencode"
+chmod 0555 "${runtime_dir}/config" "${runtime_dir}/config/opencode"
 
 resume_args=()
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then

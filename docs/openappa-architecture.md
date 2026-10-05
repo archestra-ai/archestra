@@ -314,13 +314,36 @@ A `run_tool` dispatch is ruled on as the tool it targets. The runtime receives t
 
 On later requests, the proxy restores notice calls back to original tool calls and injects the ruling as their result. Restoration is a stateless pure function of the request body. It requires no database lookup, surviving restarts and replica changes. The runtime withholds results for call IDs it never released.
 
+### What Reaches the Provider
+
+The provider never receives what the proxy writes for the client and the gateway. On every forwarded request, with or without an OpenAPPA session (deployment switch off, a bypassed client, a delegated run), the proxy:
+
+- restores notices, control calls, and ask_user calls on the three restoring families;
+- removes what restoration left on every wire: the notice record and signed offers, the execution frame and JWS members, and ask_user offers;
+- removes proxy-only parameters from the remedy and ask_user declarations of a client that still holds an old tool list (the notice keeps its record, which the gateway still advertises);
+- restores trajectory stamps that a client copied into message or tool-result text.
+
+A call is rewritten only when the request's gateway identity resolves it to a platform tool, or when it carries proof that only the proxy writes: a notice record that names its own call, or JWS signed with this deployment's key. A lookalike name alone is not enough. The catch-all routes (`/v1/messages/count_tokens` and similar) apply the same cleanup with proof-only matching. They also drop what the pipeline strips at entry: session receipts, child-trajectory receipts, delegation markers, child-return markers, and compaction carriers. A counted request thus matches the forwarded one.
+
+Every rewrite gives an earlier turn the same bytes on every request. Claude Opus 5.5 and Fable 5.1 bind each thinking block to the bytes before it. On accounts that the API enforces, it refuses a request whose earlier turns changed. One exception remains: the plugin appends one-turn guidance to `system`, so `system` changes between requests. This guidance is the question and remedy continuations, and the HITL question and decision guidance.
+
+The A2A step-context guard summarizes older turns as plain text for a provider. It omits the members that only the proxy writes, because no sanitizer can remove them from that text.
+
+A native question call reaches the client under a signed `aq1` id (`<prefix>_aq1_<nonce>_<tag>`, an HMAC over the session, the tool, and the nonce) issued in place of the provider's id. The id is not restored: later history carries it to the provider unchanged, so the exchange keeps the same bytes on every turn. The plugin verifies the answer by that signed id and spends a one-shot claim that binds it to the staged review. Request entry also restores stamps that a client copied into text, so logging, policy evaluation, and the plugin read provider ids there too.
+
+Model-facing remedy text states who decides: the organization's policy, and the user when the policy requires approval. It does not tell the model to skip the user or to act immediately. Provider safety classifiers refused requests that carried such wording.
+
 ## Remedies
 
 Two MCP tools handle remedies:
 1. `archestra__get_remedy_plans`: Returns the ruling and remedy plans from the notice arguments. It executes no code and changes no state.
 2. `archestra__execute_remedy_plan`: Runs the remedy plan selected by the model through the embedded OpenAPPA runtime.
 
+The gateway advertises only the arguments the model writes: `get_remedy_plans` omits `offers`, and `execute_remedy_plan` omits `execution`, `protected`, `payload`, and `signature`. The advertised schemas stay open, so a client that validates tool input accepts the members the proxy stamps. The handlers validate the full schemas.
+
 The model selects each remedy. The proxy releases the model's `execute_remedy_plan` call to the client for execution.
+
+The remedy can fail to run. The client can decline the call: the user rejects a permission prompt, or Claude Code's auto-mode classifier blocks it. The gateway can also refuse it before the remedy, for example when the offer is gone. Only a remedy that runs leaves a record, so the runtime has none to match the result against. For a result of the request's declared control tool, other than a pending review, the proxy shows the model what the client returned, after a line that says the plan is not applied. The model then reads, for example, the client's instruction to stop and let the user decide. Any other result without a record stays withheld.
 
 Remedy routing is a flattened JWS (RFC 7515 §7.2.2, RFC 7797 unencoded payload) on the denial notice and `execute_remedy_plan` call: `protected`, `payload`, `signature`. That is integrity (JWS), not encryption (JWE). `protected.alg` selects the verify method; unknown algorithms fail closed. The event log is the authority for whether the offer still stands. A claim carries no expiry: it is a routing token, not an authorization, and the event log's operation idempotency gates the spend — replaying a claim from another conversation can only reach an offer the same session minted, and never twice.
 
@@ -336,7 +359,7 @@ The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a t
 
 Submitting the same logical call ID and arguments returns the saved result without re-execution. Submitting changed arguments under that ID is refused. Spent offers return terminal feedback.
 
-Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. Azure Responses tool traffic is refused while OpenAPPA is enabled.
+Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, signed offers, and execution frames before forwarding. Azure Responses tool traffic is refused while OpenAPPA is enabled.
 
 Start new conversations after enabling OpenAPPA. Tool results from before activation have no receipts and are refused.
 

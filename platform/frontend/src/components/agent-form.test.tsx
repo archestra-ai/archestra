@@ -477,10 +477,6 @@ vi.mock("@/components/agent-labels", () => ({
   ProfileLabels: () => null,
 }));
 
-vi.mock("@/components/agent-badge", () => ({
-  AgentBadge: () => null,
-}));
-
 vi.mock("@/components/agent-icon-picker", () => ({
   AgentIconPicker: () => null,
 }));
@@ -1431,11 +1427,11 @@ describe("AgentForm delegation state", () => {
     expect(useAgentDelegationsMock).toHaveBeenCalledWith(undefined);
   });
 
-  it("hides messaging-channel configuration without trigger read permission", () => {
+  it("hides messaging-channel configuration without organization settings access", () => {
     vi.mocked(useHasPermissions).mockImplementation(((
       permissions: unknown,
     ) => ({
-      data: !(permissions && "agentTrigger" in (permissions as object)),
+      data: !(permissions && "organizationSettings" in (permissions as object)),
     })) as typeof useHasPermissions);
 
     render(<AgentForm agentType="agent" agent={baseAgent} />);
@@ -2341,6 +2337,7 @@ describe("AgentForm knowledge in Auto mode", () => {
 
 describe("AgentForm progressive tool loading", () => {
   beforeEach(() => {
+    useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "user-1" } },
     } as unknown as ReturnType<typeof useSession>);
@@ -2351,6 +2348,24 @@ describe("AgentForm progressive tool loading", () => {
 
   const progressiveSwitch = (section: HTMLElement) =>
     section.querySelector<HTMLInputElement>("#load-tools-when-needed");
+
+  it.each([
+    "agent",
+    "mcp_gateway",
+  ] as const)("defaults new Manual %s to progressive loading and allows an opt-out", async (agentType) => {
+    const user = userEvent.setup();
+    render(<AgentForm agentType={agentType} />);
+    const tools = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    await user.click(within(tools).getByRole("tab", { name: "Manual" }));
+    const section = await screen.findByTestId(
+      E2eTestId.AgentToolLoadingSection,
+    );
+    const toggle = progressiveSwitch(section);
+    expect(toggle?.checked).toBe(true);
+    expect(toggle?.disabled).toBe(false);
+    if (toggle) await user.click(toggle);
+    expect(progressiveSwitch(section)?.checked).toBe(false);
+  });
 
   it("hides both settings in All mode, where the record decides neither", async () => {
     // All pins progressive loading on and the connection prompt to asking when
@@ -2918,6 +2933,38 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
+  it.each([
+    "agent",
+    "mcp_gateway",
+  ] as const)("submits the progressive default or an explicit Manual opt-out for a new %s", async (agentType) => {
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType={agentType}
+        initialValues={{ accessAllTools: false }}
+      />,
+    );
+    await user.type(screen.getByLabelText("Name *"), "Manual Resource");
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      agentType,
+      accessAllTools: false,
+      toolExposureMode: "search_and_run_only",
+    });
+    const toggle = screen
+      .getByTestId(E2eTestId.AgentToolLoadingSection)
+      .querySelector<HTMLInputElement>("#load-tools-when-needed");
+    expect(toggle).not.toBeNull();
+    if (toggle) await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(2));
+    expect(createAgent.mock.calls[1][0]).toMatchObject({
+      accessAllTools: false,
+      toolExposureMode: "full",
+    });
+  });
+
   /**
    * `canSubmit` clears while `isSaving` is true, so a second click cannot start
    * a second save. Observing that needs the save held open: the mocked write
@@ -2966,13 +3013,15 @@ describe("AgentForm save payload and failure handling", () => {
         activeSection="configuration"
       />,
     );
-    expect(panelOf(screen.getByTestId("agent-runtime"))).toHaveClass("hidden");
+    // The runtime fields render their own sections, so the panel is the
+    // wrapper directly around them.
+    const runtimePanel = () =>
+      screen.getByTestId("agent-runtime").parentElement;
+    expect(runtimePanel()).toHaveClass("hidden");
     rerender(
       <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
     );
-    expect(panelOf(screen.getByTestId("agent-runtime"))).not.toHaveClass(
-      "hidden",
-    );
+    expect(runtimePanel()).not.toHaveClass("hidden");
   });
 
   it("opens the shared provider-key dialog from the agent picker", async () => {
@@ -4759,6 +4808,35 @@ describe("AgentForm save payload and failure handling", () => {
     await waitFor(() => expect(bulkUpdateTools).toHaveBeenCalled());
     expect(updateAgent).not.toHaveBeenCalled();
     expect(refetchAgentTools).not.toHaveBeenCalled();
+  });
+
+  it("creates an agent directly from Configuration with untouched setup defaults", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    render(
+      <AgentForm
+        agentType="agent"
+        activeSection="configuration"
+        submitEnabled
+        onCreated={onCreated}
+      />,
+    );
+    await user.type(
+      screen.getByPlaceholderText("Enter agent name"),
+      "Quick setup agent",
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() =>
+      expect(onCreated).toHaveBeenCalledWith({
+        id: "created-agent",
+        name: "New Agent",
+      }),
+    );
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      name: "Quick setup agent",
+      accessAllTools: true,
+      initialGrants: [],
+    });
   });
 
   it("keeps every step's editors mounted while one step shows, and submits only when told to", async () => {

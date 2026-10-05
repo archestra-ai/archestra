@@ -3,11 +3,13 @@ import { vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { ChatOpsChannelBindingModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { ChatOpsEventHandler, IncomingChatMessage } from "@/types";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import TelegramProvider, { markdownToTelegramHtml } from "./telegram-provider";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 const BOT_TOKEN = "123456:test-token";
 const BOT_ID = 99;

@@ -43,9 +43,9 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
-  LOCKED_CHAT_KEY_HEADER,
-  parseLockedChatDekHeader,
-} from "@/content-encryption/locked-chat";
+  ENCRYPTED_CHAT_KEY_HEADER,
+  parseEncryptedChatDekHeader,
+} from "@/content-encryption/encrypted-chat";
 import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
@@ -103,7 +103,10 @@ import {
   stripDelegationMarkers,
 } from "@/openappa/delegation";
 import { forkedSession } from "@/openappa/lineage";
-import { prepareAppaRequest } from "@/openappa/request";
+import {
+  prepareAppaRequest,
+  sanitizeProviderBoundRequest,
+} from "@/openappa/request";
 import {
   APPA_PARENT_HEADER,
   isAppaChatSource,
@@ -114,13 +117,20 @@ import {
   sessionFromHeaders,
 } from "@/openappa/service";
 import { formatSessionReceipt } from "@/openappa/session-token";
-import { stampedSessions } from "@/openappa/trajectory-stamp";
+import {
+  restoreTrajectoryStampText,
+  stampedSessions,
+} from "@/openappa/trajectory-stamp";
+import { startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
   appendChildTrajectoryReceiptToResponse,
   appendSessionReceiptToResponse,
+  declaredToolEntries,
+  providerWire,
   restoreTrajectoryStamps,
+  restoreTrajectoryStampsInText,
   sessionReceiptEvidence,
   stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
@@ -131,6 +141,7 @@ import {
 } from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
 import {
   APPA_CLIENT_ADAPTERS,
+  appaTrajectory,
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
@@ -147,6 +158,10 @@ import {
   type LlmProxyToolCallRefusal,
   type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
+import {
+  connectionProxySetupContext,
+  verifyConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
 import {
   nativeSetupClientFromProvenance,
   resolveConnectionSetupScope,
@@ -204,12 +219,12 @@ import {
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
 import * as utils from "./utils";
-import type { SessionSource } from "./utils/headers/session-id";
 import {
-  type LockedChatAuditDisposition,
-  redactLockedChatInteraction,
-  resolveLockedChatAuditContext,
-} from "./utils/locked-chat-session";
+  type EncryptedChatAuditDisposition,
+  redactEncryptedChatInteraction,
+  resolveEncryptedChatAuditContext,
+} from "./utils/encrypted-chat-session";
+import type { SessionSource } from "./utils/headers/session-id";
 
 const {
   observability: {
@@ -247,9 +262,9 @@ export interface LLMProxyContext<TRequest> {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   /**
-   * Locked chat session: span content capture is suppressed and persisted
+   * Encrypted chat session: span content capture is suppressed and persisted
    * content is either encrypted or redacted (usage/cost metadata untouched).
-   * True whenever `locked-chat.kind !== "none"`.
+   * True whenever `encrypted-chat.kind !== "none"`.
    */
   suppressContent: boolean;
   /**
@@ -257,7 +272,7 @@ export interface LLMProxyContext<TRequest> {
    * carries the validated conversation key; `redact` is the fail-closed
    * fallback. Resolved once per request so every write site agrees.
    */
-  lockedChat: LockedChatAuditDisposition;
+  encryptedChat: EncryptedChatAuditDisposition;
   /**
    * Caller environment an advisor consultation bills to, resolved from the
    * loopback-gated delegation header and re-validated against the executing
@@ -475,6 +490,31 @@ function markSessionReceiptIssued(receipt: {
  * sites only so a large tool result cannot trigger a false re-issue and so
  * the body is never serialized just to search it.
  */
+/**
+ * Claude Code's next-prompt suggestion: after an answer, it asks the model
+ * what the user might type next, with the session's tools and history, and
+ * shows the reply as a hint in the input box. Its last user message carries
+ * this fixed instruction.
+ */
+function isClientPromptSuggestion(body: unknown): boolean {
+  const messages = asRecord(body)?.messages;
+  if (!Array.isArray(messages)) return false;
+  const content = asRecord(messages.at(-1))?.content;
+  const texts =
+    typeof content === "string"
+      ? [content]
+      : Array.isArray(content)
+        ? content.map((part) => asRecord(part)?.text)
+        : [];
+  return texts.some(
+    (text) =>
+      typeof text === "string" &&
+      text.trimStart().startsWith(PROMPT_SUGGESTION_INSTRUCTION),
+  );
+}
+
+const PROMPT_SUGGESTION_INSTRUCTION = "[SUGGESTION MODE:";
+
 function isClientCompactionRequest(params: {
   body: unknown;
   headers: Record<string, string | string[] | undefined>;
@@ -674,11 +714,15 @@ export async function handleLLMProxy<
     });
   }
   // Restores original provider call IDs before request processing, logging,
-  // or policy evaluation.
+  // or policy evaluation: the trajectory stamps first, then any stamp a
+  // client copied into text. Neither needs an OpenAPPA session, so no id the
+  // proxy gave a client reaches a provider with Guardrails off either.
   const trajectoryStamps = restoreTrajectoryStamps({
     interactionType: provider.interactionType,
     body,
   });
+  const wire = providerWire(provider.interactionType);
+  if (wire) restoreTrajectoryStampsInText({ wire, body });
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -1031,6 +1075,7 @@ export async function handleLLMProxy<
         tokenValue: rawApiKey,
         expectedProvider: providerName,
         expectedOrganizationId: resolvedAgent.organizationId,
+        requestedModel: requestAdapter.getModel(),
       });
       await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
@@ -1197,13 +1242,13 @@ export async function handleLLMProxy<
         : "provider_key";
   }
 
-  // Locked chat sessions: interaction rows keep all usage/cost/session
+  // Encrypted chat sessions: interaction rows keep all usage/cost/session
   // metadata, but their content-bearing fields are encrypted under the
   // conversation's browser-held key (or redacted if that cannot be done
   // safely), and span content capture is suppressed either way. Resolved once
   // up front (server-derived, fail closed) so the catch below and both stream
   // handlers agree on it.
-  const lockedChat = await resolveLockedChatAuditContext({
+  const encryptedChat = await resolveEncryptedChatAuditContext({
     source,
     // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
     // from forwarded headers, and this seam must only ever match the
@@ -1211,17 +1256,36 @@ export async function handleLLMProxy<
     requestIp: request.socket.remoteAddress,
     sessionId,
     userId,
-    dek: readLockedChatDek(request),
+    dek: readEncryptedChatDek(request),
   });
-  // Content never reaches spans or logs for a locked-chat session, whether it
+  // Content never reaches spans or logs for an encrypted-chat session, whether it
   // ends up encrypted or redacted.
-  const suppressContent = lockedChat.kind !== "none";
-  const { active: appaActive, unsupportedClientAction } =
-    await getGuardrailsDeployment();
-  if (appaActive && suppressContent) {
+  const suppressContent = encryptedChat.kind !== "none";
+  const {
+    active: appaActive,
+    featureEnabled: appaFeatureEnabled,
+    unsupportedClientAction,
+  } = await getGuardrailsDeployment();
+  // Enforcement is off, but OpenAPPA records what it must know when enforcement
+  // turns on: the sessions that start now, and the calls governed sessions make.
+  // The records hold ids only, so they cover encrypted chats too.
+  const appaObserving = appaFeatureEnabled && !appaActive;
+  // An encrypted chat that started while enforcement was off stays out of
+  // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
+  if (
+    appaActive &&
+    suppressContent &&
+    !(
+      sessionId &&
+      (await startedUnenforced({
+        organization_id: resolvedAgent.organizationId,
+        session_id: sessionId,
+      }))
+    )
+  ) {
     throw new ApiError(
       409,
-      "OpenAPPA does not yet support encrypted policy storage for locked chats",
+      "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
     );
   }
 
@@ -1549,12 +1613,35 @@ export async function handleLLMProxy<
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
+    // The session a request has while enforcement is off, for the records
+    // OpenAPPA reads once it turns on. Nothing governs it.
+    let observedSession: OpenAppaSession | undefined;
     let sessionReceipt: SessionReceiptOutput | undefined;
     let childTrajectoryReceipt: ChildTrajectoryReceiptOutput | undefined;
     let childCompactionContext: string | undefined;
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
-    let connectionSetupBypass = false;
+    const approvedProxySetupContext = connectionProxySetupContext(request.raw);
+    const approvedProxySetup =
+      !!approvedProxySetupContext &&
+      [virtualKeyId, passthroughVirtualKeyId].some(
+        (keyId) =>
+          !!keyId &&
+          verifyConnectionProxySetupContext({
+            token: approvedProxySetupContext,
+            organizationId: resolvedAgent.organizationId,
+            virtualApiKeyId: keyId,
+            proxyAgentId: resolvedAgent.id,
+            secret: config.auth.secret,
+          }),
+      );
+    let connectionSetupBypass = appaActive && approvedProxySetup;
+    if (connectionSetupBypass) {
+      logger.info(
+        { profileId: resolvedAgent.id, proof: "approved-installer" },
+        "Connection setup APPA bypass active",
+      );
+    }
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
@@ -1607,8 +1694,23 @@ export async function handleLLMProxy<
       const delegatedRun =
         isInternalRequest &&
         isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
+      const callerId = appaUserId
+        ? `user:${appaUserId}`
+        : authenticatedApp
+          ? `app:${authenticatedApp.id}`
+          : virtualKeyId
+            ? `virtual-key:${virtualKeyId}`
+            : undefined;
+      // A platform request over loopback that brings no credential of its own.
+      // Only such a request may name an unscoped session in the header.
+      const platformLoopback =
+        isInternalRequest &&
+        !authenticatedUserId &&
+        !authenticatedApp &&
+        !virtualKeyId;
       const unsupportedClient =
         appaActive &&
+        !connectionSetupBypass &&
         !isInternalChat &&
         !delegatedRun &&
         headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
@@ -1622,14 +1724,12 @@ export async function handleLLMProxy<
           "Guardrails do not recognize this client, so the proxy blocked the request. Add an X-Appa-Session-ID header to each request, or ask an administrator to allow unrecognized clients.",
         );
       }
-      if (appaActive && !delegatedRun && !unsupportedClient) {
-        const callerId = appaUserId
-          ? `user:${appaUserId}`
-          : authenticatedApp
-            ? `app:${authenticatedApp.id}`
-            : virtualKeyId
-              ? `virtual-key:${virtualKeyId}`
-              : undefined;
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        !delegatedRun &&
+        !unsupportedClient
+      ) {
         appaCallerId = callerId;
         // Extract client-native session metadata into APPA session identity.
         // Client adapters resolve resume, fork, and compaction semantics
@@ -1730,22 +1830,7 @@ export async function handleLLMProxy<
                 scope: (session) => scopedSessionId(callerId, session),
               })
             : undefined;
-        if (
-          appaIdentity.sessionId &&
-          isWellFormedAppaId(appaIdentity.sessionId) &&
-          !incomingAppaSessionHeader
-        ) {
-          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
-            appaIdentity.sessionId;
-        }
-        if (
-          appaIdentity.parentId &&
-          isWellFormedAppaId(appaIdentity.parentId) &&
-          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
-        ) {
-          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] =
-            appaIdentity.parentId;
-        }
+        fillAppaSessionHeaders(headersForExtraction, appaIdentity);
         // Reading connect.md can taint the rest of setup, so the verified
         // session bypasses APPA trust and invocation decisions together.
         openappaSession = connectionSetupBypass
@@ -1760,10 +1845,7 @@ export async function handleLLMProxy<
                 : {
                     // Scope external sessions to the authenticated principal.
                     scope:
-                      isInternalRequest &&
-                      !authenticatedUserId &&
-                      !authenticatedApp &&
-                      !virtualKeyId &&
+                      platformLoopback &&
                       incomingAppaSessionHeader !== undefined
                         ? undefined
                         : callerId,
@@ -1794,6 +1876,23 @@ export async function handleLLMProxy<
             "OpenAPPA bound a fallback root because the client reported no session",
           );
         }
+      } else if (
+        appaObserving &&
+        !delegatedRun &&
+        (isInternalRequest ||
+          authenticatedUserId ||
+          authenticatedApp ||
+          virtualKeyId)
+      ) {
+        observedSession = observedAppaSession({
+          headers: headersForExtraction,
+          body,
+          interactionType: provider.interactionType,
+          organizationId: resolvedAgent.organizationId,
+          callerId,
+          isInternalChat,
+          platformLoopback,
+        });
       }
       pluginContext = {
         requestId: request.id,
@@ -1808,6 +1907,48 @@ export async function handleLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
+      // The facts that bind a child trajectory. Read without preparing the
+      // request for enforcement, which changes the body and refuses tool
+      // shapes that OpenAPPA cannot govern. Built only for an OpenAPPA session.
+      const lineageRequest = (): AppaTrustedContext["request"] => ({
+        tools: undefined,
+        session: appaIdentity,
+        customTools: new Set(),
+        declaredTools: [],
+        ...(delegationMarkers
+          ? { delegation: { markers: delegationMarkers } }
+          : {}),
+        ...(childReturns ? { childReturns } : {}),
+        ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
+          ? { childTrajectoryReceipts }
+          : {}),
+      });
+      if (
+        openappaSession &&
+        (await startedUnenforced(
+          appaTrajectory({
+            adapters: APPA_CLIENT_ADAPTERS,
+            headers: pluginContext.headers,
+            requestBody: pluginContext.requestBody,
+            trustedContext: {
+              session: openappaSession,
+              profileId: resolvedAgent.id,
+              toolIdentity,
+              request: lineageRequest(),
+              claims: appaClaims,
+              ...(isInternalChat ? { chatSource: source } : {}),
+            },
+          }).session,
+        ))
+      ) {
+        // The session started while enforcement was off. OpenAPPA never
+        // governs it: the request goes on as if enforcement were off.
+        logger.info(
+          { sessionId: openappaSession.session_id },
+          "OpenAPPA ignores a session that started while Guardrails enforcement was off",
+        );
+        openappaSession = undefined;
+      }
       if (openappaSession) {
         // A Chat session is a conversation, and the request must name the
         // user whose conversation it is: without one there is nothing to
@@ -1861,6 +2002,18 @@ export async function handleLLMProxy<
           request: appaRequest,
           claims: appaClaims,
           compaction: clientCompaction && !isInternalChat,
+          enforcement: "active",
+          ...(isInternalChat ? { chatSource: source } : {}),
+        } satisfies AppaTrustedContext);
+      } else if (observedSession) {
+        pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
+          session: observedSession,
+          profileId: resolvedAgent.id,
+          toolIdentity,
+          request: lineageRequest(),
+          claims: appaClaims,
+          compaction: clientCompaction && !isInternalChat,
+          enforcement: "inactive",
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
       }
@@ -1889,6 +2042,13 @@ export async function handleLLMProxy<
         hasNativeClientSession &&
         !isInternalChat &&
         !hasStructuredOutputConstraint(body) &&
+        // The agent loop declares its tools. A client's side calls (Claude
+        // Code's auto-mode classifier, its quota check, its next-prompt
+        // suggestion) are never shown as the session's reply, so the mark
+        // would be lost there and would alter what the client parses.
+        (clientCompaction ||
+          (declaredToolEntries(body).length > 0 &&
+            !isClientPromptSuggestion(body))) &&
         appaCallerId &&
         appaFamily &&
         config.openappa.offerSigningSecret.length > 0
@@ -1916,6 +2076,29 @@ export async function handleLLMProxy<
         };
       }
     }
+    // Nothing OpenAPPA wrote for the client and the gateway goes on to the
+    // provider, whether or not this request has a session (deployment switch
+    // off, a connection-setup or unsupported-client bypass, a delegated run)
+    // and whatever restoration above could not put back. Runs after
+    // prepareAppaRequest collected the notices' signed offers and the plugin
+    // read this request's results. A request without a session evaluates
+    // trusted data on the result, as a session does on its restored history.
+    // It changes no call id, so the tool-result updates below still land.
+    const providerBoundRewrites = sanitizeProviderBoundRequest({
+      body,
+      interactionType: provider.interactionType,
+      identity: toolIdentity,
+    });
+    if (providerBoundRewrites > 0) {
+      logger.debug(
+        {
+          resolvedAgentId,
+          rewrites: providerBoundRewrites,
+          openappaSession: openappaSession !== undefined,
+        },
+        `[${providerName}Proxy] Removed OpenAPPA transport members from the provider-bound request`,
+      );
+    }
     const trustedDataOutcome = connectionSetupBypass
       ? {
           toolResultUpdates: {},
@@ -1928,12 +2111,18 @@ export async function handleLLMProxy<
         (await evaluateLegacyTrust()));
     const { contextIsTrusted, dualLlmAnalyses, unsafeContextBoundary } =
       trustedDataOutcome;
-    const toolResultUpdates = {
-      ...("toolResultUpdates" in trustedDataOutcome
-        ? trustedDataOutcome.toolResultUpdates
-        : {}),
-      ...pluginToolResultsOutcome?.toolResultUpdates,
-    };
+    const toolResultUpdates = Object.fromEntries(
+      Object.entries({
+        ...("toolResultUpdates" in trustedDataOutcome
+          ? trustedDataOutcome.toolResultUpdates
+          : {}),
+        ...pluginToolResultsOutcome?.toolResultUpdates,
+      }).map(
+        // Approved outputs are rendered from results as the client sent them:
+        // a trajectory stamp one echoed still never reaches the provider.
+        ([id, content]) => [id, restoreTrajectoryStampText(content)],
+      ),
+    );
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
@@ -2049,6 +2238,7 @@ export async function handleLLMProxy<
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
       llmProviderApiKeyId: perKeyChatApiKeyId,
+      sessionId: sessionId ?? undefined,
       onResponseHeaders: (responseHeaders) => {
         if (providerName === "anthropic") {
           billingMode = utils.refineAnthropicBillingModeFromHeaders({
@@ -2159,7 +2349,7 @@ export async function handleLLMProxy<
       dualLlmAnalyses,
       unsafeContextBoundary,
       suppressContent,
-      lockedChat,
+      encryptedChat,
       delegationBillingEnvironmentId,
       appId: attributedAppId,
       externalAgentId,
@@ -2253,7 +2443,7 @@ export async function handleLLMProxy<
       };
       await persistProxyInteraction(
         record,
-        lockedChat,
+        encryptedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -2359,7 +2549,7 @@ async function handleStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    lockedChat,
+    encryptedChat,
     delegationBillingEnvironmentId,
     appId,
     externalAgentId,
@@ -2541,7 +2731,7 @@ async function handleStreaming<
       };
       await persistProxyInteraction(
         record,
-        lockedChat,
+        encryptedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -2740,7 +2930,7 @@ async function handleStreaming<
           ]);
         }
 
-        // Capture streamed completion content (suppressed for locked chats)
+        // Capture streamed completion content (suppressed for encrypted chats)
         if (captureContent && !suppressContent && state.text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
             [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
@@ -3157,7 +3347,7 @@ async function handleStreaming<
         });
         await persistProxyInteraction(
           record,
-          lockedChat,
+          encryptedChat,
           delegationBillingEnvironmentId,
         );
       } catch (interactionError) {
@@ -3209,7 +3399,7 @@ async function handleNonStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    lockedChat,
+    encryptedChat,
     delegationBillingEnvironmentId,
     appId,
     externalAgentId,
@@ -3382,7 +3572,7 @@ async function handleNonStreaming<
         adapter.getFinishReasons(),
       );
 
-      // Capture completion content (suppressed for locked chats)
+      // Capture completion content (suppressed for encrypted chats)
       if (captureContent && !suppressContent) {
         const text = adapter.getText?.();
         if (text) {
@@ -3596,7 +3786,7 @@ async function handleNonStreaming<
       });
       await persistProxyInteraction(
         refusalRecord,
-        lockedChat,
+        encryptedChat,
         delegationBillingEnvironmentId,
       );
 
@@ -3742,7 +3932,7 @@ async function handleNonStreaming<
     });
     await persistProxyInteraction(
       record,
-      lockedChat,
+      encryptedChat,
       delegationBillingEnvironmentId,
     );
   } catch (interactionError) {
@@ -3848,6 +4038,103 @@ function preambleSseCarriesContent(data: string | Uint8Array): boolean {
     return true;
   }
   return !sawDataLine;
+}
+
+/**
+ * Fills the APPA session and parent headers from the client's own session
+ * identity when the request did not send them. The enforced path and the
+ * observer both use it, so they read the same session from a request.
+ */
+function fillAppaSessionHeaders(
+  headers: Record<string, string | string[] | undefined>,
+  identity: AppaSessionIdentity,
+): void {
+  const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
+  const parentHeader = APPA_PARENT_HEADER.toLowerCase();
+  if (
+    identity.sessionId &&
+    isWellFormedAppaId(identity.sessionId) &&
+    !headers[sessionHeader]
+  )
+    headers[sessionHeader] = identity.sessionId;
+  if (
+    identity.parentId &&
+    isWellFormedAppaId(identity.parentId) &&
+    !headers[parentHeader]
+  )
+    headers[parentHeader] = identity.parentId;
+}
+
+/**
+ * The session a request has while enforcement is off: the one the enforced
+ * path binds, without a fork source. Undefined for a client that OpenAPPA
+ * cannot govern, or a request that names no valid session of its own. A
+ * fallback root is shared by all conversations of a credential, so it is
+ * never one session. Never throws, because enforcement is off.
+ */
+function observedAppaSession(params: {
+  headers: Record<string, string | string[] | undefined>;
+  body: unknown;
+  interactionType: Parameters<typeof appaWireFamily>[0];
+  organizationId: string;
+  callerId: string | undefined;
+  isInternalChat: boolean;
+  /** A platform request over loopback with no credential of its own. */
+  platformLoopback: boolean;
+}): OpenAppaSession | undefined {
+  const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
+  const parentHeader = APPA_PARENT_HEADER.toLowerCase();
+  const incoming = params.headers[sessionHeader];
+  const governable =
+    params.isInternalChat ||
+    incoming !== undefined ||
+    params.headers[parentHeader] !== undefined ||
+    APPA_CLIENT_ADAPTERS.some((adapter) =>
+      adapter.matches({ headers: params.headers, requestBody: params.body }),
+    );
+  if (!governable) return undefined;
+  try {
+    const family = appaWireFamily(params.interactionType);
+    const identity = family
+      ? extractAppaSessionIdentity({
+          family,
+          body: params.body,
+          headers: params.headers,
+        })
+      : {};
+    const headers = { ...params.headers };
+    fillAppaSessionHeaders(headers, identity);
+    return sessionFromHeaders({
+      headers,
+      organizationId: params.organizationId,
+      callerId: params.callerId,
+      ...(params.isInternalChat
+        ? {}
+        : {
+            scope:
+              params.platformLoopback && incoming !== undefined
+                ? undefined
+                : params.callerId,
+          }),
+    });
+  } catch (error) {
+    // Enforcement is off, so the request goes on either way. A request
+    // without a usable session id is expected; anything else is not.
+    const details = {
+      error: error instanceof Error ? error.message : String(error),
+    };
+    if (error instanceof ApiError)
+      logger.debug(
+        details,
+        "OpenAPPA does not record a request without a usable session id while Guardrails enforcement is off",
+      );
+    else
+      logger.warn(
+        details,
+        "OpenAPPA could not read the session of a request while Guardrails enforcement is off",
+      );
+    return undefined;
+  }
 }
 
 async function evaluateProxyPluginToolCalls(
@@ -4130,7 +4417,7 @@ function extractDurationStatusCode(error: unknown): string {
 
 /**
  * The single funnel every proxy interaction write goes through, so all five
- * sites treat locked-chat identically.
+ * sites treat encrypted-chat identically.
  *
  * - `encrypt`: store the full record, keyed to the conversation's browser-held
  *   DEK (recoverable offline via that conversation's escrow record).
@@ -4140,12 +4427,14 @@ function extractDurationStatusCode(error: unknown): string {
  */
 async function persistProxyInteraction(
   record: InsertInteraction,
-  lockedChat: LockedChatAuditDisposition,
+  encryptedChat: EncryptedChatAuditDisposition,
   environmentIdOverride?: string,
 ): Promise<void> {
   await InteractionModel.create(
-    lockedChat.kind === "redact" ? redactLockedChatInteraction(record) : record,
-    lockedChat.kind === "encrypt" ? lockedChat.audit : null,
+    encryptedChat.kind === "redact"
+      ? redactEncryptedChatInteraction(record)
+      : record,
+    encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
     environmentIdOverride ? { environmentIdOverride } : undefined,
   );
 }
@@ -4279,16 +4568,16 @@ async function resolveAttributedAppId(
 }
 
 /**
- * Read the locked chat key off the request. A malformed header is
+ * Read the encrypted chat key off the request. A malformed header is
  * treated as absent (the resolver then fails closed to redaction) rather than
  * failing the LLM call — the proxy's job is to serve the request; losing the
  * key costs audit fidelity, not the user's turn.
  */
-function readLockedChatDek(request: FastifyRequest): Buffer | null {
-  const raw = request.headers[LOCKED_CHAT_KEY_HEADER];
+function readEncryptedChatDek(request: FastifyRequest): Buffer | null {
+  const raw = request.headers[ENCRYPTED_CHAT_KEY_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   try {
-    return parseLockedChatDekHeader(value);
+    return parseEncryptedChatDekHeader(value);
   } catch {
     return null;
   }

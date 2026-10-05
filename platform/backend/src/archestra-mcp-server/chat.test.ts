@@ -5,12 +5,12 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ASK_USER_FULL_NAME,
 } from "@archestra/shared";
-import { vi } from "vitest";
 import config from "@/config";
 import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
 import { beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { Agent } from "@/types";
 import {
   type ArchestraContext,
@@ -18,7 +18,8 @@ import {
   getArchestraMcpTools,
 } from ".";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("chat tool execution", () => {
   let testAgent: Agent;
@@ -79,6 +80,21 @@ describe("chat tool execution", () => {
     const properties = tool?.inputSchema.properties;
     expect(properties).toHaveProperty("remedy_offer_ids");
     expect(properties).not.toHaveProperty("remedy_offers");
+  });
+
+  test("a malformed ask_user call is shown the advertised arguments, not the proxy's", async () => {
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      { options: [{ label: "Approve" }] },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    const text = result.content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("\n");
+    expect(text).toContain('"remedy_offer_ids"');
+    expect(text).not.toContain('"remedy_offers"');
   });
 
   const acceptingElicitation = {
@@ -355,7 +371,11 @@ describe("chat tool execution", () => {
     expect(text).toContain("The user picked: Accept for this session.");
     expect(text).toContain("Live remedy offers: offer-abc123");
     expect(text).toContain("archestra__execute_remedy_plan");
-    expect(text).toContain("Do not ask the user again");
+    // Credits the user's answer instead of hurrying past the user.
+    expect(text).toContain(
+      "The user already answered, so do not ask about the same plan again",
+    );
+    expect(text).not.toMatch(/continue now|immediately/i);
   });
 
   test("a staged HITL review replaces model-authored copy and records approval", async () => {

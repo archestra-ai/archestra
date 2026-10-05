@@ -140,6 +140,8 @@ export const handlers: HttpHandler[] = [
     ...getJson(`${entity}/labels/values`, []),
   ]),
   ...getJson("/api/auth/get-session", sessionSeed),
+  // Every signed-in user loads the banner; no notice is active by default.
+  ...getJson("/api/site-notification", null),
   ...getJson("/api/auth/default-credentials-status", { enabled: false }),
   ...getJson("/api/auth/organization/list", []),
   ...getJson("/api/auth/organization/get-full-organization", betterAuthOrgSeed),

@@ -241,7 +241,6 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
-      serviceAccount: result.serviceAccount,
       dontShowToast: true,
     });
   };

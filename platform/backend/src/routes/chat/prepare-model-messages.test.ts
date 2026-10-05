@@ -177,7 +177,7 @@ test("buildModelMessages emits the sandbox pointer when the agent can use the sa
   const org = await makeOrganization();
   const user = await makeUser();
   const role = await makeCustomRole(org.id, {
-    permission: { sandbox: ["execute"] },
+    permission: { agent: ["read"] },
   });
   await makeMember(user.id, org.id, { role: role.role });
   // accessAllTools makes the sandbox usable via dynamic dispatch, so this also
@@ -223,7 +223,7 @@ test("buildModelMessages omits the sandbox pointer when the agent cannot use the
   const org = await makeOrganization();
   const user = await makeUser();
   const role = await makeCustomRole(org.id, {
-    permission: { sandbox: ["execute"] },
+    permission: { agent: ["read"] },
   });
   await makeMember(user.id, org.id, { role: role.role });
   // No assigned sandbox tools and no accessAllTools: the agent can't run it,

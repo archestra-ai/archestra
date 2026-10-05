@@ -17,7 +17,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
   });
 
-  test("true when feature on, caller has sandbox:execute, and tools are assigned", async ({
+  test("true when feature on, caller has agent:read, and tools are assigned", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -28,7 +28,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
+      permission: { agent: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({ name: "Sandbox Agent" });
@@ -55,7 +55,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
+      permission: { agent: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({ name: "Bare Agent" });
@@ -79,7 +79,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
+      permission: { agent: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
     // No sandbox tools assigned, but accessAllTools lets a real user run them
@@ -110,7 +110,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
+      permission: { agent: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({
@@ -139,7 +139,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     ).toBe(false);
   });
 
-  test("false for accessAllTools without sandbox:execute", async ({
+  test("false for accessAllTools without agent:read", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -178,7 +178,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
+      permission: { agent: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
     const agent = await makeAgent({ name: "Sandbox Agent" });
@@ -194,7 +194,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     ).toBe(false);
   });
 
-  test("false without sandbox:execute", async ({
+  test("false without agent:read", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -204,7 +204,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    // skill:read but no sandbox:execute
+    // skill:read but no agent:read
     const role = await makeCustomRole(org.id, {
       permission: { skill: ["read"] },
     });
@@ -246,7 +246,7 @@ describe("isSkillSandboxAvailableForAgent", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { sandbox: ["execute"] },
+      permission: { agent: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
 

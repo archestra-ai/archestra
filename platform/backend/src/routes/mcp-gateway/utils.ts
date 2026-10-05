@@ -19,9 +19,11 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -276,10 +278,12 @@ const rawArchestraTokenCache =
     defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
   });
 
-/** Both APPA tools are served by this endpoint whenever APPA is enabled. */
+/** Runtime tools are advertised only while Guardrails v2 is active. */
 const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 ]);
 const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   "get_guardrails_policy",
@@ -298,7 +302,7 @@ const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
 
 /**
  * The tools the gateway advertises to every OpenAPPA session without an
- * assignment: the control and notice tools always, and `yell` while agent
+ * assignment: the control, notice and inbox tools, and `yell` while agent
  * reporting is on.
  */
 function isImplicitOpenAppaTool(shortName: string | null | undefined): boolean {
@@ -489,15 +493,15 @@ export async function createAgentServer(params: {
       config.agentRuntime.enabled || hasTaskStarter
         ? getImplicitTaskControlTools()
         : [];
-    // Both notice and remedy tools are required when OpenAPPA is active.
-    const implicitOpenAppaTools =
-      openappaEnabled() || (await isGuardrailsV2Active())
-        ? getArchestraMcpTools().filter((tool) =>
-            isImplicitOpenAppaTool(
-              archestraMcpBranding.getToolShortName(tool.name),
-            ),
-          )
-        : [];
+    // A thrown switch read must fail the list, not look like the switch is off.
+    const remediesActive = await isGuardrailsV2Active();
+    const implicitOpenAppaTools = getArchestraMcpTools().filter((tool) => {
+      const shortName = archestraMcpBranding.getToolShortName(tool.name);
+      if (APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "")) {
+        return remediesActive;
+      }
+      return shortName === "yell" && openappaYellEnabled();
+    });
     const implicitPolicyTools =
       openappaEnabled() && agent.agentType === "agent"
         ? getArchestraMcpTools().filter((tool) =>

@@ -26,10 +26,10 @@ const SYNC_PDF_PARSE_MAX_BYTES = 10 * 1024 * 1024; // 10MB
  * reference. Mutates `messages` in place. Idempotent across re-uploads of the
  * same bytes within an org (content-hash dedup).
  *
- * In a locked chat every stored column that carries content — the bytes, the
+ * In an encrypted chat every stored column that carries content — the bytes, the
  * filename, the extracted text — is sealed under `conversationKey`, and the
  * dedup hash is keyed by it. The route resolves that key before calling here
- * and fails the turn without one, so a locked chat never reaches this with a
+ * and fails the turn without one, so an encrypted chat never reaches this with a
  * null key and never writes an attachment in the clear.
  */
 export async function extractInlineAttachments(args: {

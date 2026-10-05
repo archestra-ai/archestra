@@ -1,15 +1,11 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
+import config from "@/config";
+import { isAllowedA2aAddress, validateOutboundUrl } from "./outbound-url";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    production: true,
-    test: { enableE2eTestEndpoints: false },
-  }),
-);
-
-const { isAllowedA2aAddress, validateOutboundUrl } = await import(
-  "./outbound-url"
-);
+beforeEach(() => {
+  config.production = true;
+  config.test.enableE2eTestEndpoints = false;
+});
 
 test("allows only public unicast DNS answers in production", () => {
   expect(isAllowedA2aAddress("8.8.8.8")).toBe(true);
@@ -63,36 +59,12 @@ describe("validateOutboundUrl in production", () => {
 
 describe("validateOutboundUrl outside production", () => {
   beforeEach(() => {
-    vi.resetModules();
+    config.production = false;
   });
 
-  async function devValidate(url: string) {
-    vi.doMock("@/config", async () =>
-      (await import("@/test/mocks/config")).configModuleMock({
-        production: false,
-        test: { enableE2eTestEndpoints: false },
-      }),
-    );
-    const { validateOutboundUrl: validate } = await import("./outbound-url");
-    return validate(url);
-  }
-
-  async function devAllowsAddress(address: string) {
-    vi.doMock("@/config", async () =>
-      (await import("@/test/mocks/config")).configModuleMock({
-        production: false,
-        test: { enableE2eTestEndpoints: false },
-      }),
-    );
-    const { isAllowedA2aAddress: allowsAddress } = await import(
-      "./outbound-url"
-    );
-    return allowsAddress(address);
-  }
-
-  test("allows loopback DNS answers but not private ranges", async () => {
-    expect(await devAllowsAddress("127.0.0.1")).toBe(true);
-    expect(await devAllowsAddress("10.0.0.1")).toBe(false);
+  test("allows loopback DNS answers but not private ranges", () => {
+    expect(isAllowedA2aAddress("127.0.0.1")).toBe(true);
+    expect(isAllowedA2aAddress("10.0.0.1")).toBe(false);
   });
 
   // Local development points webhooks and IdP discovery at localhost, so the
@@ -101,8 +73,8 @@ describe("validateOutboundUrl outside production", () => {
     ["http localhost", "http://localhost:9310/hook"],
     ["http loopback ip", "http://127.0.0.1:9310/hook"],
     ["https localhost", "https://localhost/hook"],
-  ])("allows %s for local development", async ([, url]) => {
-    expect(await devValidate(url)).toMatchObject({ ok: true });
+  ])("allows %s for local development", ([, url]) => {
+    expect(validateOutboundUrl(url)).toMatchObject({ ok: true });
   });
 
   test.for([
@@ -111,8 +83,8 @@ describe("validateOutboundUrl outside production", () => {
     ["link-local metadata", "http://169.254.169.254/latest/meta-data"],
     ["an RFC1918 address", "http://10.1.2.3/hook"],
     ["a private 192.168 address", "https://192.168.0.10/hook"],
-  ])("still rejects %s", async ([, url]) => {
-    expect(await devValidate(url)).toEqual({
+  ])("still rejects %s", ([, url]) => {
+    expect(validateOutboundUrl(url)).toEqual({
       ok: false,
       reason: "private_or_loopback_host",
     });

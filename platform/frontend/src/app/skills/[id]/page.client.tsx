@@ -11,7 +11,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { AgentBadge } from "@/components/agent-badge";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { PageLayout } from "@/components/page-layout";
@@ -311,7 +310,6 @@ function SkillDetailView({
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{skill.name}</span>
-          <AgentBadge type={skill.scope} className="font-normal" />
           <Badge variant="outline" className="font-normal">
             v{skill.latestVersion}
           </Badge>

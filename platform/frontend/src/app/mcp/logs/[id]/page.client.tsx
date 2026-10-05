@@ -3,18 +3,18 @@
 import {
   type archestraApiTypes,
   extractMcpExecutedAs,
-  isLockedChatUnavailableContent,
+  isEncryptedChatUnavailableContent,
   parseFullToolName,
 } from "@archestra/shared";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
+import {
+  EncryptedChatContentUnavailable,
+  EncryptedChatContentUnavailableLabel,
+} from "@/components/encrypted-chat-content-unavailable";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingWrapper } from "@/components/loading";
-import {
-  LockedChatContentUnavailable,
-  LockedChatContentUnavailableLabel,
-} from "@/components/locked-chat-content-unavailable";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -99,7 +99,7 @@ function McpToolCallDetail({
 
   const agent = agents?.find((a) => a.id === mcpToolCall.agentId);
   const method = mcpToolCall.method || "tools/call";
-  // A locked chat's tool call and result are stored encrypted (or,
+  // An encrypted chat's tool call and result are stored encrypted (or,
   // in the fail-closed case, not at all), so the columns hold a sentinel rather
   // than the recorded content. Split them out before anything reads a field off
   // them — the tool name, the arguments and the success/error status are all
@@ -110,12 +110,12 @@ function McpToolCallDetail({
   const nestedRedactedArgs = (
     mcpToolCall.toolCall as { arguments?: unknown } | null
   )?.arguments;
-  const lockedToolCall = isLockedChatUnavailableContent(mcpToolCall.toolCall)
+  const lockedToolCall = isEncryptedChatUnavailableContent(mcpToolCall.toolCall)
     ? mcpToolCall.toolCall
-    : isLockedChatUnavailableContent(nestedRedactedArgs)
+    : isEncryptedChatUnavailableContent(nestedRedactedArgs)
       ? nestedRedactedArgs
       : null;
-  const lockedToolResult = isLockedChatUnavailableContent(
+  const lockedToolResult = isEncryptedChatUnavailableContent(
     mcpToolCall.toolResult,
   )
     ? mcpToolCall.toolResult
@@ -237,7 +237,7 @@ function McpToolCallDetail({
         // which is exactly what the header's status slot is for.
         status={
           lockedToolResult ? (
-            <LockedChatContentUnavailableLabel value={lockedToolResult} />
+            <EncryptedChatContentUnavailableLabel value={lockedToolResult} />
           ) : (
             <Badge
               variant={
@@ -272,7 +272,7 @@ function McpToolCallDetail({
                 </AccordionTrigger>
                 <AccordionContent className="px-6 pb-4">
                   {lockedToolCall ? (
-                    <LockedChatContentUnavailable value={lockedToolCall} />
+                    <EncryptedChatContentUnavailable value={lockedToolCall} />
                   ) : (
                     <JsonCodeBlock value={toolCall?.arguments} />
                   )}
@@ -291,7 +291,7 @@ function McpToolCallDetail({
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
                 {lockedToolResult ? (
-                  <LockedChatContentUnavailable value={lockedToolResult} />
+                  <EncryptedChatContentUnavailable value={lockedToolResult} />
                 ) : (
                   <JsonCodeBlock value={toolResult} />
                 )}

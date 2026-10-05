@@ -168,9 +168,10 @@ rl.on("line", (line) => {
     await goToAddMcpServerPage(adminPage);
     await adminPage.getByRole("button", { name: "Start from scratch" }).click();
 
+    // The hosting radio is visually hidden inside its card; click the card.
     await adminPage
-      .getByRole("button", {
-        name: "Self-hosted",
+      .locator("label", {
+        has: adminPage.getByRole("radio", { name: /^Self-hosted/ }),
       })
       .click();
 
@@ -303,7 +304,10 @@ rl.on("line", (line) => {
     await commandInput.clear();
     await commandInput.fill("node");
 
-    await settingsDialog.getByLabel("stdio").click();
+    await settingsDialog
+      .getByRole("combobox", { name: "Transport Type" })
+      .click();
+    await adminPage.getByRole("option", { name: "stdio", exact: true }).click();
 
     const argumentsInput = settingsDialog.getByRole("textbox", {
       name: "Arguments (one per line)",

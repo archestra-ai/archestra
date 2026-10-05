@@ -57,7 +57,7 @@ export function useResourceOwnershipTransfer({
     kind === "catalog"
       ? { mcpRegistry: ["update"] }
       : kind === "remoteAgent"
-        ? { agentSettings: ["update"] }
+        ? { organizationSettings: ["update"] }
         : { [permissionResource]: ["update"] },
     "*",
   );

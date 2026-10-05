@@ -130,29 +130,10 @@ class BedrockOpenaiResponseAdapter
       refusalMessage,
       contentMessage,
     );
-    const usage = this.inner.getUsage();
-    return {
-      id: this.ctx.chatcmplId,
-      object: "chat.completion",
-      created: this.ctx.createdUnix,
-      model: this.ctx.requestedModel,
-      choices: [
-        {
-          index: 0,
-          logprobs: null,
-          finish_reason: "stop",
-          message: {
-            role: "assistant",
-            content: contentMessage,
-          },
-        },
-      ],
-      usage: {
-        prompt_tokens: usage.inputTokens ?? 0,
-        completion_tokens: usage.outputTokens ?? 0,
-        total_tokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-      },
-    } as unknown as BedrockResponse;
+    return converseResponseToOpenai(
+      this.rewrittenInner,
+      this.ctx,
+    ) as unknown as BedrockResponse;
   }
 }
 
@@ -162,6 +143,7 @@ class BedrockOpenaiStreamAdapter
   readonly provider = "bedrock" as const;
   private inner: LLMStreamAdapter<BedrockStreamEvent, BedrockResponse>;
   private encoder: ConverseToOpenaiSseEncoder;
+  private upstreamUsage?: BedrockResponse["usage"];
   /**
    * Tool-call events translated at arrival (once) and cached here. The handler
    * retrieves them via `getRawToolCallEvents()` after the per-tool policy
@@ -197,6 +179,7 @@ class BedrockOpenaiStreamAdapter
     const innerResult = this.inner.processChunk(event);
 
     const e = event as Loose;
+    if (e.metadata?.usage) this.upstreamUsage = e.metadata.usage;
     const isToolEvent = isToolCallEvent(e);
 
     if (isToolEvent) {
@@ -262,7 +245,10 @@ class BedrockOpenaiStreamAdapter
    * not through this method.
    */
   toProviderResponse(): BedrockResponse {
-    return this.inner.toProviderResponse();
+    return {
+      ...this.inner.toProviderResponse(),
+      ...(this.upstreamUsage ? { usage: this.upstreamUsage } : {}),
+    };
   }
 }
 

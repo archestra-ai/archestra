@@ -50,6 +50,20 @@ describe("openappaFailure", () => {
     );
   });
 
+  test.each([
+    "no prepared fork to open this child",
+    "parent session has not started",
+  ])("an unchecked child cannot be repaired by retrying: %s", (message) => {
+    const cause = new Error(message);
+    const failure = openappaFailure(cause);
+
+    expect(failure.statusCode).toBe(409);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).toContain("start a new subagent");
+    expect(failure.cause).toBe(cause);
+  });
+
   test("strips URL credentials and bounds the detail of a refused policy", () => {
     const failure = openappaFailure(
       new Error(

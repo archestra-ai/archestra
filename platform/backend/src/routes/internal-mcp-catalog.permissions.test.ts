@@ -8,8 +8,8 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { type Mock, vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import { InternalMcpCatalogModel } from "@/models";
 import {
   accessGrants,
@@ -22,10 +22,6 @@ import {
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
-vi.mock("@/auth");
-
-const mockHasPermission = hasPermission as Mock;
-
 const UNKNOWN_ID = "00000000-0000-4000-8000-000000000099";
 
 describe("internal MCP catalog built-in protection & ownership gates", () => {
@@ -35,7 +31,9 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -67,6 +65,7 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -157,7 +156,6 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
       { organizationId, authorId: member.id },
     );
     user = member;
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
 
     const response = await app.inject({
       method: "DELETE",
@@ -188,7 +186,6 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     user = member;
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
 
     const response = await app.inject({
       method: "DELETE",
@@ -227,7 +224,6 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
     });
 
     user = teamAdmin;
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
 
     // The same actor holds write — an edit at the item's scope succeeds.
     const edit = await app.inject({
@@ -272,7 +268,6 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     user = member;
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
 
     const response = await app.inject({
       method: "DELETE",

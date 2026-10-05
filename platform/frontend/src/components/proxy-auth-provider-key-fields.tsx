@@ -3,7 +3,7 @@
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import {
-  type ProviderApiKeyMap,
+  type ProviderApiKeyMappings,
   ProviderKeyMappingsField,
 } from "@/components/provider-key-mappings-field";
 import { Separator } from "@/components/ui/separator";
@@ -13,8 +13,8 @@ export function ProviderKeyAccessFields({
   onProviderApiKeyIdsChange,
   providerApiKeys,
 }: {
-  providerApiKeyIds: ProviderApiKeyMap;
-  onProviderApiKeyIdsChange: (value: ProviderApiKeyMap) => void;
+  providerApiKeyIds: ProviderApiKeyMappings;
+  onProviderApiKeyIdsChange: (value: ProviderApiKeyMappings) => void;
   providerApiKeys: LlmProviderApiKeyResponse[];
 }) {
   const docsUrl = getDocsUrl(

@@ -21,9 +21,13 @@ STAGING = ".archestra-transfers"
 ABSENT = "-"
 # Comfortably beyond both a ticket's lifetime and a transfer's own timeout.
 STALE_SECONDS = 6 * 60 * 60
+# Set by --root: a run's files that must stay out of its workspace.
+ROOT_OVERRIDE = None
 
 
 def workspace_root():
+    if ROOT_OVERRIDE:
+        return ROOT_OVERRIDE
     return os.environ.get(
         "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ROOT", "/home/node/workspace"
     )
@@ -323,6 +327,13 @@ def discard(entry_id):
 
 def dispatch(argv):
     """Route a streaming command. Staging ids are opaque and never traversed."""
+    global ROOT_OVERRIDE
+    if argv[0] == "--root":
+        # Only the control plane chooses this directory, and it may not exist
+        # until the first file is handed over.
+        os.makedirs(argv[1], 0o700, exist_ok=True)
+        ROOT_OVERRIDE = argv[1]
+        argv = argv[2:]
     command = argv[0]
     if command == "stat":
         return stat_path(argv[1])

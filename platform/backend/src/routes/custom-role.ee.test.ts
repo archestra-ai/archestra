@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -12,10 +12,6 @@ import TeamModel from "@/models/team";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import resourcePermissionRoutes from "./resource-permission/resource-permission.routes";
-
-vi.mock("@/auth");
-
-const hasPermissionMock = vi.mocked(hasPermission);
 
 describe("custom role routes", () => {
   let app: FastifyInstanceWithZod;
@@ -53,8 +49,10 @@ describe("custom role routes", () => {
       ).organizationId = organizationId;
     });
 
-    // Default: hasPermission grants admin access
-    hasPermissionMock.mockResolvedValue({ success: true, error: null });
+    // Permission checks resolve the authenticated user (an admin by default).
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: authenticatedUser.id } }) as never,
+    );
 
     const { default: organizationRoleRoutes } = await import(
       "./organization-role"
@@ -65,6 +63,7 @@ describe("custom role routes", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 

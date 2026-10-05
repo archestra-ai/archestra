@@ -34,7 +34,7 @@ import {
   encryptInteractionContent,
   readInteractionRow,
 } from "@/content-encryption/audit-rows";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -440,14 +440,14 @@ class InteractionModel {
   }
 
   /**
-   * @param auditContext when present, this interaction belongs to a locked-chat
+   * @param auditContext when present, this interaction belongs to an encrypted-chat
    * conversation: its content columns are encrypted under that conversation's
    * browser-held key and the row is stamped with the discriminator, instead of
    * being encrypted under the server key (or left plaintext).
    */
   static async create(
     data: InsertInteraction,
-    auditContext?: LockedChatAuditContext | null,
+    auditContext?: EncryptedChatAuditContext | null,
     opts?: {
       /**
        * Environment to stamp instead of the executing agent's own. The proxy
@@ -486,7 +486,7 @@ class InteractionModel {
     // plaintext before encryptInteractionContent runs below, and parent
     // resolution matches on the always-plaintext hash columns.
     //
-    // LockedChat rows are excluded outright. Today they could not qualify anyway
+    // EncryptedChat rows are excluded outright. Today they could not qualify anyway
     // (isEligible demands a Claude session source, and these are chat sources),
     // but relying on that coincidence would be fragile: a delta chain mixes rows
     // across requests and only the request that created a row carries its key,
@@ -502,7 +502,7 @@ class InteractionModel {
       .values({ id: uuidv7(), ...encryptInteractionContent(values, audit) })
       .returning();
     // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes. Safe for locked-chat rows too: this caller
+    // callers never see envelopes. Safe for encrypted-chat rows too: this caller
     // supplied the very key that just encrypted them.
     decryptInteractionContent(interaction, audit);
 
@@ -2385,7 +2385,7 @@ class InteractionModel {
         ? sql`
         UNION ALL
         (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
-                locked_chat_conversation_id
+                encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
          ORDER BY created_at ASC, id ASC
@@ -2396,7 +2396,7 @@ class InteractionModel {
         ? sql`
       UNION ALL
       SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
-             locked_chat_conversation_id
+             encrypted_chat_conversation_id
       FROM interactions
       WHERE id IN (${sql.join(
         uuidKeys.map((k) => sql`${k}::uuid`),
@@ -2418,10 +2418,10 @@ class InteractionModel {
       // Raw SQL bypasses Drizzle's column mapping, so timestamps arrive as
       // whatever the driver hands back — a Date on one, a string on another.
       created_at: Date | string;
-      // Selected so readInteractionRow can tell a locked-chat row from an
+      // Selected so readInteractionRow can tell an encrypted-chat row from an
       // ordinary one; without it the guard cannot fire and a DEK envelope
       // would be handed to the server-key decryptor.
-      locked_chat_conversation_id: string | null;
+      encrypted_chat_conversation_id: string | null;
     }>(sql`
       -- id tiebreak: turns within one session commonly land on the same
       -- millisecond, and created_at alone leaves their order undefined — which
@@ -2431,11 +2431,11 @@ class InteractionModel {
       -- resolve a delta parent). Final ordering is applied in JS, since the
       -- per-key UNION below has no single ordering to inherit.
       SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.response, t.type,
-             t.created_at, t.locked_chat_conversation_id
+             t.created_at, t.encrypted_chat_conversation_id
       FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
       CROSS JOIN LATERAL (
         (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
-                locked_chat_conversation_id
+                encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
          ORDER BY created_at DESC, id DESC

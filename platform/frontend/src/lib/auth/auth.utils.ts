@@ -1,6 +1,7 @@
 import {
   type Action,
   isPermissionActionGranted,
+  ManagedResourceSchema,
   type Permissions,
   type Resource,
   resourceLabels,
@@ -29,6 +30,10 @@ export function formatPermissionConstraint(permissions: Permissions): string {
   const noun = resources.length > 1 ? "permissions" : "permission";
 
   return `Available to roles with the ${resources.join(SEPARATOR)} ${noun}`;
+}
+
+export function permissionResourceLabel(resource: string): string {
+  return resourceLabels[resource as Resource] ?? resource;
 }
 
 export function hasPermissions(
@@ -76,6 +81,7 @@ export function hasPagePermissions(params: {
       (action) =>
         hasPermissions(params.userPermissions, { [resource]: [action] }) ||
         (action === "read" &&
+          ManagedResourceSchema.safeParse(resource).success &&
           params.capabilities.some(
             (grant) => grant.resource === resource && grant.action === "read",
           )),
@@ -86,7 +92,7 @@ export function hasPagePermissions(params: {
 /** One "Label (action, action)" entry per resource, in declaration order. */
 function describeResources(permissions: Permissions): string[] {
   return Object.entries(permissions).map(([resource, actions]) => {
-    const label = resourceLabels[resource as Resource] ?? resource;
+    const label = permissionResourceLabel(resource);
     return `${label} (${actions.join(SEPARATOR)})`;
   });
 }

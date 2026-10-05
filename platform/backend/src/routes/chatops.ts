@@ -26,7 +26,6 @@ import {
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
-  buildThreadMutedNotice,
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -398,9 +397,9 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 text: message.text,
                 // Teams stamps the bot's display name on every activity.
                 botDisplayName: context.activity.recipient?.name,
-                postMutedNotice: async () => {
-                  await context.sendActivity(buildThreadMutedNotice());
-                },
+                // The :mute: reaction (see isMuteReaction) is the only
+                // acknowledgement; no confirmation message is posted.
+                postMutedNotice: async () => {},
                 resolveAnswerAllWorkspaceId: async () => {
                   const teamId = await resolveTeamsWorkspaceId(
                     context,
@@ -1483,11 +1482,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
       if (request.body.directMessages.length > 0) {
-        const { success: canCreateAgentTrigger } = await hasPermission(
-          { agentTrigger: ["create"] },
+        const { success: canManageMessagingChannels } = await hasPermission(
+          { organizationSettings: ["update"] },
           request.headers,
         );
-        if (!canCreateAgentTrigger) {
+        if (!canManageMessagingChannels) {
           throw new ApiError(403, "Forbidden");
         }
       }
@@ -2548,9 +2547,9 @@ async function muteTeamsThreadAndNotify(
             null,
         ),
       }),
-    postMutedNotice: async () => {
-      await context.sendActivity(buildThreadMutedNotice());
-    },
+    // The :mute: reaction (see isMuteReaction) is the only acknowledgement;
+    // no confirmation message is posted.
+    postMutedNotice: async () => {},
   });
 }
 

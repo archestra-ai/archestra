@@ -16,7 +16,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
+import { LLM_PROXY_OAUTH_SCOPE, SESSION_ID_HEADER } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -24,6 +24,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -36,8 +37,10 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
+import { useMswServer } from "@/test/msw";
 import { ApiError, type OpenAi } from "@/types";
 import {
   openAiEmbeddingsAdapterFactory,
@@ -168,6 +171,72 @@ beforeEach(async () => {
       outputModalities: ["text"],
     });
   }
+});
+
+describe("OpenAI proxy reasoning effort", () => {
+  const server = useMswServer();
+
+  test("forwards max reasoning effort to the upstream provider", async ({
+    makeAgent,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Reasoning Effort Agent" });
+    await ModelModel.create({
+      externalId: "openai/reasoning-model",
+      provider: "openai",
+      modelId: "reasoning-model",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    let upstreamBody: unknown;
+    server.use(
+      http.post(
+        "https://api.openai.com/v1/chat/completions",
+        async ({ request }) => {
+          upstreamBody = await request.json();
+          return HttpResponse.json({
+            id: "chatcmpl-reasoning",
+            object: "chat.completion",
+            created: 1700000000,
+            model: "reasoning-model",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: "Hello", refusal: null },
+                finish_reason: "stop",
+                logprobs: null,
+              },
+            ],
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 10,
+              total_tokens: 22,
+            },
+          });
+        },
+      ),
+    );
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: { authorization: "Bearer test-key" },
+        payload: {
+          model: "reasoning-model",
+          messages: [{ role: "user", content: "Hello" }],
+          reasoning_effort: "max",
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamBody).toMatchObject({ reasoning_effort: "max" });
+      expect(response.json().choices[0].message.content).toBe("Hello");
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe("OpenAI proxy streaming", () => {
@@ -2230,6 +2299,147 @@ describe("OpenAI streaming mode", () => {
 
     // Response should have partial SSE data
     expect(response.body).toContain("data: ");
+  });
+});
+
+describe("OpenAI proxy on a ChatGPT subscription", () => {
+  test.for([
+    {
+      endpoint: "chat/completions",
+      payload: {
+        model: "gpt-5.5",
+        messages: [{ role: "user", content: "Hello!" }],
+      },
+    },
+    { endpoint: "responses", payload: { model: "gpt-5.5", input: "Hello!" } },
+  ])("keeps each agent's requests in one session on one Codex prompt cache ($endpoint)", async ({
+    endpoint,
+    payload,
+  }, {
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeMember,
+    makeSecret,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "ChatGPT subscription agent" });
+    const delegatedAgent = await makeAgent({
+      name: "ChatGPT subscription sub-agent",
+      organizationId: agent.organizationId,
+    });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeOpenAiCodexCredential({
+          refreshToken: "rt_subscription",
+          accountId: "account_123",
+          accessToken: "at_subscription",
+          accessTokenExpiresAtMs: Date.now() + 60 * 60 * 1000,
+        }),
+      },
+    });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "openai", userId: owner.id },
+    );
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "chatgpt-subscription-cache",
+      scope: "personal",
+      authorId: owner.id,
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+    const upstream: Array<{
+      sessionHeader: string | null;
+      promptCacheKey: unknown;
+    }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+        upstream.push({
+          sessionHeader: new Headers(init?.headers).get("session-id"),
+          promptCacheKey: JSON.parse(String(init?.body)).prompt_cache_key,
+        });
+        const completed = {
+          id: "resp_subscription",
+          object: "response",
+          created_at: Math.floor(Date.now() / 1000),
+          status: "completed",
+          model: "gpt-5.5",
+          output: [
+            {
+              id: "msg_subscription",
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [{ type: "output_text", text: "Hi", annotations: [] }],
+            },
+          ],
+          usage: {
+            input_tokens: 1000,
+            input_tokens_details: { cached_tokens: 896 },
+            output_tokens: 2,
+            total_tokens: 1002,
+          },
+        };
+        const events = [
+          { type: "response.output_text.delta", delta: "Hi" },
+          { type: "response.completed", response: completed },
+        ];
+        return new Response(
+          events
+            .map(
+              (event) =>
+                `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            )
+            .join(""),
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        );
+      }),
+    );
+
+    // The second agent stands for a delegated agent, which runs in its
+    // parent's session.
+    for (const [agentId, sessionId] of [
+      [agent.id, "run-1"],
+      [agent.id, "run-1"],
+      [agent.id, "run-2"],
+      [delegatedAgent.id, "run-1"],
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agentId}/${endpoint}`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${virtualKey}`,
+          [SESSION_ID_HEADER]: sessionId,
+        },
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+
+    const [first, second, otherRun, delegated] = upstream;
+    expect(upstream).toHaveLength(4);
+    expect(first.sessionHeader).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(first.promptCacheKey).toBe(first.sessionHeader);
+    expect(second).toEqual(first);
+    expect(otherRun.sessionHeader).not.toBe(first.sessionHeader);
+    expect(otherRun.promptCacheKey).toBe(otherRun.sessionHeader);
+    expect(delegated.sessionHeader).not.toBe(first.sessionHeader);
+    expect(delegated.promptCacheKey).toBe(delegated.sessionHeader);
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.at(-1)).toMatchObject({ cacheReadTokens: 896 });
   });
 });
 

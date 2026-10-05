@@ -384,7 +384,13 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
               onClick: () => openDuplicateDialog(role),
             },
           ];
-          return <TableRowActions actions={actions} />;
+          return (
+            <TableRowActions
+              actions={actions.slice(0, 1)}
+              dropdownActions={actions.slice(1)}
+              itemName={role.name}
+            />
+          );
         }
 
         const actions: TableRowAction[] = [
@@ -416,7 +422,13 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             },
           },
         ];
-        return <TableRowActions actions={actions} />;
+        return (
+          <TableRowActions
+            actions={actions.slice(0, 1)}
+            dropdownActions={actions.slice(1)}
+            itemName={role.name}
+          />
+        );
       },
     },
   ];
@@ -541,7 +553,8 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         onOpenChange={setCreateDialogOpen}
         title="Create role"
         size="large"
-        className="h-auto max-h-[90vh]"
+        className="h-[min(46rem,90dvh)] max-w-4xl"
+        headerClassName="text-left"
       >
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
@@ -588,7 +601,8 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         title="Edit role"
         description="Changes apply to everyone with this role, including through a team."
         size="large"
-        className="h-auto max-h-[90vh]"
+        className="h-[min(46rem,90dvh)] max-w-4xl"
+        headerClassName="text-left"
       >
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
@@ -641,10 +655,11 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             : undefined
         }
         size="large"
-        className="h-auto max-h-[90vh]"
+        className="h-[min(40rem,90dvh)] max-w-4xl"
+        headerClassName="text-left"
       >
         {viewPermissionsRole && (
-          <DialogBody className="p-6">
+          <DialogBody className="flex min-h-0 flex-1 flex-col p-5">
             <RolePermissionBuilder
               permission={viewPermissionsRole.permission}
               onChange={() => {}}
@@ -692,7 +707,7 @@ function RoleFormBody(props: {
   userPermissions: Permissions;
 }) {
   return (
-    <DialogBody className="space-y-5 p-6">
+    <DialogBody className="flex min-h-0 flex-1 flex-col gap-5 p-5">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <div className="space-y-2">
           <Label htmlFor={`${props.idPrefix}-name`}>Name</Label>
@@ -718,7 +733,10 @@ function RoleFormBody(props: {
           />
         </div>
       </div>
-      <section className="space-y-2" aria-label="Permissions">
+      <section
+        className="flex min-h-0 flex-1 flex-col gap-3"
+        aria-label="Permissions"
+      >
         <h3 className="text-sm font-medium">Permissions</h3>
         <RolePermissionBuilder
           permission={props.permission}

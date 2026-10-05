@@ -3,7 +3,7 @@
 import {
   type archestraApiTypes,
   extractMcpExecutedAs,
-  isLockedChatUnavailableContent,
+  isEncryptedChatUnavailableContent,
   parseFullToolName,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -11,13 +11,13 @@ import { Boxes, MessagesSquare, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
+import { EncryptedChatContentUnavailableLabel } from "@/components/encrypted-chat-content-unavailable";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
 } from "@/components/filter-bar";
-import { LockedChatContentUnavailableLabel } from "@/components/locked-chat-content-unavailable";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
@@ -300,7 +300,7 @@ function McpToolCallsTable({
       cell: ({ row }) => {
         const call = row.original.toolCall;
         const method = row.original.method || "tools/call";
-        const fullName = isLockedChatUnavailableContent(call)
+        const fullName = isEncryptedChatUnavailableContent(call)
           ? undefined
           : call?.name;
         const toolName = fullName
@@ -320,8 +320,8 @@ function McpToolCallsTable({
             </span>
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">
-                {isLockedChatUnavailableContent(call) ? (
-                  <LockedChatContentUnavailableLabel value={call} />
+                {isEncryptedChatUnavailableContent(call) ? (
+                  <EncryptedChatContentUnavailableLabel value={call} />
                 ) : toolName ? (
                   <code className="font-mono text-xs">{toolName}</code>
                 ) : (
@@ -420,11 +420,11 @@ function McpToolCallsTable({
         const result = row.original.toolResult;
         const method = row.original.method || "tools/call";
 
-        // The status lives inside the result, so a locked-chat row has none to
+        // The status lives inside the result, so an encrypted-chat row has none to
         // report. Falling through to the "Success" badge below would assert an
         // outcome the row does not record.
-        if (isLockedChatUnavailableContent(result)) {
-          return <LockedChatContentUnavailableLabel value={result} />;
+        if (isEncryptedChatUnavailableContent(result)) {
+          return <EncryptedChatContentUnavailableLabel value={result} />;
         }
 
         // For tools/call, resolve success / error / cancelled (a call the

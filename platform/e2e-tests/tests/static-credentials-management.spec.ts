@@ -32,8 +32,6 @@ import {
   waitForMcpServerToolsDiscovered,
 } from "../utils";
 
-test.describe.configure({ mode: "serial" });
-
 test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
   const MATRIX: { user: "Admin" | "Member" }[] = [

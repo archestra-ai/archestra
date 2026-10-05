@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.4.0-rc.28",
+  "version": "1.4.0-rc.31",
   "description": "",
   "author": "",
   "private": true,
@@ -33,6 +33,7 @@
     "check:sandbox-base": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-sandbox-base-sync.ts",
     "check:test-imports": "dependency-cruiser --config .dependency-cruiser.mjs 'src/**/*.unit.test.ts' src/plugins/github-import.ts src/plugins/github-tree.ts src/plugins/plugin-tree-files.ts --output-type err && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-test-fixture-imports.ts",
     "update:codex-models-client-version": "node scripts/update-codex-models-client-version.mjs",
+    "update:grok-client-version": "node scripts/update-grok-client-version.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node ./scripts/migrate-with-lock.mjs",
     "db:studio": "drizzle-kit studio",

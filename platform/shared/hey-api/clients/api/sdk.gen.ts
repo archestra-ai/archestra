@@ -27,7 +27,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const transferRemoteAgentOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferRemoteAgentOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferRemoteAgentOwnershipResponses, TransferRemoteAgentOwnershipErrors, ThrowOnError>({
     url: '/api/a2a/remote-agents/{id}/transfer-ownership',
@@ -80,7 +80,7 @@ export const syncAgentA2aDelegations = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const inspectA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<InspectA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).post<InspectA2aRemoteAgentResponses, InspectA2aRemoteAgentErrors, ThrowOnError>({
     url: '/api/a2a/remote-agents/inspect',
@@ -100,7 +100,7 @@ export const inspectA2aRemoteAgent = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const listA2aRemoteAgents = <ThrowOnError extends boolean = false>(options?: Options<ListA2aRemoteAgentsData, ThrowOnError>) => (options?.client ?? client).get<ListA2aRemoteAgentsResponses, ListA2aRemoteAgentsErrors, ThrowOnError>({ url: '/api/a2a/remote-agents', ...options });
 
@@ -113,7 +113,7 @@ export const listA2aRemoteAgents = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const createA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<CreateA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).post<CreateA2aRemoteAgentResponses, CreateA2aRemoteAgentErrors, ThrowOnError>({
     url: '/api/a2a/remote-agents',
@@ -133,7 +133,7 @@ export const createA2aRemoteAgent = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const deleteA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).delete<DeleteA2aRemoteAgentResponses, DeleteA2aRemoteAgentErrors, ThrowOnError>({ url: '/api/a2a/remote-agents/{id}', ...options });
 
@@ -146,7 +146,7 @@ export const deleteA2aRemoteAgent = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const getA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<GetA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).get<GetA2aRemoteAgentResponses, GetA2aRemoteAgentErrors, ThrowOnError>({ url: '/api/a2a/remote-agents/{id}', ...options });
 
@@ -159,7 +159,7 @@ export const getA2aRemoteAgent = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).put<UpdateA2aRemoteAgentResponses, UpdateA2aRemoteAgentErrors, ThrowOnError>({
     url: '/api/a2a/remote-agents/{id}',
@@ -179,7 +179,7 @@ export const updateA2aRemoteAgent = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agentSettings:read`: View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const listA2aRemoteAgentRuns = <ThrowOnError extends boolean = false>(options: Options<ListA2aRemoteAgentRunsData, ThrowOnError>) => (options.client ?? client).get<ListA2aRemoteAgentRunsResponses, ListA2aRemoteAgentRunsErrors, ThrowOnError>({ url: '/api/a2a/remote-agents/{id}/runs', ...options });
 
@@ -231,7 +231,7 @@ export const postV2A2aByAgentId = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * Requires `agent:read`; when `status=deleted`, requires `agent:delete`. External A2A rows are limited to agents visible to the caller unless they have `agentSettings:update`; when `selectableOnly=true`, external rows are omitted unless the caller has that permission.
+ * Requires `agent:read`; when `status=deleted`, requires `agent:delete`. External A2A rows are limited to agents visible to the caller unless they have `organizationSettings:update`; when `selectableOnly=true`, external rows are omitted unless the caller has that permission.
  */
 export const getAgentCatalog = <ThrowOnError extends boolean = false>(options?: Options<GetAgentCatalogData, ThrowOnError>) => (options?.client ?? client).get<GetAgentCatalogResponses, GetAgentCatalogErrors, ThrowOnError>({ url: '/api/agent-catalog', ...options });
 
@@ -3272,7 +3272,7 @@ export const postApiWebhooksChatopsSlackSlashCommand = <ThrowOnError extends boo
  *
  * Authorization:
  *
- * `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getChatOpsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetChatOpsStatusData, ThrowOnError>) => (options?.client ?? client).get<GetChatOpsStatusResponses, GetChatOpsStatusErrors, ThrowOnError>({ url: '/api/chatops/status', ...options });
 
@@ -3285,7 +3285,7 @@ export const getChatOpsStatus = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const listChatOpsBindings = <ThrowOnError extends boolean = false>(options?: Options<ListChatOpsBindingsData, ThrowOnError>) => (options?.client ?? client).get<ListChatOpsBindingsResponses, ListChatOpsBindingsErrors, ThrowOnError>({ url: '/api/chatops/bindings', ...options });
 
@@ -3298,7 +3298,7 @@ export const listChatOpsBindings = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `agentTrigger:update`: Modify agent trigger configurations
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const bulkUpdateChatOpsBindings = <ThrowOnError extends boolean = false>(options: Options<BulkUpdateChatOpsBindingsData, ThrowOnError>) => (options.client ?? client).patch<BulkUpdateChatOpsBindingsResponses, BulkUpdateChatOpsBindingsErrors, ThrowOnError>({
     url: '/api/chatops/bindings',
@@ -3318,7 +3318,7 @@ export const bulkUpdateChatOpsBindings = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `agentTrigger:delete`: Remove agent triggers
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const deleteChatOpsBinding = <ThrowOnError extends boolean = false>(options: Options<DeleteChatOpsBindingData, ThrowOnError>) => (options.client ?? client).delete<DeleteChatOpsBindingResponses, DeleteChatOpsBindingErrors, ThrowOnError>({ url: '/api/chatops/bindings/{id}', ...options });
 
@@ -3331,7 +3331,7 @@ export const deleteChatOpsBinding = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agentTrigger:update`: Modify agent trigger configurations
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateChatOpsBinding = <ThrowOnError extends boolean = false>(options: Options<UpdateChatOpsBindingData, ThrowOnError>) => (options.client ?? client).patch<UpdateChatOpsBindingResponses, UpdateChatOpsBindingErrors, ThrowOnError>({
     url: '/api/chatops/bindings/{id}',
@@ -3351,7 +3351,7 @@ export const updateChatOpsBinding = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agentTrigger:create`: Set up new agent triggers
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const createChatOpsDmBinding = <ThrowOnError extends boolean = false>(options: Options<CreateChatOpsDmBindingData, ThrowOnError>) => (options.client ?? client).post<CreateChatOpsDmBindingResponses, CreateChatOpsDmBindingErrors, ThrowOnError>({
     url: '/api/chatops/bindings/dm',
@@ -3371,8 +3371,8 @@ export const createChatOpsDmBinding = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
- * `agentTrigger:update`: Modify agent trigger configurations
+ * `agent:read`: View and list agents, and use their code sandboxes and files
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const applyChatOpsBindingPlan = <ThrowOnError extends boolean = false>(options: Options<ApplyChatOpsBindingPlanData, ThrowOnError>) => (options.client ?? client).post<ApplyChatOpsBindingPlanResponses, ApplyChatOpsBindingPlanErrors, ThrowOnError>({
     url: '/api/chatops/bindings/assignment-plan',
@@ -3392,7 +3392,7 @@ export const applyChatOpsBindingPlan = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agentTrigger:update`: Modify agent trigger configurations
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateChatOpsConfigInQuickstart = <ThrowOnError extends boolean = false>(options: Options<UpdateChatOpsConfigInQuickstartData, ThrowOnError>) => (options.client ?? client).put<UpdateChatOpsConfigInQuickstartResponses, UpdateChatOpsConfigInQuickstartErrors, ThrowOnError>({
     url: '/api/chatops/config/ms-teams',
@@ -3412,7 +3412,7 @@ export const updateChatOpsConfigInQuickstart = <ThrowOnError extends boolean = f
  *
  * Authorization:
  *
- * `agentTrigger:update`: Modify agent trigger configurations
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const disconnectNgrok = <ThrowOnError extends boolean = false>(options?: Options<DisconnectNgrokData, ThrowOnError>) => (options?.client ?? client).delete<DisconnectNgrokResponses, DisconnectNgrokErrors, ThrowOnError>({ url: '/api/chatops/config/ngrok', ...options });
 
@@ -3425,7 +3425,7 @@ export const disconnectNgrok = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getNgrokConfig = <ThrowOnError extends boolean = false>(options?: Options<GetNgrokConfigData, ThrowOnError>) => (options?.client ?? client).get<GetNgrokConfigResponses, GetNgrokConfigErrors, ThrowOnError>({ url: '/api/chatops/config/ngrok', ...options });
 
@@ -3438,7 +3438,7 @@ export const getNgrokConfig = <ThrowOnError extends boolean = false>(options?: O
  *
  * Authorization:
  *
- * `agentTrigger:update`: Modify agent trigger configurations
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const connectNgrok = <ThrowOnError extends boolean = false>(options: Options<ConnectNgrokData, ThrowOnError>) => (options.client ?? client).put<ConnectNgrokResponses, ConnectNgrokErrors, ThrowOnError>({
     url: '/api/chatops/config/ngrok',
@@ -3458,7 +3458,7 @@ export const connectNgrok = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `agentTrigger:update`: Modify agent trigger configurations
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateSlackChatOpsConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateSlackChatOpsConfigData, ThrowOnError>) => (options.client ?? client).put<UpdateSlackChatOpsConfigResponses, UpdateSlackChatOpsConfigErrors, ThrowOnError>({
     url: '/api/chatops/config/slack',
@@ -3478,7 +3478,7 @@ export const updateSlackChatOpsConfig = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `agentTrigger:update`: Modify agent trigger configurations
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateTelegramChatOpsConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateTelegramChatOpsConfigData, ThrowOnError>) => (options.client ?? client).put<UpdateTelegramChatOpsConfigResponses, UpdateTelegramChatOpsConfigErrors, ThrowOnError>({
     url: '/api/chatops/config/telegram',
@@ -3531,7 +3531,7 @@ export const linkTelegramChatOpsAccount = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const refreshChatOpsChannelDiscovery = <ThrowOnError extends boolean = false>(options: Options<RefreshChatOpsChannelDiscoveryData, ThrowOnError>) => (options.client ?? client).post<RefreshChatOpsChannelDiscoveryResponses, RefreshChatOpsChannelDiscoveryErrors, ThrowOnError>({
     url: '/api/chatops/channel-discovery/refresh',
@@ -4451,7 +4451,7 @@ export const groqChatCompletionsWithAgent = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getGuardrailsDeployment = <ThrowOnError extends boolean = false>(options?: Options<GetGuardrailsDeploymentData, ThrowOnError>) => (options?.client ?? client).get<GetGuardrailsDeploymentResponses, GetGuardrailsDeploymentErrors, ThrowOnError>({ url: '/api/guardrails-deployment', ...options });
 
@@ -4462,7 +4462,7 @@ export const getGuardrailsDeployment = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `organization:update`: No description available
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateGuardrailsDeployment = <ThrowOnError extends boolean = false>(options: Options<UpdateGuardrailsDeploymentData, ThrowOnError>) => (options.client ?? client).put<UpdateGuardrailsDeploymentResponses, UpdateGuardrailsDeploymentErrors, ThrowOnError>({
     url: '/api/guardrails-deployment',
@@ -4498,7 +4498,7 @@ export const annotateGuardrailsTool = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getGuardrailsPolicy = <ThrowOnError extends boolean = false>(options?: Options<GetGuardrailsPolicyData, ThrowOnError>) => (options?.client ?? client).get<GetGuardrailsPolicyResponses, GetGuardrailsPolicyErrors, ThrowOnError>({ url: '/api/guardrails-policy', ...options });
 
@@ -4509,7 +4509,7 @@ export const getGuardrailsPolicy = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const updateGuardrailsPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateGuardrailsPolicyData, ThrowOnError>) => (options.client ?? client).put<UpdateGuardrailsPolicyResponses, UpdateGuardrailsPolicyErrors, ThrowOnError>({
     url: '/api/guardrails-policy',
@@ -4527,7 +4527,7 @@ export const updateGuardrailsPolicy = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const validateGuardrailsPolicy = <ThrowOnError extends boolean = false>(options: Options<ValidateGuardrailsPolicyData, ThrowOnError>) => (options.client ?? client).post<ValidateGuardrailsPolicyResponses, ValidateGuardrailsPolicyErrors, ThrowOnError>({
     url: '/api/guardrails-policy/validate',
@@ -4642,7 +4642,7 @@ export const getAgentEmailAddress = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getIncomingEmailStatus = <ThrowOnError extends boolean = false>(options?: Options<GetIncomingEmailStatusData, ThrowOnError>) => (options?.client ?? client).get<GetIncomingEmailStatusResponses, GetIncomingEmailStatusErrors, ThrowOnError>({ url: '/api/incoming-email/status', ...options });
 
@@ -4655,7 +4655,7 @@ export const getIncomingEmailStatus = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `agentTrigger:create`: Set up new agent triggers
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const setupIncomingEmailWebhook = <ThrowOnError extends boolean = false>(options: Options<SetupIncomingEmailWebhookData, ThrowOnError>) => (options.client ?? client).post<SetupIncomingEmailWebhookResponses, SetupIncomingEmailWebhookErrors, ThrowOnError>({
     url: '/api/incoming-email/setup',
@@ -4675,7 +4675,7 @@ export const setupIncomingEmailWebhook = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `agentTrigger:update`: Modify agent trigger configurations
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const renewIncomingEmailSubscription = <ThrowOnError extends boolean = false>(options?: Options<RenewIncomingEmailSubscriptionData, ThrowOnError>) => (options?.client ?? client).post<RenewIncomingEmailSubscriptionResponses, RenewIncomingEmailSubscriptionErrors, ThrowOnError>({ url: '/api/incoming-email/renew', ...options });
 
@@ -4688,7 +4688,7 @@ export const renewIncomingEmailSubscription = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * `agentTrigger:delete`: Remove agent triggers
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const deleteIncomingEmailSubscription = <ThrowOnError extends boolean = false>(options?: Options<DeleteIncomingEmailSubscriptionData, ThrowOnError>) => (options?.client ?? client).delete<DeleteIncomingEmailSubscriptionResponses, DeleteIncomingEmailSubscriptionErrors, ThrowOnError>({ url: '/api/incoming-email/subscription', ...options });
 
@@ -5027,12 +5027,12 @@ export const deleteInternalMcpCatalogItemByName = <ThrowOnError extends boolean 
  *
  * Authorization:
  *
- * `mcpRegistry:manage-deleted`: View and restore soft-deleted MCP registry entries
+ * None (no additional RBAC permission required)
  */
 export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<RestoreInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).post<RestoreInternalMcpCatalogItemResponses, RestoreInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/restore', ...options });
 
 /**
- * Generate a deployment YAML template preview for a catalog item
+ * Generate a deployment YAML template preview. Requires configure-deployment-spec on this MCP registry entry.
  *
  * Authentication:
  *
@@ -5045,7 +5045,7 @@ export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = fal
 export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentYamlPreviewData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentYamlPreviewResponses, GetDeploymentYamlPreviewErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/deployment-yaml-preview', ...options });
 
 /**
- * Validate a deployment YAML template
+ * Validate a deployment YAML template. Requires configure-deployment-spec on the supplied catalogId, or on all MCP registry entries when catalogId is omitted.
  *
  * Authentication:
  *
@@ -5065,7 +5065,7 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
- * Reset the deployment YAML to default by clearing the custom YAML
+ * Reset the deployment YAML to default by clearing the custom YAML. Requires configure-deployment-spec on this MCP registry entry.
  *
  * Authentication:
  *
@@ -6872,7 +6872,7 @@ export const installMcpServer = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * `mcpServerInstallation:delete`: Uninstall MCP servers
+ * `mcpServerInstallation:delete`: Uninstall, view deleted, and restore MCP servers within your access
  */
 export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpServerResponses, DeleteMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}', ...options });
 
@@ -6918,7 +6918,7 @@ export const reauthenticateMcpServer = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `mcpServerInstallation:delete`: Uninstall MCP servers
+ * `mcpServerInstallation:delete`: Uninstall, view deleted, and restore MCP servers within your access
  */
 export const bulkDeleteMcpServers = <ThrowOnError extends boolean = false>(options: Options<BulkDeleteMcpServersData, ThrowOnError>) => (options.client ?? client).delete<BulkDeleteMcpServersResponses, BulkDeleteMcpServersErrors, ThrowOnError>({
     url: '/api/mcp_server/bulk',
@@ -6938,7 +6938,7 @@ export const bulkDeleteMcpServers = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `mcpServerInstallation:manage-deleted`: View and restore soft-deleted (uninstalled) MCP servers
+ * `mcpServerInstallation:delete`: Uninstall, view deleted, and restore MCP servers within your access
  */
 export const restoreMcpServer = <ThrowOnError extends boolean = false>(options: Options<RestoreMcpServerData, ThrowOnError>) => (options.client ?? client).post<RestoreMcpServerResponses, RestoreMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/restore', ...options });
 
@@ -7644,7 +7644,7 @@ export const markOnboardingNavItemsSeen = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const getOnboardingSurveyEligibility = <ThrowOnError extends boolean = false>(options?: Options<GetOnboardingSurveyEligibilityData, ThrowOnError>) => (options?.client ?? client).get<GetOnboardingSurveyEligibilityResponses, GetOnboardingSurveyEligibilityErrors, ThrowOnError>({ url: '/api/onboarding/survey-eligibility', ...options });
 
@@ -7657,7 +7657,7 @@ export const getOnboardingSurveyEligibility = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const submitOnboardingSurvey = <ThrowOnError extends boolean = false>(options: Options<SubmitOnboardingSurveyData, ThrowOnError>) => (options.client ?? client).post<SubmitOnboardingSurveyResponses, SubmitOnboardingSurveyErrors, ThrowOnError>({
     url: '/api/onboarding/survey',
@@ -7677,7 +7677,7 @@ export const submitOnboardingSurvey = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const getFeedbackPopupActivation = <ThrowOnError extends boolean = false>(options?: Options<GetFeedbackPopupActivationData, ThrowOnError>) => (options?.client ?? client).get<GetFeedbackPopupActivationResponses, GetFeedbackPopupActivationErrors, ThrowOnError>({ url: '/api/onboarding/feedback-popup-activation', ...options });
 
@@ -7867,7 +7867,7 @@ export const openaiCodexDeviceAuthPoll = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaBatteries = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaBatteriesData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaBatteriesResponses, GetOpenappaBatteriesErrors, ThrowOnError>({ url: '/api/openappa/batteries', ...options });
 
@@ -7878,7 +7878,7 @@ export const getOpenappaBatteries = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaPolicyDeclarations = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaPolicyDeclarationsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaPolicyDeclarationsResponses, GetOpenappaPolicyDeclarationsErrors, ThrowOnError>({ url: '/api/openappa/policy-declarations', ...options });
 
@@ -7889,7 +7889,7 @@ export const getOpenappaPolicyDeclarations = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaBatteryPolicySource = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaBatteryPolicySourceData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaBatteryPolicySourceResponses, GetOpenappaBatteryPolicySourceErrors, ThrowOnError>({ url: '/api/openappa/battery-policy-source', ...options });
 
@@ -7900,7 +7900,7 @@ export const getOpenappaBatteryPolicySource = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaEffectivePolicy = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaEffectivePolicyData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaEffectivePolicyResponses, GetOpenappaEffectivePolicyErrors, ThrowOnError>({ url: '/api/openappa/effective-policy', ...options });
 
@@ -7911,7 +7911,7 @@ export const getOpenappaEffectivePolicy = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaBatteryMatches = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaBatteryMatchesData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaBatteryMatchesResponses, GetOpenappaBatteryMatchesErrors, ThrowOnError>({ url: '/api/openappa/battery-matches', ...options });
 
@@ -7922,7 +7922,7 @@ export const getOpenappaBatteryMatches = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const createOpenappaBatteryInstall = <ThrowOnError extends boolean = false>(options: Options<CreateOpenappaBatteryInstallData, ThrowOnError>) => (options.client ?? client).post<CreateOpenappaBatteryInstallResponses, CreateOpenappaBatteryInstallErrors, ThrowOnError>({
     url: '/api/openappa/battery-installs',
@@ -7940,7 +7940,7 @@ export const createOpenappaBatteryInstall = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const deleteOpenappaBatteryInstall = <ThrowOnError extends boolean = false>(options: Options<DeleteOpenappaBatteryInstallData, ThrowOnError>) => (options.client ?? client).delete<DeleteOpenappaBatteryInstallResponses, DeleteOpenappaBatteryInstallErrors, ThrowOnError>({ url: '/api/openappa/battery-installs/{id}', ...options });
 
@@ -7951,7 +7951,7 @@ export const deleteOpenappaBatteryInstall = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const updateOpenappaBatteryInstall = <ThrowOnError extends boolean = false>(options: Options<UpdateOpenappaBatteryInstallData, ThrowOnError>) => (options.client ?? client).patch<UpdateOpenappaBatteryInstallResponses, UpdateOpenappaBatteryInstallErrors, ThrowOnError>({
     url: '/api/openappa/battery-installs/{id}',
@@ -7969,7 +7969,7 @@ export const updateOpenappaBatteryInstall = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const deleteOpenappaBatteryInclude = <ThrowOnError extends boolean = false>(options: Options<DeleteOpenappaBatteryIncludeData, ThrowOnError>) => (options.client ?? client).delete<DeleteOpenappaBatteryIncludeResponses, DeleteOpenappaBatteryIncludeErrors, ThrowOnError>({ url: '/api/openappa/battery-includes/{name}', ...options });
 
@@ -7980,7 +7980,7 @@ export const deleteOpenappaBatteryInclude = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const uploadOpenappaBatteryPackage = <ThrowOnError extends boolean = false>(options: Options<UploadOpenappaBatteryPackageData, ThrowOnError>) => (options.client ?? client).put<UploadOpenappaBatteryPackageResponses, UploadOpenappaBatteryPackageErrors, ThrowOnError>({
     url: '/api/openappa/battery-packages/{name}',
@@ -7998,7 +7998,7 @@ export const uploadOpenappaBatteryPackage = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const deleteOpenappaBatteryPackage = <ThrowOnError extends boolean = false>(options: Options<DeleteOpenappaBatteryPackageData, ThrowOnError>) => (options.client ?? client).delete<DeleteOpenappaBatteryPackageResponses, DeleteOpenappaBatteryPackageErrors, ThrowOnError>({ url: '/api/openappa/battery-packages/{contentHash}', ...options });
 
@@ -8009,7 +8009,7 @@ export const deleteOpenappaBatteryPackage = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaCoverageEntities = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaCoverageEntitiesData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaCoverageEntitiesResponses, GetOpenappaCoverageEntitiesErrors, ThrowOnError>({ url: '/api/openappa/coverage/entities', ...options });
 
@@ -8020,7 +8020,7 @@ export const getOpenappaCoverageEntities = <ThrowOnError extends boolean = false
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaCoverageTools = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaCoverageToolsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaCoverageToolsResponses, GetOpenappaCoverageToolsErrors, ThrowOnError>({ url: '/api/openappa/coverage/tools', ...options });
 
@@ -8031,12 +8031,12 @@ export const getOpenappaCoverageTools = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const getOpenappaCoverageSummary = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaCoverageSummaryData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaCoverageSummaryResponses, GetOpenappaCoverageSummaryErrors, ThrowOnError>({ url: '/api/openappa/coverage/summary', ...options });
 
 /**
- * Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.
+ * Export the external consults Guardrails recorded in the active organization, newest first. `openappaDiagnostics:read` returns the consults of the caller's own sessions. `openappaDiagnostics:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.
  *
  * Authentication:
  *
@@ -8044,7 +8044,7 @@ export const getOpenappaCoverageSummary = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const getOpenappaExternalConsults = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaExternalConsultsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaExternalConsultsResponses, GetOpenappaExternalConsultsErrors, ThrowOnError>({ url: '/api/openappa/external-consults', ...options });
 
@@ -8055,7 +8055,7 @@ export const getOpenappaExternalConsults = <ThrowOnError extends boolean = false
  *
  * Authorization:
  *
- * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getAppaGithubSync = <ThrowOnError extends boolean = false>(options?: Options<GetAppaGithubSyncData, ThrowOnError>) => (options?.client ?? client).get<GetAppaGithubSyncResponses, GetAppaGithubSyncErrors, ThrowOnError>({ url: '/api/openappa/github-sync', ...options });
 
@@ -8066,7 +8066,7 @@ export const getAppaGithubSync = <ThrowOnError extends boolean = false>(options?
  *
  * Authorization:
  *
- * `organization:update`: No description available
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateAppaGithubSync = <ThrowOnError extends boolean = false>(options: Options<UpdateAppaGithubSyncData, ThrowOnError>) => (options.client ?? client).patch<UpdateAppaGithubSyncResponses, UpdateAppaGithubSyncErrors, ThrowOnError>({
     url: '/api/openappa/github-sync',
@@ -8084,7 +8084,7 @@ export const updateAppaGithubSync = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `organization:update`: No description available
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const configureAppaGithubSync = <ThrowOnError extends boolean = false>(options: Options<ConfigureAppaGithubSyncData, ThrowOnError>) => (options.client ?? client).put<ConfigureAppaGithubSyncResponses, ConfigureAppaGithubSyncErrors, ThrowOnError>({
     url: '/api/openappa/github-sync',
@@ -8102,7 +8102,7 @@ export const configureAppaGithubSync = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `organization:update`: No description available
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const createAppaGithubRepository = <ThrowOnError extends boolean = false>(options: Options<CreateAppaGithubRepositoryData, ThrowOnError>) => (options.client ?? client).post<CreateAppaGithubRepositoryResponses, CreateAppaGithubRepositoryErrors, ThrowOnError>({
     url: '/api/openappa/github-sync/repository',
@@ -8120,7 +8120,7 @@ export const createAppaGithubRepository = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
  */
 export const acceptHeldAppaGithubPull = <ThrowOnError extends boolean = false>(options?: Options<AcceptHeldAppaGithubPullData, ThrowOnError>) => (options?.client ?? client).post<AcceptHeldAppaGithubPullResponses, AcceptHeldAppaGithubPullErrors, ThrowOnError>({ url: '/api/openappa/github-sync/accept-held', ...options });
 
@@ -8149,7 +8149,7 @@ export const consultOpenappaBatteryHelper = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const getOpenAppaYells = <ThrowOnError extends boolean = false>(options?: Options<GetOpenAppaYellsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenAppaYellsResponses, GetOpenAppaYellsErrors, ThrowOnError>({ url: '/api/openappa/yells', ...options });
 
@@ -8160,7 +8160,7 @@ export const getOpenAppaYells = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const getOpenAppaYellsSummary = <ThrowOnError extends boolean = false>(options?: Options<GetOpenAppaYellsSummaryData, ThrowOnError>) => (options?.client ?? client).get<GetOpenAppaYellsSummaryResponses, GetOpenAppaYellsSummaryErrors, ThrowOnError>({ url: '/api/openappa/yells/summary', ...options });
 
@@ -8171,7 +8171,7 @@ export const getOpenAppaYellsSummary = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const getOpenAppaYell = <ThrowOnError extends boolean = false>(options: Options<GetOpenAppaYellData, ThrowOnError>) => (options.client ?? client).get<GetOpenAppaYellResponses, GetOpenAppaYellErrors, ThrowOnError>({ url: '/api/openappa/yells/{id}', ...options });
 
@@ -8182,8 +8182,8 @@ export const getOpenAppaYell = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
- * `toolPolicy:update`: Modify tools, tool configuration, and security policies
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
+ * `openappaDiagnostics:update`: Resolve and reopen organization yells
  */
 export const updateOpenAppaYell = <ThrowOnError extends boolean = false>(options: Options<UpdateOpenAppaYellData, ThrowOnError>) => (options.client ?? client).patch<UpdateOpenAppaYellResponses, UpdateOpenAppaYellErrors, ThrowOnError>({
     url: '/api/openappa/yells/{id}',
@@ -8201,7 +8201,7 @@ export const updateOpenAppaYell = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
+ * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
  */
 export const downloadOpenAppaYell = <ThrowOnError extends boolean = false>(options: Options<DownloadOpenAppaYellData, ThrowOnError>) => (options.client ?? client).get<DownloadOpenAppaYellResponses, unknown, ThrowOnError>({ url: '/api/openappa/yells/{id}/archive', ...options });
 
@@ -8351,7 +8351,7 @@ export const getAppearanceSettings = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateAppearanceSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateAppearanceSettingsResponses, UpdateAppearanceSettingsErrors, ThrowOnError>({
     url: '/api/organization/appearance-settings',
@@ -8371,7 +8371,7 @@ export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateSecuritySettings = <ThrowOnError extends boolean = false>(options: Options<UpdateSecuritySettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateSecuritySettingsResponses, UpdateSecuritySettingsErrors, ThrowOnError>({
     url: '/api/organization/security-settings',
@@ -8391,7 +8391,7 @@ export const updateSecuritySettings = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `mcpSettings:update`: Modify MCP settings
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateMcpSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateMcpSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateMcpSettingsResponses, UpdateMcpSettingsErrors, ThrowOnError>({
     url: '/api/organization/mcp-settings',
@@ -8411,7 +8411,7 @@ export const updateMcpSettings = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `skillsSettings:update`: Modify Skills settings
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateSkillsSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateSkillsSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateSkillsSettingsResponses, UpdateSkillsSettingsErrors, ThrowOnError>({
     url: '/api/organization/skills-settings',
@@ -8431,7 +8431,7 @@ export const updateSkillsSettings = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateAgentSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateAgentSettingsResponses, UpdateAgentSettingsErrors, ThrowOnError>({
     url: '/api/organization/agent-settings',
@@ -8451,7 +8451,7 @@ export const updateAgentSettings = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateConnectionSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateConnectionSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateConnectionSettingsResponses, UpdateConnectionSettingsErrors, ThrowOnError>({
     url: '/api/organization/connection-settings',
@@ -8471,7 +8471,7 @@ export const updateConnectionSettings = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateIntegrationSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateIntegrationSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateIntegrationSettingsResponses, UpdateIntegrationSettingsErrors, ThrowOnError>({
     url: '/api/organization/integration-settings',
@@ -8511,7 +8511,7 @@ export const updateDefaultEnvironment = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateAuthSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateAuthSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateAuthSettingsResponses, UpdateAuthSettingsErrors, ThrowOnError>({
     url: '/api/organization/auth-settings',
@@ -8531,7 +8531,7 @@ export const updateAuthSettings = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateKnowledgeSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateKnowledgeSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateKnowledgeSettingsResponses, UpdateKnowledgeSettingsErrors, ThrowOnError>({
     url: '/api/organization/knowledge-settings',
@@ -8551,7 +8551,7 @@ export const updateKnowledgeSettings = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const dropEmbeddingConfig = <ThrowOnError extends boolean = false>(options?: Options<DropEmbeddingConfigData, ThrowOnError>) => (options?.client ?? client).post<DropEmbeddingConfigResponses, DropEmbeddingConfigErrors, ThrowOnError>({ url: '/api/organization/knowledge-settings/drop-embedding', ...options });
 
@@ -8564,7 +8564,7 @@ export const dropEmbeddingConfig = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const testEmbeddingConnection = <ThrowOnError extends boolean = false>(options: Options<TestEmbeddingConnectionData, ThrowOnError>) => (options.client ?? client).post<TestEmbeddingConnectionResponses, TestEmbeddingConnectionErrors, ThrowOnError>({
     url: '/api/organization/knowledge-settings/test-embedding',
@@ -8584,7 +8584,7 @@ export const testEmbeddingConnection = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const testRerankerConnection = <ThrowOnError extends boolean = false>(options: Options<TestRerankerConnectionData, ThrowOnError>) => (options.client ?? client).post<TestRerankerConnectionResponses, TestRerankerConnectionErrors, ThrowOnError>({
     url: '/api/organization/knowledge-settings/test-reranker',
@@ -8604,7 +8604,7 @@ export const testRerankerConnection = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `knowledgeSettings:read`: View knowledge settings (embedding and reranking models)
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getKeywordRankingStatus = <ThrowOnError extends boolean = false>(options?: Options<GetKeywordRankingStatusData, ThrowOnError>) => (options?.client ?? client).get<GetKeywordRankingStatusResponses, GetKeywordRankingStatusErrors, ThrowOnError>({ url: '/api/organization/knowledge-settings/keyword-ranking-status', ...options });
 
@@ -8617,7 +8617,7 @@ export const getKeywordRankingStatus = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const testOcrConnection = <ThrowOnError extends boolean = false>(options: Options<TestOcrConnectionData, ThrowOnError>) => (options.client ?? client).post<TestOcrConnectionResponses, TestOcrConnectionErrors, ThrowOnError>({
     url: '/api/organization/knowledge-settings/test-ocr',
@@ -8637,7 +8637,7 @@ export const testOcrConnection = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const completeOnboarding = <ThrowOnError extends boolean = false>(options: Options<CompleteOnboardingData, ThrowOnError>) => (options.client ?? client).post<CompleteOnboardingResponses, CompleteOnboardingErrors, ThrowOnError>({
     url: '/api/organization/complete-onboarding',
@@ -9304,7 +9304,6 @@ export const permanentlyDeleteProject = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `file:manage`: List, read, write, and delete files in chats and projects
  * `project:read`: View projects and your own sessions inside them
  */
 export const getProjectFiles = <ThrowOnError extends boolean = false>(options: Options<GetProjectFilesData, ThrowOnError>) => (options.client ?? client).get<GetProjectFilesResponses, GetProjectFilesErrors, ThrowOnError>({ url: '/api/projects/{id}/files', ...options });
@@ -9318,7 +9317,6 @@ export const getProjectFiles = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `file:manage`: List, read, write, and delete files in chats and projects
  * `project:read`: View projects and your own sessions inside them
  */
 export const uploadProjectFiles = <ThrowOnError extends boolean = false>(options: Options<UploadProjectFilesData, ThrowOnError>) => (options.client ?? client).post<UploadProjectFilesResponses, UploadProjectFilesErrors, ThrowOnError>({
@@ -9385,7 +9383,7 @@ export const getProjectConversations = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  * `project:read`: View projects and your own sessions inside them
  */
 export const getProjectRuns = <ThrowOnError extends boolean = false>(options: Options<GetProjectRunsData, ThrowOnError>) => (options.client ?? client).get<GetProjectRunsResponses, GetProjectRunsErrors, ThrowOnError>({ url: '/api/projects/{id}/runs', ...options });
@@ -9798,7 +9796,7 @@ export const createScheduleTriggerRunConversation = <ThrowOnError extends boolea
  *
  * Authorization:
  *
- * `secret:read`: View secrets manager configuration
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getSecretsType = <ThrowOnError extends boolean = false>(options?: Options<GetSecretsTypeData, ThrowOnError>) => (options?.client ?? client).get<GetSecretsTypeResponses, GetSecretsTypeErrors, ThrowOnError>({ url: '/api/secrets/type', ...options });
 
@@ -9811,7 +9809,7 @@ export const getSecretsType = <ThrowOnError extends boolean = false>(options?: O
  *
  * Authorization:
  *
- * `secret:read`: View secrets manager configuration
+ * `mcpRegistry:update`: Modify MCP registry entries
  */
 export const getSecret = <ThrowOnError extends boolean = false>(options: Options<GetSecretData, ThrowOnError>) => (options.client ?? client).get<GetSecretResponses, GetSecretErrors, ThrowOnError>({ url: '/api/secrets/{id}', ...options });
 
@@ -9824,7 +9822,7 @@ export const getSecret = <ThrowOnError extends boolean = false>(options: Options
  *
  * Authorization:
  *
- * `secret:update`: Modify secrets manager settings and test connectivity
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const checkSecretsConnectivity = <ThrowOnError extends boolean = false>(options?: Options<CheckSecretsConnectivityData, ThrowOnError>) => (options?.client ?? client).post<CheckSecretsConnectivityResponses, CheckSecretsConnectivityErrors, ThrowOnError>({ url: '/api/secrets/check-connectivity', ...options });
 
@@ -10055,7 +10053,7 @@ export const bulkRevokeSessions = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `siteNotification:read`: View site-wide notifications
+ * None (no additional RBAC permission required)
  */
 export const getSiteNotification = <ThrowOnError extends boolean = false>(options?: Options<GetSiteNotificationData, ThrowOnError>) => (options?.client ?? client).get<GetSiteNotificationResponses, GetSiteNotificationErrors, ThrowOnError>({ url: '/api/site-notification', ...options });
 
@@ -10068,7 +10066,7 @@ export const getSiteNotification = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `siteNotification:create`: Create new site notifications
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const createSiteNotification = <ThrowOnError extends boolean = false>(options: Options<CreateSiteNotificationData, ThrowOnError>) => (options.client ?? client).post<CreateSiteNotificationResponses, CreateSiteNotificationErrors, ThrowOnError>({
     url: '/api/site-notification',
@@ -10088,7 +10086,7 @@ export const createSiteNotification = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `siteNotification:read`: View site-wide notifications
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getSiteNotificationSettings = <ThrowOnError extends boolean = false>(options?: Options<GetSiteNotificationSettingsData, ThrowOnError>) => (options?.client ?? client).get<GetSiteNotificationSettingsResponses, GetSiteNotificationSettingsErrors, ThrowOnError>({ url: '/api/site-notification/settings', ...options });
 
@@ -10101,7 +10099,7 @@ export const getSiteNotificationSettings = <ThrowOnError extends boolean = false
  *
  * Authorization:
  *
- * `siteNotification:delete`: Delete site notifications
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const deleteSiteNotification = <ThrowOnError extends boolean = false>(options: Options<DeleteSiteNotificationData, ThrowOnError>) => (options.client ?? client).delete<DeleteSiteNotificationResponses, DeleteSiteNotificationErrors, ThrowOnError>({ url: '/api/site-notification/{id}', ...options });
 
@@ -10114,7 +10112,7 @@ export const deleteSiteNotification = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `siteNotification:update`: Modify site notifications
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const updateSiteNotification = <ThrowOnError extends boolean = false>(options: Options<UpdateSiteNotificationData, ThrowOnError>) => (options.client ?? client).put<UpdateSiteNotificationResponses, UpdateSiteNotificationErrors, ThrowOnError>({
     url: '/api/site-notification/{id}',
@@ -10403,7 +10401,7 @@ export const updateSkillGithubSync = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
 export const enableSkillToolDefaults = <ThrowOnError extends boolean = false>(options?: Options<EnableSkillToolDefaultsData, ThrowOnError>) => (options?.client ?? client).post<EnableSkillToolDefaultsResponses, EnableSkillToolDefaultsErrors, ThrowOnError>({ url: '/api/skills/enable-defaults', ...options });
 
@@ -10489,7 +10487,7 @@ export const importGithubSkills = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const deleteSkillSandboxArtifact = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillSandboxArtifactData, ThrowOnError>) => (options.client ?? client).delete<DeleteSkillSandboxArtifactResponses, DeleteSkillSandboxArtifactErrors, ThrowOnError>({ url: '/api/skill-sandbox/artifacts/{artifactId}', ...options });
 
@@ -10502,7 +10500,7 @@ export const deleteSkillSandboxArtifact = <ThrowOnError extends boolean = false>
  *
  * Authorization:
  *
- * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const getSkillSandboxArtifact = <ThrowOnError extends boolean = false>(options: Options<GetSkillSandboxArtifactData, ThrowOnError>) => (options.client ?? client).get<GetSkillSandboxArtifactResponses, unknown, ThrowOnError>({ url: '/api/skill-sandbox/artifacts/{artifactId}', ...options });
 
@@ -10515,7 +10513,7 @@ export const getSkillSandboxArtifact = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const updateSkillSandboxArtifactContent = <ThrowOnError extends boolean = false>(options: Options<UpdateSkillSandboxArtifactContentData, ThrowOnError>) => (options.client ?? client).put<UpdateSkillSandboxArtifactContentResponses, UpdateSkillSandboxArtifactContentErrors, ThrowOnError>({
     url: '/api/skill-sandbox/artifacts/{artifactId}/content',
@@ -10535,7 +10533,7 @@ export const updateSkillSandboxArtifactContent = <ThrowOnError extends boolean =
  *
  * Authorization:
  *
- * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
+ * `agent:read`: View and list agents, and use their code sandboxes and files
  */
 export const getSkillSandboxConversationArtifacts = <ThrowOnError extends boolean = false>(options: Options<GetSkillSandboxConversationArtifactsData, ThrowOnError>) => (options.client ?? client).get<GetSkillSandboxConversationArtifactsResponses, GetSkillSandboxConversationArtifactsErrors, ThrowOnError>({ url: '/api/skill-sandbox/conversations/{conversationId}/artifacts', ...options });
 

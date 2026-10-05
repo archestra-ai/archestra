@@ -115,12 +115,12 @@ async function createViaWizard(
   expect(response.ok()).toBe(true);
   const { id } = (await response.json()) as { id: string };
 
-  // 5. Agents open a summary for the saved record. Gateways still
+  // 5. Agents open chat with the new agent selected. Gateways still
   // open on Connect, their default detail section.
   const destination =
     listPath === "/mcp/gateways"
       ? new RegExp(`${listPath}/${id}$`)
-      : new RegExp(`/agents/${id}/created$`);
+      : new RegExp(`/chat\\?agentId=${id}$`);
   await page.waitForURL(destination, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
   // The pointer is still where the Create button was — the bottom-right
@@ -152,20 +152,8 @@ test("can create and delete an agent", {
 
   await page.waitForLoadState("domcontentloaded");
 
+  // Creating lands in chat with the new agent selected.
   const agentId = await createViaWizard(page, "/agents", AGENT_NAME);
-
-  await expect(
-    page.getByRole("heading", { name: "Agent created", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: AGENT_NAME, exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Messaging channels" }),
-  ).toBeVisible();
-  await page.reload();
-  await page.getByRole("link", { name: "Chat", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/chat\\?agentId=${agentId}$`));
 
   // Check the rendered chat selection, not just the redirect URL: a stale
   // agent list must not silently substitute a different agent after creation.

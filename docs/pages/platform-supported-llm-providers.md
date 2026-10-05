@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-09-17
+lastUpdated: 2026-10-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -46,7 +46,7 @@ Archestra syncs each model's context window and maximum output tokens from the p
 
 You can set both yourself. Go to **LLM → Models**, edit the model, and fill in **Context window** and **Max output tokens** under **Limits**. What you set replaces what the provider reports, and survives the next model refresh. Clear a field to go back to the provider's own number.
 
-The context window sizes the [chat context ring](/docs/platform-chat#context-window-visualizer) and decides when auto-compaction runs. The output limit is what an agent turn asks the provider for. Without one, a turn falls back to a conservative 8192-token budget, which can cut a long answer short.
+The context window sizes the chat context ring and decides when auto-compaction runs. The output limit is what an agent turn asks the provider for. Without one, a turn falls back to a conservative 8192-token budget, which can cut a long answer short.
 
 ## OpenAI-Compatible Model Router
 
@@ -86,7 +86,23 @@ The prefix before `:` is the provider. The value after `:` is the provider's nat
 
 The `/models` response includes model-router-compatible text models for the providers mapped on the virtual key. Providers that use native request formats, including Anthropic, Bedrock, Gemini, and Cohere, are translated between OpenAI request/response formats and provider-native formats before forwarding.
 
-Model Router translation forwards inline non-text content where the provider's native format supports it: Gemini (base64 data URL images, audio, and files), Anthropic (base64 data URL images and PDF files, plus http(s) image URLs), Cohere (images via base64 data URI or web URL in user messages), and Bedrock (base64 data URL images). Anthropic also forwards images returned inside tool results. Content the provider format cannot represent is dropped — for example http(s) image URLs to Gemini (its `fileData` accepts only Files API or `gs://` URIs), audio to Anthropic, and non-text content in Gemini and Cohere tool results.
+Model Router translation forwards inline non-text content where the provider's native format supports it: Gemini (base64 data URL images, audio, and files), Anthropic (base64 data URL images and PDF files, plus http(s) image URLs), Cohere (images via base64 data URI or web URL in user messages), and Bedrock (inline base64 images and supported documents). Anthropic also forwards images returned inside tool results. Content the provider format cannot represent is dropped — for example http(s) image URLs to Gemini (its `fileData` accepts only Files API or `gs://` URIs), audio to Anthropic, and non-text content in Gemini and Cohere tool results.
+
+### Gemini Reasoning And Output Limits
+
+For Gemini text models, `reasoning_effort` follows [Google's OpenAI compatibility mapping](https://ai.google.dev/gemini-api/docs/openai#thinking). Omitted or null effort preserves the model's default thinking configuration.
+
+Gemini 2.5 uses thinking budgets. `minimal` and `low` map to 1,024 tokens, `medium` to 8,192, and `high` to 24,576. `none` disables thinking only for Gemini 2.5 Flash and Flash-Lite.
+
+Archestra sends `thinkingLevel` for Gemini 3 and newer text models. `low` stays `low`. `minimal` maps to `low` on Gemini 3 and 3.1 Pro. Gemini 3.7 and 3.8 Flash reject `minimal`; Gemini 3 Pro rejects `medium`. `minimal` does not guarantee that thinking is disabled.
+
+New text model families receive the requested level for Google to validate. Archestra does not retry rejected requests with changed reasoning settings. `none` is supported only for Gemini 2.5 Flash and Flash-Lite. `xhigh`, `max`, and explicit effort on non-text model variants return HTTP 400.
+
+`max_completion_tokens` sets Gemini's output cap, including thinking tokens. It takes precedence over `max_tokens`; a null or omitted value falls back to `max_tokens`. Small caps can leave empty or truncated answers.
+
+### Gemini Token Usage
+
+Gemini completion counts include thinking tokens. Chat Completions reports the thinking subset in `completion_tokens_details.reasoning_tokens`. Responses reports it in `output_tokens_details.reasoning_tokens`.
 
 ## OpenAI
 
@@ -494,7 +510,7 @@ Open **LLM → Models**, edit a native-transport model, and set any generation p
 
 ### Context Window
 
-Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the [chat context ring](/docs/platform-chat#context-window-visualizer). A window you set under [Limits](#model-context-and-output-limits) is the architectural length for this purpose, so a Modelfile `num_ctx` still caps it.
+Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the chat context ring. A window you set under [Limits](#model-context-and-output-limits) is the architectural length for this purpose, so a Modelfile `num_ctx` still caps it.
 
 A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama's model API and cannot be detected. If you run a capped server, set `num_ctx` on the model — a request-level value takes precedence.
 
@@ -841,16 +857,32 @@ A key can also point at a custom endpoint instead, for a VPC or PrivateLink setu
 
 ### Prompt Caching
 
-Bedrock can reuse the unchanging prefix of a request instead of reprocessing it every turn. That prefix is the system prompt, tool definitions, and earlier turns. Reuse needs an explicit cache marker, and who sets it depends on how the request reaches Bedrock:
+Bedrock supports explicit caching on selected Claude and Nova models. Some models also offer implicit caching. Repeating a prefix does not guarantee a cache hit.
 
-- Chat conversations are marked automatically. Archestra marks the stable prefix and the most recent turn, so each turn reuses what the one before it wrote. There is no setting to turn that off.
-- Every other path forwards the markers its caller set, unchanged. On the LLM Proxy that leaves the decision with your own client — Claude Code, for example, marks its own requests. Agent runs reached over A2A, including the Slack, Teams, and Telegram integrations, set no marker of their own, so they go uncached unless the caller adds one.
+Chat conversations and headless agent runs apply Archestra's automatic breakpoint policy. Model Router Responses requests use the markers you supply. The router does not add automatic checkpoints.
 
-Bedrock only caches for Claude and the Nova text models. Other families reject a marked request outright, so Archestra marks none of them. An unfamiliar model forfeits the cache rather than failing.
+For Bedrock Responses, add `cache_control` with `type: "ephemeral"` to an input content part or message. Archestra translates it into a standalone Converse `cachePoint` after the marked content and forwards an optional `ttl` string. Tool-definition markers are not forwarded.
 
-A cached prefix lives five minutes by default. Archestra asks for the one-hour lifetime on Claude 4.5, the only generation Bedrock accepts it on. Any gap longer than the lifetime expires the prefix, and the next request pays to write all of it again.
+```json
+{
+  "model": "bedrock:us.anthropic.claude-sonnet-4-6",
+  "input": [{
+    "role": "user",
+    "content": [
+      {"type": "input_text", "text": "A stable reference document...", "cache_control": {"type": "ephemeral", "ttl": "1h"}},
+      {"type": "input_text", "text": "Summarize the reference."}
+    ]
+  }]
+}
+```
 
-Cache tokens are billed differently from ordinary input. Reads cost a tenth of the input price, five-minute writes 1.25x, and one-hour writes 2x. The longer lifetime therefore trades a higher write price for fewer rewrites, and pays off whenever it keeps a prefix alive across a gap that would otherwise have expired it. Archestra estimates with those ratios when a model has no cache prices of its own — see [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for setting exact ones and reading cache spend back.
+AWS validates model support, TTLs, checkpoint limits and ordering, token thresholds, regional availability, and multimodal support. The router does not maintain a model allowlist or add automatic checkpoints. See [AWS prompt caching](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html) for current requirements.
+
+Bedrock Responses preserves ordered text, image, and file parts. Images require supported base64 data URLs. Files accept base64 data URLs or base64 bytes with a supported filename extension. PDF files remain document blocks; JSON files become text-format document blocks. Document-only user messages receive companion text. Unresolved file IDs, external file/image URLs, and unsupported file formats return `400 Bad Request` before forwarding. External images that were previously dropped now return this error so requested attachments cannot disappear silently; the router does not fetch remote content. Unmarked reasoning items, built-in tools, and other unsupported parts retain their previous handling and are omitted. A cache marker on omitted content returns an error. AWS validates each model's multimodal support.
+
+Bedrock Responses input totals include fresh input, cache reads, and cache writes. `input_tokens_details.cached_tokens` reports reads. The Archestra extensions `cache_write_tokens` and `cache_write_1h_tokens` report total writes and one-hour writes when provided by AWS.
+
+For example, send the same long reference twice within its TTL. Check the returned usage to see whether AWS reports cache writes or reads. Marker forwarding alone does not prove caching occurred. See [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for cache prices and recorded spend.
 
 ### Authentication Methods
 

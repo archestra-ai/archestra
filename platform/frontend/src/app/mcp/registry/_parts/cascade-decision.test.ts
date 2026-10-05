@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Frontend scenario-matrix sweep. Runs every entry in `CASCADE_SCENARIOS`
  * through the pure `computeCascadeOutcome` function and asserts the

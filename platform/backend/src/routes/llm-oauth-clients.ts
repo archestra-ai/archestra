@@ -28,6 +28,7 @@ import {
   LlmOauthClientSchema,
   LlmOauthClientWithSecretSchema,
 } from "@/types";
+import { assertValidProviderKeyMappings } from "@/utils/provider-key-mappings";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 import { registerEntityLabelRoutes } from "./entity-labels";
 
@@ -409,16 +410,7 @@ async function validateLlmOauthClientConfig(params: {
     providerApiKeyId: string;
   }>;
 }) {
-  const seenProviders = new Set<string>();
-  for (const mapping of params.providerApiKeys) {
-    if (seenProviders.has(mapping.provider)) {
-      throw new ApiError(
-        400,
-        `Only one provider API key can be mapped for provider "${mapping.provider}"`,
-      );
-    }
-    seenProviders.add(mapping.provider);
-  }
+  assertValidProviderKeyMappings(params.providerApiKeys);
 
   for (const mapping of params.providerApiKeys) {
     const apiKey = await LlmProviderApiKeyModel.findById(

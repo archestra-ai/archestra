@@ -13,7 +13,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import { isServiceAccountUserId } from "@/auth/utils";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {

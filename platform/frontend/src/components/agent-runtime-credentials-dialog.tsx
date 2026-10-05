@@ -103,7 +103,7 @@ export function AgentRuntimeCredentialsDialog({
   const [connecting, setConnecting] =
     useState<RuntimeCredentialDefinition | null>(null);
   const { data: canManageOrganization, isPending: permissionsPending } =
-    useHasPermissions({ agentSettings: ["update"] });
+    useHasPermissions({ organizationSettings: ["update"] });
   const config = useConfig();
   const byosEnabled = config.data?.features.byosEnabled;
   const save = useSetMissingAgentRuntimeCredentials(agentId);

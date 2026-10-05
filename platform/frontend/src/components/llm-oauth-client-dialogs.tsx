@@ -13,11 +13,7 @@ import {
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
-import {
-  type ProviderApiKeyMap,
-  providerApiKeyArrayToMap,
-  providerApiKeyMapToArray,
-} from "@/components/provider-key-mappings-field";
+import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
@@ -45,9 +41,8 @@ export function EditOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
-  const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
-    {},
-  );
+  const [providerApiKeyIds, setProviderApiKeyIds] =
+    useState<ProviderApiKeyMappings>([]);
   const [redirectUrisText, setRedirectUrisText] = useState("");
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
@@ -67,21 +62,25 @@ export function EditOAuthClientDialog({
     if (!oauthClient) return;
     setActiveSection("general");
     setName(oauthClient.name);
-    setProviderApiKeyIds(providerApiKeyArrayToMap(oauthClient.providerApiKeys));
+    setProviderApiKeyIds(
+      oauthClient.providerApiKeys.map(({ provider, providerApiKeyId }) => ({
+        provider,
+        providerApiKeyId,
+      })),
+    );
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
     setLabels(oauthClient.labels);
   }, [oauthClient]);
 
   // The grant type is fixed at creation, so only its own configuration is editable.
   const isAuthorizationCode = oauthClient?.grantType === "authorization_code";
-  const mappedProviderApiKeys = providerApiKeyMapToArray(providerApiKeyIds);
   const redirectUris = parseRedirectUris(redirectUrisText);
   const canSubmit =
     !!oauthClient &&
     name.trim().length > 0 &&
     (isAuthorizationCode
       ? redirectUris.length > 0
-      : mappedProviderApiKeys.length > 0);
+      : providerApiKeyIds.length > 0);
 
   return (
     <TabbedDialogShell
@@ -123,7 +122,7 @@ export function EditOAuthClientDialog({
           grantType: oauthClient.grantType,
           ...(isAuthorizationCode
             ? { redirectUris }
-            : { providerApiKeys: mappedProviderApiKeys }),
+            : { providerApiKeys: providerApiKeyIds }),
           labels: finalLabels,
         });
       }}

@@ -152,8 +152,7 @@ export function BatteriesUploadAction() {
   const pathname = usePathname();
   const declarations = usePolicyDeclarations();
   const { data: canBind } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
     credential: ["update"],
   });
   const [uploading, setUploading] = useState(false);
@@ -182,14 +181,12 @@ export function BatteriesPanel() {
   // The batteries that fit a server, as the overview counts them.
   const summary = useCoverageSummary();
   const { data: canManage } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
   });
   // Binding a credential hands its value to helper code, and an uploaded
   // package may carry such code, so both take the credential permission too.
   const { data: canBind } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
     credential: ["update"],
   });
   // Filters and page live in the URL, so a reload or a shared link keeps them.
@@ -1102,7 +1099,7 @@ function CredentialRow({
         value={value}
         disabled={disabled}
         onValueChange={(next) => {
-          // The table is one per organization: letting go of a variable the
+          // The table is one per openappaSettings: letting go of a variable the
           // other entries read would take the key from them too, so the
           // unset is refused and the row says why.
           if (next === UNBOUND && others.length > 0) return setKept(true);

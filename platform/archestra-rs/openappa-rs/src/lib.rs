@@ -6,6 +6,8 @@ mod batteries;
 mod consults;
 mod declarations;
 mod deployments;
+#[allow(dead_code)]
+mod peer;
 mod policy;
 
 use appa_eventlog::{
@@ -21,8 +23,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnRef,
-    ToolOutcome, TrajectoryId, WireDecision,
+    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind,
+    SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -287,6 +289,11 @@ enum HookEventKind {
     Prompt,
     TurnEnd,
     ChildEnd,
+    /// A parent addresses a child it already started, as when a lead sends
+    /// its teammate a message: the parent's current label flows into the
+    /// child. `spawned_id` names the child session and `output` the message,
+    /// which the operation retains so the child's side can verify it.
+    ChildAddress,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -806,13 +813,11 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
 #[napi(js_name = "listBundledOpenappaBatteries")]
 pub async fn list_bundled_openappa_batteries() -> napi::Result<Vec<BatteryPackage>> {
     tokio::task::spawn_blocking(|| {
-        std::panic::catch_unwind(|| {
-            batteries::bundled()
-                .iter()
-                .map(BatteryPackage::from)
-                .collect()
-        })
-        .map_err(|_| error("bundled OpenAPPA batteries failed to load"))
+        let loaded = std::panic::catch_unwind(batteries::bundled)
+            .map_err(|_| error("bundled OpenAPPA batteries failed to load"))?;
+        loaded
+            .map_err(error)
+            .map(|batteries| batteries.iter().map(BatteryPackage::from).collect())
     })
     .await
     .map_err(error)?
@@ -985,6 +990,16 @@ fn validate(input: &Input) -> napi::Result<()> {
         }
         HookEventKind::Prompt | HookEventKind::TurnEnd | HookEventKind::ChildEnd => {
             required(&input.operation_id, "operation_id")?;
+        }
+        HookEventKind::ChildAddress => {
+            required(&input.operation_id, "operation_id")?;
+            let child = required(&input.spawned_id, "spawned_id")?;
+            if child.len() > 1024 || child.chars().any(char::is_control) {
+                return Err(error("invalid child identity"));
+            }
+            if input.output.is_none() {
+                return Err(error("missing output"));
+            }
         }
     }
     Ok(())
@@ -1255,6 +1270,85 @@ pub async fn load_child_returns(
             });
         }
         Ok(records)
+    })
+    .map_err(error)
+}
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct ChildAddressRecord {
+    /// Fully scoped session id of the parent that addressed the child.
+    pub parent_session_id: String,
+    /// The exact message the parent addressed to the child.
+    pub value: String,
+}
+
+/// Loads the messages a child's parent addressed to it, from the retained
+/// ChildAddress operations in PostgreSQL. This is the authority the child side
+/// verifies an arriving message against; nothing the client carries proves one.
+#[napi(js_name = "loadChildAddresses")]
+pub async fn load_child_addresses(
+    organization_id: String,
+    child_session_id: String,
+) -> napi::Result<Vec<ChildAddressRecord>> {
+    // Mirror load_child_returns: clone state, drop the mutex, then lease a
+    // connection before host SQL so lookups never contend with dispatches.
+    let state = {
+        let slot = state_mutex().lock().await;
+        slot.as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .clone()
+    };
+    let leased = state.lease().await?;
+    let pg = postgres_store(&leased.state.store)?;
+    pg.with_client(move |client| {
+        // Only the child's own parent addresses it, and only an address the
+        // runtime acknowledged carried the parent's label into the child.
+        let rows = client.query(
+            "SELECT o.session_id AS parent_session_id, \
+              COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS value \
+              FROM openappa_operations o \
+              WHERE o.organization_id=$1 AND o.status='complete' \
+              AND EXISTS (SELECT 1 FROM openappa_sessions s \
+                WHERE s.organization_id=$1 AND s.session_id=$2 AND s.parent_id=o.session_id) \
+              AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_address' \
+              AND COALESCE(o.input->'semantic'->>'spawned_id', o.input->>'spawned_id') = $2 \
+              AND o.decision->>'decision' = 'ack' \
+              AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL \
+              ORDER BY o.created_at",
+            &[&organization_id, &child_session_id],
+        )?;
+        let mut records = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let value: Option<String> = row.get("value");
+            records.push(ChildAddressRecord {
+                parent_session_id: row.get("parent_session_id"),
+                value: value.ok_or_else(|| {
+                    PostgresError("OpenAPPA retained a child address without a value".into())
+                })?,
+            });
+        }
+        Ok(records)
+    })
+    .map_err(error)
+}
+
+/// Whether this child's parent addressed it before the child's first event.
+fn addressed_before_start(pg: &LeasedPostgres, input: &Input) -> napi::Result<bool> {
+    let Some(parent) = input.parent_id.clone() else {
+        return Ok(false);
+    };
+    let (organization_id, child) = (input.organization_id.clone(), input.session_id.clone());
+    pg.with_client(move |client| {
+        Ok(client
+            .query_one(
+                "SELECT EXISTS (SELECT 1 FROM openappa_operations o \
+                  WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                  AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_address' \
+                  AND COALESCE(o.input->'semantic'->>'spawned_id', o.input->>'spawned_id') = $3)",
+                &[&organization_id, &parent, &child],
+            )?
+            .get::<_, bool>(0))
     })
     .map_err(error)
 }
@@ -1555,11 +1649,33 @@ impl State {
                 HookEvent::SessionStart {
                     root: actor.root.clone(),
                     principal: input.principal.clone(),
+                    address: None,
+                    title: None,
                 }
             };
             let decision = hooks::handle(&self.runtime, start).await;
             if !matches!(decision, HookDecision::Ack | HookDecision::Context { .. }) {
                 return Err(error(wire(&decision)?));
+            }
+            // A child opens under its fork's seed: the parent's label when it spawned
+            // the child. A parent that addressed the child before this first event may
+            // have read more since, so the child takes the parent's current label now,
+            // as a later address would give it.
+            if let Some(child) = &actor.child
+                && addressed_before_start(pg, &input)?
+            {
+                let readdress = hooks::handle(
+                    &self.runtime,
+                    HookEvent::ChildStart {
+                        root: actor.root.clone(),
+                        child: child.clone(),
+                        spawn: SpawnRef::InFlight,
+                    },
+                )
+                .await;
+                if !matches!(readdress, HookDecision::Ack | HookDecision::Context { .. }) {
+                    return Err(error(wire(&readdress)?));
+                }
             }
             // A return contract must be delivered before the child starts work.
             // Keep it in the start receipt so repeat SessionStart can deliver it.
@@ -1660,7 +1776,8 @@ impl State {
                     actor: actor.clone(),
                     call,
                     call_id: None,
-                    spawn: false,
+                    spawn: None,
+                    prompt: None,
                     ruling,
                 },
             )
@@ -1741,6 +1858,10 @@ impl State {
             // the same namespace from the provider's tool-call ID.
             request["call_id"] = json!(operation);
         }
+        if input.event == HookEventKind::ChildAddress {
+            // Retained so the child's side can find what its parent addressed to it.
+            request["spawned_id"] = json!(input.spawned_id);
+        }
         if let Some(decision) = claim_operation(
             &self.store,
             &input,
@@ -1779,18 +1900,24 @@ impl State {
                 Err(reason) => (true, format!("[appa] Not reported: {reason}")),
             };
             json!({ "decision": "mcp_result", "result": { "isError": is_error, "content": [{ "type": "text", "text": message }] } })
+        } else if input.event == HookEventKind::ChildAddress {
+            self.address_child(pg, &input, &actor).await?
         } else {
             let event = match input.event {
                 HookEventKind::ToolCall => HookEvent::ToolCall {
                     actor: actor.clone(),
                     call: proposed(&input)?,
                     call_id: Some(operation.clone()),
-                    spawn: input.spawn,
+                    spawn: input.spawn.then_some(SpawnKind::Single),
+                    prompt: None,
                     ruling: None,
                 },
                 HookEventKind::Prompt => HookEvent::Prompt {
                     actor: actor.clone(),
                     text: String::new(),
+                    settles: None,
+                    peer: None,
+                    title: None,
                 },
                 HookEventKind::TurnEnd => HookEvent::TurnEnd {
                     actor: actor.clone(),
@@ -1807,7 +1934,8 @@ impl State {
                 | HookEventKind::ToolResult
                 | HookEventKind::CancelCall
                 | HookEventKind::Remedy
-                | HookEventKind::Yell => return Err(error("unsupported OpenAPPA event")),
+                | HookEventKind::Yell
+                | HookEventKind::ChildAddress => return Err(error("unsupported OpenAPPA event")),
             };
             let outcome = hooks::handle_embedded_with_options(
                 &self.runtime,
@@ -1827,6 +1955,58 @@ impl State {
         Ok(decision)
     }
 
+    /// The parent addresses a child it started, so the parent's current label flows into
+    /// the child before the child reads the message. The runtime reads a start for a child
+    /// it already bound as exactly this. A child that has not started yet is left to its
+    /// first event, which takes the parent's label at that point (`addressed_before_start`).
+    /// Only a session under this parent's own child ids can be such a child: an address to
+    /// any other session is refused.
+    async fn address_child(
+        &self,
+        pg: &LeasedPostgres,
+        input: &Input,
+        actor: &Actor,
+    ) -> napi::Result<Value> {
+        let (organization_id, parent, child) = (
+            input.organization_id.clone(),
+            input.session_id.clone(),
+            required(&input.spawned_id, "spawned_id")?.to_owned(),
+        );
+        if !child.starts_with(&format!("{parent}:")) {
+            return Ok(json!({
+                "decision": "block",
+                "feedback": "OpenAPPA did not send this message: its recipient is not a child of this session.",
+            }));
+        }
+        let started = pg
+            .with_client(move |client| {
+                Ok(client
+                    .query_opt(
+                        "SELECT actor FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2 AND parent_id = $3",
+                        &[&organization_id, &child, &parent],
+                    )?
+                    .map(|row| row.get::<_, String>(0)))
+            })
+            .map_err(error)?;
+        let Some(child) = started else {
+            return Ok(json!({ "decision": "ack" }));
+        };
+        let decision = hooks::handle(
+            &self.runtime,
+            HookEvent::ChildStart {
+                root: actor.root.clone(),
+                child: TrajectoryId(child),
+                spawn: SpawnRef::InFlight,
+            },
+        )
+        .await;
+        match decision {
+            // The contract text is the child's to read at its own start, not the parent's.
+            HookDecision::Ack | HookDecision::Context { .. } => Ok(json!({ "decision": "ack" })),
+            other => wire(&other),
+        }
+    }
+
     async fn result(
         &self,
         pg: &LeasedPostgres,
@@ -1834,6 +2014,9 @@ impl State {
         actor: &Actor,
     ) -> napi::Result<Value> {
         let call_id = required(&input.tool_call_id, "tool_call_id")?.to_owned();
+        if let Some(withheld) = peer::forged_read_result(pg, input, &call_id)? {
+            return Ok(withheld);
+        }
         let key = processed_result_key(input, call_id.clone());
         match self
             .store
@@ -2432,9 +2615,16 @@ fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
 /// short name every spelling keeps. Which question tool to use follows
 /// ask_user's own description: the client's own first. A plan is carried out
 /// by the call the ruling shows for it, which is not always the remedy tool (a
-/// redispatch plan names another tool to run first).
-const UNEXECUTED_CALL_HINT: &str = "The tool was not executed. If the ruling offers a plan, choose one yourself and make the call it shows now, exactly as shown. If only the user can make this choice, ask them with a question tool (the client's own if it has one, otherwise ask_user), never as a plain-text question. In questions and replies, describe the block and any plan only in the ruling's own words, and never guess who the readers are or how access would change. If no plan is offered, explain the ruling.";
+/// redispatch plan names another tool to run first). The hint says what to do
+/// and who decides; provider safety classifiers refused requests that told the
+/// model to skip the user.
+const UNEXECUTED_CALL_HINT: &str = "The tool did not run. If the ruling offers a plan that fits the user's request, apply that plan with the exact call that the ruling shows for it. If only the user can make this choice, ask the user with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. In questions and replies, describe the block and any plan in the ruling's own words, and do not guess who the readers are or how access would change. If the ruling offers no plan, explain the ruling to the user.";
 
+/// A result for a call this session never released. The code tells the proxy
+/// that nothing ran on the runtime's side: a remedy the gateway never ran
+/// comes back this way, and the proxy shows the model what the client returned
+/// instead of this text. It is a separate field because callers read `reason`
+/// as the text of a block.
 fn unknown_result_response() -> Value {
     let approved_output =
         "[appa] Tool output withheld: this result has no record of releasing a call.".to_owned();
@@ -2443,8 +2633,11 @@ fn unknown_result_response() -> Value {
         "feedback": approved_output,
         "approved_output": approved_output,
         "output_source": OutputSource::Runtime,
+        "code": UNRELEASED_CALL_CODE,
     })
 }
+
+const UNRELEASED_CALL_CODE: &str = "unreleased_call";
 
 fn cancellation_operation(call_id: &str) -> String {
     format!("cancel:{call_id}")
@@ -2735,7 +2928,7 @@ mod typed_tests {
     use super::{
         OfferId, OfferOwner, RemedyAct, RemedyOutcome, RemedyPresentation,
         authoritative_unexecuted_response, owner_can_be_spent_by, presentation_offer_ids,
-        render_released_call, render_remedy_outcome,
+        render_released_call, render_remedy_outcome, unknown_result_response,
     };
     use appa_runtime_api::OfferedRemedy;
     use serde_json::Value;
@@ -2879,16 +3072,33 @@ mod typed_tests {
         let text = response["approved_output"].as_str().unwrap();
         // The ruling stays verbatim and first: it is the only account of the
         // block the model has.
-        assert!(text.starts_with(&format!("{ruling}\n\nThe tool was not executed.")));
+        assert!(text.starts_with(&format!("{ruling}\n\nThe tool did not run.")));
         // A plan is carried out by the call the ruling shows, which for a
         // redispatch plan is another tool rather than the remedy tool.
-        assert!(text.contains("choose one yourself and make the call it shows now"));
+        assert!(text.contains("apply that plan with the exact call that the ruling shows for it"));
         assert!(!text.contains("remedy tool"));
         // The same order of question tools as ask_user's own description.
-        assert!(text.contains("the client's own if it has one, otherwise ask_user"));
-        assert!(text.contains("never as a plain-text question"));
-        assert!(text.contains("only in the ruling's own words"));
-        assert!(text.contains("never guess who the readers are"));
+        assert!(text.contains("the client's own question tool if it has one, otherwise ask_user"));
+        assert!(text.contains("not in plain text"));
+        assert!(text.contains("in the ruling's own words"));
+        assert!(text.contains("do not guess who the readers are"));
+        // Who decides, not an instruction to skip the user.
+        assert!(!text.contains("choose one yourself"));
+    }
+
+    #[test]
+    fn an_unreleased_result_is_withheld_and_says_why() {
+        let response = unknown_result_response();
+
+        assert_eq!(response["decision"], "block");
+        assert_eq!(response["output_source"], "runtime");
+        assert_eq!(response["code"], "unreleased_call");
+        // Callers read `reason` as the text of a block, so the code stays out of it.
+        assert!(response.get("reason").is_none());
+        assert_eq!(
+            response["approved_output"],
+            "[appa] Tool output withheld: this result has no record of releasing a call."
+        );
     }
 
     #[test]

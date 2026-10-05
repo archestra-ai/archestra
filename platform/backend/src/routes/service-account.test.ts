@@ -608,16 +608,9 @@ describe("service account API authentication", () => {
     const organizationDataRole = await makeCustomRole(organization.id, {
       permission: {
         llmCost: ["read"],
-        log: ["read"],
+        log: ["read", "admin"],
         member: ["read"],
       },
-    });
-    // Every member's logs are `read` on the log at `*`, which log:admin became.
-    await grantRoleEverywhere({
-      organizationId: organization.id,
-      resource: "log",
-      roleId: organizationDataRole.id,
-      actions: ["read"],
     });
     const organizationDataAccount = await ServiceAccountModel.create({
       organizationId: organization.id,

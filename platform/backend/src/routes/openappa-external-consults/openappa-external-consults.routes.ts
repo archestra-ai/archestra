@@ -8,7 +8,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import { OpenappaExternalConsultModel } from "@/models";
-import { ResourcePermissions } from "@/services/resource-permissions";
 import { constructResponseSchema } from "@/types";
 import {
   type ExternalConsult,
@@ -49,7 +48,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaExternalConsults,
         description:
-          "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
+          "Export the external consults Guardrails recorded in the active organization, newest first. `openappaDiagnostics:read` returns the consults of the caller's own sessions. `openappaDiagnostics:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
         tags: ["OpenAPPA"],
         querystring: QuerySchema,
         response: constructResponseSchema(
@@ -59,16 +58,13 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async ({ query, user, organizationId }, reply) => {
       const { format, limit, cursor, from, to, ...rest } = query;
-      // log:read scopes the export to the caller's own consults;
-      // log:read at `*` lifts it within the active organization.
       const [canSeeAllLogs, canSeeMembers] = await Promise.all([
-        ResourcePermissions.allows({
-          userId: user.id,
+        userHasPermission(
+          user.id,
           organizationId,
-          resource: "log",
-          scope: "*",
-          action: "read",
-        }),
+          "openappaDiagnostics",
+          "admin",
+        ),
         userHasPermission(user.id, organizationId, "member", "read"),
       ]);
       const toExport = exporter({ canSeeMembers });

@@ -14,10 +14,16 @@ import {
   recordHitlRuling,
   stageHitlReview,
 } from "@/openappa/hitl-review";
-import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
+import {
+  signOfferClaims,
+  unsignedOfferClaims,
+  verifyOfferClaims,
+} from "@/openappa/offer-claims";
+import { signPeerProof } from "@/openappa/peer-claims";
 import * as openappaService from "@/openappa/service";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { seedCoverage } from "@/test/openappa-coverage";
 import type { Agent } from "@/types";
 import {
@@ -26,7 +32,8 @@ import {
   getAllArchestraMcpTools,
 } from ".";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 const TEST_SIGNING_SECRET = "test-offer-signing-secret-32chars";
 
@@ -66,22 +73,56 @@ test("remedy tools open human review without asking for prior consent", () => {
   );
 
   expect(getPlans?.description).toContain(
-    "immediately call execute_remedy_plan",
+    "apply that plan with execute_remedy_plan",
   );
   expect(getPlans?.description).toContain(
-    "Do not ask the user for permission first",
+    "execute_remedy_plan asks the user for approval when the policy requires it",
   );
   expect(getPlans?.description).not.toContain("use ask_user");
-  expect(executePlan?.description).toContain("result says review_required");
+  expect(executePlan?.description).toContain("the result is review_required");
   expect(executePlan?.description).toContain(
-    "immediately call the declared ask_user tool",
+    "Ask the user with the declared ask_user tool",
   );
   expect(executePlan?.description).not.toContain(
     "review it before approving the call",
   );
+  // Both say who decides instead of telling the model to skip the user.
+  for (const description of [getPlans?.description, executePlan?.description]) {
+    expect(description).not.toContain("Do not ask the user");
+    expect(description).not.toMatch(/immediately/i);
+  }
 });
 
-test("only the policy read advertises a read-only MCP annotation", () => {
+test("remedy tools advertise only the arguments the model writes", () => {
+  const tools = getAllArchestraMcpTools();
+  const getPlans = tools.find((tool) =>
+    tool.name.endsWith(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+  );
+  const executePlan = tools.find((tool) =>
+    tool.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+  );
+
+  expect(Object.keys(executePlan?.inputSchema.properties ?? {}).sort()).toEqual(
+    ["label", "offer_id", "plan", "return_schema"],
+  );
+  expect(Object.keys(getPlans?.inputSchema.properties ?? {})).not.toContain(
+    "offers",
+  );
+  for (const tool of [getPlans, executePlan]) {
+    // A client that forwards the tool list never shows its model the signed
+    // members the proxy stamps.
+    expect(JSON.stringify(tool?.inputSchema)).not.toMatch(
+      /JWS|RFC 7515|signature/,
+    );
+    // Not strict: a validating client must still accept a stamped call.
+    expect(
+      (tool?.inputSchema as { additionalProperties?: unknown })
+        .additionalProperties,
+    ).not.toBe(false);
+  }
+});
+
+test("policy reads advertise a read-only annotation but policy writes do not", () => {
   const tools = getAllArchestraMcpTools();
   expect(
     tools.find((tool) => tool.name.endsWith("__get_guardrails_policy"))
@@ -93,7 +134,23 @@ test("only the policy read advertises a read-only MCP annotation", () => {
   ).not.toBe(true);
 });
 
-describe("openappa remedy plan HITL execution", () => {
+test("peer inbox tools hide transport proofs without rejecting proxy-stamped calls", () => {
+  const tools = getAllArchestraMcpTools();
+  const list = tools.find((tool) => tool.name.endsWith("list_peer_messages"));
+  const read = tools.find((tool) => tool.name.endsWith("read_peer_message"));
+
+  expect(Object.keys(list?.inputSchema.properties ?? {})).toEqual([]);
+  expect(Object.keys(read?.inputSchema.properties ?? {})).toEqual([
+    "message_id",
+  ]);
+  for (const tool of [list, read]) {
+    expect(tool).toBeDefined();
+    expect(JSON.stringify(tool?.inputSchema)).not.toContain("peer_proof");
+    expect(tool?.inputSchema.additionalProperties).not.toBe(false);
+  }
+});
+
+describe("OpenAPPA tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
   let orgId: string;
@@ -137,6 +194,361 @@ describe("openappa remedy plan HITL execution", () => {
   afterEach(() => {
     config.openappa = originalOpenappaConfig;
     vi.restoreAllMocks();
+  });
+
+  function peerProof(
+    overrides: Partial<Parameters<typeof signPeerProof>[0]> = {},
+  ) {
+    const proof = signPeerProof(
+      {
+        v: 1,
+        organization_id: orgId,
+        caller_id: `user:${mockContext.userId}`,
+        session_id: "session-1:worker",
+        parent_id: "session-1",
+        call_id: "peer-call-1",
+        action: "read_peer_message",
+        message_id: "message-1",
+        ...overrides,
+      },
+      TEST_SIGNING_SECRET,
+    );
+    if (!proof) throw new Error("Invalid peer-proof fixture");
+    return proof;
+  }
+
+  test.each([
+    "list_peer_messages",
+    "read_peer_message",
+  ] as const)("%s refuses to infer an inbox from an ordinary session ID", async (shortName) => {
+    await expect(
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`,
+        shortName === "read_peer_message" ? { message_id: "message-1" } : {},
+        {
+          ...mockContext,
+          sessionId: "guessed-session",
+          currentToolCallId: "call-1",
+        },
+      ),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  test.each([
+    "list_peer_messages",
+    "read_peer_message",
+  ] as const)("%s cannot use inherited session headers when its proof is omitted", async (shortName) => {
+    const list = vi.spyOn(openappaService, "listPeerMessages");
+    const read = vi.spyOn(openappaService, "readPeerMessage");
+    await expect(
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`,
+        shortName === "read_peer_message" ? { message_id: "message-1" } : {},
+        {
+          ...mockContext,
+          openappaSession: { organization_id: orgId, session_id: "session-1" },
+          currentToolCallId: "inherited-call",
+        },
+      ),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(list).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  test("a signed proof from one organization cannot read another organization's inbox", async ({
+    makeOrganization,
+    makeMember,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const userId = mockContext.userId;
+    if (!userId) throw new Error("Missing authenticated fixture user");
+    await makeMember(userId, otherOrganization.id, { role: "admin" });
+    const read = vi.spyOn(openappaService, "readPeerMessage");
+
+    await expect(
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+        { message_id: "message-1", peer_proof: peerProof() },
+        {
+          ...mockContext,
+          organizationId: otherOrganization.id,
+          openappaSession: {
+            organization_id: otherOrganization.id,
+            session_id: "other-session",
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  test("listing held messages does not expose content digests or sender-supplied identities", async () => {
+    const session = {
+      organization_id: orgId,
+      caller_id: `user:${mockContext.userId}`,
+      session_id: "session-1:worker",
+      parent_id: "session-1",
+    };
+    const list = vi
+      .spyOn(openappaService, "listPeerMessages")
+      .mockResolvedValue([
+        {
+          messageId: "message-1",
+          senderSessionId: "private-sender-name",
+          recipientSessionId: "session-1",
+          digest: "private-content-digest",
+          expiresAt: "2026-10-04T00:00:00.000Z",
+        },
+      ]);
+    const response = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_peer_messages`,
+      {
+        peer_proof: peerProof({
+          action: "list_peer_messages",
+          message_id: null,
+        }),
+      },
+      { ...mockContext, openappaSession: session },
+    );
+    expect(list).toHaveBeenCalledExactlyOnceWith({
+      session,
+      toolCallId: "peer-call-1",
+    });
+    expect(response.content).toEqual([
+      {
+        type: "text",
+        text: JSON.stringify({
+          messages: [
+            { message_id: "message-1", expires_at: "2026-10-04T00:00:00.000Z" },
+          ],
+        }),
+      },
+    ]);
+  });
+
+  test("a peer read cannot supply its own recipient or source label", async () => {
+    const read = vi.spyOn(openappaService, "readPeerMessage");
+    const response = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+      {
+        message_id: "message-1",
+        peer_proof: peerProof(),
+        session_id: "another-session",
+        label: { trust: "trusted", audience: ["public"] },
+      },
+      {
+        ...mockContext,
+        currentToolCallId: "read-1",
+        openappaSession: { organization_id: orgId, session_id: "session-1" },
+      },
+    );
+    expect(response.isError).toBe(true);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  test("a peer read keeps the authenticated child and logical call identity", async () => {
+    const session = {
+      organization_id: orgId,
+      caller_id: `user:${mockContext.userId}`,
+      session_id: "session-1:worker",
+      parent_id: "session-1",
+    };
+    const admitted = {
+      content: [{ type: "text" as const, text: "A checked peer message" }],
+    };
+    const read = vi
+      .spyOn(openappaService, "readPeerMessage")
+      .mockResolvedValue(admitted);
+    const response = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+      { message_id: "message-1", peer_proof: peerProof({ call_id: "read-1" }) },
+      { ...mockContext, openappaSession: session, currentToolCallId: "read-1" },
+    );
+    expect(response).toEqual(admitted);
+    expect(read).toHaveBeenCalledExactlyOnceWith({
+      session,
+      toolCallId: "read-1",
+      args: { message_id: "message-1" },
+    });
+  });
+
+  test.each([
+    false,
+    true,
+  ])("a signed read routes to its child without depending on inherited headers (%s)", async (withParentHeaders) => {
+    const read = vi
+      .spyOn(openappaService, "readPeerMessage")
+      .mockResolvedValue({
+        content: [{ type: "text", text: "Checked value" }],
+      });
+    await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+      { message_id: "message-1", peer_proof: peerProof() },
+      {
+        ...mockContext,
+        ...(withParentHeaders
+          ? {
+              openappaSession: {
+                organization_id: orgId,
+                session_id: "session-1",
+              },
+              currentToolCallId: "parent-call",
+            }
+          : {}),
+      },
+    );
+    expect(read).toHaveBeenCalledExactlyOnceWith({
+      session: {
+        organization_id: orgId,
+        caller_id: `user:${mockContext.userId}`,
+        session_id: "session-1:worker",
+        parent_id: "session-1",
+      },
+      toolCallId: "peer-call-1",
+      args: { message_id: "message-1" },
+    });
+  });
+
+  test("a signed inbox listing retains its proxy-issued logical call", async () => {
+    const list = vi
+      .spyOn(openappaService, "listPeerMessages")
+      .mockResolvedValue([]);
+    await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_peer_messages`,
+      {
+        peer_proof: peerProof({
+          action: "list_peer_messages",
+          message_id: null,
+        }),
+      },
+      mockContext,
+    );
+    expect(list).toHaveBeenCalledExactlyOnceWith({
+      session: {
+        organization_id: orgId,
+        caller_id: `user:${mockContext.userId}`,
+        session_id: "session-1:worker",
+        parent_id: "session-1",
+      },
+      toolCallId: "peer-call-1",
+    });
+  });
+
+  test("a denied read returns signed remedies scoped to the receiving child", async () => {
+    vi.spyOn(openappaService, "readPeerMessage").mockResolvedValue({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "The read requires accepting a narrower return.",
+        },
+      ],
+      structuredContent: {
+        decision: "deny_call",
+        peer_read_denied: true,
+        offers: [{ offer_id: "peer-read-offer" }],
+      },
+    });
+    const response = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+      { message_id: "message-1", peer_proof: peerProof() },
+      mockContext,
+    );
+    expect(response.isError).toBe(true);
+    const text = response.content.find((item) => item.type === "text");
+    if (text?.type !== "text") throw new Error("Missing denial text");
+    const denial = JSON.parse(text.text);
+    expect(denial.message).toBe(
+      "The read requires accepting a narrower return.",
+    );
+    expect(denial.offers).toHaveLength(1);
+    expect(
+      verifyOfferClaims(denial.offers[0], TEST_SIGNING_SECRET),
+    ).toMatchObject({
+      organization_id: orgId,
+      caller_id: `user:${mockContext.userId}`,
+      session_id: "session-1:worker",
+      parent_id: "session-1",
+      offer_id: "peer-read-offer",
+    });
+  });
+
+  test("successful peer content is not interpreted as a remedy response", async () => {
+    const data = {
+      content: [
+        { type: "text" as const, text: '{"offers":["not-a-policy-offer"]}' },
+      ],
+      structuredContent: { offers: ["not-a-policy-offer"] },
+    };
+    vi.spyOn(openappaService, "readPeerMessage").mockResolvedValue(data);
+    const response = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+      { message_id: "message-1", peer_proof: peerProof() },
+      mockContext,
+    );
+    expect(response).toEqual(data);
+  });
+
+  test.each([
+    { name: "caller", claims: { caller_id: "user:another-member" } },
+    {
+      name: "organization",
+      claims: { organization_id: "another-organization" },
+    },
+    { name: "message", claims: { message_id: "another-message" } },
+    {
+      name: "action",
+      claims: { action: "list_peer_messages", message_id: null },
+    },
+  ] as const)("a peer proof cannot change the $name boundary", async ({
+    claims,
+  }) => {
+    const read = vi.spyOn(openappaService, "readPeerMessage");
+    await expect(
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+        { message_id: "message-1", peer_proof: peerProof(claims) },
+        mockContext,
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  test("a tampered proof does not fall back to an otherwise valid session", async () => {
+    const read = vi.spyOn(openappaService, "readPeerMessage");
+    await expect(
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
+        {
+          message_id: "message-1",
+          peer_proof: { ...peerProof(), signature: "invalid" },
+        },
+        {
+          ...mockContext,
+          openappaSession: { organization_id: orgId, session_id: "session-1" },
+          currentToolCallId: "read-1",
+        },
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  test("a malformed remedy call is shown the advertised arguments, not the proxy's", async () => {
+    const result = await executeArchestraTool(
+      toolFullName,
+      { plan: "Accept restriction" },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    const text = result.content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("\n");
+    expect(text).toContain('"offer_id"');
+    // The members the proxy stamps never appear in the model's error text.
+    for (const member of ["execution", "protected", "payload", "signature"]) {
+      expect(text).not.toContain(`"${member}"`);
+    }
   });
 
   test("executes unreviewed remedy offer immediately without prompting", async () => {
@@ -800,6 +1212,16 @@ describe("list_guardrails_battery_fits", () => {
     return (result.structuredContent as any).fits;
   };
 
+  test("advertises a required nullable server ID for strict tool schemas", () => {
+    const tool = getAllArchestraMcpTools().find(
+      (candidate) => candidate.name === toolFullName,
+    );
+    expect(tool?.inputSchema.required).toContain("mcpServerId");
+    expect(tool?.inputSchema.properties?.mcpServerId).toMatchObject({
+      anyOf: [{ type: "string", format: "uuid" }, { type: "null" }],
+    });
+  });
+
   test("says how to declare a battery that fits and what its rules would do", async ({
     makeOrganization,
     makeUser,
@@ -820,7 +1242,7 @@ describe("list_guardrails_battery_fits", () => {
     });
 
     // Docs and Acme already have their batteries declared, so only Linear fits.
-    expect(await fits({}, context)).toEqual([
+    expect(await fits({ mcpServerId: null }, context)).toEqual([
       expect.objectContaining({
         mcpServerId: catalogIds.linear,
         mcpServerName: "Linear",
@@ -902,9 +1324,9 @@ describe("list_guardrails_battery_fits", () => {
       organizationId: org.id,
     });
 
-    expect(await fits({}, context(owner.id))).toEqual([
+    expect(await fits({ mcpServerId: null }, context(owner.id))).toEqual([
       expect.objectContaining({ mcpServerId: linear.id }),
     ]);
-    expect(await fits({}, context(viewer.id))).toEqual([]);
+    expect(await fits({ mcpServerId: null }, context(viewer.id))).toEqual([]);
   });
 });

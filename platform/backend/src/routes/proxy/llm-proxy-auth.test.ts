@@ -4,7 +4,13 @@ import {
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
-import { AgentLabelModel, AgentModel, VirtualApiKeyModel } from "@/models";
+import {
+  AgentLabelModel,
+  AgentModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { accessGrants, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
@@ -488,6 +494,77 @@ describe("validateVirtualApiKey", () => {
         expectedOrganizationId: otherOrg.id,
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("picks the mapped endpoint that serves the requested model", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const endpoints = [];
+    // Sequential: the fallback below is the oldest key, so creation order
+    // matters.
+    for (const { modelId, apiKey, baseUrl } of [
+      { modelId: "glm-5.3", apiKey: "sk-glm", baseUrl: "https://glm.test" },
+      {
+        modelId: "deepseek-v4.1-flash",
+        apiKey: "sk-deepseek",
+        baseUrl: "https://deepseek.test",
+      },
+    ]) {
+      const model = await ModelModel.upsert({
+        externalId: `vllm/${modelId}`,
+        provider: "vllm",
+        modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      const secret = await makeSecret({ secret: { apiKey } });
+      const key = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "vllm",
+        baseUrl,
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+      endpoints.push(key);
+    }
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "two-endpoint-vk",
+      providerApiKeys: endpoints.map((key) => ({
+        provider: "vllm" as const,
+        providerApiKeyId: key.id,
+      })),
+      ...accessGrants("org"),
+    });
+    const validate = (requestedModel: string | null) =>
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "vllm",
+        expectedOrganizationId: org.id,
+        requestedModel,
+      });
+
+    expect(await validate("deepseek-v4.1-flash")).toMatchObject({
+      apiKey: "sk-deepseek",
+      baseUrl: "https://deepseek.test",
+      chatApiKeyId: endpoints[1].id,
+    });
+    expect(await validate("glm-5.3")).toMatchObject({
+      apiKey: "sk-glm",
+      baseUrl: "https://glm.test",
+      chatApiKeyId: endpoints[0].id,
+    });
+    // No model to go by (model listing) or a model no mapped endpoint is
+    // known to serve: the first mapping answers, deterministically.
+    for (const requestedModel of [null, "never-synced-model"]) {
+      expect((await validate(requestedModel)).chatApiKeyId).toBe(
+        endpoints[0].id,
+      );
+    }
   });
 });
 

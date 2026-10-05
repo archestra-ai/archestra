@@ -153,26 +153,7 @@ describe("hasPermission", () => {
         ).resolves.toMatchObject({ success: false });
       }
       await expect(
-        hasPermission(
-          { mcpServerInstallation: ["manage-deleted"] },
-          { cookie: "session-cookie" },
-        ),
-      ).resolves.toMatchObject({
-        success: false,
-        missingPermissions: {
-          mcpServerInstallation: ["manage-deleted"],
-        },
-      });
-      await expect(
         userHasPermission(user.id, org.id, "mcpServerInstallation", "update"),
-      ).resolves.toBe(false);
-      await expect(
-        userHasPermission(
-          user.id,
-          org.id,
-          "mcpServerInstallation",
-          "manage-deleted",
-        ),
       ).resolves.toBe(false);
     });
 

@@ -23,6 +23,8 @@ export const ARCHESTRA_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_T
 
 export const TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME = "execute_remedy_plan";
 export const TOOL_GET_REMEDY_PLANS_SHORT_NAME = "get_remedy_plans";
+export const TOOL_LIST_PEER_MESSAGES_SHORT_NAME = "list_peer_messages";
+export const TOOL_READ_PEER_MESSAGE_SHORT_NAME = "read_peer_message";
 export const TOOL_WHOAMI_SHORT_NAME = "whoami";
 export const TOOL_CREATE_AGENT_SHORT_NAME = "create_agent";
 export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
@@ -248,6 +250,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "get_guardrails_policy",
   "get_openappa_yell",
   "list_guardrails_battery_fits",
@@ -466,6 +470,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   execute_remedy_plan: "openappa",
   yell: "openappa",
   get_remedy_plans: "openappa",
+  list_peer_messages: "openappa",
+  read_peer_message: "openappa",
   get_guardrails_policy: "openappa",
   get_openappa_yell: "openappa",
   list_guardrails_battery_fits: "openappa",
@@ -852,6 +858,8 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
 export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "yell",
 ] as const satisfies readonly ArchestraToolShortName[];
 
@@ -947,11 +955,11 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Code-execution runtime tools. Gated by `sandbox:execute` and only seeded when
+ * Code-execution runtime tools. Gated by `agent:read` and only seeded when
  * the skills-sandbox runtime is on (`config.skillsSandbox.enabled`). They
  * materialize a Dagger container, so they genuinely need the runtime, and they
  * participate in the `search_tools`/`run_tool` dynamic tool access relaxation
- * (see `dynamic-tools.ts`) so a user with `sandbox:execute` can reach them
+ * (see `dynamic-tools.ts`) so a user with `agent:read` can reach them
  * without a manual assignment.
  */
 export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -961,7 +969,7 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Persistent-files ("My Files" / Projects) tools. Also gated by `sandbox:execute`,
+ * Persistent-files ("My Files" / Projects) tools. Also gated by `agent:read`,
  * but they operate purely on persistent file storage and never touch the Dagger
  * runtime — their exposure and dynamic-access participation follow the sandbox
  * runtime flag (`config.skillsSandbox.enabled`), like the runtime tools (see
@@ -1015,7 +1023,7 @@ export const APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
 
 /**
  * The full sandbox tool group (runtime + persistent-files). All share the
- * `sandbox:execute` RBAC permission and require the runtime to execute.
+ * `agent:read` RBAC permission and require the runtime to execute.
  */
 const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
   ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -1141,7 +1149,7 @@ export function buildElicitationMandateInstruction(params?: {
     tools.length > 1
       ? `${tools[0]} (or ${tools[1]})`
       : (tools[0] ?? TOOL_ASK_USER_SHORT_NAME);
-  return `When you ask the user a question, clarification, preference, or approval, call ${toolName}. Never ask multiple-choice questions or request user decisions in plain text.`;
+  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.`;
 }
 
 /**
@@ -1152,6 +1160,8 @@ export function buildElicitationMandateInstruction(params?: {
  */
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
   [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers"],
+  [TOOL_LIST_PEER_MESSAGES_SHORT_NAME]: ["peer_proof"],
+  [TOOL_READ_PEER_MESSAGE_SHORT_NAME]: ["peer_proof"],
   [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
     "execution",
     "protected",

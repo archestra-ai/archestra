@@ -15,10 +15,11 @@ FROM ${NODE_IMAGE}
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends tini libpcre2-8-0 \
-  # CVE-2026-86145: reject a repository snapshot that predates the pcre2 fix.
+  # CVE-2026-86145 and CVE-2026-103111: reject a repository snapshot that
+  # predates the pcre2 fixes.
   && dpkg --compare-versions \
     "$(dpkg-query --show --showformat='${Version}' libpcre2-8-0)" \
-    ge 10.42-1+deb12u1 \
+    ge 10.42-1+deb12u2 \
   && rm -rf /var/lib/apt/lists/*
 
 # The entrypoint is `node /app/server.mjs`, server.mjs imports nothing outside

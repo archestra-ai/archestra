@@ -1,6 +1,6 @@
 import type { UIMessageChunk } from "ai";
 import config from "@/config";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import {
@@ -204,12 +204,12 @@ export class ActiveChatRunService {
     }>;
     abortController?: AbortController;
     /**
-     * Locked chats: replay event payloads are raw stream chunks, so
+     * Encrypted chats: replay event payloads are raw stream chunks, so
      * they are stored encrypted under the conversation key.
      */
-    lockedChatAudit?: LockedChatAuditContext | null;
+    encryptedChatAudit?: EncryptedChatAuditContext | null;
     /**
-     * LockedChat with no key to encrypt under (no escrow record): payload
+     * EncryptedChat with no key to encrypt under (no escrow record): payload
      * persistence is suppressed rather than written in plaintext. The run row
      * still tracks liveness (flushes touch it), but reconnect replay is
      * unavailable for that run.
@@ -233,7 +233,7 @@ export class ActiveChatRunService {
       const writer = new ActiveChatRunEventBatcher({
         runId: params.runId,
         suppressPayloads: params.suppressEventPayloads ?? false,
-        lockedChatAudit: params.lockedChatAudit ?? null,
+        encryptedChatAudit: params.encryptedChatAudit ?? null,
         onFlush: () => this.notifyEvent(params.runId),
         onAsyncFailure: () => {
           if (!params.abortController?.signal.aborted) {
@@ -337,12 +337,12 @@ export class ActiveChatRunService {
 
   createReplayStream(
     runId: string,
-    lockedChatAudit?: LockedChatAuditContext | null,
+    encryptedChatAudit?: EncryptedChatAuditContext | null,
   ): ReadableStream<UIMessageChunk> {
     let isCancelled = false;
     const notifier = this.notifier;
     const replayPollIntervalMs = this.replayPollIntervalMs;
-    const audit = lockedChatAudit ?? null;
+    const audit = encryptedChatAudit ?? null;
 
     return new ReadableStream<UIMessageChunk>({
       async start(controller) {
@@ -357,7 +357,7 @@ export class ActiveChatRunService {
             const snapshot = await ActiveChatRunModel.readStatusAndEventsAfter({
               runId,
               seq: lastSeq,
-              lockedChatAudit: audit,
+              encryptedChatAudit: audit,
             });
 
             // Run row gone: its conversation was hard-deleted and cascaded,
@@ -529,20 +529,20 @@ class ActiveChatRunEventBatcher {
   private asyncFailure: unknown = null;
   private readonly runId: string;
   private readonly suppressPayloads: boolean;
-  private readonly lockedChatAudit: LockedChatAuditContext | null;
+  private readonly encryptedChatAudit: EncryptedChatAuditContext | null;
   private readonly onFlush: () => Promise<void>;
   private readonly onAsyncFailure: (error: unknown) => void;
 
   constructor(params: {
     runId: string;
     suppressPayloads: boolean;
-    lockedChatAudit: LockedChatAuditContext | null;
+    encryptedChatAudit: EncryptedChatAuditContext | null;
     onFlush: () => Promise<void>;
     onAsyncFailure: (error: unknown) => void;
   }) {
     this.runId = params.runId;
     this.suppressPayloads = params.suppressPayloads;
-    this.lockedChatAudit = params.lockedChatAudit;
+    this.encryptedChatAudit = params.encryptedChatAudit;
     this.onFlush = params.onFlush;
     this.onAsyncFailure = params.onAsyncFailure;
   }
@@ -589,7 +589,7 @@ class ActiveChatRunEventBatcher {
       return;
     }
 
-    // Suppression is now only for a locked-chat run with no key to encrypt
+    // Suppression is now only for an encrypted-chat run with no key to encrypt
     // under; the appendEvents call below still runs when a liveness touch is
     // due, so a long silent stream is not reaped as stale.
     const payloads = this.suppressPayloads
@@ -603,7 +603,7 @@ class ActiveChatRunEventBatcher {
     this.flushPromise = this.flushPromise.then(async () => {
       const result = await ActiveChatRunModel.appendEvents({
         runId: this.runId,
-        lockedChatAudit: this.lockedChatAudit,
+        encryptedChatAudit: this.encryptedChatAudit,
         seq,
         payloads,
         touchRun,

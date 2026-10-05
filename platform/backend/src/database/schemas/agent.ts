@@ -148,7 +148,7 @@ const agentsTable = softDeletablePgTable(
     toolExposureMode: text("tool_exposure_mode")
       .$type<ToolExposureMode>()
       .notNull()
-      .default("full"),
+      .default("search_and_run_only"),
 
     /**
      * How a shared agent behaves for a caller who has no usable connection to

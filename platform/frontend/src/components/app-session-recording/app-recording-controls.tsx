@@ -59,7 +59,7 @@ export function AppRecordingControls() {
   // The toggle is admin-only, so a member offered a link to it would land on a
   // control they cannot move. Same permission the setting itself is gated on.
   const { data: canDisableRecorder } = useHasPermissions({
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
 
   const isRecording = recorder.status === "recording";

@@ -1,5 +1,5 @@
+import { memberPermissions } from "@archestra/shared/access-control";
 import { vi } from "vitest";
-import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { PluginModel, PluginSkillUsageEventModel } from "@/models";
 import {
@@ -16,10 +16,6 @@ import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import pluginSkillRoutes from "./plugin-skill.routes";
-
-vi.mock("@/auth");
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
 
 const SKILL_MD = [
   "---",
@@ -85,27 +81,20 @@ describe("plugin Skill routes", () => {
   const ctx = useRouteTestApp(pluginSkillRoutes);
   let originalEnabled: boolean;
 
-  beforeEach(async ({ makeMember }) => {
+  let pluginAdmin: boolean;
+
+  beforeEach(async ({ makeCustomRole, makeMember }) => {
     // Plugin visibility reads grants, and a grant reaches only a member of
-    // the organization.
-    await makeMember(ctx.user.id, ctx.organizationId);
+    // the organization. The catalog reader holds plugin:read but is not a
+    // plugin admin, so visibility is scope-based.
+    const reader = await makeCustomRole(ctx.organizationId, {
+      permission: { ...memberPermissions, plugin: ["read"] },
+    });
+    await makeMember(ctx.user.id, ctx.organizationId, { role: reader.role });
     originalEnabled = config.plugins.enabled;
     config.plugins.enabled = true;
-    mockUserHasPermission.mockReset();
-    // the catalog reader is not a plugin admin, so visibility is scope-based
-    mockUserHasPermission.mockImplementation(
-      async (_userId, _organizationId, _resource, action) => action === "read",
-    );
-    grantEverywhere(["plugin"], async () =>
-      Boolean(
-        await mockUserHasPermission.getMockImplementation()?.(
-          "",
-          "",
-          "plugin",
-          "admin" as never,
-        ),
-      ),
-    );
+    pluginAdmin = false;
+    grantEverywhere(["plugin"], () => pluginAdmin);
   });
 
   afterEach(() => {
@@ -237,7 +226,10 @@ describe("plugin Skill routes", () => {
     expect(names).toContain("Org bundle");
     expect(names).not.toContain("Personal bundle");
 
-    mockUserHasPermission.mockResolvedValue(false);
+    // a plain member holds no plugin:read
+    const reader = ctx.user;
+    ctx.user = await makeUser();
+    await makeMember(ctx.user.id, ctx.organizationId);
     const withoutPluginRead = await ctx.app.inject({
       method: "GET",
       url: "/api/skills/plugins",
@@ -245,7 +237,8 @@ describe("plugin Skill routes", () => {
     expect(withoutPluginRead.json()).toEqual([]);
 
     // a plugin admin sees the whole org catalog
-    mockUserHasPermission.mockResolvedValue(true);
+    ctx.user = reader;
+    pluginAdmin = true;
     const adminResponse = await ctx.app.inject({
       method: "GET",
       url: "/api/skills/plugins",
@@ -318,7 +311,7 @@ describe("plugin Skill routes", () => {
   });
 
   test("projects only portable resources from root and nested skill trees", async () => {
-    mockUserHasPermission.mockResolvedValue(true);
+    pluginAdmin = true;
     const plugin = await seedPlugin(
       stePlugin({
         files: [

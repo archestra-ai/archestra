@@ -91,10 +91,11 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
         profileId: pid,
         token: jwt,
         identityProviderId,
+        expectedToolName: "archestra__whoami",
       });
       expect(tools.length).toBeGreaterThan(0);
 
-      // Verify archestra tools are present
+      // Verify whoami is available through progressive discovery.
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain("archestra__whoami");
 

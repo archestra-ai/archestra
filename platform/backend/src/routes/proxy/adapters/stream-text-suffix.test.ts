@@ -200,7 +200,7 @@ describe("stream text suffix seam", () => {
     ]) {
       expect(adapter.processChunk(chunk as never).sseData).toBeNull();
     }
-    adapter.processChunk({
+    const completed = adapter.processChunk({
       type: "response.completed",
       sequence_number: 5,
       response: {
@@ -220,6 +220,23 @@ describe("stream text suffix seam", () => {
       },
     } as never);
 
+    const output = frames(
+      `${first.sseData ?? ""}${completed.sseData ?? ""}${adapter.formatEndSSE()}`,
+    );
+    expect(
+      output.filter((frame) => frame.type === "response.output_item.done"),
+    ).toHaveLength(1);
+    expect(
+      output.filter((frame) => frame.type === "response.completed"),
+    ).toHaveLength(1);
+    expect(
+      output.find((frame) => frame.type === "response.output_item.done"),
+    ).toMatchObject({
+      item: {
+        id: "msg_1",
+        content: [{ type: "output_text", text: `${suffix}\n\nanswer` }],
+      },
+    });
     expect(
       (
         adapter.toProviderResponse().output[0] as {
@@ -227,6 +244,136 @@ describe("stream text suffix seam", () => {
         }
       ).content[0].text,
     ).toBe("answer");
+  });
+
+  test.each([
+    [
+      "OpenAI messages",
+      openAiResponsesAdapterFactory,
+      [["checking"], ["answer"]],
+    ],
+    [
+      "Azure messages",
+      azureResponsesAdapterFactory,
+      [["checking"], ["answer"]],
+    ],
+    ["OpenAI parts", openAiResponsesAdapterFactory, [["first", "second"]]],
+    ["Azure parts", azureResponsesAdapterFactory, [["first", "second"]]],
+  ] as const)("%s keep the receipt on only the first streamed text part", (_name, factory, texts) => {
+    const adapter = factory.createStreamAdapter();
+    adapter.setTextSuffix?.(signedPrefix);
+    let sse = "";
+    let sequence = 0;
+    const process = (chunk: unknown) => {
+      sse += String(adapter.processChunk(chunk as never).sseData ?? "");
+    };
+    const items = texts.map((parts, outputIndex) => ({
+      id: `msg_${outputIndex}`,
+      type: "message",
+      role: "assistant",
+      status: "completed",
+      phase: outputIndex < texts.length - 1 ? "commentary" : "final_answer",
+      content: parts.map((text: string) => ({
+        type: "output_text",
+        text,
+        annotations: [],
+      })),
+    }));
+    process({
+      type: "response.created",
+      sequence_number: sequence++,
+      response: { id: "resp_1", model: "gpt-test", output: [] },
+    });
+    for (const [outputIndex, item] of items.entries()) {
+      process({
+        type: "response.output_item.added",
+        sequence_number: sequence++,
+        output_index: outputIndex,
+        item: { ...item, status: "in_progress", content: [] },
+      });
+      for (const [contentIndex, part] of item.content.entries()) {
+        const position = {
+          item_id: item.id,
+          output_index: outputIndex,
+          content_index: contentIndex,
+        };
+        process({
+          type: "response.content_part.added",
+          sequence_number: sequence++,
+          ...position,
+          part: { ...part, text: "" },
+        });
+        process({
+          type: "response.output_text.delta",
+          sequence_number: sequence++,
+          ...position,
+          delta: part.text,
+        });
+        process({
+          type: "response.output_text.done",
+          sequence_number: sequence++,
+          ...position,
+          text: part.text,
+        });
+        process({
+          type: "response.content_part.done",
+          sequence_number: sequence++,
+          ...position,
+          part,
+        });
+      }
+      process({
+        type: "response.output_item.done",
+        sequence_number: sequence++,
+        output_index: outputIndex,
+        item,
+      });
+    }
+    process({
+      type: "response.completed",
+      sequence_number: sequence++,
+      response: {
+        id: "resp_1",
+        model: "gpt-test",
+        status: "completed",
+        output: items,
+      },
+    });
+    sse += adapter.formatEndSSE();
+
+    const output = frames(sse);
+    const expectedItems = structuredClone(items);
+    expectedItems[0].content[0].text = `${signedPrefix("")}\n\n${texts[0][0]}`;
+    const expectedParts = expectedItems.flatMap((item) => item.content);
+    expect(
+      output
+        .filter((frame) => frame.type === "response.output_item.done")
+        .map((frame) => frame.item),
+    ).toEqual(expectedItems);
+    expect(
+      output
+        .filter((frame) => frame.type === "response.output_text.done")
+        .map((frame) => frame.text),
+    ).toEqual(expectedParts.map((part) => part.text));
+    expect(
+      output
+        .filter((frame) => frame.type === "response.content_part.done")
+        .map((frame) => frame.part),
+    ).toEqual(expectedParts);
+    expect(
+      output
+        .filter((frame) => frame.type === "response.output_text.delta")
+        .map((frame) => frame.delta)
+        .join(""),
+    ).toBe(expectedParts.map((part) => part.text).join(""));
+    expect(
+      output.filter((frame) => frame.type === "response.completed"),
+    ).toEqual([
+      expect.objectContaining({
+        response: expect.objectContaining({ output: expectedItems }),
+      }),
+    ]);
+    expect(adapter.toProviderResponse().output).toEqual(items);
   });
 
   test("does not emit a suffix for an aborted or tool-only Responses turn", () => {

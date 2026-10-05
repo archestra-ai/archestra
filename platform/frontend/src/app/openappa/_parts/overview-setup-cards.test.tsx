@@ -19,15 +19,15 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import appConfig from "@/lib/config/config";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   OverviewSetupCards,
   UnrecognizedClientsCard,
 } from "./overview-setup-cards";
 
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
 const api = "http://localhost:9000/api";
 const server = setupServer(
@@ -77,6 +77,7 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);
+  vi.mocked(useAppName).mockReturnValue("Archestra");
   enabled = false;
   featureEnabled = true;
   clientAction = "bypass";
@@ -108,7 +109,10 @@ beforeEach(() => {
     ),
   );
 });
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  vi.restoreAllMocks();
+});
 afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
@@ -144,9 +148,14 @@ test("a fresh instance shows only the policy step", async () => {
 });
 
 test("members who cannot edit the policy are told who can", async () => {
-  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: Object.values(permissions).every((actions) =>
+          actions.every((action) => action === "read"),
+        ),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   show();
   expect(
     await screen.findByText("Ask an administrator to turn on the guardrail."),
@@ -207,9 +216,14 @@ test("the enforcement switch turns enforcement on and off", async () => {
 
 test("members who cannot manage enforcement see the switch disabled", async () => {
   revision = 3;
-  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: Object.values(permissions).every((actions) =>
+          actions.every((action) => action === "read"),
+        ),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   show();
   expect(
     await screen.findByRole("switch", { name: "Enforce the policy" }),
@@ -251,9 +265,14 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
 test("members who cannot manage sync are told who can connect it", async () => {
   revision = 1;
   enabled = true;
-  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: Object.values(permissions).every((actions) =>
+          actions.every((action) => action === "read"),
+        ),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   show();
   expect(
     await screen.findByText("Ask an administrator to connect a repository."),
@@ -301,6 +320,12 @@ test("once sync is connected the cards stay as status with no next step", async 
 });
 
 test("an administrator blocks requests from unrecognized clients", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: Boolean(permissions.organizationSettings),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   const updates: unknown[] = [];
   server.use(
     http.put(`${api}/guardrails-deployment`, async ({ request }) => {
@@ -345,9 +370,15 @@ test("a rejected change keeps unrecognized clients allowed", async () => {
 });
 
 test("members who cannot manage the setting see it disabled", async () => {
-  vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data:
+          permissions.organizationSettings?.every(
+            (action) => action === "read",
+          ) ?? false,
+      }) as ReturnType<typeof useHasPermissions>,
+  );
   show("unrecognized");
   expect(
     await screen.findByRole("combobox", {
@@ -367,4 +398,20 @@ test("the unrecognized-client setting is disabled without the feature flag", asy
       name: /should be:/,
     }),
   ).toBeDisabled();
+});
+
+test("hidden docs links keep the branded client coverage explanation", async () => {
+  vi.spyOn(
+    appConfig.enterpriseFeatures,
+    "fullWhiteLabeling",
+    "get",
+  ).mockReturnValue(true);
+  vi.mocked(useAppName).mockReturnValue("Workspace");
+  const { container } = show("unrecognized");
+  await screen.findByRole("combobox", { name: /should be:/ });
+
+  expect(container).toHaveTextContent(
+    "Guardrails work with natively supported clients like Workspace chat, Claude Code, Codex, and more, and with any client that correctly sends OpenAPPA session headers.",
+  );
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
 });

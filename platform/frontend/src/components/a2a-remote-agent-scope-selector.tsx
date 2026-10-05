@@ -43,7 +43,7 @@ export function A2aRemoteAgentScopeSelector({
 }) {
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: canManageExternalAgents } = useHasPermissions({
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
   const { data: isAdmin } = useHasPermissions({ agent: ["update"] }, "*");
   const canShareOrganization = !!canManageExternalAgents || !!isAdmin;

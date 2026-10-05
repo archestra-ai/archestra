@@ -20,7 +20,7 @@ const RUN_TOOL_FULL_NAME = getArchestraToolFullName(TOOL_RUN_TOOL_SHORT_NAME);
 // target's own trusted-data policies decide, exactly as they do when the same
 // tool is called directly with tools exposed. The individual behaviors
 // (untrusted-by-default results, untrusted-context blocking, policy
-// overrides) are pinned in trusted-data.test.ts, trusted-data-policy.test.ts
+// overrides) are pinned in trusted-data.rollback.test.ts, trusted-data-policy.test.ts
 // and tool-invocation-policy.test.ts — this file only pins the dispatch
 // unwrapping chain.
 describe("guardrails: run_tool dispatch -> target tool's trusted data policies apply", () => {

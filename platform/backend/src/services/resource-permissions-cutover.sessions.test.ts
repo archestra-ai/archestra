@@ -137,7 +137,7 @@ for (const resource of ["conversation", "agentRun"] as const) {
   }
 }
 
-test("new chat grants support mixed principals and cannot expose locked chats", async ({
+test("new chat grants support mixed principals and cannot expose encrypted chats", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -218,7 +218,7 @@ test("new chat grants support mixed principals and cannot expose locked chats", 
     userId: owner.id,
     organizationId: org.id,
     agentId: agent.id,
-    lockedChat: true,
+    encryptedChat: true,
   });
   await expect(
     ResourcePermissions.updatePolicy({
@@ -443,7 +443,7 @@ test("a chat share naming somebody outside the organization still converts to a 
   ).toBe(false);
 });
 
-test("a locked chat keeps its owner alone even when an organization share exists", async ({
+test("an encrypted chat keeps its owner alone even when an organization share exists", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -460,7 +460,7 @@ test("a locked chat keeps its owner alone even when an organization share exists
     userId: owner.id,
     organizationId: org.id,
     agentId: agent.id,
-    lockedChat: true,
+    encryptedChat: true,
   });
   // A chat that predates the upgrade: drop the policy creation wrote.
   await removeObjectPolicies(org.id);

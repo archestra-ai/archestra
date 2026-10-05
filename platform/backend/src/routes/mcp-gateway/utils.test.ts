@@ -31,7 +31,7 @@ import {
   type ListToolsResult,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { onTestFinished, vi } from "vitest";
+import { type MockInstance, onTestFinished, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import {
   takeLeadingAttestation,
@@ -47,37 +47,36 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   appConnectorAudienceRef,
   buildConnectorResourceUri,
 } from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
-import type { JwksValidationResult } from "@/services/jwks-validator";
-import { describe, expect, test } from "@/test";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: true },
-  }),
-);
-
-const mockValidateJwt = vi.fn<() => Promise<JwksValidationResult | null>>();
-
-vi.mock("@/services/jwks-validator", () => ({
-  jwksValidator: {
-    validateJwt: (...args: unknown[]) => mockValidateJwt(...(args as [])),
-  },
-}));
-
-const {
+import { jwksValidator } from "@/services/jwks-validator";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
   authenticateMCPGatewayRequest,
   createAgentServer,
   ensureRequestSocketDestroySoon,
+  validateExternalIdpToken,
   validateMCPGatewayToken,
   validateOAuthToken,
-  validateExternalIdpToken,
-} = await import("./utils");
+} from "./utils";
+
+let mockValidateJwt: MockInstance<typeof jwksValidator.validateJwt>;
+
+beforeEach(() => {
+  config.enterpriseFeatures.core = true;
+  mockValidateJwt = vi
+    .spyOn(jwksValidator, "validateJwt")
+    .mockResolvedValue(null);
+});
+
+afterEach(() => {
+  mockValidateJwt.mockRestore();
+});
 
 type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
 type TestCallToolHandler = (
@@ -1615,7 +1614,7 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
-  test("lists APPA notice and remedy tools for an unassigned agent when OpenAPPA is enabled", async ({
+  test("lists APPA notice, remedy and inbox tools for an unassigned agent when OpenAPPA is enabled", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1623,6 +1622,7 @@ describe("createAgentServer tools/list", () => {
   }) => {
     const previousEnabled = config.openappa.enabled;
     config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(true);
     onTestFinished(() => {
       config.openappa.enabled = previousEnabled;
     });
@@ -1665,6 +1665,12 @@ describe("createAgentServer tools/list", () => {
     expect(names).toContain(
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
     );
+    for (const inboxTool of [
+      "list_peer_messages",
+      "read_peer_message",
+    ] as const) {
+      expect(names).toContain(archestraMcpBranding.getToolName(inboxTool));
+    }
     for (const policyTool of [
       "get_guardrails_policy",
       "list_guardrails_battery_fits",
@@ -1689,6 +1695,143 @@ describe("createAgentServer tools/list", () => {
           archestraMcpBranding.getToolName("update_guardrails_policy"),
       )?.annotations?.readOnlyHint,
     ).not.toBe(true);
+  });
+
+  test("hides remedy tools while the deployment switch is off and still lists policy tools", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(false);
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+    });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) throw new Error("Expected tools/list handler");
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = response.tools.map((tool) => tool.name);
+    expect(names).not.toContain(
+      archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+    );
+    expect(names).not.toContain(
+      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    );
+    for (const inboxTool of [
+      "list_peer_messages",
+      "read_peer_message",
+    ] as const) {
+      expect(names).not.toContain(archestraMcpBranding.getToolName(inboxTool));
+    }
+    expect(names).toContain(
+      archestraMcpBranding.getToolName("get_guardrails_policy"),
+    );
+
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const { server: enabledServer } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const enabledList = (
+      enabledServer.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!enabledList) throw new Error("Expected tools/list handler");
+    const enabled = await enabledList({ method: "tools/list", params: {} });
+    const enabledNames = enabled.tools.map((tool) => tool.name);
+    expect(enabledNames).toContain(
+      archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+    );
+    expect(enabledNames).toContain(
+      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    );
+    for (const inboxTool of [
+      "list_peer_messages",
+      "read_peer_message",
+    ] as const) {
+      expect(enabledNames).toContain(
+        archestraMcpBranding.getToolName(inboxTool),
+      );
+    }
+  });
+
+  test("refuses remedy and inbox tools when the deployment switch is off", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(false);
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { server } = await createAgentServer({ agentId: agent.id });
+    const handler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestCallToolHandler>;
+      }
+    )._requestHandlers.get("tools/call");
+    if (!handler) throw new Error("Expected tools/call handler");
+    for (const name of [
+      archestraMcpBranding.getToolName(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+      archestraMcpBranding.getToolName("list_peer_messages"),
+      archestraMcpBranding.getToolName("read_peer_message"),
+    ]) {
+      await expect(
+        handler(
+          {
+            method: "tools/call",
+            params: {
+              name,
+              arguments: { ruling: "Blocked." },
+            },
+          },
+          { sendRequest: vi.fn() },
+        ),
+      ).rejects.toMatchObject({
+        code: -32601,
+        message: "Guardrails v2 is disabled",
+      });
+    }
   });
 
   test("assigned read-only policy tool keeps its annotation without marking writes safe", async ({
@@ -2631,7 +2774,10 @@ describe("createAgentServer tools/list", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({ organizationId: org.id });
+    const agent = await makeAgent({
+      toolExposureMode: "full",
+      organizationId: org.id,
+    });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       name: "bug-tracker",
@@ -3132,6 +3278,7 @@ describe("createAgentServer tools/list", () => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
 
     const gatewayAgent = await makeAgent({
+      toolExposureMode: "full",
       organizationId: org.id,
       agentType: "mcp_gateway",
     });
@@ -3139,6 +3286,7 @@ describe("createAgentServer tools/list", () => {
     // makeAgent defaults to agentType "mcp_gateway"; the chat shape must be
     // explicit or this pin compares two gateway agents.
     const chatAgent = await makeAgent({
+      toolExposureMode: "full",
       organizationId: org.id,
       agentType: "agent",
     });
@@ -3877,7 +4025,10 @@ describe("createAgentServer tools/list", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent({ organizationId: org.id });
+    const agent = await makeAgent({
+      toolExposureMode: "full",
+      organizationId: org.id,
+    });
 
     // Two different catalog items whose installs happen to share a display
     // name, producing two tool rows with the identical slugified name.
@@ -3961,7 +4112,10 @@ describe("createAgentServer tools/list", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent({ organizationId: org.id });
+    const agent = await makeAgent({
+      toolExposureMode: "full",
+      organizationId: org.id,
+    });
     await ToolModel.syncArchestraBuiltInCatalog({ organization: null });
     await ToolModel.assignArchestraToolsToAgent(
       agent.id,
@@ -4085,7 +4239,10 @@ describe("createAgentServer tools/list", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent({ organizationId: org.id });
+    const agent = await makeAgent({
+      toolExposureMode: "full",
+      organizationId: org.id,
+    });
     const upstreamTool = await makeUpstreamTool({
       makeInternalMcpCatalog,
       makeMcpServer,

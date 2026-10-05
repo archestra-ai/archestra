@@ -8,12 +8,7 @@ import {
 import type { CoverageRuleCounts } from "@/lib/openappa-coverage.query";
 import { cn } from "@/lib/utils/tailwind";
 
-/**
- * What judges a tool, in a fixed order, name, and color so the same bucket
- * reads the same in every chart: enforced rules first, then the ones that do
- * not hold, then the tools no rule names. The catch-all and the built-in
- * fallback both judge a tool no rule names, so they are one bucket.
- */
+/** Shared coverage categories for the overview chart and entity bars. */
 export const RULE_BUCKETS = [
   {
     key: "root",
@@ -30,6 +25,14 @@ export const RULE_BUCKETS = [
     count: (counts: CoverageRuleCounts) => counts.battery,
   },
   {
+    key: "catchAll",
+    label: "Catch-all rule",
+    description:
+      "One rule covers these tools. Add specific rules for more control.",
+    color: "var(--chart-3)",
+    count: (counts: CoverageRuleCounts) => counts.catchAll,
+  },
+  {
     key: "notEnforced",
     label: "Not enforced",
     description:
@@ -38,15 +41,13 @@ export const RULE_BUCKETS = [
     count: (counts: CoverageRuleCounts) => counts.notEnforced,
   },
   {
-    key: "noRule",
+    key: "notCovered",
     label: "No rule",
-    description:
-      "No rule names these tools, so your policy's catch-all decides their calls.",
+    description: "Always allowed. Add rules to set limits.",
     // Opaque, so it reads the same over a card, a table row, or a bar track.
     color:
       "color-mix(in oklch, var(--muted-foreground) 55%, var(--background))",
-    count: (counts: CoverageRuleCounts) =>
-      counts.catchAll + counts.builtInFallback,
+    count: (counts: CoverageRuleCounts) => counts.notCovered,
   },
 ] as const;
 

@@ -1,4 +1,5 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   consumeHitlRuling,
   getHitlAskUserArguments,
@@ -7,7 +8,8 @@ import {
 } from "./hitl-review";
 import type { OpenAppaSession } from "./service";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 const session = (sessionId: string): OpenAppaSession => ({
   organization_id: "organization",

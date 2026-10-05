@@ -105,13 +105,17 @@ export class ResourcePermissions {
   }
 
   /** Load scoped capabilities once for a request that touches several targets. */
-  static async resolveAll(params: {
-    organizationId: string;
-    userId: string;
-  }): Promise<ManagedScopedPermission[]> {
-    const subjects = await ResourcePermissions.getSubjects(params);
+  static async resolveAll(
+    params:
+      | { organizationId: string; userId: string }
+      | { organizationId: string; subjects: PermissionSubject[] },
+  ): Promise<ManagedScopedPermission[]> {
+    const subjects =
+      "subjects" in params
+        ? params.subjects
+        : await ResourcePermissions.getSubjects(params);
     const policies = await ResourcePermissionPolicyModel.findForSubjects({
-      ...params,
+      organizationId: params.organizationId,
       subjects,
     });
     const keys = new Set(subjects.map(subjectKey));

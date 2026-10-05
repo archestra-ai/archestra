@@ -212,17 +212,18 @@ class KnowledgeSourceAccessControlService {
     userId: string;
     organizationId: string;
   }): Promise<KnowledgeSourceAccessControlContext> {
-    const [canReadAll, principal, grants] = await Promise.all([
-      ResourcePermissions.allows({
-        userId: params.userId,
+    const principal =
+      await ResourcePermissionSubjectModel.resolvePrincipal(params);
+    const grants = await ResourcePermissions.resolveAll(principal);
+    const canReadAll = hasScopedPermission({
+      grants,
+      required: {
         organizationId: params.organizationId,
         resource: "knowledgeBase",
         scope: "*",
         action: "update",
-      }),
-      ResourcePermissionSubjectModel.resolvePrincipal(params),
-      ResourcePermissions.resolveAll(params),
-    ]);
+      },
+    });
 
     return {
       userId: params.userId,

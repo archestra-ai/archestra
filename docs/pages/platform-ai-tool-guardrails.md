@@ -35,7 +35,9 @@ OpenAPPA evaluates four core concepts:
 
 ## Replacing the Previous Guardrails
 
-Archestra 1.4 replaces the legacy Guardrails interface and Security settings tab. Setting `ARCHESTRA_BETA=true` stops legacy trusted-data classification, even with OpenAPPA enforcement off. Legacy invocation policies still run before OpenAPPA. Rules that depend on the old untrusted-context labels lose that signal.
+Archestra 1.4 replaces the legacy Guardrails interface and Security settings tab.
+
+Setting `ARCHESTRA_BETA=true` stops legacy trusted-data classification. This happens even when OpenAPPA enforcement is off. Legacy invocation policies still run before OpenAPPA. Rules that depend on the old untrusted-context labels lose that signal.
 
 ## Enable the Feature
 
@@ -66,9 +68,9 @@ Claude Code teammates can send messages without finishing their tasks. Sending b
 - A free-text message reaches its receiver directly when it adds no restrictions. Otherwise, Guardrails hold the body and show a notice.
 - The receiver lists pending messages with `list_peer_messages` and chooses which to read with `read_peer_message`. Reading applies that message's restrictions to the receiver.
 - The inbox tools require a connection to the [Archestra MCP Gateway](./platform-claude-code-example). Pending messages remain discoverable after conversation compaction. Expired messages cannot be read.
-- A teammate that started while enforcement was off stays unchecked. Start a new teammate, under a new name, to continue its work under the policy.
+- A teammate that started while enforcement was off stays unchecked. Start a new teammate, under a new name, to continue its work under the policy. OpenAPPA refuses a second teammate under a name the session already used.
 
-A structured message appears directly only when that same send adds no restrictions. Otherwise, read its held body through the inbox. Messages without a recorded release stay withheld. OpenAPPA refuses a second teammate under a name the session already used.
+A structured message appears directly only when that same send adds no restrictions. Otherwise, read its held body through the inbox. Messages without a recorded release stay withheld.
 
 ## Yells
 
@@ -82,7 +84,7 @@ The overview counts unresolved reports. You can search reports, download their d
 
 A policy controls every agent, so changes to it should be reviewed like code. Connect a GitHub repository and the configuration agent opens pull requests instead of saving changes. A change applies once it's merged and synced.
 
-Administrators can create a private repository from the [OpenAPPA configuration template](https://github.com/archestra-ai/openappa-config). Start in the setup chat, on **OpenAPPA → Overview**, or under **Settings → OpenAPPA**. The chat uses a connected organization GitHub App, or opens the same credential dialog used in Settings to add one. Install the App on the GitHub account that will own the new repository. Select **All repositories** so it can access repositories created later. Give it **Read & write** access to Administration, Contents, and Pull requests. Enter the repository as `owner/name`. Archestra copies the template and writes your current policy to `appa.toml`, including battery declarations. Sync starts immediately.
+Administrators can create a private repository from the [OpenAPPA configuration template](https://github.com/archestra-ai/openappa-config). Start in the setup chat, on **Guardrails → Overview**, or under **Settings → OpenAPPA**. The chat uses a connected organization GitHub App, or opens the same credential dialog used in Settings to add one. Install the App on the GitHub account that will own the new repository. Select **All repositories** so it can access repositories created later. Give it **Read & write** access to Administration, Contents, and Pull requests. Enter the repository as `owner/name`. Archestra copies the template and writes your current policy to `appa.toml`, including battery declarations. Sync starts immediately.
 
 The template checks policy structure on each pull request. Add [trajectory tests](https://www.openappa.com/validation) under `traces/` to check allowed and refused decisions. Require the validation check in GitHub branch protection.
 

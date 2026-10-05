@@ -8,6 +8,8 @@ This guide explains Archestra's integration rather than OpenAPPA policy syntax. 
 
 Protocol jump links: [call rewriting](#tool-calls-and-results), [remedy execution](#remedies), [user questions](#ask_user-and-native-elicitation), [session and child markers](#protected-session-markers), and [yell reporting](#yell-and-diagnostic-tools).
 
+The baseline records the version examined, not a promise about later releases. Check [`Cargo.toml`](../platform/archestra-rs/openappa-rs/Cargo.toml) for the current OpenAPPA pin. Review this guide when that pin or the host protocols change.
+
 ```mermaid
 flowchart LR
   Client[Chat or external client] <--> Proxy[LLM proxy and APPA plugin]
@@ -128,13 +130,13 @@ flowchart TD
   OldRoot[Existing root] --> Snapshot[(Previously recorded policy bytes)]
 ```
 
-Dispatch freshness checks root revisions and the revision-0 starter hash. Declarations and coverage reads also check the fingerprint. A catalog match marked `available` is a discovery suggestion, not an active install.
+Before dispatch, the host compares root revisions and the revision-0 starter hash. Declarations and coverage reads also check the fingerprint. A catalog match marked `available` is a discovery suggestion, not an active install.
 
 ### Helpers
 
 Helper scripts run in an isolated sandbox container, never on the backend host. The composer rewrites `command` externals to loopback URLs: `POST /api/openappa/helpers/<installId>/<externalName>`, authenticated with `APPA_ARCHESTRA_BRIDGE_TOKEN`. Neither root policies nor batteries can use `APPA_ARCHESTRA_*` tokens.
 
-The bridge rejects non-loopback calls and invalid tokens. It mounts battery files read-only under `/skills/<battery>`, passes requests on stdin, injects credentials as sandbox secrets, and reads JSON from stdout. Execution timeout is 4 seconds, with a 4.5 second hard deadline.
+The bridge rejects non-loopback calls and invalid tokens. It mounts battery files read-only under `/skills/<battery>`, passes requests on stdin, injects credentials as sandbox secrets, and reads JSON from stdout. [`helper-bridge.ts`](../platform/backend/src/openappa/helper-bridge.ts) sets a 4-second execution timeout and a 4.5-second deadline, including setup. A timed-out run holds its concurrency slot until it settles.
 
 Helper concurrency is capped at `max(1, floor(sandbox maxConcurrent / 2))`. Error responses: 404 for missing helpers, 502 for script errors, 503 for capacity limits, 504 for timeouts. The runtime treats non-200 responses as no answer, failing closed. Because consults hold database connections, slow helpers can exhaust connection pools.
 
@@ -182,7 +184,7 @@ Client tool names do not prove gateway identity. The gateway appends `[[gwa1.<pa
 
 In attested mode, the proxy demotes unverified lookalike tools. Internal Chat trusts the tool list it builds. If no attestation verifies, the resolver falls back to a label-based compatibility mode. That mode does not provide cryptographic proof.
 
-Outgoing calls flow through dispatch rewrites, `onPrepareToolCalls`, legacy invocation validation, and the APPA finalizer. The plugin registry ensures no call skips validation. APPA can allow a call, replace a denied call with a notice, or append delegation metadata. If partial processing fails, the proxy cancels already-admitted calls.
+Outgoing calls flow through dispatch rewrites, `onPrepareToolCalls`, legacy invocation validation, and the APPA finalizer. The registry prevents finalizers from adding calls that skipped validation. APPA can allow a call, replace a denied call with a notice, or append delegation metadata. If partial processing fails, the proxy attempts to cancel already-admitted calls. Failed cancellation is logged.
 
 Sources: [`gateway-tool-names.ts`](../platform/backend/src/routes/proxy/utils/gateway-tool-names.ts), [`tool-attestation.ts`](../platform/backend/src/archestra-mcp-server/tool-attestation.ts), [`registry.ts`](../platform/backend/src/proxy/plugins/registry.ts).
 
@@ -262,9 +264,9 @@ Sources: [`notice.ts`](../platform/backend/src/openappa/notice.ts), [`request.ts
 
 ### Streaming boundary
 
-The streaming boundary buffers tool calls until the stream completes. Stream adapters hold calls by omitting `sseData`. Parent text streams immediately. Child runs and marked client-compaction requests buffer responses up to 10 MiB (returning 413 on overflow). The compaction flag does not cover every internal chat compaction request.
+The intended streaming boundary holds tool calls until the stream completes. Stream adapters hold calls by omitting `sseData`. Parent text normally streams immediately. Child runs and marked client-compaction requests buffer responses up to 10 MiB (returning 413 on overflow). The compaction flag does not cover every internal chat compaction request.
 
-On unbuffered streams, adapters that emit chunks containing both text and tool calls (such as Gemini, MiniMax, or OpenAI delta content) can release calls before policy validation runs. Terminal frames on Responses can do the same. Audit your stream adapter before relying on pre-execution guarantees ([`llm-proxy-handler.ts` lines 2823-2837](../platform/backend/src/routes/proxy/llm-proxy-handler.ts#L2823-L2837)).
+On unbuffered streams, mixed text/tool chunks can release calls before policy validation. The handler identifies `gemini.ts`, `minimax.ts`, and `openai.ts` as affected adapters. Terminal frames on Responses can do the same. Audit your adapter before relying on pre-execution guarantees ([`llm-proxy-handler.ts`](../platform/backend/src/routes/proxy/llm-proxy-handler.ts#L2823-L2837)).
 
 Provider-hosted tools (like server-side web search) run inside the model provider before Archestra receives the request. The proxy can modify or withhold their outputs, but cannot prevent their execution.
 
@@ -440,9 +442,9 @@ flowchart TD
   Header --> Fill[Fill missing internal APPA session and parent headers]
   Fallback --> Fill
   Fill --> Scope[Scope external identity to authenticated caller]
+  Scope --> Child{Checked native child evidence?}
   Child -->|Yes| Bind[Verify marker or receipt and bind parent plus child]
   Child -->|No| Fork[Resolve eligible receipt or stamp lineage]
-  Scope --> Child{Checked native child evidence?}
   Bind --> Start[Native session_start]
   Fork --> Start
 ```
@@ -465,7 +467,13 @@ Client matching selects syntax rather than authority. After authentication, the 
 
 A custom adapter implements `AppaClientAdapter` and registers in `APPA_CLIENT_ADAPTERS`. It extracts sessions, classifies tools, maps native questions, and parses spawn/return events. Implementing only session extraction leaves child and question protections inactive. See [`types.ts`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/types.ts).
 
-Notice restoration and turn accounting run on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices stay in history. Deferred tools (`tool_search`), `local_shell`, computer-use tools, and conflicting APPA declarations fail validation immediately.
+### Client Constraints
+
+Notice restoration and turn accounting run on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices stay in history.
+
+Deferred tools (`tool_search`), `local_shell`, computer-use tools, and conflicting APPA declarations fail validation immediately.
+
+The A2A [step-context guard](../platform/backend/src/agents/step-context-guard.ts) removes proxy-only fields from calls before writing plain-text summaries. A summary cannot replace signed protocol evidence.
 
 Sources: [`session-identity.ts`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/session-identity.ts), [`fillAppaSessionHeaders`](../platform/backend/src/routes/proxy/llm-proxy-handler.ts), [`client adapters`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/), [`sessionFromHeaders`](../platform/backend/src/openappa/service.ts).
 
@@ -692,7 +700,7 @@ The host acquires an in-process root lock before leasing a database connection. 
 
 The connection pool defaults to 4 connections (capped at 64). Calls wait up to 30 seconds for a connection. Connections enforce 30-second lock timeouts and 60-second statement timeouts. Pool exhaustion typically stems from slow external consults. Stale connections are replaced automatically. Modifying pool limits requires a backend restart.
 
-OpenAPPA management requires `openappaPolicy`, `openappaDiagnostics`, and `organizationSettings`. The legacy `toolPolicy` permission is not supported.
+OpenAPPA administration uses `openappaPolicy`, `openappaDiagnostics`, and `organizationSettings`. These are distinct resources in [`access-control.ts`](../platform/shared/access-control.ts). Legacy `toolPolicy` permissions still exist for other features, but do not authorize OpenAPPA administration. This guide does not prescribe a role migration.
 
 | Endpoint | Role | Permission |
 | --- | --- | --- |
@@ -708,7 +716,9 @@ OpenAPPA management requires `openappaPolicy`, `openappaDiagnostics`, and `organ
 | `/api/openappa/yells/*` | View diagnostic reports and download archives. | `openappaDiagnostics:read` / `update` |
 | `GET /api/chat/conversations/:id/openappa-status` | Read chat conversation governance status. | `chat:read` |
 
-Start new conversations after enabling OpenAPPA. Tool results produced before activation lack receipts and are rejected.
+Start new conversations after enabling OpenAPPA. Retained unenforced sessions and positively observed unenforced calls have separate admission paths. Unrecorded results do not gain admission merely because they predate activation. Unenforced observation records expire after 30 days.
+
+For schema history, inspect [`the migrations directory`](../platform/backend/src/database/migrations/). This includes `0477_appa_github_sync`, `0483_openappa_batteries`, and `0485_fine_silver_surfer`. Startup backfill behavior lives in [`declare-installs.ts`](../platform/backend/src/openappa/declare-installs.ts), not a separate runtime migration.
 
 There is no automated cleanup API for pending receipts. Do not delete pending rows or truncate database tables manually. Investigate the root cause and check external state first. `pnpm --dir backend db:reset-openappa` is a development command that wipes policy data — never run it to fix stuck production sessions.
 

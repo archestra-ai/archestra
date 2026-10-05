@@ -24,6 +24,15 @@ class AgentWorkspaceModel {
     return row;
   }
 
+  static async findById(id: string): Promise<AgentWorkspace | null> {
+    const [row] = await db
+      .select()
+      .from(schema.agentWorkspacesTable)
+      .where(eq(schema.agentWorkspacesTable.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
   static async findByWorkloadName(
     name: string,
   ): Promise<AgentWorkspace | null> {

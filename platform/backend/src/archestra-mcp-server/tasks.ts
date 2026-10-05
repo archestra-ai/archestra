@@ -12,6 +12,7 @@ import {
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import type { A2AAttachment } from "@/agents/a2a-executor";
@@ -34,6 +35,16 @@ import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backe
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import {
+  admitRuntimeSteer,
+  classifyRuntimeCaller,
+  crossingRefusal,
+  crossRuntimeFile,
+  crossRuntimeOutput,
+  guardRuntimeCrossing,
+  type RuntimeCrossing,
+  SPAWN_TARGET_MISMATCH,
+} from "@/services/agent-runtime/runtime-crossing";
+import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
@@ -43,6 +54,7 @@ import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
@@ -99,6 +111,8 @@ export async function startDelegatedTask(params: {
 
     const runtime = resolveAgentRuntime(agent);
     if (runtime) resolveAgentRuntimeBackendDriver(runtime.backend);
+    const crossing = await runtimeCrossingForStart(context, Boolean(runtime));
+    if (typeof crossing === "string") return errorResult(crossing);
 
     // Refuse before creating a task when the caller can already fix the
     // missing credential. Otherwise the detached task fails after its handle
@@ -141,6 +155,7 @@ export async function startDelegatedTask(params: {
           ? RouteCategory.CHATOPS
           : RouteCategory.A2A,
         completionTarget,
+        ...(crossing ? { runtimeCrossing: crossing } : {}),
       },
     });
 
@@ -174,6 +189,8 @@ export async function startDelegatedTask(params: {
     if (needed) {
       return credentialsNeededResult(needed.agentId, needed.missing);
     }
+    const refused = crossingRefusal(error);
+    if (refused) return errorResult(refused);
     return catchError(error, "starting the run");
   }
 }
@@ -379,23 +396,41 @@ const registry = defineArchestraTools([
     }),
     handler: async ({ args, context }) => {
       try {
+        const actor = requireActor(context);
+        const access = await protectedFileAccess({
+          context,
+          actor,
+          taskId: args.task_id,
+        });
+        if (access.kind === "error") return access.result;
         const result = await accessAgentWorkspaceFile({
-          actor: requireActor(context),
+          actor,
           taskId: args.task_id,
           request: { operation: "read", path: args.path },
         });
         const { content_base64, ...metadata } = result;
+        const decoded =
+          args.encoding === "base64"
+            ? (content_base64 ?? "")
+            : new TextDecoder("utf-8", { fatal: true }).decode(
+                Buffer.from(content_base64 ?? "", "base64"),
+              );
+        const content =
+          access.kind === "parent"
+            ? await crossRuntimeFile({
+                child: access.child,
+                operationId: access.crossing.callId,
+                value: decoded,
+              })
+            : decoded;
         return structuredSuccessResult({
           ...metadata,
           encoding: args.encoding,
-          content:
-            args.encoding === "base64"
-              ? content_base64
-              : new TextDecoder("utf-8", { fatal: true }).decode(
-                  Buffer.from(content_base64 ?? "", "base64"),
-                ),
+          content,
         });
       } catch (error) {
+        const refused = crossingRefusal(error);
+        if (refused) return errorResult(refused);
         return catchError(
           error,
           "reading workspace file; use base64 encoding for binary content",
@@ -447,6 +482,12 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
+        const access = await protectedFileAccess({
+          context,
+          actor,
+          taskId: args.task_id,
+        });
+        if (access.kind === "error") return access.result;
         if (
           args.direction === "upload" &&
           (args.size === undefined || !args.sha256)
@@ -461,6 +502,14 @@ const registry = defineArchestraTools([
                 actor,
                 taskId: args.task_id,
                 path: args.path,
+                ...(access.kind === "parent"
+                  ? {
+                      crossing: {
+                        child: access.child,
+                        operationId: access.crossing.callId,
+                      },
+                    }
+                  : {}),
               })
             : await workspaceTransferTickets.mintUpload({
                 actor,
@@ -468,6 +517,15 @@ const registry = defineArchestraTools([
                 path: args.path,
                 size: args.size as number,
                 sha256: args.sha256 as string,
+                ...(access.kind === "parent"
+                  ? {
+                      crossing: {
+                        parent: access.crossing.source,
+                        childSessionId: access.child.session_id,
+                        operationId: access.crossing.callId,
+                      },
+                    }
+                  : {}),
               });
         const url = `${getAppAssetBaseOrigin()}${AGENT_WORKSPACE_TRANSFER_PREFIX}/${minted.ticket.id}/content`;
         // Only metadata and a command cross this boundary. The file itself
@@ -490,6 +548,8 @@ const registry = defineArchestraTools([
               : "Run the command. It reports the stored path, size and checksum on success.",
         });
       } catch (error) {
+        const refused = crossingRefusal(error);
+        if (refused) return errorResult(refused);
         return catchError(error, "authorizing a workspace file transfer");
       }
     },
@@ -508,8 +568,22 @@ const registry = defineArchestraTools([
     }),
     handler: async ({ args, context }) => {
       try {
+        const actor = requireActor(context);
+        const access = await protectedFileAccess({
+          context,
+          actor,
+          taskId: args.task_id,
+        });
+        if (access.kind === "error") return access.result;
+        if (access.kind === "parent") {
+          await admitRuntimeSteer({
+            crossing: access.crossing,
+            organizationId: actor.organizationId,
+            workspaceId: access.workspaceId,
+          });
+        }
         const result = await accessAgentWorkspaceFile({
-          actor: requireActor(context),
+          actor,
           taskId: args.task_id,
           request: {
             operation: "write",
@@ -523,6 +597,8 @@ const registry = defineArchestraTools([
         });
         return structuredSuccessResult(result);
       } catch (error) {
+        const refused = crossingRefusal(error);
+        if (refused) return errorResult(refused);
         return catchError(error, "writing workspace file");
       }
     },
@@ -585,6 +661,13 @@ const registry = defineArchestraTools([
           currentSession: true,
         });
         if ("error" in task) return errorResult(task.error);
+
+        const governed = await governedRunOutput({
+          context,
+          actor,
+          task: task.row,
+        });
+        if (governed) return governed;
 
         const artifacts = await A2AArtifactModel.findByTaskId(task.row.id);
         const text = artifacts
@@ -682,6 +765,8 @@ const registry = defineArchestraTools([
             : null,
         });
       } catch (error) {
+        const refused = crossingRefusal(error);
+        if (refused) return errorResult(refused);
         return catchError(error, "reading the run");
       }
     },
@@ -788,10 +873,11 @@ const registry = defineArchestraTools([
           limit: args.limit,
           thread,
         });
+        const hidePrompt = await isGuardrailsV2Active();
         const runs = rows.map((row) => ({
           task_id: row.taskId,
           title: row.title,
-          prompt: row.prompt,
+          prompt: hidePrompt ? "" : row.prompt,
           state: row.state,
           status_reason: row.statusReason,
           started_at: row.startedAt.toISOString(),
@@ -886,6 +972,15 @@ const registry = defineArchestraTools([
         const workspace = await AgentWorkspaceModel.findByWorkloadName(
           session.workloadName,
         );
+        const crossing = await parentCrossing(context, workspace?.id);
+        if (typeof crossing === "string") return errorResult(crossing);
+        if (crossing && workspace) {
+          await admitRuntimeSteer({
+            crossing,
+            organizationId: actor.organizationId,
+            workspaceId: workspace.id,
+          });
+        }
         if (session.endedAt) {
           if (
             !workspace ||
@@ -905,6 +1000,7 @@ const registry = defineArchestraTools([
               resumeFromTaskId: session.taskId,
               completionTarget: session.completionTarget ?? undefined,
               projectId: session.projectId ?? undefined,
+              ...(crossing ? { runtimeCrossing: crossing } : {}),
             },
           });
           if (session.completionTarget) {
@@ -947,6 +1043,8 @@ const registry = defineArchestraTools([
         if (needed) {
           return credentialsNeededResult(needed.agentId, needed.missing);
         }
+        const refused = crossingRefusal(error);
+        if (refused) return errorResult(refused);
         return catchError(error, "steering the run");
       }
     },
@@ -1052,6 +1150,17 @@ const registry = defineArchestraTools([
         if (session.actorUserId !== actor.id) {
           return errorResult(
             "Only the person the run acts as can post files for it.",
+          );
+        }
+        const posted = await protectedFileAccess({
+          context,
+          actor,
+          taskId: task.row.id,
+        });
+        if (posted.kind === "error") return posted.result;
+        if (posted.kind === "parent") {
+          return errorResult(
+            "A protected runtime file cannot be posted from another session. The bytes were not sent.",
           );
         }
         const target = session.completionTarget;
@@ -1246,6 +1355,138 @@ async function requireAccessibleTask({
     if (!isAdmin) return notFound;
   }
   return { row };
+}
+
+async function runtimeCrossingForStart(
+  context: Parameters<typeof guardRuntimeCrossing>[0],
+  runtime: boolean,
+): Promise<RuntimeCrossing | undefined | string> {
+  if (!runtime) {
+    return context.openappaRuntimeCall?.spawn
+      ? SPAWN_TARGET_MISMATCH
+      : undefined;
+  }
+  const gate = await guardRuntimeCrossing(context);
+  if (gate.kind === "refused") return gate.reason;
+  if (gate.kind === "inactive") return undefined;
+  if (!gate.crossing.spawn) {
+    return "This start was not classified as a protected spawn. No runtime was started.";
+  }
+  return gate.crossing;
+}
+
+async function parentCrossing(
+  context: Parameters<typeof guardRuntimeCrossing>[0],
+  workspaceId: string | undefined,
+): Promise<RuntimeCrossing | undefined | string> {
+  const gate = await guardRuntimeCrossing(context);
+  if (gate.kind === "refused") return gate.reason;
+  if (gate.kind !== "proof") return undefined;
+  if (!workspaceId) {
+    return "This runtime session could not be verified. The request was refused.";
+  }
+  return gate.crossing;
+}
+
+async function protectedFileAccess(params: {
+  context: Parameters<typeof guardRuntimeCrossing>[0];
+  actor: A2AActor;
+  taskId: string;
+}): Promise<
+  | { kind: "open" }
+  | { kind: "producer" }
+  | {
+      kind: "parent";
+      child: import("@/openappa/service").OpenAppaSession;
+      crossing: RuntimeCrossing;
+      workspaceId: string;
+    }
+  | { kind: "error"; result: ReturnType<typeof errorResult> }
+> {
+  const session = await AgentRunModel.findByTaskId(params.taskId);
+  const workspace = session
+    ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
+    : null;
+  if (!session || !workspace) return { kind: "open" };
+  const gate = await guardRuntimeCrossing(params.context);
+  if (gate.kind === "refused") {
+    return { kind: "error", result: errorResult(gate.reason) };
+  }
+  if (gate.kind !== "proof") return { kind: "open" };
+  const relation = await classifyRuntimeCaller({
+    crossing: gate.crossing,
+    organizationId: params.actor.organizationId,
+    workspaceId: workspace.id,
+  });
+  if (relation.kind === "refused") {
+    return { kind: "error", result: errorResult(relation.reason) };
+  }
+  if (relation.kind === "producer") return { kind: "producer" };
+  return {
+    kind: "parent",
+    child: relation.child,
+    crossing: gate.crossing,
+    workspaceId: workspace.id,
+  };
+}
+
+async function governedRunOutput(params: {
+  context: Parameters<typeof guardRuntimeCrossing>[0];
+  actor: A2AActor;
+  task: {
+    id: string;
+    state: string;
+    agentId: string | null;
+    statusReason?: string | null;
+    createdAt: Date;
+    stateChangedAt: Date | null;
+  };
+}): Promise<CallToolResult | undefined> {
+  const session = await AgentRunModel.findByTaskId(params.task.id);
+  const workspace = session
+    ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
+    : null;
+  if (!session || !workspace) return undefined;
+  const gate = await guardRuntimeCrossing(params.context);
+  if (gate.kind === "inactive") return undefined;
+  if (gate.kind === "refused") return errorResult(gate.reason);
+  const crossed = await crossRuntimeOutput({
+    crossing: gate.crossing,
+    organizationId: params.actor.organizationId,
+    workspaceId: workspace.id,
+    taskId: params.task.id,
+  });
+  if (crossed.kind === "producer") return undefined;
+  if (crossed.kind === "refused") return errorResult(crossed.reason);
+  const canContinue = Boolean(
+    (workspace.state === "active" &&
+      !session.endedAt &&
+      workspace.activeTaskId === params.task.id) ||
+      (["idle", "suspended"].includes(workspace.state) &&
+        !workspace.activeTaskId),
+  );
+  return structuredSuccessResult(
+    {
+      run: runSummary(params.task),
+      session_id: workspace.id,
+      run_url: `${config.frontendBaseUrl}/chat/runs/${workspace.id}`,
+      requests: [],
+      output: crossed.kind === "admitted" ? crossed.value : "",
+      output_truncated: false,
+      workspace: {
+        state: workspace.state,
+        retained_until: workspace.expiresAt.toISOString(),
+        can_continue: canContinue && workspace.expiresAt.getTime() > Date.now(),
+        continuation_error: null,
+        connection: null,
+      },
+      session: {
+        attachable: session.endedAt === null,
+        started_at: session.startedAt?.toISOString() ?? null,
+      },
+    },
+    crossed.kind === "admitted" ? crossed.value : crossed.reason,
+  );
 }
 
 function runSummary(row: {

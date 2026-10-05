@@ -14,7 +14,15 @@ import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
-import { InteractionModel, ModelModel, VirtualApiKeyModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
+  InteractionModel,
+  ModelModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
@@ -31,6 +39,7 @@ import {
 } from "@/openappa/trajectory-stamp";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
+import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { beginConnectionPromptSession } from "@/services/connection-prompt-session";
 import {
@@ -3637,6 +3646,107 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect.objectContaining({ session_id: sessionId }),
     );
   });
+
+  for (const mode of ["missing", "invalid", "valid"] as const) {
+    test(`observing runtime identity requires a verified binding (${mode})`, async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      await GuardrailsDeploymentModel.setEnabled(false);
+      config.openappa.offerSigningSecret =
+        "runtime-observing-binding-test-secret";
+      const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+      const providerKey = await makeLlmProviderApiKey(
+        agent.organizationId,
+        secret.id,
+        { provider: "anthropic" },
+      );
+      const { value: key, virtualKey } = await VirtualApiKeyModel.create({
+        organizationId: agent.organizationId,
+        name: "runtime-observing",
+        scope: "org",
+        authorId: null,
+        providerApiKeys: [
+          { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+        ],
+      });
+      const context = await A2AContextModel.create({
+        actorKind: "organization",
+        actorId: agent.organizationId,
+      });
+      const task = await A2ATaskModel.create({
+        contextId: context.id,
+        agentId: agent.id,
+        state: "TASK_STATE_WORKING",
+      });
+      const workloadName = `runtime-observing-${task.id.slice(0, 8)}`;
+      const workspace = await AgentWorkspaceModel.create({
+        organizationId: agent.organizationId,
+        agentId: agent.id,
+        actorKind: "organization",
+        actorId: agent.organizationId,
+        backend: "kubernetes",
+        runtimeScope: "test",
+        workloadName,
+        state: "active",
+        activeTaskId: task.id,
+        lastTaskId: task.id,
+        expiresAt: new Date(Date.now() + 3600_000),
+      });
+      await AgentRunModel.create({
+        organizationId: agent.organizationId,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind: "organization",
+        actorId: agent.organizationId,
+        actorUserId: null,
+        workloadName,
+        backend: "kubernetes",
+        runtimeScope: "test",
+        virtualApiKeyId: virtualKey.id,
+      });
+      const binding = issueRuntimeBinding({
+        secret: config.openappa.offerSigningSecret,
+        organizationId: agent.organizationId,
+        workspaceId: workspace.id,
+        workloadName,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind: "organization",
+        actorId: agent.organizationId,
+        expiresAt: Date.now() + 600_000,
+      });
+      if (!binding) throw new Error("The fixture has no signed binding");
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "203.0.113.20",
+        headers: {
+          authorization: `Bearer ${key}`,
+          "anthropic-version": "2023-06-01",
+          "x-appa-session-id": workloadName,
+          ...(mode === "missing"
+            ? {}
+            : {
+                "x-archestra-runtime-binding":
+                  mode === "valid" ? binding : "invalid-binding",
+              }),
+        },
+        payload: payload(false) as Record<string, unknown>,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(events).toHaveLength(0);
+      const workload = `agent-workspace:${workspace.id}|${workloadName}`;
+      const credential = `virtual-key:${virtualKey.id}|${workloadName}`;
+      const rows = await OpenAppaUnenforcedModel.findSessions({
+        organizationId: agent.organizationId,
+        sessionIds: [workload, credential],
+      });
+      expect(rows).toEqual([
+        { sessionId: mode === "valid" ? workload : credential, parentId: null },
+      ]);
+    });
+  }
 
   test("refuses a Chat request that names no user, instead of binding it unchecked", async () => {
     const { "x-archestra-user-id": _user, ...noUser } = headers();

@@ -55,6 +55,32 @@ describe("delegation markers", () => {
     expect(verify({ ...read, spawnCallId: "toolu_other" })).toBe(false);
   });
 
+  test("signs a runtime workspace anchor and rejects a swapped one", () => {
+    const runtimeSessionId = "user:u1|workspace";
+    const marker = mintDelegationMarker({
+      ...SPAWN,
+      parentId: "workspace:a1",
+      prompt: PROMPT,
+      spawnCallId: "toolu_spawn_1",
+      runtimeSessionId,
+    });
+    expect(marker).toMatch(
+      /^\[appa\] delegated trajectory appa3-[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[0-9a-f]{40} — child of workspace:a1\.$/,
+    );
+    const read = readBack(`${PROMPT}\n\n${marker}`);
+    expect(read.runtimeSessionId).toBe(runtimeSessionId);
+    expect(read.parentId).toBe("workspace:a1");
+    expect(verify(read)).toBe(true);
+    expect(verify({ ...read, runtimeSessionId: "user:u1|other" })).toBe(false);
+    expect(
+      mintDelegationMarker({
+        ...SPAWN,
+        prompt: PROMPT,
+        runtimeSessionId,
+      }),
+    ).toBeUndefined();
+  });
+
   test("never verifies for another organization, caller, spawner, lineage or prompt", () => {
     const read = readBack(`${PROMPT}\n\n${mint()}`);
 

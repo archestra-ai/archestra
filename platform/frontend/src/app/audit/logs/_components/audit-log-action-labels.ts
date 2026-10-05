@@ -16,7 +16,9 @@ type BadgeVariant = NonNullable<ComponentProps<typeof Badge>["variant"]>;
  * the `Record<AuditEventName, string>` type enforces completeness at
  * compile time.
  */
-export const ACTION_LABEL: Record<AuditEventName, string> = {
+export const ACTION_LABEL: Record<AuditEventName, string> & {
+  "agentRun.reviewDecided": string;
+} = {
   "hook.created": "Hook created",
   "hook.updated": "Hook updated",
   "hook.deleted": "Hook deleted",
@@ -35,6 +37,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agentRun.canceled": "Agent run canceled",
   "agentRun.updated": "Agent run renamed",
   "agentRun.deleted": "Agent run deleted",
+  "agentRun.reviewDecided": "OpenAPPA review decided",
   "agentRun.shared": "Agent run shared",
   "agentRun.unshared": "Agent run unshared",
   // Runtime credential

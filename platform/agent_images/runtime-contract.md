@@ -154,6 +154,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` | Turn-boundary steering channel. |
 | `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` | How long a completed turn may wait for follow-up work before the run exits. |
 | `ARCHESTRA_AGENT_RUNTIME_OPENAPPA` | `1` when Guardrails v2 (OpenAPPA) governed the deployment at launch. A client must then declare every tool inline: OpenAPPA refuses a session that hides tools behind a provider-side tool search or a code-mode program. The Codex image turns off tool search, code mode, and hosted web search. |
+| `ARCHESTRA_AGENT_RUNTIME_BINDING` | Platform-signed, turn-scoped workspace credential. Send it only to the injected proxy and gateway. Do not print, store in artifacts, or forward it to providers or tool servers. |
 
 Send these headers on every LLM proxy and MCP gateway request. The maintained catalog images configure them automatically.
 
@@ -162,9 +163,19 @@ Send these headers on every LLM proxy and MCP gateway request. The maintained ca
 | `X-Archestra-Run-Id` | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Groups one turn's model interactions and tool calls in logs and traces. |
 | `X-Archestra-Session-Id` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Groups the whole conversation, follow-ups included, in one log session. |
 | `X-Appa-Session-ID` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Names the OpenAPPA session that holds the conversation's trust restrictions and pending calls. |
-| `X-Appa-Parent-ID` | The parent's `X-Appa-Session-ID` | Optional. Marks a subagent session as a child of that session. |
+| `X-Archestra-Runtime-Binding` | `ARCHESTRA_AGENT_RUNTIME_BINDING` | Authenticates the workspace and current run independently of the virtual key. Required with Guardrails v2. |
 
 The workspace ID stays the same for follow-ups, so a resumed conversation keeps its log session and its OpenAPPA restrictions. Send the same value in both session headers. A client that sends no session ID shares one fallback OpenAPPA session with every other run of the same user on the Agent.
+
+With Guardrails v2, the platform rejects a runtime credential that names a different workspace or turn. The launcher binds delegated runs to their authenticated parent before staging inputs or starting the client. The proxy and gateway restore that stored relationship; a client header cannot select another parent. Team and organization runs keep a workspace principal when the platform rotates their virtual keys.
+
+Claude Code, Codex, and OpenCode children retain separate trajectories when the client supplies native child identity. Signed lineage binds nested children to the same workspace. A custom client without child identity cannot create isolated child-return boundaries by sharing the workspace header.
+
+Human-review remedies use `ask_user` with the exact signed offer IDs. Runtime reviews appear on the run page. Only the run's user owner can approve or deny them. Native permission settings and plain-text answers do not approve an OpenAPPA offer. A run without an eligible human reviewer stays blocked.
+
+Pending reviews and rulings expire after ten minutes. They use the platform's shared PostgreSQL-backed cache, whose state can be lost on restart. Expiry or missing state never approves an action; the runtime must request a fresh review for a live exact offer before proceeding.
+
+Protected runtime tools accept only proxy-signed source proofs. Returned text is an admitted value for that run, not a raw transcript. Protected file downloads admit the pinned content before issuing a ticket. They refuse transformed content and files over 4 MiB. Direct owner downloads remain an authenticated human surface. A parent cannot publish another runtime's file through `post_run_file` without a supported external-egress crossing.
 
 Session and parent IDs must be 1 to 512 bytes with no control characters. The proxy rejects a malformed value with HTTP 400; the gateway answers with JSON-RPC error `-32600`.
 

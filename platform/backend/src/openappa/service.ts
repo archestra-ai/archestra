@@ -76,6 +76,13 @@ const NativeOfferSchema = z
   .passthrough();
 
 /** Validation schema for decisions returned by the native runtime. */
+const NativeValueSchema = z
+  .string()
+  .refine(
+    (value) => Buffer.byteLength(value, "utf8") <= 8 * 1024 * 1024,
+    "Native value exceeds 8 MiB",
+  );
+
 const NativeDecisionSchema = z
   .discriminatedUnion("decision", [
     z.object({ decision: z.literal("ack"), ...ResultDecisionFields }),
@@ -109,12 +116,12 @@ const NativeDecisionSchema = z
     }),
     z.object({
       decision: z.literal("deliver_value"),
-      value: z.string(),
+      value: NativeValueSchema,
       ...ResultDecisionFields,
     }),
     z.object({
       decision: z.literal("child_return"),
-      value: z.string(),
+      value: NativeValueSchema,
       ...ResultDecisionFields,
     }),
     z.object({
@@ -523,15 +530,22 @@ export function sessionFromHeaders(params: {
   };
 }
 
-async function startSession(
-  session: OpenAppaSession,
-  policy?: DispatchPolicy,
-): Promise<void> {
-  const decision = await dispatch(session, { event: "session_start" }, policy);
+async function startSession(params: {
+  session: OpenAppaSession;
+  policy?: DispatchPolicy;
+  deliverReturnContract?: (text: string) => void;
+}): Promise<void> {
+  const decision = await dispatch(
+    params.session,
+    { event: "session_start" },
+    params.policy,
+  );
   if (decision.decision === "context") {
-    // The runtime returns start context (the child return contract) before inference.
-    // The proxy cannot send this contract to the model.
-    // Refuses the session instead of running without the return contract.
+    if (decision.text && params.deliverReturnContract) {
+      validateReturnContract(decision.text);
+      params.deliverReturnContract(decision.text);
+      return;
+    }
     throw new ApiError(
       409,
       "This session requires an OpenAPPA return contract the proxy cannot deliver before inference",
@@ -539,6 +553,43 @@ async function startSession(
   }
   if (decision.decision !== "ack")
     throw new ApiError(409, decisionMessage(decision));
+}
+
+/** Binds the prepared fork before a runtime receives any prompt or file. */
+export async function startRuntimeChild(params: {
+  session: OpenAppaSession;
+  spawnCallId?: string;
+}): Promise<{ contract?: string }> {
+  if (!params.session.parent_id) {
+    throw new ApiError(409, "A protected runtime requires its bound parent");
+  }
+  const decision = await dispatch(params.session, {
+    event: "session_start",
+    ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+  });
+  if (decision.decision === "ack") return {};
+  if (decision.decision === "context" && decision.text) {
+    validateReturnContract(decision.text);
+    return { contract: decision.text };
+  }
+  throw new ApiError(409, decisionMessage(decision));
+}
+
+/** Refreshes a registered child's inherited label before new bytes arrive. */
+export async function addressRuntimeChild(params: {
+  session: OpenAppaSession;
+  childSessionId: string;
+  operationId: string;
+}): Promise<void> {
+  const decision = await dispatch(params.session, {
+    event: "child_address",
+    operation_id: params.operationId,
+    spawned_id: params.childSessionId,
+    output: "",
+  });
+  if (decision.decision !== "ack") {
+    throw new ApiError(409, decisionMessage(decision));
+  }
 }
 
 function extractApprovedOutput(
@@ -698,6 +749,8 @@ export async function processProxyResults(params: {
    */
   isControlResult?: (result: CommonToolResult) => boolean;
   trustedChat?: boolean;
+  /** The proxy must inject this host-authored contract before its provider call. */
+  deliverReturnContract?: (text: string) => void;
   /** How a client-side spawn launch ended. */
   classifySpawnResult?: (
     result: CommonToolResult,
@@ -705,7 +758,11 @@ export async function processProxyResults(params: {
 }) {
   // The results dispatch one after another; one policy read serves them all.
   const policy = await effectivePolicy(params.session.organization_id);
-  await startSession(params.session, policy);
+  await startSession({
+    session: params.session,
+    policy,
+    deliverReturnContract: params.deliverReturnContract,
+  });
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
@@ -777,6 +834,8 @@ export async function evaluateToolCalls(
     notice?: DeclaredToolSpelling;
     /** True for a call that names a child trajectory (Task, spawn_agent, task). */
     isSpawn?: (name: string, namespace?: string) => boolean;
+    /** Runtime launches are resolved per call, including run_tool targets. */
+    spawnCallIds?: ReadonlySet<string>;
     /** Whether this client can carry child-return declarations. */
     supportsDelegation?: boolean;
     /** Signed lineage retained with a child call for later turns. */
@@ -839,7 +898,9 @@ export async function evaluateToolCalls(
       }
       // The target is already canonical, so it is read, not re-canonicalized.
       const tool = shortName === "yell" ? "yell" : target.toolCallName;
-      const spawn = options.isSpawn?.(call.name, call.namespace) === true;
+      const spawn =
+        options.spawnCallIds?.has(call.id) === true ||
+        options.isSpawn?.(call.name, call.namespace) === true;
       const spelling = spawnRetrySpelling({
         call,
         tool,
@@ -1084,73 +1145,29 @@ export async function endChild(params: {
   spawnCallId?: string;
   childNativeId?: string;
 }): Promise<ChildEndOutcome> {
-  if (!params.session.parent_id) {
-    throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
-  }
+  return crossChildValue({ ...params, event: "child_end" });
+}
 
-  const policy = sharedPolicy(params.session.organization_id);
-  const decision = await dispatch(
-    params.session,
-    {
-      event: "child_end",
-      operation_id: params.operationId,
-      ...(params.output.length > 0 ? { output: params.output } : {}),
-      ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
-      ...(params.childNativeId
-        ? { child_native_id: params.childNativeId }
-        : {}),
-    },
-    await policy(),
-  );
-
-  if (decision.decision === "ack") {
-    return { decision: "release", crossed: true };
+/** Cross a value without ending the runtime or settling its pending calls. */
+export async function returnRuntimeValue(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  value: string;
+}): Promise<
+  { kind: "admitted"; value: string } | { kind: "held"; reason: string }
+> {
+  const outcome = await crossChildValue({
+    session: params.session,
+    operationId: params.operationId,
+    output: params.value,
+    event: "child_return",
+  });
+  if (outcome.decision === "release") {
+    return { kind: "admitted", value: params.value };
   }
-  if (decision.decision === "block") {
-    return {
-      decision: "replace",
-      content: decisionMessage(decision),
-      crossed: false,
-    };
-  }
-  if (decision.decision === "refuse") {
-    throw openappaFailure(new Error("OpenAPPA refused the child return"));
-  }
-  if (decision.decision !== "child_return") {
-    throw openappaFailure(
-      new Error(`Unexpected ChildEnd decision: ${decision.decision}`),
-    );
-  }
-
-  const echo = await dispatch(
-    params.session,
-    {
-      event: "child_end",
-      operation_id: `${params.operationId}:echo`,
-      // Keep an explicitly empty canonical value distinct from a void first end.
-      output: decision.value,
-      // The echo is the latest retained ChildEnd, so it must carry the same
-      // correlation metadata for the durable lookup to read back.
-      ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
-      ...(params.childNativeId
-        ? { child_native_id: params.childNativeId }
-        : {}),
-    },
-    await policy(),
-  );
-  if (echo.decision !== "ack") {
-    throw openappaFailure(
-      new Error(
-        `OpenAPPA did not admit the canonical child return: ${echo.decision}`,
-      ),
-    );
-  }
-
-  return {
-    decision: "replace",
-    content: decision.value,
-    crossed: true,
-  };
+  return outcome.crossed
+    ? { kind: "admitted", value: outcome.content }
+    : { kind: "held", reason: outcome.content };
 }
 
 /** Verifies that a parent carrier contains bytes admitted through ChildEnd. */
@@ -1307,6 +1324,8 @@ export async function executeRemedyByOffer(params: {
 export type AppaChildReturnRecord = {
   /** Fully scoped session id of the child whose return crossed. */
   childSessionId: string;
+  /** Host operation identity, including a runtime task when applicable. */
+  operationId?: string;
   /** The spawn call the return answers, when the child named it at ChildEnd. */
   spawnCallId?: string;
   /** The client-native child identity, when the child named one. */
@@ -1327,15 +1346,32 @@ export type AppaChildReturnRecord = {
 export async function loadChildReturns(params: {
   organizationId: string;
   parentSessionId: string;
+  childSessionId?: string;
+  operationPrefix?: string;
 }): Promise<AppaChildReturnRecord[]> {
   try {
     const module = await binding();
-    const records = await module.loadChildReturns(
-      params.organizationId,
-      params.parentSessionId,
-    );
+    const lookup =
+      params.childSessionId !== undefined ||
+      params.operationPrefix !== undefined
+        ? {
+            childSessionId: params.childSessionId,
+            operationPrefix: params.operationPrefix,
+          }
+        : undefined;
+    const records = lookup
+      ? await module.loadChildReturns(
+          params.organizationId,
+          params.parentSessionId,
+          lookup,
+        )
+      : await module.loadChildReturns(
+          params.organizationId,
+          params.parentSessionId,
+        );
     return records.map((record) => ({
       childSessionId: record.childSessionId,
+      ...(record.operationId ? { operationId: record.operationId } : {}),
       ...(record.spawnCallId ? { spawnCallId: record.spawnCallId } : {}),
       ...(record.childNativeId ? { childNativeId: record.childNativeId } : {}),
       value: record.value,
@@ -1614,6 +1650,90 @@ export async function loadOfferReview(params: {
     );
     throw openappaFailure(error);
   }
+}
+
+function validateReturnContract(text: string): void {
+  if (Buffer.byteLength(text, "utf8") > 64 * 1024) {
+    throw new ApiError(
+      413,
+      "The OpenAPPA child return contract exceeds 64 KiB",
+    );
+  }
+}
+
+async function crossChildValue(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  output: string;
+  event: "child_end" | "child_return";
+  spawnCallId?: string;
+  childNativeId?: string;
+}): Promise<ChildEndOutcome> {
+  if (!params.session.parent_id) {
+    throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
+  }
+  if (Buffer.byteLength(params.output, "utf8") > 8 * 1024 * 1024) {
+    return {
+      decision: "replace",
+      crossed: false,
+      content:
+        "The child value exceeds the supported size. No original bytes were returned.",
+    };
+  }
+  const policy = sharedPolicy(params.session.organization_id);
+  const correlation = {
+    ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+    ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
+  };
+  const decision = await dispatch(
+    params.session,
+    {
+      event: params.event,
+      operation_id: params.operationId,
+      ...(params.event === "child_return" || params.output.length > 0
+        ? { output: params.output }
+        : {}),
+      ...correlation,
+    },
+    await policy(),
+  );
+  if (decision.decision === "ack") {
+    return { decision: "release", crossed: true };
+  }
+  if (decision.decision === "block") {
+    return {
+      decision: "replace",
+      content: decisionMessage(decision),
+      crossed: false,
+    };
+  }
+  if (decision.decision === "refuse") {
+    throw openappaFailure(new Error("OpenAPPA refused the child return"));
+  }
+  if (decision.decision !== "child_return") {
+    throw openappaFailure(
+      new Error(`Unexpected child return decision: ${decision.decision}`),
+    );
+  }
+  const echo = await dispatch(
+    params.session,
+    {
+      event: params.event,
+      operation_id: `${params.operationId}:echo`,
+      // Echo exact canonical bytes, including an explicitly empty value.
+      output: decision.value,
+      ...correlation,
+    },
+    await policy(),
+  );
+  if (echo.decision !== "ack") {
+    throw openappaFailure(
+      new Error(
+        `OpenAPPA did not admit the canonical child return: ${echo.decision}`,
+      ),
+    );
+  }
+  return { decision: "replace", content: decision.value, crossed: true };
 }
 
 /**

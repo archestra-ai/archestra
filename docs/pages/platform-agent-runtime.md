@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run coding agents and delegated tasks in isolated containers
-lastUpdated: "2026-09-30"
+lastUpdated: "2026-10-05"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -145,6 +145,16 @@ Custom clients should restore saved state when `ARCHESTRA_AGENT_RUNTIME_CONTINUE
 External clients can use `read_workspace_file` and `write_workspace_file` without starting another Agent turn. Each accepts a run ID and a path relative to the run’s working directory. File access can wake a paused container, but does not extend its retention deadline.
 
 Only the original run owner can access these files. See the [MCP tool reference](/docs/platform-archestra-mcp-server) for request schemas and overwrite behavior.
+
+### Guardrails
+
+Guardrails v2 checks model tool calls and results within each runtime. Delegated runs inherit their parent's restrictions before work starts. Follow-up instructions preserve those restrictions. Returned answers cross the guardrail boundary before another Agent receives them.
+
+A remedy that requires human review appears on the run page. The run's user owner can approve or deny it. Native client permission settings do not approve guardrail remedies. Runs without an eligible human reviewer stay blocked.
+
+Protected file transfers check the pinned file content before returning a download command. They refuse files that require transformation or exceed the protected export limit. Direct downloads by the session owner remain available.
+
+Start a new session to apply Guardrails v2 to work begun without enforcement. Enabling the deployment switch does not retroactively protect that history. Guardrails do not replace filesystem or network sandboxing.
 
 ### Readable Transcript
 

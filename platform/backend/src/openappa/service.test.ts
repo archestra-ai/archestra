@@ -14,6 +14,7 @@ import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
 import {
+  addressRuntimeChild,
   admitPeerMessage,
   approveSpawnReturn,
   cancelCalls,
@@ -27,8 +28,10 @@ import {
   loadOfferReview,
   processProxyResults,
   readPeerMessage,
+  returnRuntimeValue,
   sendPeerMessage,
   sessionFromHeaders,
+  startRuntimeChild,
 } from "./service";
 import { rememberYellSession } from "./yell-session";
 
@@ -1386,6 +1389,189 @@ describe("APPA feature boundary", () => {
     );
   });
 
+  test("returns the child start contract for host delivery without treating it as a refusal", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "context",
+        text: "Return only a safe summary.",
+      }),
+    );
+    const child = {
+      ...session,
+      session_id: "runtime-workspace",
+      parent_id: session.session_id,
+    };
+    await expect(
+      startRuntimeChild({ session: child, spawnCallId: "runtime-spawn" }),
+    ).resolves.toEqual({ contract: "Return only a safe summary." });
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
+      ...child,
+      event: "session_start",
+      spawn_call_id: "runtime-spawn",
+    });
+    native.dispatchHook.mockClear();
+    await expect(startRuntimeChild({ session })).rejects.toThrow(
+      "bound parent",
+    );
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test("refuses new steer or file bytes when the native parent-child address is refused", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "block",
+        feedback: "not a child of this parent",
+      }),
+    );
+    await expect(
+      addressRuntimeChild({
+        session,
+        childSessionId: "another-workspace",
+        operationId: "steer-call",
+      }),
+    ).rejects.toThrow();
+  });
+
+  test("refuses oversized return contracts before host delivery or runtime launch", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "context", text: "x".repeat(64 * 1024 + 1) }),
+    );
+    const child = {
+      ...session,
+      session_id: "runtime-workspace",
+      parent_id: session.session_id,
+    };
+    await expect(
+      startRuntimeChild({ session: child, spawnCallId: "runtime-spawn" }),
+    ).rejects.toThrow("exceeds 64 KiB");
+    const delivery = vi.fn();
+    await expect(
+      processProxyResults({
+        session: child,
+        results: [],
+        canonicalize: (name) => name,
+        deliverReturnContract: delivery,
+      }),
+    ).rejects.toThrow("exceeds 64 KiB");
+    expect(delivery).not.toHaveBeenCalled();
+  });
+
+  test("crosses a runtime value through canonical echo without ending pending calls", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.operation_id.endsWith(":echo")
+          ? { decision: "ack" }
+          : { decision: "child_return", value: "approved summary" },
+      );
+    });
+    const child = {
+      ...session,
+      session_id: "runtime-workspace",
+      parent_id: session.session_id,
+    };
+    await expect(
+      returnRuntimeValue({
+        session: child,
+        operationId: "runtime-return:task:turn",
+        value: "private source text",
+      }),
+    ).resolves.toEqual({ kind: "admitted", value: "approved summary" });
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      {
+        ...child,
+        event: "child_return",
+        operation_id: "runtime-return:task:turn",
+        output: "private source text",
+      },
+      {
+        ...child,
+        event: "child_return",
+        operation_id: "runtime-return:task:turn:echo",
+        output: "approved summary",
+      },
+    ]);
+  });
+
+  test("withholds oversized UTF-8 child bytes before native dispatch", async () => {
+    await expect(
+      returnRuntimeValue({
+        session: {
+          ...session,
+          session_id: "child",
+          parent_id: session.session_id,
+        },
+        operationId: "oversized-raw",
+        value: "é".repeat(4 * 1024 * 1024 + 1),
+      }),
+    ).resolves.toMatchObject({ kind: "held" });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  for (const decision of ["child_return", "deliver_value"] as const) {
+    test(`rejects oversized native ${decision} data instead of forwarding it`, async () => {
+      native.dispatchHook.mockResolvedValue(
+        JSON.stringify({ decision, value: "é".repeat(4 * 1024 * 1024 + 1) }),
+      );
+      await expect(
+        returnRuntimeValue({
+          session: {
+            ...session,
+            session_id: "child",
+            parent_id: session.session_id,
+          },
+          operationId: `oversized-${decision}`,
+          value: "small source",
+        }),
+      ).rejects.toThrow();
+    });
+  }
+
+  test("withholds a runtime value with an open call instead of ending the child", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "block",
+        reason: "child has a call still open",
+      }),
+    );
+    await expect(
+      returnRuntimeValue({
+        session: {
+          ...session,
+          session_id: "runtime",
+          parent_id: session.session_id,
+        },
+        operationId: "file-read",
+        value: "private file",
+      }),
+    ).resolves.toEqual({ kind: "held", reason: "child has a call still open" });
+    expect(native.dispatchHook).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0]).event).toBe(
+      "child_return",
+    );
+  });
+
+  test("keeps an empty runtime value explicit at the native boundary", async () => {
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    await expect(
+      returnRuntimeValue({
+        session: {
+          ...session,
+          session_id: "runtime",
+          parent_id: session.session_id,
+        },
+        operationId: "empty-file",
+        value: "",
+      }),
+    ).resolves.toEqual({ kind: "admitted", value: "" });
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
+      event: "child_return",
+      output: "",
+    });
+  });
+
   test("echoes the runtime's canonical ChildReturn before exposing it", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
@@ -2465,6 +2651,7 @@ describe("remedy by offer", () => {
         },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
         organizationId,
+        userId: "alice",
       },
     );
     expect(result).toMatchObject({ isError: true });
@@ -2473,6 +2660,7 @@ describe("remedy by offer", () => {
       session_id: "conversation",
       owner_caller_id: "user:alice",
       execution_mode: "untracked",
+      caller_id: "user:alice",
       original_arguments: '{"offer_id":"offer-1"}',
       arguments: { offer_id: "offer-1" },
       presentation: {
@@ -2676,6 +2864,7 @@ describe("remedy by offer", () => {
         agent: { id: "3c0f2458-f26a-4b05-9571-a64dca1d65a7", name: "Gateway" },
         agentId: "3c0f2458-f26a-4b05-9571-a64dca1d65a7",
         organizationId,
+        userId: "alice",
         currentToolCallId: "remedy-2",
       },
     );
@@ -2689,6 +2878,7 @@ describe("remedy by offer", () => {
       owner_caller_id: "user:alice",
       execution_mode: "tracked",
       tool_call_id: "provider-control-2",
+      caller_id: "user:alice",
       original_arguments:
         '{"offer_id":"offer-1","plan":"accept the policy\'s restriction on this session\'s readers"}',
       arguments: { offer_id: "offer-1" },

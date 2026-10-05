@@ -733,6 +733,53 @@ builtin = "hitl"
     return staged.value;
   };
 
+  await t.test('a runtime workspace binds to its released spawn and returns across replica restarts without ending', async () => {
+    const { parent, proposeSpawn } = await openReturnDeclaredParent();
+    assert.equal((await proposeSpawn('runtime-start')).decision, 'allow_call');
+    const child = { ...parent, session_id: `workspace-${randomUUID()}`, parent_id: parent.session_id };
+    assert.ok(!child.session_id.startsWith(`${parent.session_id}:`));
+    const started = await hook(child, { event: 'session_start', spawn_call_id: 'runtime-start' });
+    assert.ok(['ack', 'context'].includes(started.decision), JSON.stringify(started));
+    assert.deepEqual(await restarted(child, { event: 'session_start' }), started, 'a continuation retains its return contract');
+    const wrongParent = scope();
+    await hook(wrongParent, { event: 'session_start' });
+    const foreign = await hook(wrongParent, { event: 'child_address', operation_id: 'foreign-address', spawned_id: child.session_id, output: '' });
+    assert.notEqual(foreign.decision, 'ack');
+    const addressed = await restarted(parent, { event: 'child_address', operation_id: 'runtime-steer', spawned_id: child.session_id, output: '' });
+    assert.equal(addressed.decision, 'ack', JSON.stringify(addressed));
+    const cross = async (turn, text) => {
+      const operation_id = `runtime-return:task:${turn}`;
+      const returned = await restarted(child, { event: 'child_return', operation_id, output: text });
+      assert.ok(['ack', 'child_return'].includes(returned.decision), JSON.stringify(returned));
+      const approved = returned.decision === 'ack' ? text : returned.value;
+      if (returned.decision === 'child_return') {
+        const echo = await restarted(child, { event: 'child_return', operation_id: `${operation_id}:echo`, output: approved });
+        assert.equal(echo.decision, 'ack', JSON.stringify(echo));
+      }
+      const records = await native.loadChildReturns(organization_id, parent.session_id);
+      assert.ok(records.some(record => record.childSessionId === child.session_id && record.operationId.startsWith(operation_id) && record.value === approved));
+      return approved;
+    };
+    await cross('first', 'runtime result one');
+    const next = await call(child, 'read-next', 'read_plain');
+    assert.equal(next.decision, 'allow_call', JSON.stringify(next));
+    const held = await hook(child, { event: 'child_return', operation_id: 'runtime-return:task:pending', output: 'must not settle read-next' });
+    assert.equal(held.decision, 'block', JSON.stringify(held));
+    await result(child, 'read-next', 'private report');
+    const admittedSecond = await cross('second', 'runtime result two');
+    const latest = await native.loadChildReturns(organization_id, parent.session_id, {
+      childSessionId: child.session_id, operationPrefix: 'runtime-return:task:',
+    });
+    assert.equal(latest.length, 1);
+    assert.equal(latest[0].value, admittedSecond);
+    assert.ok(latest[0].operationId.includes(':second'));
+    assert.deepEqual(await native.loadChildReturns(organization_id, parent.session_id, {
+      childSessionId: child.session_id, operationPrefix: 'runtime-return:another-task:',
+    }), []);
+    assert.equal((await call(child, 'read-third', 'read_plain')).decision, 'allow_call', 'returning did not end the workspace');
+    await result(child, 'read-third', 'next report');
+  });
+
   await t.test('a void child end never poisons the durable child-return ledger', async () => {
     const { parent, proposeSpawn } = await openReturnDeclaredParent();
     assert.equal((await proposeSpawn('spawn-real')).decision, 'allow_call');

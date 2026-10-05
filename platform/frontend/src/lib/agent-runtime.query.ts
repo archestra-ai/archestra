@@ -15,6 +15,8 @@ const {
   continueAgentRun,
   deleteAgentRun,
   deleteAgentWorkspace,
+  decideAgentRunOpenappaReview,
+  getAgentRunOpenappaReview,
   getAgentRuntimePreflight,
   getAgentRuns,
   getMyAgentRun,
@@ -120,6 +122,66 @@ export function useMyAgentRun(taskId: string, enabled = true) {
     },
     retry: (failureCount) => failureCount < 8,
     retryDelay: 500,
+  });
+}
+
+export type AgentRunOpenappaReview =
+  archestraApiTypes.GetAgentRunOpenappaReviewResponses["200"];
+
+export function useAgentRunOpenappaReview(taskId: string, enabled = true) {
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: ["agent-runs", taskId, "openappa-review"],
+    queryFn: async () => {
+      const { data, error } = await getAgentRunOpenappaReview({
+        path: { taskId },
+      });
+      throwOnApiError(error);
+      return (
+        data ?? {
+          status: "none" as const,
+          canDecide: false,
+          offerId: null,
+          text: null,
+          tool: null,
+          arguments: null,
+        }
+      );
+    },
+    enabled: enabled && !!taskId,
+    refetchInterval: (query) => {
+      const run = queryClient.getQueryData<
+        archestraApiTypes.GetMyAgentRunResponses["200"]
+      >(["agent-runs", taskId]);
+      // Live/retained runs can acquire their first offer after the panel opens.
+      return !run ||
+        !run.endedAt ||
+        hasRetainedSessionActivity(run) ||
+        query.state.data?.status === "pending"
+        ? 3_000
+        : false;
+    },
+  });
+}
+
+export function useDecideAgentRunOpenappaReview(taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.DecideAgentRunOpenappaReviewData["body"],
+    ) => {
+      const { data, error } = await decideAgentRunOpenappaReview({
+        path: { taskId },
+        body,
+      });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["agent-runs", taskId, "openappa-review"],
+      });
+    },
   });
 }
 

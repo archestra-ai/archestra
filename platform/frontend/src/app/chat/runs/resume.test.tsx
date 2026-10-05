@@ -53,6 +53,18 @@ const previous = {
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: origin });
+  server.use(
+    http.get(`${origin}/api/agent-runs/:taskId/openappa-review`, () =>
+      HttpResponse.json({
+        status: "none",
+        canDecide: false,
+        offerId: null,
+        text: null,
+        tool: null,
+        arguments: null,
+      }),
+    ),
+  );
   vi.mocked(useRouter).mockReturnValue({
     push: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);

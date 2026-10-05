@@ -10,7 +10,7 @@
 // existing `biome ci` step.
 //
 // Two shapes are covered:
-//   1. The shadcn `<Button>` at an icon size (`icon`, `icon-sm`, `icon-lg`)
+//   1. The shadcn `<Button>` at an icon size (`icon`, `icon-sm`, `icon-xs`, `icon-lg`)
 //      whose content includes an icon (a self-closing JSX element).
 //   2. A native `<button>` whose SOLE child is an icon (a self-closing JSX
 //      element). The single-child requirement is deliberate: a native
@@ -34,6 +34,7 @@ or {
     $props <: or {
       contains `size="icon"`,
       contains `size="icon-sm"`,
+      contains `size="icon-xs"`,
       contains `size="icon-lg"`
     },
     $props <: not contains `asChild`,

@@ -194,6 +194,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
+import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
@@ -1913,7 +1914,8 @@ export function ChatPageContent({
   const isContextCompacting =
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
-  const handleCompactConversation = useCallback(async () => {
+  // Stable identity: passed to the memoized composer (see handleSubmit).
+  const handleCompactConversation = useStableCallback(async () => {
     // The composer stays usable for the whole compaction, so `/compact` is
     // reachable again while one is already running — this guard is what stops
     // a second run re-entering.
@@ -2011,16 +2013,7 @@ export function ChatPageContent({
     } finally {
       endManualContextCompaction?.();
     }
-  }, [
-    beginManualContextCompaction,
-    compactConversationMutation,
-    conversationId,
-    endManualContextCompaction,
-    isContextCompacting,
-    isReadOnlyConversation,
-    recordContextCompaction,
-    syncPersistedMessageMetadata,
-  ]);
+  });
 
   useEffect(() => {
     if (
@@ -2195,7 +2188,10 @@ export function ChatPageContent({
     });
   }, []);
 
-  const handleStopStreaming = () => {
+  // The composer is memoized so streamed chunks (which re-render this page)
+  // skip it; its handlers therefore keep one identity across renders while
+  // still reading the latest messages/status when invoked.
+  const handleStopStreaming = useStableCallback(() => {
     if (conversationId) {
       stop?.({
         preserveQueuedMessages: true,
@@ -2204,13 +2200,12 @@ export function ChatPageContent({
     } else {
       stop?.();
     }
-  };
+  });
 
-  const handleSubmit: ArchestraPromptInputProps["onSubmit"] = async (
-    message,
-    e,
-    options,
-  ) => {
+  const handleSubmit = useStableCallback<
+    Parameters<ArchestraPromptInputProps["onSubmit"]>,
+    ReturnType<ArchestraPromptInputProps["onSubmit"]>
+  >(async (message, e, options) => {
     e.preventDefault();
 
     // Enqueue this submission instead of sending it now (throws on inputs that
@@ -2393,7 +2388,7 @@ export function ChatPageContent({
         conversationId,
       });
     }
-  };
+  });
 
   const isBrowserPanelVisible = isBrowserPanelOpen;
   const isReviewPanelVisible = isReviewTabOpen && !!reviewContext;

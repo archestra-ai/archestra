@@ -5,7 +5,7 @@ import {
   foldCitationSources,
 } from "@archestra/shared";
 import { Info } from "lucide-react";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import { stripAssistantProtocolMarkers } from "@/components/chat/chat-messages.utils";
@@ -35,11 +35,17 @@ interface EditableAssistantMessageProps {
     newText: string,
   ) => Promise<void>;
   feedback?: ChatMessageFeedback | null;
-  onFeedbackChange?: (feedback: ChatMessageFeedback | null) => void;
+  onFeedbackChange?: (
+    messageId: string,
+    feedback: ChatMessageFeedback | null,
+  ) => void;
   feedbackDisabled?: boolean;
 }
 
-export function EditableAssistantMessage({
+// Memoized so a streamed chunk, which re-renders the whole transcript, only
+// re-renders the bubble whose text changed. Callers pass stable callbacks
+// (see ChatMessages) so the memo holds.
+export const EditableAssistantMessage = memo(function EditableAssistantMessage({
   messageId,
   partIndex,
   partKey,
@@ -137,7 +143,10 @@ export function EditableAssistantMessage({
               onEditClick={handleStartEdit}
               editDisabled={editDisabled}
               feedback={feedback}
-              onFeedbackChange={onFeedbackChange}
+              onFeedbackChange={
+                onFeedbackChange &&
+                ((nextFeedback) => onFeedbackChange(messageId, nextFeedback))
+              }
               feedbackDisabled={feedbackDisabled}
             />
           </div>
@@ -145,4 +154,4 @@ export function EditableAssistantMessage({
       </div>
     </Message>
   );
-}
+});

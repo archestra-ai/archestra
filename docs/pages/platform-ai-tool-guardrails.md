@@ -96,7 +96,7 @@ An administrator creates a starter policy for a new deployment, then connects th
 
 ## MCP Servers and Tool Coverage
 
-The starting policy leaves most tools without a rule. The coverage chart shows how far along you are:
+The starting policy leaves most tools without a rule. The one exception is the [code sandbox](./platform-code-sandbox) command tool, `run_command`. Your organization's default model labels each command before it runs — reading a credentials file narrows who may see the result, for example. A policy you already saved keeps its own rules. The coverage chart shows how far along you are:
 
 | Coverage | Meaning |
 | --- | --- |

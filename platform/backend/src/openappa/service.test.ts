@@ -1810,6 +1810,31 @@ describe("APPA feature boundary", () => {
     ]);
   });
 
+  test("checks run_command reached through run_tool as run_command itself", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "wrapped-command",
+          name: "archestra__run_tool",
+          arguments: {
+            tool_name: "archestra__run_command",
+            tool_args: { command: "ls" },
+          },
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
+      event: "tool_call",
+      tool: "archestra__run_command",
+      arguments: { command: "ls" },
+    });
+  });
+
   test("does not let an unprotected child execute a remedy on the parent session", async () => {
     const parent = "a637fb55-989b-4f01-a251-e7e277c65f05";
     const child = "3c0f2458-f26a-4b05-9571-a64dca1d65a7";

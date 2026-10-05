@@ -28,14 +28,16 @@ describe("catch-all tool annotations", () => {
     vi.restoreAllMocks();
   });
 
-  test("an unconfigured organization gets a valid catch-all without specific tool rules", async ({
+  test("an unconfigured organization gets a valid catch-all whose only specific tool rule is run_command", async ({
     makeOrganization,
   }) => {
     const organizationId = (await makeOrganization()).id;
     const policy = await guardrailsPolicyService.get(organizationId);
     expect(policy.revision).toBe(0);
     expect(policy.content).toContain('name = "*"');
-    expect(policy.content).not.toContain('name = "archestra__');
+    expect(policy.content.match(/name = "archestra__[^"]*"/g)).toEqual([
+      'name = "archestra__run_command"',
+    ]);
     expect(
       await guardrailsPolicyService.validate(policy.content, {
         organizationId,

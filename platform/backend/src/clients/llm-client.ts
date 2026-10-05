@@ -614,6 +614,16 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     },
     defaultBaseUrl: config.llm.voyage.baseUrl,
   },
+  // Decisions-only provider: it answers classification questions and has no
+  // chat API, so the same loud failure applies.
+  jev: {
+    createModel: () => {
+      throw new Error(
+        "Jev is a decisions-only provider and cannot serve chat requests",
+      );
+    },
+    defaultBaseUrl: config.llm.jev.baseUrl,
+  },
 
   // --- Native SDK providers (use their own SDK, call client(modelName)) ---
 

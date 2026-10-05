@@ -318,6 +318,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           bedrock: config.llm.bedrock.baseUrl || null,
           cohere: config.llm.cohere.baseUrl || null,
           voyage: config.llm.voyage.baseUrl || null,
+          jev: config.llm.jev.baseUrl || null,
           cerebras: config.llm.cerebras.baseUrl || null,
           mistral: config.llm.mistral.baseUrl || null,
           perplexity: config.llm.perplexity.baseUrl || null,

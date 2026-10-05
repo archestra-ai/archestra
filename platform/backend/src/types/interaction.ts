@@ -24,6 +24,7 @@ import {
   Gemini,
   GithubCopilot,
   Groq,
+  Jev,
   Kimi,
   Microsoft365Copilot,
   Minimax,
@@ -181,6 +182,7 @@ export const InteractionRequestSchema = z.union([
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
   Azure.API.ResponsesRequestSchema,
+  Jev.API.DecisionsRequestSchema,
 ]);
 
 /**
@@ -233,6 +235,7 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ResponsesCompactedResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
   Azure.API.ResponsesResponseSchema,
+  Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
 ]);
 
@@ -728,6 +731,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .optional(),
     response: withErrorResponse(GithubCopilot.API.ResponsesResponseSchema),
     requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["jev:decisions"]),
+    request: withReadFallback(Jev.API.DecisionsRequestSchema),
+    processedRequest: withReadFallback(Jev.API.DecisionsRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Jev.API.DecisionsResponseSchema),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),

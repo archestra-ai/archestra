@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-10-01
+lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -375,6 +375,16 @@ When an OpenRouter key is added to an organization that has no default model con
 Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so the pricing is dynamic.
 
 Models that generate audio or images also report a zero per-token price, because they bill per second or per image instead. Archestra doesn't mark those free — the "Free models only" filter leaves them out.
+
+## Jev
+
+[Jev](https://typesafe.ai) is TypeSafe's decision model. It scores content, like a tool call, instead of chatting.
+
+- **Endpoint**: `http://localhost:9000/v1/jev/decisions`
+- **Authentication**: `Authorization: Bearer <your-api-key>`
+- **Base URL**: `ARCHESTRA_JEV_BASE_URL` (default: `https://api.typesafe.ai/v1/systemone`)
+
+To use Jev through OpenRouter, set the key's base URL to `https://openrouter.ai/api/alpha/decisions`.
 
 ## Mistral AI
 

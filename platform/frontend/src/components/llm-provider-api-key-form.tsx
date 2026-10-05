@@ -243,6 +243,17 @@ const PROVIDER_CONFIG: Record<
     description:
       "Embeddings only. Voyage serves no chat models, so this key is used to embed knowledge-base documents rather than to answer prompts.",
   },
+  jev: {
+    name: "Jev",
+    icon: "/model-logos/jev.svg",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://typesafe.ai",
+    consoleName: "TypeSafe",
+    description:
+      "Decisions only. Jev classifies content and serves no chat models. To reach Jev through another service, set the base URL to its full decisions endpoint, such as https://openrouter.ai/api/alpha/decisions.",
+    supportsEmbeddings: false,
+  },
   cohere: {
     name: "Cohere",
     icon: "/icons/cohere.png",

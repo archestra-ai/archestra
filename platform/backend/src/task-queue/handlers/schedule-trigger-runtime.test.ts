@@ -34,6 +34,7 @@ test.for([
   config.agentRuntime.enabled = true;
   config.agentRuntime.platformBaseUrl = "https://platform.example.test";
   vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+  vi.spyOn(backend, "assertReady").mockResolvedValue();
   vi.spyOn(backend, "resolveRuntimeScope").mockReturnValue("test-runtime");
   const launch = vi.spyOn(backend, "launch").mockResolvedValue();
   vi.spyOn(backend, "stageInputs").mockResolvedValue();

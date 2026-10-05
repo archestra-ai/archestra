@@ -12,9 +12,11 @@ export function signRuntimeToolProof(params: {
   arguments: Record<string, unknown>;
   spawn: boolean;
   secret: string;
+  now?: number;
 }): string | undefined {
   if (!params.secret) return undefined;
   try {
+    const now = params.now ?? Math.floor(Date.now() / 1000);
     const claims = ClaimsSchema.parse({
       v: 1,
       organization_id: params.session.organization_id,
@@ -25,6 +27,8 @@ export function signRuntimeToolProof(params: {
       action: params.action,
       arguments_hash: argumentsHash(params.arguments),
       spawn: params.spawn,
+      iat: now,
+      exp: now + PROOF_TTL_SECONDS,
     });
     const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
     return `${payload}.${signature(payload, params.secret)}`;
@@ -40,6 +44,7 @@ export function verifyRuntimeToolProof(params: {
   action: string;
   arguments: Record<string, unknown>;
   secret: string;
+  now?: number;
 }): {
   session: OpenAppaSession;
   toolCallId: string;
@@ -67,7 +72,11 @@ export function verifyRuntimeToolProof(params: {
     const claims = ClaimsSchema.parse(
       JSON.parse(Buffer.from(payload, "base64url").toString("utf8")),
     );
+    const now = params.now ?? Math.floor(Date.now() / 1000);
     if (
+      claims.iat > now + 30 ||
+      claims.exp <= now ||
+      claims.exp !== claims.iat + PROOF_TTL_SECONDS ||
       claims.organization_id !== params.organizationId ||
       claims.caller_id !== (params.callerId ?? null) ||
       claims.action !== params.action ||
@@ -142,6 +151,8 @@ const ClaimsSchema = z
     action: z.string().min(1).max(512),
     arguments_hash: z.string().regex(/^[a-f0-9]{64}$/),
     spawn: z.boolean(),
+    iat: z.number().int().nonnegative(),
+    exp: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -153,14 +164,25 @@ function signature(payload: string, secret: string): string {
 
 function argumentsHash(args: Record<string, unknown>): string {
   const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args;
-  return createHash("sha256").update(canonicalJson(original)).digest("hex");
+  return createHash("sha256")
+    .update(canonicalJson(original, new WeakSet()))
+    .digest("hex");
 }
 
 /** Hash complete JSON, not the bounded/truncated representation used for logs. */
-function canonicalJson(value: unknown, depth = 0): string {
+function canonicalJson(
+  value: unknown,
+  visited: WeakSet<object>,
+  depth = 0,
+): string {
   if (depth > 64) throw new Error("Runtime tool arguments are too deep");
+  if (value !== null && typeof value === "object") {
+    if (visited.has(value))
+      throw new Error("Runtime tool arguments must be a JSON tree");
+    visited.add(value);
+  }
   if (Array.isArray(value)) {
-    return `[${value.map((entry) => canonicalJson(entry, depth + 1)).join(",")}]`;
+    return `[${value.map((entry) => canonicalJson(entry, visited, depth + 1)).join(",")}]`;
   }
   if (value !== null && typeof value === "object") {
     const record = value as Record<string, unknown>;
@@ -168,7 +190,7 @@ function canonicalJson(value: unknown, depth = 0): string {
       .sort()
       .map(
         (key) =>
-          `${JSON.stringify(key)}:${canonicalJson(record[key], depth + 1)}`,
+          `${JSON.stringify(key)}:${canonicalJson(record[key], visited, depth + 1)}`,
       )
       .join(",")}}`;
   }
@@ -177,3 +199,5 @@ function canonicalJson(value: unknown, depth = 0): string {
     throw new Error("Invalid runtime tool arguments");
   return serialized;
 }
+
+const PROOF_TTL_SECONDS = 5 * 60;

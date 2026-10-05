@@ -99,7 +99,11 @@ export function verifyDelegatedPrompt(params: {
   if (!key) return undefined;
   const token = parseMarkerToken(params.marker.token);
   if (!token) return undefined;
-  if (params.marker.spawnCallId !== token.spawnCallId) return undefined;
+  if (
+    params.marker.spawnCallId !== token.spawnCallId ||
+    params.marker.runtimeSessionId !== token.runtimeSessionId
+  )
+    return undefined;
   const actual = Buffer.from(token.tag, "utf8");
   // A line pushed as an item of its own closes no text, but a client may
   // still join it to the text before it.

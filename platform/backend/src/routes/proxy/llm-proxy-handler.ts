@@ -1778,6 +1778,7 @@ export async function handleLLMProxy<
       const runtimeSessionId = runtimeSession?.session_id;
       const boundRuntimeIdentity =
         runtimeIdentity &&
+        runtimeBindingMatches &&
         !runtimeSessionConflicts({
           workloadName: runtimeIdentity.workloadName,
           presentedSession: presentedRuntimeSession,

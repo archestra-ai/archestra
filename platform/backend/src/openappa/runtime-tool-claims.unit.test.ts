@@ -97,6 +97,28 @@ describe("runtime tool origin proofs", () => {
     ).toBeUndefined();
   });
 
+  it("refuses expired and future proofs even when authority and arguments match", () => {
+    const proof = signRuntimeToolProof({ ...request, now: 1_000 });
+    expect(verify({ proof, now: 1_299 })).not.toBeNull();
+    expect(verify({ proof, now: 1_300 })).toBeNull();
+    expect(verify({ proof, now: 969 })).toBeNull();
+  });
+
+  it("rejects a shared-reference graph without expanding it exponentially", () => {
+    let shared: unknown = { value: "leaf" };
+    for (let depth = 0; depth < 40; depth++)
+      shared = { left: shared, right: shared };
+    expect(
+      signRuntimeToolProof({ ...request, arguments: { graph: shared } }),
+    ).toBeUndefined();
+    expect(
+      signRuntimeToolProof({
+        ...request,
+        arguments: { left: { value: "leaf" }, right: { value: "leaf" } },
+      }),
+    ).toBeDefined();
+  });
+
   it("strips replayed proofs from structured history without looping", () => {
     const args = { prompt: "original", [RUNTIME_TOOL_PROOF_ARGUMENT]: "proof" };
     const body: Record<string, unknown> = { calls: [{ arguments: args }] };

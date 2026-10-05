@@ -60,8 +60,6 @@ class Handler(BaseHTTPRequestHandler):
             self.mcp(request)
         elif self.path.endswith("count_tokens"):
             self.respond({"input_tokens": 10})
-        elif self.path.endswith("/runtime-status"):
-            self.respond({})
         elif "/messages" in self.path or "/responses" in self.path or "/chat/completions" in self.path:
             self.record_runtime_binding()
             self.llm(request)

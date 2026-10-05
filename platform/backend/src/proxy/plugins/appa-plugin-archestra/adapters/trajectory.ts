@@ -415,15 +415,6 @@ function runtimeNest(params: {
   const markerAnchor = params.delegated?.runtimeSessionId;
   const receiptAnchor = params.recorded?.runtimeSessionId;
   if (!markerAnchor && !receiptAnchor) {
-    if (
-      params.delegated &&
-      params.recorded &&
-      params.delegated.runtimeSessionId !== params.recorded.runtimeSessionId
-    ) {
-      throw correlationError(
-        "OpenAPPA signed child lineage does not match the authenticated session root",
-      );
-    }
     return undefined;
   }
   const trusted = params.context.trustedContext;

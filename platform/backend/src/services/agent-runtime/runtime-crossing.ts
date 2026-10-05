@@ -227,6 +227,7 @@ export async function crossRuntimeOutput(params: {
       record.childSessionId === relation.child.session_id &&
       record.operationId?.startsWith(prefix),
   );
+  // Native lookup is newest-first and returns the latest matching admitted row.
   const last = matches[0];
   if (!last) {
     return {

@@ -316,22 +316,13 @@ export async function resolveVerifiedRuntimeAssociation(params: {
     sessionId: params.sessionId,
   });
   if (!workspace || !params.callerId) return null;
-  const root = scopedSessionId(
-    runtimeCallerId({
-      actorKind: workspace.actorKind,
-      actorId: workspace.actorId,
-      workspaceId: workspace.id,
-    }),
-    workspace.workloadName,
-  );
-  if (
-    params.callerId !==
-    runtimeCallerId({
-      actorKind: workspace.actorKind,
-      actorId: workspace.actorId,
-      workspaceId: workspace.id,
-    })
-  ) {
+  const callerId = runtimeCallerId({
+    actorKind: workspace.actorKind,
+    actorId: workspace.actorId,
+    workspaceId: workspace.id,
+  });
+  const root = scopedSessionId(callerId, workspace.workloadName);
+  if (params.callerId !== callerId) {
     return null;
   }
   if (

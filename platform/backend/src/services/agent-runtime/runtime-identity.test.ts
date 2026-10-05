@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   A2AContextModel,
@@ -15,8 +16,10 @@ import {
   resolveRuntimeIdentityByVirtualKeys,
   resolveRuntimeSessionForWorkspace,
   resolveVerifiedRuntimeAssociation,
+  runtimeBindingAuthorizes,
   runtimeOpenAppaSession,
   runtimeSessionConflicts,
+  stampRuntimeBinding,
   workloadPrincipal,
 } from "./runtime-identity";
 
@@ -76,6 +79,85 @@ async function persistWorkspace(params: {
 }
 
 describe("runtime OpenAPPA identity", () => {
+  test("the launcher stamps only secret environment from persisted identity and refuses replay on a sibling", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const run = await persistWorkspace({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: org.id,
+    });
+    const prior = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = SECRET;
+    try {
+      const spec = {
+        env: { ARCHESTRA_AGENT_RUNTIME_BINDING: "untrusted" } as Record<
+          string,
+          string
+        >,
+        secretEnv: {} as Record<string, string>,
+        activeDeadlineSeconds: 60,
+      };
+      await stampRuntimeBinding({
+        spec,
+        organizationId: org.id,
+        workspaceId: run.workspace.id,
+        taskId: run.task.id,
+      });
+      expect(spec.env).not.toHaveProperty("ARCHESTRA_AGENT_RUNTIME_BINDING");
+      const token = spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_BINDING;
+      const resolved = await resolveRuntimeIdentityByVirtualKeys({
+        organizationId: org.id,
+        virtualKeyIds: [run.virtualKeyId],
+      });
+      if (resolved.status !== "bound")
+        throw new Error("The persisted fixture is unbound");
+      expect(
+        runtimeBindingAuthorizes({
+          token,
+          secret: SECRET,
+          identity: resolved.identity,
+        }),
+      ).toBe(true);
+      expect(
+        runtimeBindingAuthorizes({
+          token: `${token}tampered`,
+          secret: SECRET,
+          identity: resolved.identity,
+        }),
+      ).toBe(false);
+      expect(
+        runtimeBindingAuthorizes({
+          token,
+          secret: SECRET,
+          identity: { ...resolved.identity, workspaceId: randomUUID() },
+        }),
+      ).toBe(false);
+      expect(
+        runtimeBindingAuthorizes({
+          token,
+          secret: SECRET,
+          identity: resolved.identity,
+          now: Date.now() + 120_000,
+        }),
+      ).toBe(false);
+      await expect(
+        stampRuntimeBinding({
+          spec,
+          organizationId: org.id,
+          workspaceId: run.workspace.id,
+          taskId: randomUUID(),
+        }),
+      ).rejects.toThrow("persisted workspace");
+    } finally {
+      config.openappa.offerSigningSecret = prior;
+    }
+  });
+
   test("two virtual keys for one workspace share a principal a sibling key does not", async ({
     makeOrganization,
     makeAgent,

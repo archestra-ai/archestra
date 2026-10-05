@@ -1292,6 +1292,13 @@ pub async fn load_child_returns(
               AND (o.decision->>'decision' = 'ack' OR \
                 (COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_end' \
                  AND o.decision->>'decision' = 'child_return')) \
+              AND ((COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_return' \
+                    AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL) \
+                OR (COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_end' \
+                    AND o.operation_id NOT LIKE '%:echo' \
+                    AND ((o.decision->>'decision' = 'ack' \
+                          AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL) \
+                      OR (o.decision->>'decision' = 'child_return' AND o.decision->>'value' IS NOT NULL)))) \
               AND ($3::text IS NULL OR o.session_id=$3) \
               AND ($4::text IS NULL OR left(o.operation_id,length($4))=$4) \
               ORDER BY o.created_at DESC, o.session_id, o.operation_id DESC LIMIT $5",
